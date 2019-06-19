@@ -264,9 +264,6 @@ class DetectableObject(EventSource):
     def clear_detection_points(self):
         self._detections.clear()
 
-class AlertSubmitException(Exception):
-    pass
-
 # utility class to translate custom objects into JSON
 class _JSONEncoder(json.JSONEncoder):
     def default(self, obj):
