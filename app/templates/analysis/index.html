@@ -130,7 +130,7 @@
             {# split up tags between ones that came in with the alert and onces that came from analysis #}
             {% for tag in alert_tags %}
                 {% if tag.level != 'hidden' %}
-                    <div><span class="label {{tag.css_class}}">{{tag}}</span></div>
+                    <div><span class="label {{tag.css_class}}">{{tag}}</span>{% if tag.name.lower().startswith('atos') %} 🤡 {% endif %}</div>
                 {% endif %}
             {% endfor %}
             <hr>

@@ -119,7 +119,7 @@
                     </button>
                 {% endfor %}
                 <span class="observable_display {{observable_node.obj.type}}" title="">{% include observable_node.obj.jinja_template_path %}</span> 
-                {% for tag in observable_node.obj.tags %}{% if tag.level != 'hidden' %}<span class="label {{tag.css_class}}">{{ tag }}</span>{% endif %}{% endfor %}
+                {% for tag in observable_node.obj.tags %}{% if tag.level != 'hidden' %}<span class="label {{tag.css_class}}">{{ tag }}</span>{% if tag.name.lower().startswith('atos') %} 🤡 {% endif %}{% endif %}{% endfor %}
                 {% if observable_node.disposition_history %}
                     {% for disposition, count, percentage in observable_node.disposition_history %}
                         <a href="{{ url_for('analysis.manage', odh_md5=observable_node.obj.md5_hex, odh_d=disposition) }}"><span class="label label-{{disposition_css_mapping[disposition]}}">{{disposition}} {{percentage | int}}% ({{count}})</span></a>
