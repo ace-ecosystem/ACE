@@ -956,7 +956,7 @@ class RemediationSystem(object):
 
             elif not remediation_result.successful and self.message_on_error:
                 try:
-                    send_message(f"<!channel> :rotating_light: remediation for {remediation_result.key} failed:\n{remediation_result.result}{alert_references}", MESSAGE_TYPE_REMEDIATION_FAILURE)
+                    send_message(f":rotating_light: remediation for {remediation_result.key} failed:\n{remediation_result.result}{alert_references}", MESSAGE_TYPE_REMEDIATION_FAILURE)
                 except Exception as e:
                     logging.error(f"unable to send completed message: {e}")
 
@@ -980,7 +980,7 @@ class RemediationSystem(object):
                 saq.db.commit()
 
                 if self.message_on_error:
-                    send_message(f"<!channel> :rotating_light: attempt to execute remediation {remediation.key} failed:\n{e}{alert_references}", MESSAGE_TYPE_REMEDIATION_FAILURE)
+                    send_message(f":rotating_light: attempt to execute remediation {remediation.key} failed:\n{e}{alert_references}", MESSAGE_TYPE_REMEDIATION_FAILURE)
                     
             except Exception as e:
                 logging.error(f"unable to record error for remediation item {remediation.id}: {e}")
