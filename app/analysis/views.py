@@ -3509,7 +3509,9 @@ FROM
     JOIN alerts a ON om.alert_id = a.id
 WHERE 
     o.type = %s AND 
-    o.md5 = UNHEX(%s)
+    o.md5 = UNHEX(%s) AND
+    a.alert_type != 'faqueue' AND
+    a.disposition != 'UNKNOWN'
 GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
 
                 for row in c:
