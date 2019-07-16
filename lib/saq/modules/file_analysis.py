@@ -37,7 +37,7 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.modules import AnalysisModule
 from saq.process_server import Popen, PIPE, DEVNULL, TimeoutExpired
-from saq.util import is_url, URL_REGEX_B, URL_REGEX_STR
+from saq.util import is_url, URL_REGEX_B, URL_REGEX_STR, is_subdomain
 
 from bs4 import BeautifulSoup
 from iptools import IpRangeList
@@ -775,7 +775,7 @@ class ArchiveAnalyzer(AnalysisModule):
                     file_observable.redirection = _file
 
                 # https://github.com/IntegralDefense/ACE/issues/12 - also fixed for xps
-                if file_observable.ext in [ 'xps', 'rels' ]:
+                if file_observable.ext in [ 'xps', 'rels', 'xml' ]:
                     file_observable.add_directive(DIRECTIVE_EXTRACT_URLS)
 
                 # a single file inside of a zip file is always suspect
@@ -3427,6 +3427,28 @@ class URLExtractionAnalyzer(AnalysisModule):
 
         # parse out any embedded urls inside thesed urls
         #extracted_urls.extend(_extract_embedded_urls(extracted_urls))
+
+        # filter out the stuff that is excluded via configuration
+        fqdns = [_.strip() for _ in self.config['excluded_domains'].split(',')]
+        def f(url):
+            if not fqdns:
+                return True
+
+            try:
+                parsed_url = urlparse(url)
+            except:
+                return True
+
+            if parsed_url.hostname is None:
+                return True
+
+            for fqdn in fqdns:
+                if is_subdomain(parsed_url.hostname, fqdn):
+                    return False
+
+            return True
+        
+        extracted_urls = list(filter(f, extracted_urls))
 
         # since cloudphish_request_limit, order urls by our interest in them
         extracted_ordered_urls, analysis.details['urls_grouped_by_domain'] = self.order_urls_by_interest(extracted_urls)
