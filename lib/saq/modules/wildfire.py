@@ -23,12 +23,14 @@ class WildfireAnalysis(Analysis):
 
     def initialize_details(self):
         self.details = {
-            'sha256': sha256(open(path, 'rb').read()).hexdigest(),
+            #'sha256': sha256(open(path, 'rb').read()).hexdigest(),
+            'sha256': None,
             'verdict': None,
             'submit_date': None }
 
     def init(self, path):
         self.report = None
+        self.sha256 = sha256(open(path, 'rb').read()).hexdigest()
 
     def fail(self, message, error):
         self.verdict = '-101'
@@ -108,6 +110,10 @@ class WildfireAnalyzer(SandboxAnalysisModule):
         return self.config.getboolean('use_proxy')
 
     @property
+    def query_only(self):
+        return self.config.getboolean('query_only')
+
+    @property
     def proxies(self):
         if not self.use_proxy:
             return {}
@@ -175,6 +181,9 @@ class WildfireAnalyzer(SandboxAnalysisModule):
 
         # if wildfire has never analyzed this file before then submit it and check back later
         elif analysis.verdict == '-102':
+            if self.query_only:
+                # Do not upload files, so exit if Wildfire doesn't know about this file
+                return False
             logging.debug("submitting {} to wildfire for analysis".format(path))
             file = { "file" : (os.path.basename(path), open(path, 'rb').read()) }
             url = "https://wildfire.paloaltonetworks.com/publicapi/submit/file"
