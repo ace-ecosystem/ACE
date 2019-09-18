@@ -1,3 +1,5 @@
+import collections.abc
+import calendar
 import datetime
 import importlib
 import io
@@ -7,6 +9,7 @@ import math
 import os
 import os.path
 import pymysql
+import pysip
 import random
 import re
 import shutil
@@ -19,6 +22,7 @@ import zipfile
 
 from collections import defaultdict
 from datetime import timedelta
+from dateutil.relativedelta import relativedelta
 from email.encoders import encode_base64
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -34,7 +38,9 @@ import requests
 from pymongo import MongoClient
 
 import saq
+import saq.analysis
 import saq.intel
+import saq.remediation
 import virustotal
 import vxstreamlib
 import splunklib
@@ -1766,6 +1772,52 @@ def manage():
             filters[FILTER_S_SEARCH_COMPANY].value = 'Core'
             filters[FILTER_CB_USE_SEARCH_COMPANY].value = True
 
+    # are we drilling down into observable disposition history?
+    while 'odh_d' in request.args and 'odh_md5' in request.args:
+        odh_d = request.args['odh_d']
+        odh_md5 = request.args['odh_md5']
+
+        # look up the ID we need to use for this observable by the md5
+        odh_o = db.session.query(Observable).filter(Observable.md5 == func.unhex(odh_md5)).first()
+        if odh_o is None:
+            logging.warning(f"observable md5 {odh_md5} does not exist")
+            break
+
+        # map disposition to key
+        disp_map = {
+            DISPOSITION_FALSE_POSITIVE: FILTER_CB_DIS_FALSE_POSITIVE,
+            DISPOSITION_IGNORE: FILTER_CB_DIS_IGNORE,
+            DISPOSITION_UNKNOWN: FILTER_CB_DIS_UNKNOWN,
+            DISPOSITION_REVIEWED: FILTER_CB_DIS_REVIEWED,
+            DISPOSITION_GRAYWARE: FILTER_CB_DIS_GRAYWARE,
+            DISPOSITION_POLICY_VIOLATION: FILTER_CB_DIS_POLICY_VIOLATION,
+            DISPOSITION_RECONNAISSANCE: FILTER_CB_DIS_RECONNAISSANCE,
+            DISPOSITION_WEAPONIZATION: FILTER_CB_DIS_WEAPONIZATION,
+            DISPOSITION_DELIVERY: FILTER_CB_DIS_DELIVERY,
+            DISPOSITION_EXPLOITATION: FILTER_CB_DIS_EXPLOITATION,
+            DISPOSITION_INSTALLATION: FILTER_CB_DIS_INSTALLATION,
+            DISPOSITION_COMMAND_AND_CONTROL: FILTER_CB_DIS_COMMAND_AND_CONTROL,
+            DISPOSITION_EXFIL: FILTER_CB_DIS_EXFIL,
+            DISPOSITION_DAMAGE: FILTER_CB_DIS_DAMAGE }
+
+        if odh_d not in disp_map:
+            logging.error(f"invalid disposition {odh_d}")
+            break
+
+        # in this case we clear out all other filters except for this observable and disposition
+        filters[FILTER_CB_OPEN].value = False
+        filters[FILTER_CB_UNOWNED].value = False
+
+        key = f'observable_{odh_o.id}'
+        filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
+        filters[key] = filter_item
+        filters[key].value = True
+        observable_filter_items.append(filter_item)
+
+        # override setting for target disp
+        filters[disp_map[odh_d]].value = True
+        break
+
     # initialize filter state (passed to the view to set up the form controls)
     filter_state = {filters[f].name: filters[f].state for f in filters}
 
@@ -2589,39 +2641,145 @@ def add_email_alert_counts_per_event(events):
     events['# Emails'] = email_counts
 
 
-def generate_intel_tables():
-    mongo_uri = saq.CONFIG.get("crits", "mongodb_uri")
-    mongo_host = mongo_uri[mongo_uri.rfind('://')+3:mongo_uri.rfind(':')]
-    mongo_port = int(mongo_uri[mongo_uri.rfind(':')+1:])
-    client = MongoClient(mongo_host, mongo_port)
-    crits = client.crits
+def generate_intel_tables(sip=True, crits=False):
+    if sip and crits:
+        logging.error("Can only use one intel source at a time.")
+        return False, False
+    if crits:
+        mongo_uri = saq.CONFIG.get("crits", "mongodb_uri")
+        mongo_host = mongo_uri[mongo_uri.rfind('://')+3:mongo_uri.rfind(':')]
+        mongo_port = int(mongo_uri[mongo_uri.rfind(':')+1:])
+        client = MongoClient(mongo_host, mongo_port)
+        crits = client.crits
+    elif sip:
+        sip_host = saq.CONFIG.get("sip", "remote_address")
+        api_key = saq.CONFIG.get("sip", "api_key")
+        sip = pysip.Client(sip_host, api_key, verify=False) 
+    else:
+        logging.warn("No intel source specified.")
+        return None, None
 
     #+ amount of indicators per source
-    intel_sources = crits.source_access.distinct("name")
+    intel_sources = crits.source_access.distinct("name") if crits else None
+    if sip:
+        intel_sources = sip.get('/api/intel/source')
+        intel_sources = [s['value'] for s in intel_sources]
     source_counts = {}
     for source in intel_sources:
-        source_counts[source] = crits.indicators.find( { 'source.name': source }).count()
+        source_counts[source] = crits.indicators.find( { 'source.name': source }).count() if crits else None
+        source_counts[source] = sip.get('/indicators?sources={}&count'.format(source))['count'] if sip else source_counts[source]
     source_cnt_df = pd.DataFrame.from_dict(source_counts, orient='index')
     source_cnt_df.columns = ['count']
     source_cnt_df.name = "Count of Indicators by Intel Sources"
     source_cnt_df.sort_index(inplace=True)
 
     # amount of indicators per status
-    indicator_statuses = crits.indicators.distinct("status")
+    indicator_statuses = crits.indicators.distinct("status") if crits else None
+    if sip:
+        indicator_statuses = sip.get('/api/indicators/status')
+        indicator_statuses = [s['value'] for s in indicator_statuses if s['value'] != 'FA']
     status_counts = []
-    test = {}
     for status in indicator_statuses:
-        test[status] = crits.indicators.find( { 'status': status }).count()
-        status_counts.append( test[status] )
-    lookscount = pd.DataFrame.from_dict(test, orient='index')
-    lookscount.columns = ['count']
+        count = crits.indicators.find( { 'status': status }).count() if crits else None
+        count = sip.get('/indicators?status={}&count'.format(status))['count'] if sip else count
+        status_counts.append(count)
     # put results in dataframe row
     status_cnt_df = pd.DataFrame(data=[status_counts], columns=indicator_statuses)
     status_cnt_df.name = "Count of Indicators by Status"
     status_cnt_df.rename(index={0: "Count"}, inplace=True)
 
-    client.close()
+    if crits:
+        client.close()
     return source_cnt_df, status_cnt_df 
+
+
+def get_month_day_range(date):
+    """
+    For a date 'date' returns the start and end dateitime for the month of 'date'.
+
+    Month with 31 days:
+    >>> date = datetime(2011, 7, 31, 5, 27, 18)
+    >>> get_month_day_range(date)
+    (datetime.datetime(2011, 7, 1, 0, 0), datetime.datetime(2011, 7, 31, 23, 59, 59))
+
+    Month with 28 days:
+    >>> datetime(2011, 2, 15, 17, 8, 45)
+    >>> get_month_day_range(date)
+    (datetime.datetime(2011, 2, 1, 0, 0), datetime.datetime(2011, 2, 28, 23, 59, 59))
+    """
+    start_time = date.replace(day=1, hour=0, minute=0, second=0)
+    last_day = calendar.monthrange(date.year, date.month)[1]
+    end_time = date.replace(day=last_day, hour=23, minute=59, second=59)
+    return start_time, end_time
+
+
+def get_month_ranges(daterange_start, daterange_end):
+    """
+    Take whatever start and end datetime and return a dictionary where the keys are %Y%m
+    formatted and the values are tuples with start and end datetimes respective to the month (key).
+    """
+    month_ranges = {}
+    month = datetime.datetime.strftime(daterange_start, '%Y%m')
+    start_time, end_time = get_month_day_range(daterange_start)
+    if end_time >= daterange_end:
+        # range contained in month
+        month_ranges[month] = (daterange_start, daterange_end)
+        return month_ranges
+
+    if daterange_start != end_time: # edge case
+        month_ranges[month] = (daterange_start, end_time)
+    
+    while True:
+        # move to first second of next month
+        start_time = start_time + relativedelta(months=1)
+        start_time, end_time = get_month_day_range(start_time)
+        month = datetime.datetime.strftime(start_time, '%Y%m')
+
+        if end_time >= daterange_end:
+            # range contained in current month
+            if start_time != daterange_end: # edge case
+                month_ranges[month] = (start_time, daterange_end)
+            return month_ranges
+        else:
+            month_ranges[month] = (start_time, end_time)
+
+
+def get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=False, modified=False):
+    """
+    Use SIP to return a DataFrame table representing the status of all indicators created OR modified during
+    daterange and by the month (%Y%m) they were created in.i
+
+    :param datetime daterange_start: The datetime representing the start time of the daterange
+    :param datetime daterange_end: The datetime representing the end time of the daterange
+    :param bool created: If True, return table of created indicators
+    :param bool modified: If True, return table of modified indicators
+    :return: Pandas DataFrame table
+    """
+    sip_host = saq.CONFIG.get("sip", "remote_address")
+    api_key = saq.CONFIG.get("sip", "api_key")
+    sc = pysip.Client(sip_host, api_key, verify=False) 
+   
+    if created is modified: # they should never be the same
+        logging.warning("Created and Modfied flags both set to '{}'".format(created))
+        return False
+    table_type = "created" if created else "modified" 
+
+    statuses = sc.get('/api/indicators/status')
+    statuses = [s['value'] for s in statuses if s['value'] != 'FA']
+
+    status_by_date = {}
+    month_ranges = get_month_ranges(daterange_start, daterange_end)
+    for month, daterange in month_ranges.items():
+        status_counts = {}
+        for status in statuses:
+            status_counts[status] = sc.get('/indicators?status={0}&{1}_after={2}&{3}_before={4}&count'
+                                           .format(status, table_type, daterange[0], table_type, daterange[1]))['count']
+        status_by_date[month] = status_counts
+
+    status_by_month = pd.DataFrame.from_dict(status_by_date, orient='index')
+    status_by_month.name = "Count of Indicator Status by {} Month".format(table_type.capitalize())
+    return status_by_month
+
 
 @analysis.route('/metrics', methods=['GET', 'POST'])
 @login_required
@@ -2794,15 +2952,28 @@ def metrics():
             if not events.empty:
                 tables.append(events)
 
-        # generate CRITS indicator intel tables
+        # generate SIP ;-) indicator intel tables
+        # XXX add support for using CRITS/SIP based on what ACE is configured to use
         if 'indicator_intel' in metric_actions:
             try:
                 indicator_source_table, indicator_status_table = generate_intel_tables()
                 tables.append(indicator_source_table)
                 tables.append(indicator_status_table) 
             except Exception as e:
-                flash("Error generating intel tables. Is 'mongodb_uri' specified in the configuration? : {0}".format(str(e)))
-
+                flash("Problem generating overall source and status indicator tables : {0}".format(str(e)))
+            # Count all created indicators during daterange by their status
+            try:
+                created_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=True)
+                if created_indicators is not False:
+                    tables.append(created_indicators)
+            except Exception as e:
+                flash("Problem generating created indicator table: {0}".format(str(e)))
+            try:
+                modified_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, modified=True)
+                if modified_indicators is not False:
+                    tables.append(modified_indicators)
+            except Exception as e:
+                flash("Problem generating modified indicator table: {0}".format(str(e)))
 
     if download_results:
         outBytes = io.BytesIO()
@@ -3232,6 +3403,35 @@ def index():
     special_tag_names = [tag for tag in saq.CONFIG['tags'].keys() if saq.CONFIG['tags'][tag] == 'special']
     alert_tags = [tag for tag in alert_tags if tag.name not in special_tag_names]
 
+    class DispositionHistory(collections.abc.MutableMapping):
+        def __init__(self, observable):
+            self.observable = observable
+            self.history = {} # key = disposition, value = count
+
+        def __getitem__(self, key):
+            return self.history[key]
+
+        def __setitem__(self, key, value):
+            # we skip the None key which corresponds to alerts that have not been dispositioned yet
+            if key is not None:
+                if key not in VALID_ALERT_DISPOSITIONS:
+                    raise ValueError(f"invalid disposition {key}")
+
+                self.history[key] = value
+
+        def __delitem__(self, key):
+            pass
+
+        def __iter__(self):
+            total = sum([self.history[disp] for disp in self.history.keys()])
+            dispositions = [disposition for disposition in VALID_ALERT_DISPOSITIONS if disposition in self.history]
+            dispositions = sorted(dispositions, key=lambda disposition: (self.history[disposition] / total) * 100.0, reverse=True)
+            for disposition in dispositions:
+                yield disposition, self.history[disposition], (self.history[disposition] / total) * 100.0
+
+        def __len__(self):
+            return len(self.history)
+
     # compute the display tree
     class TreeNode(object):
         def __init__(self, obj, parent=None):
@@ -3273,6 +3473,52 @@ def index():
         def __str__(self):
             return "TreeNode({}, {}, {})".format(self.obj, self.reference_node, self.visible)
 
+        @property
+        def disposition_history(self):
+            """Returns a DispositionHistory object if self.obj is an Observable, None otherwise."""
+            if hasattr(self, '_disposition_history'):
+                return self._disposition_history
+
+            self._disposition_history = None
+            if not isinstance(self.obj, saq.analysis.Observable):
+                return None
+
+            if self.obj.whitelisted:
+                return None
+
+            if self.obj.type == F_FILE:
+                from saq.modules.file_analysis import FileHashAnalysis
+                for child in self.children:
+                    if isinstance(child.obj, FileHashAnalysis):
+                        for grandchild in child.children:
+                            if isinstance(grandchild.obj, saq.analysis.Observable) and grandchild.obj.type == F_SHA256:
+                                self._disposition_history = grandchild.disposition_history
+                                return self._disposition_history
+
+                return None
+
+            self._disposition_history = DispositionHistory(self.obj)
+
+            with get_db_connection() as db:
+                c = db.cursor()
+                c.execute("""
+SELECT 
+    a.disposition, COUNT(*) 
+FROM 
+    observables o JOIN observable_mapping om ON o.id = om.observable_id
+    JOIN alerts a ON om.alert_id = a.id
+WHERE 
+    o.type = %s AND 
+    o.md5 = UNHEX(%s) AND
+    a.alert_type != 'faqueue' AND
+    a.disposition != 'UNKNOWN'
+GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
+
+                for row in c:
+                    disposition, count = row
+                    self._disposition_history[disposition] = count
+
+            return self._disposition_history
 
     def find_all_url_domains(analysis):
         assert isinstance(analysis, saq.analysis.Analysis)
@@ -3842,10 +4088,11 @@ def query_message_ids():
     return response
 
 class EmailRemediationTarget(object):
-    def __init__(self, archive_id=None, message_id=None, recipient=None):
+    def __init__(self, archive_id=None, message_id=None, recipient=None, company_id=None):
         self.archive_id = archive_id
         self.message_id = message_id
         self.recipient = recipient
+        self.company_id = company_id
         self.result_text = None
         self.result_success = False
 
@@ -3859,8 +4106,16 @@ class EmailRemediationTarget(object):
             'archive_id': self.archive_id,
             'message_id': self.message_id,
             'recipient': self.recipient,
+            'company_id': self.company_id,
             'result_text': self.result_text,
             'result_success': self.result_success }
+
+#
+# XXX
+# remediation is a mess
+# it's gone through a bunch of iterations starting with some custom Lotus Notes nonsense
+# to what it is today
+#
 
 # the archive_id and config sections are encoded in the name of the form element
 # XXX probably a gross security flaw
@@ -3870,19 +4125,36 @@ INPUT_CHECKBOX_REGEX = re.compile(r'^cb_archive_id_([0-9]+)_source_(.+)$')
 @login_required
 def remediate_emails():
 
+    alert_uuids = []
+    if 'alert_uuids' in request.values:
+        alert_uuids = json.loads(request.values['alert_uuids'])
+
     action = request.values['action']
-    use_phishfry = request.values['use_phishfry'] == 'true' # string representation of javascript boolean value true
+
+    # if this is set to True then we issue the request now and wait for the response
+    # if this is false then the remediation request is sent to the remediation system
+    do_it_now = request.values['do_it_now'] == 'true' # string representation of javascript boolean value true
+
     assert action in [ 'restore', 'remove' ];
 
     # generate our list of archive_ids from the list of checkboxes that were checked
-    archive_ids = { }
+    archive_ids = { } # key = source (email_archive_blah) which corresponds to database_email_archive_blah
+    archive_company_id = { } # key = same as above, value = company_id for that email archive source
     for key in request.values.keys():
         if key.startswith('cb_archive_id_'):
             m = INPUT_CHECKBOX_REGEX.match(key)
             if m:
                 archive_id, source = m.groups()
+                section_key = f'database_{source}'
+                if section_key not in saq.CONFIG:
+                    logging.error(f"missing config section {section_key}")
+                    continue
+
                 if source not in archive_ids:
                     archive_ids[source] = []
+                    # look up what company_id this email archive source is
+                    archive_company_id[source] = saq.CONFIG[section_key].getint('company_id', fallback=saq.COMPANY_ID)
+                    logging.debug(f"got company_id {archive_company_id[source]} for {source}")
 
                 archive_ids[source].append(m.group(1))
 
@@ -3903,7 +4175,7 @@ def remediate_emails():
             for row in c:
                 archive_id, field, value = row
                 if archive_id not in targets:
-                    targets[archive_id] = EmailRemediationTarget(archive_id=archive_id)
+                    targets[archive_id] = EmailRemediationTarget(archive_id=archive_id, company_id=archive_company_id[db_name])
 
                 if field == 'message_id':
                     targets[archive_id].message_id = value.decode(errors='ignore')
@@ -3922,26 +4194,62 @@ def remediate_emails():
 
     results = []
 
-    import saq.remediation
-    #from saq.remediation import remediate_emails, unremediate_emails
-
     try:
         if action == 'remove':
-            results = saq.remediation.remediate_emails(params, user_id=current_user.id, use_phishfry=use_phishfry)
+            if not do_it_now:
+                for target in targets.values():
+                    try:
+                        r_id = saq.remediation.request_remediation(saq.remediation.constants.REMEDIATION_TYPE_EMAIL,
+                                                                   target.message_id,
+                                                                   target.recipient,
+                                                                   user_id=current_user.id,
+                                                                   company_id=target.company_id,
+                                                                   comment=','.join(alert_uuids))
+
+                        target.result_text = f"request remediation (id {r_id})"
+                        target.result_success = True
+
+                    except Exception as e:
+                        target.result_text = str(e)
+                        target.result_success = False
+            else:
+                # TODO refactor this to use the classes of the new system
+                results = saq.remediation.remediate_emails(params, user_id=current_user.id)
+
         elif action == 'restore':
-            results = saq.remediation.unremediate_emails(params, user_id=current_user.id, use_phishfry=use_phishfry)
+            if not do_it_now:
+                for target in targets.values():
+                    try:
+                        r_id = saq.remediation.request_restoration(saq.remediation.constants.REMEDIATION_TYPE_EMAIL,
+                                                                   target.message_id,
+                                                                   target.recipient,
+                                                                   user_id=current_user.id,
+                                                                   company_id=target.company_id,
+                                                                   comment=','.join(alert_uuids))
+
+                        target.result_text = f"request restoration (id {r_id})"
+                        target.result_success = True
+
+                    except Exception as e:
+                        target.result_text = str(e)
+                        target.result_success = False
+            else:
+                # TODO refactor this to use the classes of the new system
+                results = saq.remediation.unremediate_emails(params, user_id=current_user.id)
+
     except Exception as e:
         logging.error("unable to perform email remediation action {}: {}".format(action, e))
         for target in targets.values():
             target.result_text = str(e)
             target.result_success = False
 
-    for result in results:
-        message_id, recipient, result_code, result_text = result
-        for target in targets.values():
-            if target.message_id == message_id and target.recipient == recipient:
-                target.result_text = '({}) {}'.format(result_code, result_text)
-                target.result_success = str(result_code) == '200'
+    if do_it_now:
+        for result in results:
+            message_id, recipient, result_code, result_text = result
+            for target in targets.values():
+                if target.message_id == message_id and target.recipient == recipient:
+                    target.result_text = '({}) {}'.format(result_code, result_text)
+                    target.result_success = str(result_code) == '200'
 
     # return JSON formatted results
     for key in targets.keys():
