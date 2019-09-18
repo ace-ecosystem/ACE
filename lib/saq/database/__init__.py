@@ -1577,7 +1577,11 @@ WHERE
             continue
 
         email_from = alert.details['email']['from'].replace('\r', '').replace('\n', '')
-        email_subject = alert.details['email']['subject'].replace('[POTENTIAL PHISH] ', '').replace('\r', '').replace('\n', '')
+        if 'decoded_subject' in alert.details['email']:
+            email_subject = alert.details['email']['decoded_subject'].replace('\r', '').replace('\n', '')
+        else:
+            email_subject = alert.details['email']['subject'].replace('\r', '').replace('\n', '')
+        email_subject = email_subject.replace('[POTENTIAL_PHISH]_', '').replace('[POTENTIAL PHISH] ', '')
 
         try:
             submit_response(email_from, email_subject, alert.disposition, user_comment)
