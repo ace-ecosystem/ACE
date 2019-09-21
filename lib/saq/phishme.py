@@ -29,7 +29,7 @@ def submit_response(recipient, subject, disposition, comment):
         return False
 
     if not saq.CONFIG['phishme'][disposition_key]:
-        logging.debug("disposition {disposition} is not mapped to a value for a response for phishme")
+        logging.debug(f"disposition {disposition} is not mapped to a value for a response for phishme")
         return False
 
     # load the response from file

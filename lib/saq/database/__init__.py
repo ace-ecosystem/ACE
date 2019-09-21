@@ -1549,6 +1549,7 @@ WHERE
         params.extend(alert_uuids)
         c.execute(sql, tuple(params))
         db.commit()
+        db.close()
 
     # TODO - I don't think this should be here
     # we probably need custom Alert classes, based on the alert type, with overloaded functions
@@ -1575,8 +1576,12 @@ WHERE
             logging.error(f"phishme report alert {alert} missing subject property in alert email details")
             continue
 
-        email_from = alert.details['email']['from']
-        email_subject = alert.details['email']['subject'].replace('[POTENTIAL PHISH] ', '')
+        email_from = alert.details['email']['from'].replace('\r', '').replace('\n', '')
+        if 'decoded_subject' in alert.details['email']:
+            email_subject = alert.details['email']['decoded_subject'].replace('\r', '').replace('\n', '')
+        else:
+            email_subject = alert.details['email']['subject'].replace('\r', '').replace('\n', '')
+        email_subject = email_subject.replace('[POTENTIAL_PHISH]_', '').replace('[POTENTIAL PHISH] ', '')
 
         try:
             submit_response(email_from, email_subject, alert.disposition, user_comment)
