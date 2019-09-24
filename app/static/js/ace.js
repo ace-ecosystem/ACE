@@ -4,10 +4,10 @@
 $(document).ready(function() {
     $("#event-form").on("submit", function(e) {
         e.preventDefault();
-        var event_name_re = /^[a-zA-Z0-9+-. ]+$/;
+        var event_name_re = /^[a-zA-Z0-9-. ]+$/;
         event_name = $("#event_name").val();
         if (event_name != "" && ! event_name_re.test(event_name)) {
-            alert("Event names can only have the characters a-Z A-Z 0-9 + - . and space.");
+            alert("Event names can only have the characters a-Z A-Z 0-9 - . and space.");
             return;
         }
 
