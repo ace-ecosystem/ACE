@@ -337,7 +337,7 @@ def _cli_submit(args):
         for o in args.observables:
             o = o.split('/')
             _type = o[0]
-            _value = o[1]
+            _value = o[1].strip()
             _time = _tags = _directives = _limited_analysis = None
 
             if len(o) > 2:
