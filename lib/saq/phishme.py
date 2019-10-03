@@ -36,7 +36,7 @@ def submit_response(recipient, subject, disposition, comment):
     response_path = saq.CONFIG['phishme'][saq.CONFIG['phishme'][disposition_key]]
 
     # interpolate the values
-    if comment is None:
+    if comment is None or comment is '':
         comment = "(No comments were added.)"
     else:
         comment = f"{comment}"
