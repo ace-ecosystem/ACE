@@ -44,6 +44,8 @@ import urllib3
 import uuid
 import warnings
 
+from configparser import ConfigParser
+
 # set up the argument parsing as we define the functions
 # so we can keep them grouped together
 parser = argparse.ArgumentParser(description="ACE API Command Line Wrapper")
@@ -1347,8 +1349,38 @@ update_event_status_parser.add_argument('--event-id', help="Event ID", required=
 update_event_status_parser.add_argument('--status', help="Event status", required=True)
 update_event_status_parser.set_defaults(func=_cli_update_event_status)
 
+def load_config():
+    """Load ace_api configuration. Configuration files are looked for in the following locations::
+        /opt/ace/etc/ace_api.local.ini
+        ~/<current-user>/.ace/api.ini
+
+    Configuration items found in later config files take presendence over earlier ones.
+    """
+    config = ConfigParser()
+    config_paths = []
+    # default
+    config_paths.append('/opt/ace/etc/ace_api.local.ini')
+    # user specific
+    config_paths.append(os.path.join(os.path.expanduser("~"),'.ace','api.ini'))
+    finds = []
+    for cp in config_paths:
+        if os.path.exists(cp):
+            logging.debug("Found config file at {}.".format(cp))
+            finds.append(cp)
+    if not finds:
+        logging.debug("Didn't find any config files defined at these paths: {}".format(config_paths))
+        return False
+
+    config.read(finds)
+    return config
 
 def main():
+
+    config = load_config()
+    if config:
+        ace_instances = [ sec for sec in config.sections() if sec != 'global' ]
+        parser.add_argument('-e', '--environment', action="store", default=None,
+                            help="specify an ACE environment to work with.", choices=ace_instances)
 
     args = parser.parse_args()
 
