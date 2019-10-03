@@ -249,37 +249,53 @@ class NetBIOSAnalyzer(AnalysisModule):
             args.insert(0, 'ssh')
 
         with tempfile.TemporaryFile(dir=saq.TEMP_DIR) as fp:
-            p = Popen(args, stdout=fp)
-            p.wait()
+            with tempfile.TemporaryFile(dir=saq.TEMP_DIR) as stderr_fp:
+                p = Popen(args, stdout=fp, stderr=stderr_fp)
+                try:
+                    p.wait(timeout=10)
+                except Exception as e:
+                    logging.error(f"netbios query timeout against {asset}: {e}")
 
-            fp.seek(0)
+                    p.kill()
 
-            for line in fp:
-                if re.match(r'^137/udp\s+open\s+netbios-ns$', line.decode(saq.DEFAULT_ENCODING)):
-                    logging.debug("{} responded to a netbios query".format(asset))
-                    analysis.netbios_open = True
-                    continue
+                    fp.seek(0)
+                    for line in fp:
+                        logging.info(f"MARKER: NETBIOS STDOUT OUTPUT: {line}")
 
-                if not analysis.netbios_open:
-                    continue
-
-                m = re.search(r'NetBIOS name: ([^,]+), NetBIOS user: ([^,]+), NetBIOS MAC: (..:..:..:..:..:..)', line.decode(saq.DEFAULT_ENCODING))
-                if m:
-                    (name, user, mac) = m.groups()
-                    analysis.netbios_name = name
-                    analysis.netbios_user = user
-                    analysis.netbios_mac = mac
+                    stderr_fp.seek(0)
+                    for line in stderr_fp:
+                        logging.info(f"MARKER: NETBIOS STDERR OUTPUT: {line}")
                     
-                    logging.debug("found netbios_name {0} netbios_user {1} netbios_mac {2} for asset {3}".format(
-                        name, user, mac, asset))
-                    continue
+                    return False
 
-                m = re.search(r'\s([^<\s]+)<00>\s+Flags:\s+<group><active>', line.decode(saq.DEFAULT_ENCODING))
-                if m:
-                    (domain,) = m.groups()
-                    analysis.netbios_domain = domain
-                    logging.debug("found netbios_domain {0} for asset {1}".format(domain, asset))
-                    continue
+                fp.seek(0)
+
+                for line in fp:
+                    if re.match(r'^137/udp\s+open\s+netbios-ns$', line.decode(saq.DEFAULT_ENCODING)):
+                        logging.debug("{} responded to a netbios query".format(asset))
+                        analysis.netbios_open = True
+                        continue
+
+                    if not analysis.netbios_open:
+                        continue
+
+                    m = re.search(r'NetBIOS name: ([^,]+), NetBIOS user: ([^,]+), NetBIOS MAC: (..:..:..:..:..:..)', line.decode(saq.DEFAULT_ENCODING))
+                    if m:
+                        (name, user, mac) = m.groups()
+                        analysis.netbios_name = name
+                        analysis.netbios_user = user
+                        analysis.netbios_mac = mac
+                        
+                        logging.debug("found netbios_name {0} netbios_user {1} netbios_mac {2} for asset {3}".format(
+                            name, user, mac, asset))
+                        continue
+
+                    m = re.search(r'\s([^<\s]+)<00>\s+Flags:\s+<group><active>', line.decode(saq.DEFAULT_ENCODING))
+                    if m:
+                        (domain,) = m.groups()
+                        analysis.netbios_domain = domain
+                        logging.debug("found netbios_domain {0} for asset {1}".format(domain, asset))
+                        continue
 
         asset.add_analysis(analysis)
 
