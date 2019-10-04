@@ -45,3 +45,4 @@ urlfinderlib
 vxstreamlib
 yara_scanner
 sandboxapi
+gglsbl-rest-client
