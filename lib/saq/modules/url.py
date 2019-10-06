@@ -53,8 +53,7 @@ class GglsblAnalysis(Analysis):
                 }
 
     def generate_summary(self):
-        result = self.details['match_tags'] if self.details['match_tags'] else None
-        return "Google SafeBrowsing Results: {}".format(self.details['match_tags'])
+        return "Google SafeBrowsing Results: {}".format(' '.join(self.details['match_tags']))
 
 class GglsblAnalyzer(AnalysisModule):
     """Lookup a URL against a gglsbl-rest service.
@@ -79,32 +78,27 @@ class GglsblAnalyzer(AnalysisModule):
     def verify_environment(self):
         self.verify_config_exists('server');
 
-    def _summarize_matches(self, matches):
-        match_tags = []
-        for match in matches:
-            match_tag_summary += match['threat']+' ' if match['threat_entry'] == 'URL' else ''
-        return match_tag_summary
-
     def execute_analysis(self, observable):
-       
-        #try:
-        sbc = GRS_Client(self.remote_server, self.remote_port)
-        result = sbc.lookup(observable.value)
-        matches = result['matches']
-        if matches:
-            logging.error("HERE")
-            analysis = self.create_analysis(observable)
-            analysis.details['result'] = result
-            observable.add_tag('suspicious')
-            logging.error(matches)
-            analysis.details['match_tags'] = list(set([ m for match in matches if match['threat_entry'] == 'URL' ]))
-            loggine.error(analysis.details['match_tags'])
-            observable.add_detection_point("URL has matches on Google Safe Browsing List")
-        else:
-            return False
-        #except Exception as e:
-        #    logging.error("Error using the gglsbl-rest service at {} : {}".format(self.remote_server, e))
-        #    return False 
+        logging.info("Looking up '{}' in gglsbl-rest service at '{}'".format(observable.value, self.remote_server))       
+        try:
+            sbc = GRS_Client(self.remote_server, self.remote_port)
+            result = sbc.lookup(observable.value)
+            matches = result['matches']
+            if matches:
+                observable.add_detection_point("URL has matches on Google Safe Browsing List")
+                analysis = self.create_analysis(observable)
+                analysis.details['result'] = result
+                analysis.details['match_tags'] = list(set([ m['threat'] for m in matches if m['threat_entry'] == 'URL' ]))
+                observable.add_tag('gglsbl match')
+                for tag in analysis.details['match_tags']:
+                    observable.add_tag(tag.replace('_',' ').lower())
+                observable.add_detection_point("URL has matches on Google Safe Browsing List")
+                return True
+            else:
+                return False
+        except Exception as e:
+            logging.error("Error using the gglsbl-rest service at {} : {}".format(self.remote_server, e))
+            return False 
 
 class CrawlphishAnalysis(Analysis):
 
