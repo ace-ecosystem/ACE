@@ -77,6 +77,7 @@ class GglsblAnalyzer(AnalysisModule):
 
     def verify_environment(self):
         self.verify_config_exists('server');
+        self.verify_config_exists('port');
 
     def execute_analysis(self, observable):
         logging.info("Looking up '{}' in gglsbl-rest service at '{}'".format(observable.value, self.remote_server))       
@@ -85,6 +86,7 @@ class GglsblAnalyzer(AnalysisModule):
             result = sbc.lookup(observable.value)
             matches = result['matches']
             if matches:
+                logging.info("Matches found for '{}' in gglsbl. Adding analysis.".format(observable.value))
                 observable.add_detection_point("URL has matches on Google Safe Browsing List")
                 analysis = self.create_analysis(observable)
                 analysis.details['result'] = result
