@@ -1584,7 +1584,7 @@ WHERE
         email_subject = email_subject.replace('[POTENTIAL_PHISH]_', '').replace('[POTENTIAL PHISH] ', '')
 
         try:
-            submit_response(email_from, email_subject, alert.disposition, user_comment)
+            submit_response(email_from, email_subject, disposition, user_comment)
         except Exception as e:
             logging.error(f"unable to submit response to phishme report to {email_from}: {e}")
             report_exception()
