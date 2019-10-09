@@ -13,9 +13,21 @@ then
     rm logs/unittest.log
 fi
 
+if [ ! -d data_unittest ]
+then
+    mkdir data_unittest
+fi
+
 if [ -d data_unittest/error_reports ]
 then
     rm -rf data_unittest/error_reports && mkdir data_unittest/error_reports
+fi
+
+if [ -d data_unittest/logs ]
+then
+    rm -rf data_unittest/logs && mkdir data_unittest/logs
+else
+    mkdir data_unittest/logs
 fi
 
 # if we passed no parameters then we run all the tests
