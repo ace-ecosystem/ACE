@@ -34,6 +34,9 @@ class BroHTTPTestCase(BroHTTPBaseTestCase):
         collector.wait()
 
     def test_processing(self):
+        if not os.path.exists(self.bro_bin_path):
+            self.skipTest(f"{self.bro_bin_path} does not exist")
+
         self.process_pcap(os.path.join(saq.SAQ_HOME, 'test_data', 'pcaps', 'http_download_pdf.pcap'))
 
         collector = BroHTTPStreamCollector()
@@ -50,6 +53,9 @@ class BroHTTPTestCase(BroHTTPBaseTestCase):
 
 class BroHTTPEngineTestCase(BroHTTPBaseTestCase, ACEEngineTestCase):
     def test_complete_processing(self):
+        if not os.path.exists(self.bro_bin_path):
+            self.skipTest(f"{self.bro_bin_path} does not exist")
+
         self.process_pcap(os.path.join(saq.SAQ_HOME, 'test_data', 'pcaps', 'http_download_pdf.pcap'))
 
         self.start_api_server()
