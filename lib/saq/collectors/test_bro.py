@@ -36,4 +36,7 @@ class BroBaseTestCase(CollectorBaseTestCase):
     def process_pcap(self, pcap_path):
         # have bro process this pcap file of a download of a PDF file
         logging.debug("processing pcap...")
+        if not os.path.exists(self.bro_bin_path):
+            self.skipTest(f"{self.bro_bin_path} does not exist")
+
         Popen([self.bro_bin_path, '-C', '-r', pcap_path, os.path.join('ace', 'ace_http.bro'), os.path.join('ace', 'ace_smtp.bro')], cwd=self.bro_work_dir).wait()
