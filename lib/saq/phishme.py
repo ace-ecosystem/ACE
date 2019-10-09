@@ -20,10 +20,12 @@ def submit_response(recipient, subject, disposition, comment):
 
     # Is phishme enabled?
     if not saq.CONFIG['phishme'].getboolean('enabled'):
+        logging.debug("phishme response is not enabled.")
         return False
 
     # is SMTP enabled?
     if not saq.CONFIG['smtp'].getboolean('enabled'):
+        logging.debug("smtp is not enabled. Aborting phishme response")
         return False
 
     # is this disposition mapped to a response?
