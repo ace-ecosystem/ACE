@@ -12,6 +12,7 @@ olefile
 oletools
 openpyxl
 pcodedmp
+phishfry
 pip
 ply
 psutil 
