@@ -18,6 +18,10 @@ from saq.constants import *
 def submit_response(recipient, subject, disposition, comment):
     """Sends en email as a response to a PhishMe report based on the analysis of an analyst."""
 
+    # Is phishme enabled?
+    if not saq.CONFIG['phishme'].getboolean('enabled'):
+        return False
+
     # is SMTP enabled?
     if not saq.CONFIG['smtp'].getboolean('enabled'):
         return False
@@ -25,7 +29,7 @@ def submit_response(recipient, subject, disposition, comment):
     # is this disposition mapped to a response?
     disposition_key = f'DISPOSITION_{disposition}'
     if disposition_key not in saq.CONFIG['phishme']:
-        logging.debug("disposition {disposition} is not mapped to a response for phishme")
+        logging.debug(f"disposition {disposition} is not mapped to a response for phishme")
         return False
 
     if not saq.CONFIG['phishme'][disposition_key]:

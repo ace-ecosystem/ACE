@@ -73,6 +73,7 @@ KEY_SOURCE_PORT = 'source_port'
 KEY_RETURN_PATH = 'return_path'
 
 TAG_OUTBOUND_EMAIL = 'outbound_email'
+TAG_OUTBOUND_EXCEPTION_EMAIL = 'outbound_email_exception'
 
 # regex to match an email header line
 RE_EMAIL_HEADER = re.compile(r'^[^:]+:\s.*$')
@@ -1160,6 +1161,7 @@ class EmailAnalyzer(AnalysisModule):
         self.verify_config_exists('whitelist_path')
         self.verify_path_exists(self.config['whitelist_path'])
         self.verify_config_exists('scan_inbound_only')
+        self.verify_config_exists('outbound_exceptions')
 
     def load_config(self):
         self.whitelist = BrotexWhitelist(os.path.join(saq.SAQ_HOME, self.config['whitelist_path']))
@@ -1176,6 +1178,10 @@ class EmailAnalyzer(AnalysisModule):
     @property
     def valid_observable_types(self):
         return F_FILE
+
+    @property
+    def outbound_exception_list(self):
+        return self.config['outbound_exceptions'].split(',')
 
     def analyze_rfc822(self, _file):
 
@@ -1250,18 +1256,6 @@ class EmailAnalyzer(AnalysisModule):
 
         # START WHITELISTING
 
-        # for office365 we check to see if this email is inbound
-        # this only applies to the original email, not email attachments
-        if _file.has_directive(DIRECTIVE_ORIGINAL_EMAIL):
-            if 'X-MS-Exchange-Organization-MessageDirectionality' in target_email:
-                if target_email['X-MS-Exchange-Organization-MessageDirectionality'] != 'Incoming':
-                    _file.add_tag(TAG_OUTBOUND_EMAIL)
-                    # are we scanning inbound only?
-                    if self.config.getboolean('scan_inbound_only'):
-                        logging.debug("skipping outbound office365 email {}".format(_file))
-                        _file.mark_as_whitelisted()
-                        return False
-
         # check to see if the sender or receiver has been whitelisted
         # this is useful to filter out internally sourced garbage
         if 'from' in target_email:
@@ -1290,6 +1284,26 @@ class EmailAnalyzer(AnalysisModule):
             if self.whitelist.is_whitelisted(WHITELIST_TYPE_SMTP_TO, address):
                 _file.mark_as_whitelisted()
                 return False
+
+        # for office365 we check to see if this email is inbound
+        # this only applies to the original email, not email attachments
+        if _file.has_directive(DIRECTIVE_ORIGINAL_EMAIL):
+            if 'X-MS-Exchange-Organization-MessageDirectionality' in target_email:
+                if target_email['X-MS-Exchange-Organization-MessageDirectionality'] != 'Incoming':
+                    _file.add_tag(TAG_OUTBOUND_EMAIL)
+                    if self.config.getboolean('scan_inbound_only'):
+                        # do we have a configured exception?
+                        for email_exception in self.outbound_exception_list:
+                            logging.debug("searching header To addresses ({}) for '{}'".format(header_tos,
+                                                                                               email_exception))
+                            if email_exception in header_tos:
+                                _file.add_tag(TAG_OUTBOUND_EXCEPTION_EMAIL)
+                                logging.info("Outbound office365 email exception found: {}".format(email_exception))
+                                break
+                        else:
+                            logging.info("skipping outbound office365 email {}".format(_file))
+                            _file.mark_as_whitelisted()
+                            return False
 
         # END WHITELISTING
 
@@ -1615,9 +1629,10 @@ class EmailAnalyzer(AnalysisModule):
                 if headers_file: 
                     headers_file.exclude_analysis(self)
 
+        mail_rcpt_to = log_entry['env_rcpt_to'] if log_entry['env_rcpt_to'] else log_entry['mail_to']
         logging.info("scanning email [{}] {} from {} to {} subject {}".format(
                      self.root.uuid,
-                     log_entry['message_id'], log_entry['mail_from'], log_entry['env_rcpt_to'],
+                     log_entry['message_id'], log_entry['mail_from'], mail_rcpt_to,
                      log_entry['subject']))
 
         return True
