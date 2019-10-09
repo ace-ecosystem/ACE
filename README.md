@@ -34,7 +34,7 @@ ACE is the implementation of a proven detection strategy, a framework for automa
 3. Add ace to sudo.
 4. Login as user ace.
 5. `sudo mkdir /opt/ace && sudo chown ace:ace /opt/ace && cd /opt/ace`
-6. `git clone https://github.com/IntegralDefense/ACE.git .`
+6. `git clone https://github.com/ace-ecosystem/ACE.git .`
 7. `./installer/source_install`
 8. `source load_environment`
 8. `./ace add-user username email_address`
