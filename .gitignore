@@ -140,7 +140,6 @@ etc/remote_assignments.yar
 etc/saq.ini.saved
 etc/startupd
 etc/phishfry.ini
-etc/phishfry.unittest.ini
 etc/mysql_defaults.root
 
 # java decompiler

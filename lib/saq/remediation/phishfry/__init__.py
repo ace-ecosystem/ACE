@@ -14,7 +14,7 @@ from saq.database import Remediation
 from saq.remediation import EmailRemediationSystem
 from saq.remediation.constants import *
 
-import EWS
+import phishfry
 
 class PhishfryRemediationSystem(EmailRemediationSystem):
     def __init__(self, *args, **kwargs):
@@ -33,7 +33,7 @@ class PhishfryRemediationSystem(EmailRemediationSystem):
             version = config[section].get("version", "Exchange2016")
             user = config[section]["user"]
             password = config[section]["pass"]
-            self.accounts.append(EWS.Account(user, password, server=server, version=version, 
+            self.accounts.append(phishfry.Account(user, password, server=server, version=version, 
                                              timezone=timezone, proxies=saq.PROXIES))
             logging.debug(f"loaded phishfry EWS account user {user} server {server} version {version}")
 
@@ -56,14 +56,14 @@ class PhishfryRemediationSystem(EmailRemediationSystem):
         for account in self.accounts:
             if self.testing_mode:
                 pf_result = {}
-                pf_result[recipient] = EWS.remediation_result.RemediationResult(recipient, message_id, 'mailbox', remediation.action, success=True, message='removed')
+                pf_result[recipient] = phishfry.remediation_result.RemediationResult(recipient, message_id, 'mailbox', remediation.action, success=True, message='removed')
             else:
                 pf_result = account.Remediate(remediation.action, recipient, message_id)
 
             logging.info(f"got result {pf_result} for message-id {message_id} for {recipient}")
 
             # this returns a dict of the following structure
-            # pf_result[email_address] = EWS.RemediationResult
+            # pf_result[email_address] = phishfry.RemediationResult
             # with any number of email_address keys depending on what kind of mailbox it found
             # and how many forwards it found
 
