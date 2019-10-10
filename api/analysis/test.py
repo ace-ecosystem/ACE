@@ -199,8 +199,20 @@ class APIAnalysisTestCase(APIBasicTestCase):
 
         self.assertEquals(result.status_code, 400)
         self.assertTrue('invalid event time format' in result.data.decode())
-        # there should be nothing in the data directory (it should have been removed)
-        self.assertEquals(len(os.listdir(os.path.join(saq.SAQ_HOME, saq.DATA_DIR, saq.SAQ_NODE))), 0)
+        # there should only be one entry in the node directory, but that should be empty
+
+        def _get_alert_dir_count():
+            """Returns a tuple of subdir_count, alert_count where subdir_count is the count of sub directories in the node directory,
+               and alert_count is the count of sub directories in the subdirs (the alert directories)."""
+            subdirs = os.listdir(os.path.join(saq.SAQ_HOME, saq.DATA_DIR, saq.SAQ_NODE))
+            count = 0
+            for subdir in subdirs:
+                count += len(os.listdir(os.path.join(saq.SAQ_HOME, saq.DATA_DIR, saq.SAQ_NODE, subdir)))
+
+            return len(subdirs), count
+
+        subdir_count, alertdir_count = _get_alert_dir_count()
+        self.assertEquals(alertdir_count, 0)
 
         result = self.client.post(url_for('analysis.submit'), data={
             'analysis': json.dumps({
@@ -224,7 +236,8 @@ class APIAnalysisTestCase(APIBasicTestCase):
         self.assertEquals(result.status_code, 400)
         self.assertEquals(result.data.decode(), 'an observable is missing the value field')
         # there should be nothing in the data directory (it should have been removed)
-        self.assertEquals(len(os.listdir(os.path.join(saq.SAQ_HOME, saq.DATA_DIR, saq.SAQ_NODE))), 0)
+        subdir_count, alertdir_count = _get_alert_dir_count()
+        self.assertEquals(alertdir_count, 0)
 
         result = self.client.post(url_for('analysis.submit'), data={
             'analysis': json.dumps({
@@ -248,7 +261,8 @@ class APIAnalysisTestCase(APIBasicTestCase):
         self.assertEquals(result.status_code, 400)
         self.assertTrue(result.data.decode(), 'an observable is missing the type field')
         # there should be nothing in the data directory (it should have been removed)
-        self.assertEquals(len(os.listdir(os.path.join(saq.SAQ_HOME, saq.DATA_DIR, saq.SAQ_NODE))), 0)
+        subdir_count, alertdir_count = _get_alert_dir_count()
+        self.assertEquals(alertdir_count, 0)
 
         result = self.client.post(url_for('analysis.submit'), data={
             'analysis': json.dumps({
@@ -271,7 +285,8 @@ class APIAnalysisTestCase(APIBasicTestCase):
         self.assertEquals(result.status_code, 400)
         self.assertTrue('an observable has an invalid time format' in result.data.decode())
         # there should be nothing in the data directory (it should have been removed)
-        self.assertEquals(len(os.listdir(os.path.join(saq.SAQ_HOME, saq.DATA_DIR, saq.SAQ_NODE))), 0)
+        subdir_count, alertdir_count = _get_alert_dir_count()
+        self.assertEquals(alertdir_count, 0)
 
         result = self.client.post(url_for('analysis.submit'), data={
             'analysis': json.dumps({
@@ -294,7 +309,8 @@ class APIAnalysisTestCase(APIBasicTestCase):
         self.assertEquals(result.status_code, 400)
         self.assertTrue('has invalid directive' in result.data.decode())
         # there should be nothing in the data directory (it should have been removed)
-        self.assertEquals(len(os.listdir(os.path.join(saq.SAQ_HOME, saq.DATA_DIR, saq.SAQ_NODE))), 0)
+        subdir_count, alertdir_count = _get_alert_dir_count()
+        self.assertEquals(alertdir_count, 0)
 
     def test_api_analysis_invalid_status(self):
         result = self.client.get(url_for('analysis.get_status', uuid='invalid'))

@@ -164,6 +164,7 @@ class TestCase(ACEModuleTestCase):
         # these should be the same
         self.assertEquals(analysis.details, root.details)
 
+    @unittest.skip("Missing test data.")
     def test_bro_smtp_stream_analysis(self):
         import saq
         import saq.modules.email
@@ -210,6 +211,7 @@ class TestCase(ACEModuleTestCase):
         email_analysis = email_file.get_analysis(saq.modules.email.EmailAnalysis)
         self.assertIsNotNone(email_analysis)
 
+    @unittest.skip("Missing test data.")
     def test_bro_smtp_stream_analysis_no_end_command(self):
         import saq
         import saq.modules.email
@@ -259,6 +261,7 @@ class TestCase(ACEModuleTestCase):
         email_analysis = email_file.get_analysis(saq.modules.email.EmailAnalysis)
         self.assertIsNotNone(email_analysis)
 
+    @unittest.skip("Missing test data.")
     def test_bro_smtp_stream_submission(self):
         from flask import url_for
         from saq.analysis import _JSONEncoder
