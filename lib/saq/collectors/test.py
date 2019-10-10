@@ -241,9 +241,9 @@ class CollectorTestCase(CollectorBaseTestCase):
         # we should see 10 of these
         wait_for_log_count('scheduled test_description mode analysis', 1, 5)
         # and then 16 of these
-        wait_for_log_count('got submission result', 16, 5)
+        wait_for_log_count('got submission result', 16, 15)
         # and 10 of these
-        wait_for_log_count('completed work item', 10, 5)
+        wait_for_log_count('completed work item', 10, 15)
 
         collector.stop()
         collector.wait()
@@ -655,7 +655,7 @@ class CollectorTestCase(CollectorBaseTestCase):
         collector.start()
 
         # with the API server running now we should see these go out
-        wait_for_log_count('completed work item', 10, 5)
+        wait_for_log_count('completed work item', 10, 15)
 
         collector.stop()
         collector.wait()

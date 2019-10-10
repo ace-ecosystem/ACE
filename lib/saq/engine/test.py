@@ -358,8 +358,8 @@ class TestCase(ACEEngineTestCase):
         engine.wait()
 
         # TODO kind of annoying I have to edit this every time I add a new module for testing
-        # there should be 19 analysis modules loaded
-        self.assertEquals(log_count('loading module '), 19)
+        # there should be 20 analysis modules loaded
+        self.assertEquals(log_count('loading module '), 20)
 
     def test_locally_enabled_modules(self):
         

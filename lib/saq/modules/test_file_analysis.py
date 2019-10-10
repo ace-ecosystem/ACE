@@ -837,6 +837,7 @@ class TestCase(ACEModuleTestCase):
         self.assertIsNotNone(analysis)
         self.assertEquals(len(analysis.find_observables(F_FILE)), 12)
 
+    @unittest.skip("Missing test data.")
     def test_correlated_tag(self):
 
         from saq.database import Alert
@@ -864,6 +865,7 @@ class TestCase(ACEModuleTestCase):
         alert = saq.db.query(Alert).first()
         self.assertIsNotNone(alert)
 
+    @unittest.skip("Missin test data.")
     def test_mhtml_analysis(self):
 
         root = create_root_analysis(analysis_mode='test_groups')
