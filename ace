@@ -243,11 +243,11 @@ def daemonize(daemon_name):
     if (maxfd == resource.RLIM_INFINITY):
         maxfd = MAXFD
 
-        for fd in range(0, maxfd):
-            try:
-                os.close(fd)
-            except OSError:   # ERROR, fd wasn't open to begin with (ignored)
-                pass
+    for fd in range(0, maxfd):
+        try:
+            os.close(fd)
+        except OSError:   # ERROR, fd wasn't open to begin with (ignored)
+            pass
 
     if (hasattr(os, "devnull")):
         REDIRECT_TO = os.devnull
