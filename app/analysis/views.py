@@ -31,6 +31,7 @@ from email.utils import COMMASPACE, formatdate
 from operator import attrgetter
 from subprocess import Popen, PIPE, DEVNULL
 from urllib.parse import urlparse
+from sandboxapi.falcon import FalconAPI
 
 import businesstime
 import pandas as pd
@@ -42,7 +43,6 @@ import saq.analysis
 import saq.intel
 import saq.remediation
 import virustotal
-import vxstreamlib
 import splunklib
 
 from saq import SAQ_HOME
@@ -429,17 +429,27 @@ def download_file():
         return redirect(url_for('analysis.index'))
 
     if request.method == "POST" and mode == "vxstream":
-        baseuri = saq.CONFIG.get("vxstream", "baseuri")
+        baseuri = saq.CONFIG.get("vxstream", "baseuri_v2")
         gui_baseuri = saq.CONFIG.get('vxstream', 'gui_baseuri')
         if baseuri[-1] == "/":
             baseuri = baseuri[:-1]
         environmentid = saq.CONFIG.get("vxstream", "environmentid")
         apikey = saq.CONFIG.get("vxstream", "apikey")
         secret = saq.CONFIG.get("vxstream", "secret")
-        server = vxstreamlib.VxStreamServer(baseuri, apikey, secret)
-        submission = server.submit(full_path, environmentid)
-        
-        url = gui_baseuri + "/sample/" + submission.sha256 + "?environmentId=" + environmentid
+        proxies = saq.PROXIES if saq.CONFIG.getboolean('vxstream', 'use_proxy') else {}
+        logging.debug("Uploading file to falcon sandbox")
+        falcon = FalconAPI(apikey, url=baseuri, proxies=proxies, env=environmentid)
+        job_id = None
+        with open(full_path, 'rb') as fp:
+            job_id = falcon.analyze(fp, file_observable.value)
+        if job_id is None:
+            logging.error("submission of {} failed".format(full_path))
+            return False
+        if file_observable.sha256_hash is None:
+            if not file_observable.compute_hashes():
+                return "unable to compute file hash of {}".format(file_observable.value), 404
+        url = gui_baseuri + "/sample/" + file_observable.sha256_hash + "?environmentId=" + environmentid
+        logging.debug("Got vxstream url: {}".format(url))
         return url
 
     if request.method == "POST" and mode == "virustotal":
