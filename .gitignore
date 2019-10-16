@@ -147,3 +147,8 @@ bin/procyon-decompiler*
 
 # unit testing
 data_unittest
+
+# update installation tracking
+updates/**/*.installed
+updates/**/*.stderr
+updates/**/*.stdout

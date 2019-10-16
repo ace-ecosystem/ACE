@@ -56,26 +56,26 @@
     {% if alert.disposition %}
     <tr>
         <td class="col-md-2">Disposition</td>
-	<td class="col-md-10"><b>{{alert.disposition}}</b> by {{alert.disposition_user.username}} @ {{alert.display_disposition_time}} ({{alert.disposition_time}} UTC)</td>
+	<td class="col-md-10"><b>{{alert.disposition}}</b> by {{alert.disposition_user.gui_display}} @ {{alert.display_disposition_time}} ({{alert.disposition_time}} UTC)</td>
     </tr>
     {% endif %}
     {% if alert.owner %}
     <tr>
         <td class="col-md-2">Owner</td>
-        <td class="col-md-10">{{alert.owner.username}} @ {{alert.owner_time}}</td>
+        <td class="col-md-10">{{alert.owner.gui_display}} @ {{alert.owner_time}}</td>
     </tr>
     {% endif %}
     {% if alert.remover %}
     <tr>
         <td class="col-md-2">Removal</td>
-        <td class="col-md-10">{{alert.remover.username}} @ {{alert.removal_time}}</td>
+        <td class="col-md-10">{{alert.remover.gui_display}} @ {{alert.removal_time}}</td>
     </tr>
     {% endif %}
 
     {% for comment in alert.comments %}
     <tr>
         <td class="col-md-2">Comment</td>
-        <td class="col-md-10">{% if comment.user.id == current_user.id %}<span class="glyphicon glyphicon-remove" onmousedown="delete_comment({{comment.comment_id}})"></span> {% endif %} {{comment.insert_date}} {{comment.user.username}}<br>{{comment.comment}}</td>
+        <td class="col-md-10">{% if comment.user.id == current_user.id %}<span class="glyphicon glyphicon-remove" onmousedown="delete_comment({{comment.comment_id}})"></span> {% endif %} {{comment.insert_date}} {{comment.user.gui_display}}<br>{{comment.comment}}</td>
     </tr>
     {% endfor %}
 
