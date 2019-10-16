@@ -1291,10 +1291,10 @@ def add_user(args):
     from saq.database import get_db_connection
     from getpass import getpass
 
-
     u = User()
     u.username = args.username
     u.email = args.email
+    u.display_name = args.display_name
 
     try:
         import pytz
@@ -1308,8 +1308,8 @@ def add_user(args):
         print(f"ERROR: invalid timezone {u.timezone}")
         sys.exit(1)
 
-    password = getpass("Enter password for {0}: ".format(u.username))
-    confirm = getpass("Confirm password for {0}: ".format(u.username))
+    password = getpass("Enter password for {}: ".format(u.username))
+    confirm = getpass("Confirm password for {}: ".format(u.username))
     if password != confirm:
         logging.error("passwords do not match")
         sys.exit(1)
@@ -1318,11 +1318,11 @@ def add_user(args):
 
     with get_db_connection() as db:
         c = db.cursor()
-        c.execute("""INSERT INTO users ( username, email, password_hash, timezone ) VALUES ( %s, %s, %s, %s )""", (
-            u.username, u.email, u.password_hash, u.timezone))
+        c.execute("""INSERT INTO users ( username, email, password_hash, timezone, display_name ) VALUES ( %s, %s, %s, %s, %s )""", (
+            u.username, u.email, u.password_hash, u.timezone, u.display_name ))
         db.commit()
 
-    logging.info("added user {0}".format(u.username))
+    logging.info("added user {}".format(u.username))
 
 add_user_parser = subparsers.add_parser('add-user',
     help="Add a new user to the system.")
@@ -1330,6 +1330,8 @@ add_user_parser.add_argument('username', help="The username of the new user.")
 add_user_parser.add_argument('email', help="The email address of the new user.")
 add_user_parser.add_argument('-z', '--timezone', required=False, default=None,
     help="The timezone the user is in. Defaults to UTC.")
+add_user_parser.add_argument('-d', '--display-name', required=False, default=None,
+    help="The (optional) display name for the user.")
 add_user_parser.set_defaults(func=add_user)
 
 def modify_user(args):

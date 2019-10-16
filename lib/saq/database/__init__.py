@@ -458,8 +458,20 @@ class User(UserMixin, Base):
     password_hash = Column(String(128))
     omniscience = Column(Integer, nullable=False, default=0)
     timezone = Column(String(512))
+    display_name = Column(String(1024))
 
     def __str__(self):
+        return self.username
+
+    @property
+    def gui_display(self):
+        """Returns the textual representation of this user in the GUI.
+           If the user has a display_name value set then that is returned.
+           Otherwise, the username is returned."""
+
+        if self.display_name is not None:
+            return self.display_name
+
         return self.username
 
     @property
