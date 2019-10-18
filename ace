@@ -977,6 +977,54 @@ ace_engine_parser = subparsers.add_parser('ace-engine',
 ace_engine_parser.set_defaults(func=ace)
 
 # ============================================================================
+# start/stop the falcon siem collector
+#
+
+def falcon_collector(args):
+
+    from saq.collectors.falcon import FalconCollector
+    from saq.error import report_exception
+
+    daemon_name = 'falcon'
+    disable_proxy()
+
+    if args.stop:
+        kill_daemon(daemon_name)
+        sys.exit(0)
+
+    elif args.start:
+        if args.daemon:
+            logging.info("starting daemon {}".format(daemon_name))
+            daemonize(daemon_name)
+
+        try:
+            collector = FalconCollector()
+            collector.load_groups()
+            collector.start()
+
+        except KeyboardInterrupt as e:
+            logging.info("caught user interrupt")
+            try:
+                collector.stop()
+                collector.wait()
+            except Exception as e:
+                logging.error("uncaught exception: {}".format(e))
+        except Exception as e:
+            logging.error("uncaught exception: {}".format(e))
+            report_exception()
+    else:
+        logging.error("You must specify either --start or --stop for this service.")
+        sys.exit(1)
+
+    sys.exit(0)
+
+# falcon-collector
+falcon_collector_parser = subparsers.add_parser('falcon-collector',
+    help="Start/Stop the Falcon SIEM Collector")
+falcon_collector_parser.set_defaults(func=falcon_collector)
+
+
+# ============================================================================
 # start/stop the carbon black binary collector
 #
 
