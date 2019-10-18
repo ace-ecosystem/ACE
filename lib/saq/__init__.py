@@ -508,7 +508,7 @@ def initialize(saq_home=None,
         os.path.join(STATS_DIR, 'brocess'), # get rid of this
         os.path.join(STATS_DIR, 'metrics'),
         os.path.join(DATA_DIR, CONFIG['splunk_logging']['splunk_log_dir']),
-        os.path.join(DATA_DIR, DATA_DIR, CONFIG['elk_logging']['elk_log_dir']),
+        os.path.join(DATA_DIR, CONFIG['elk_logging']['elk_log_dir']),
         os.path.join(TEMP_DIR),
         os.path.join(SAQ_HOME, CONFIG['yara']['yss_base_dir'], 'logs'), ]: # XXX this should be in YSS
         #os.path.join(SAQ_HOME, maliciousdir) ]: # XXX remove
