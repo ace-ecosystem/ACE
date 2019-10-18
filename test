@@ -35,6 +35,7 @@ if [ "$#" -eq "0" ]
 then
     PYTHONPATH=lib python3 -W ignore -m unittest -f -v \
         saq.analysis.test \
+        saq.util.test \
         saq.collectors.test \
         saq.collectors.test_http \
         saq.collectors.test_email \
