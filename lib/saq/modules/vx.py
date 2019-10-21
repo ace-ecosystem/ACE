@@ -805,7 +805,7 @@ class FalconAnalysis(Analysis):
                 logging.debug("{} missing key: {}".format(self, e))
 
         except Exception as e:
-            logging.error("unable to parse vxstream json at {}: {}".format(self.json_path, e))
+            logging.error("unable to parse Falcon json at {}: {}".format(self.json_path, e))
             #report_exception()
 
 
@@ -1125,7 +1125,7 @@ class FalconAnalyzer(SandboxAnalysisModule):
             return True
 
         if analysis.status != VXSTREAM_STATUS_SUCCESS:
-            logging.error("unknown vxstream status {} for sample {}".format(analysis.status, target))
+            logging.error("unknown falcon status {} for sample {}".format(analysis.status, target))
             return False
 
         # the analysis is assumed to be complete here
@@ -1188,7 +1188,7 @@ class FalconAnalyzer(SandboxAnalysisModule):
                     if ((analysis.vxstream_threat_score and int(analysis.vxstream_threat_score) >= self.threat_score_threshold)
                         and (analysis.vxstream_threat_level and int(analysis.vxstream_threat_level) >= self.threat_level_threshold)):
                         target.add_tag('malicious')
-                        analysis.add_detection_point("sample has vxstream threat score of {} and threat level of {}".format(
+                        analysis.add_detection_point("sample has falcon threat score of {} and threat level of {}".format(
                                                      analysis.vxstream_threat_score, analysis.vxstream_threat_level))
 
                     for host in results['hosts']:
@@ -1204,7 +1204,7 @@ class FalconAnalyzer(SandboxAnalysisModule):
                         if ((analysis.vxstream_threat_score and int(analysis.vxstream_threat_score) >= self.threat_score_threshold)
                             and (analysis.vxstream_threat_level and int(analysis.vxstream_threat_level) >= self.threat_level_threshold)):
                             target.add_tag('malicious')
-                            analysis.add_detection_point("sample has vxstream threat score of {} and threat level of {}".format(
+                            analysis.add_detection_point("sample has falcon threat score of {} and threat level of {}".format(
                                                          analysis.vxstream_threat_score, analysis.vxstream_threat_level))
 
                     # NOTE for these results if there is only one result then vxstream uses a single dict
@@ -1230,7 +1230,7 @@ class FalconAnalyzer(SandboxAnalysisModule):
                             analysis.add_observable(F_URL, http_request['request_url'])
 
         except KeyError as e:
-            logging.warning("vxstream report for {} missing or incomplete: {}".format(analysis.sha256, e))
+            logging.warning("falcon report for {} missing or incomplete: {}".format(analysis.sha256, e))
         except Exception as e:
             logging.error("unable to load json from {}: {}".format(analysis.json_path, e))
 
@@ -1327,7 +1327,8 @@ class FalconFileAnalyzer(FalconAnalyzer):
             target = target.redirection
 
         analysis = target.get_analysis(FalconFileAnalysis)
-        if analysis is None:
+        # XXX I'm not sure why get_analysis returns False instead of None if the observable has already been analyze
+        if analysis is None or analysis is False:
             # let vxstream analyze the hash of the file before we decide to submit it
             hash_analysis = self.wait_for_analysis(target, FileHashAnalysis)
 
@@ -1384,7 +1385,7 @@ class FalconFileAnalyzer(FalconAnalyzer):
             analysis.submit_date = datetime.datetime.now()
 
         else:
-            logging.debug("FalconFileAnalysis exists with status {} for target: {}".format(analysis.status, target))
+            logging.info("FalconFileAnalysis exists with status {} for target: {}".format(analysis.status, target))
 
         # at this point we have analysis for a file that has been submitted
         return self.execute_vxstream_analysis(target, analysis)

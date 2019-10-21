@@ -1584,7 +1584,11 @@ WHERE
         email_subject = email_subject.replace('[POTENTIAL_PHISH]_', '').replace('[POTENTIAL PHISH] ', '')
 
         try:
-            submit_response(email_from, email_subject, alert.disposition, user_comment)
+            # Has this alert already been dispositioned? Try not to spam users when an event is updated. 
+            if alert.disposition == disposition:
+                logging.warning(f"Not sending phishme response to {email_from} for subject:'{email_subject}' because the disposition was not updated.")
+            else:
+                submit_response(email_from, email_subject, disposition, user_comment)
         except Exception as e:
             logging.error(f"unable to submit response to phishme report to {email_from}: {e}")
             report_exception()
