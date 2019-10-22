@@ -20,6 +20,7 @@ saq.ini
 saq.unittest.ini
 brotex.whitelist
 saq_apache.conf
+falcon_collector_logging.ini
 
 carbon_black.auth
 mysql_defaults

@@ -140,7 +140,6 @@ etc/remote_assignments.yar
 etc/saq.ini.saved
 etc/startupd
 etc/phishfry.ini
-etc/phishfry.unittest.ini
 etc/mysql_defaults.root
 
 # java decompiler
@@ -148,3 +147,8 @@ bin/procyon-decompiler*
 
 # unit testing
 data_unittest
+
+# update installation tracking
+updates/**/*.installed
+updates/**/*.stderr
+updates/**/*.stdout

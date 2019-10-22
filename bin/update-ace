@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+#
+
+cd $SAQ_HOME || { echo "unable to cd to $SAQ_HOME"; exit 1; }
+
+#
+# install mysql updates
+#
+
+# make sure we can connect as root
+MYSQL_COMMAND="sudo mysql -u root"
+if ! $MYSQL_COMMAND -e 'SELECT 1' > /dev/null 2>&1
+then
+    echo "unable to connect as root user to mysql"
+    exit 1
+fi
+
+# make sure we have root creds
+#if [ ! -e etc/mysql_defaults.root ]
+#then
+    #cat<<EOF
+#ERROR: missing file etc/mysql_defaults.root
+#Create this file before continuing.
+#EOF
+    #exit 1
+#fi
+
+#mysql --defaults-file=etc/mysql_defaults.root || { echo "unable to log into mysql database as root"; exit 1; }
+
+# keep track of which updates are installed
+if [ ! -d updates/.installed/sql ]
+then
+    mkdir -p updates/.installed/sql
+fi
+
+find updates/sql -type f -name '*.sql' \! -name '*.installed' | while read sql
+do
+    database=$(echo $sql | awk -F / '{print $3}')
+
+    #echo $sql
+    #echo $installed_marker
+    #echo $database
+
+    if [ -e $sql.installed ]
+    then
+        echo "already installed $sql"
+        continue
+    fi
+
+    echo "installing $sql on database $database"
+    if ! $MYSQL_COMMAND --database=$database < $sql 2> $sql.stderr > $sql.stdout
+    then
+        echo "unable to install $sql (command returned error result $?)"
+        exit 1
+    fi
+
+    if [ -s $sql.stderr ]
+    then
+        echo "unable to install $sql (see $sql.stderr for details)"
+        exit 1
+    elif [ -z $sql.stderr ]
+    then
+        rm $sql.stderr
+    fi
+
+    if [ -z $sql.stdout ]
+    then
+        rm $sql.stdout
+    fi
+
+    touch $installed_marker
+done

@@ -243,11 +243,11 @@ def daemonize(daemon_name):
     if (maxfd == resource.RLIM_INFINITY):
         maxfd = MAXFD
 
-        for fd in range(0, maxfd):
-            try:
-                os.close(fd)
-            except OSError:   # ERROR, fd wasn't open to begin with (ignored)
-                pass
+    for fd in range(0, maxfd):
+        try:
+            os.close(fd)
+        except OSError:   # ERROR, fd wasn't open to begin with (ignored)
+            pass
 
     if (hasattr(os, "devnull")):
         REDIRECT_TO = os.devnull
@@ -977,6 +977,54 @@ ace_engine_parser = subparsers.add_parser('ace-engine',
 ace_engine_parser.set_defaults(func=ace)
 
 # ============================================================================
+# start/stop the falcon siem collector
+#
+
+def falcon_collector(args):
+
+    from saq.collectors.falcon import FalconCollector
+    from saq.error import report_exception
+
+    daemon_name = 'falcon'
+    disable_proxy()
+
+    if args.stop:
+        kill_daemon(daemon_name)
+        sys.exit(0)
+
+    elif args.start:
+        if args.daemon:
+            logging.info("starting daemon {}".format(daemon_name))
+            daemonize(daemon_name)
+
+        try:
+            collector = FalconCollector()
+            collector.load_groups()
+            collector.start()
+
+        except KeyboardInterrupt as e:
+            logging.info("caught user interrupt")
+            try:
+                collector.stop()
+                collector.wait()
+            except Exception as e:
+                logging.error("uncaught exception: {}".format(e))
+        except Exception as e:
+            logging.error("uncaught exception: {}".format(e))
+            report_exception()
+    else:
+        logging.error("You must specify either --start or --stop for this service.")
+        sys.exit(1)
+
+    sys.exit(0)
+
+# falcon-collector
+falcon_collector_parser = subparsers.add_parser('falcon-collector',
+    help="Start/Stop the Falcon SIEM Collector")
+falcon_collector_parser.set_defaults(func=falcon_collector)
+
+
+# ============================================================================
 # start/stop the carbon black binary collector
 #
 
@@ -1291,10 +1339,10 @@ def add_user(args):
     from saq.database import get_db_connection
     from getpass import getpass
 
-
     u = User()
     u.username = args.username
     u.email = args.email
+    u.display_name = args.display_name
 
     try:
         import pytz
@@ -1308,8 +1356,8 @@ def add_user(args):
         print(f"ERROR: invalid timezone {u.timezone}")
         sys.exit(1)
 
-    password = getpass("Enter password for {0}: ".format(u.username))
-    confirm = getpass("Confirm password for {0}: ".format(u.username))
+    password = getpass("Enter password for {}: ".format(u.username))
+    confirm = getpass("Confirm password for {}: ".format(u.username))
     if password != confirm:
         logging.error("passwords do not match")
         sys.exit(1)
@@ -1318,11 +1366,11 @@ def add_user(args):
 
     with get_db_connection() as db:
         c = db.cursor()
-        c.execute("""INSERT INTO users ( username, email, password_hash, timezone ) VALUES ( %s, %s, %s, %s )""", (
-            u.username, u.email, u.password_hash, u.timezone))
+        c.execute("""INSERT INTO users ( username, email, password_hash, timezone, display_name ) VALUES ( %s, %s, %s, %s, %s )""", (
+            u.username, u.email, u.password_hash, u.timezone, u.display_name ))
         db.commit()
 
-    logging.info("added user {0}".format(u.username))
+    logging.info("added user {}".format(u.username))
 
 add_user_parser = subparsers.add_parser('add-user',
     help="Add a new user to the system.")
@@ -1330,6 +1378,8 @@ add_user_parser.add_argument('username', help="The username of the new user.")
 add_user_parser.add_argument('email', help="The email address of the new user.")
 add_user_parser.add_argument('-z', '--timezone', required=False, default=None,
     help="The timezone the user is in. Defaults to UTC.")
+add_user_parser.add_argument('-d', '--display-name', required=False, default=None,
+    help="The (optional) display name for the user.")
 add_user_parser.set_defaults(func=add_user)
 
 def modify_user(args):

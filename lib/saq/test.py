@@ -192,6 +192,11 @@ class MemoryLogHandler(logging.Handler):
     def wait_for_log_entry(self, callback, timeout=5, count=1):
         """Waits for callback to return True count times before timeout seconds expire.
            callback takes a single LogRecord object as the parameter and returns a boolean."""
+        
+        # XXX this is a hack but on slower machines the tests are timing out because the system is slow
+        if timeout < 30:
+            timeout = 30
+
         time_limit = datetime.datetime.now() + datetime.timedelta(seconds=timeout)
 
         current_index = 0

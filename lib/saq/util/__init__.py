@@ -4,10 +4,13 @@
 #
 
 import datetime
+import functools
+import json
 import logging
 import os, os.path
 import re
 import signal
+import tempfile
 
 import saq
 from saq.constants import *
@@ -198,3 +201,119 @@ def kill_process_tree(pid, sig=signal.SIGTERM, include_parent=True,
     gone, alive = psutil.wait_procs(children, timeout=timeout,
                                     callback=on_terminate)
     return (gone, alive)
+
+def json_parse(fileobj, decoder=json.JSONDecoder(), buffersize=2048):
+    """Utility iterator function that yields JSON objects from a file that contains multiple JSON objects.
+       The iterator returns a tuple of (json_object, next_position) where next_position is the position in the
+       file the next parsing would take place at."""
+    buffer = ''
+    reference_position = fileobj.tell() # remember where we're starting
+    for chunk in iter(functools.partial(fileobj.read, buffersize), ''):
+        buffer += chunk
+        processed_buffer_size = 0
+        while buffer:
+            try:
+                # index is where we stopped parsing at (where we'll start next time)
+                result, index = decoder.raw_decode(buffer)
+
+                buffer_size = len(buffer)
+                buffer = buffer[index:].lstrip()
+                processed_buffer_size = buffer_size - len(buffer)
+                reference_position += processed_buffer_size
+
+                yield result, reference_position
+
+            except ValueError:
+                # Not enough data to decode, read more
+                break
+
+#
+# How this works:
+# Let's say we're watching a file that another system is writing to. At some point it decides to roll the file over
+# and start a new file. We don't want that to happen while we're in the middle of reading/process it.
+# So we create a HARD LINK to the file named file_name.monitor.
+# When the other system moves the file to the side, we still have the hard link to the original file.
+# And now we can tell that it rolled over since the inode for the hard link we have will be different than the 
+# inode for the new file.
+#
+
+class FileMonitorLink(object):
+    """Utility class to track when a file has been modified."""
+
+    FILE_NEW = 'new'
+    FILE_MODIFIED = 'modified'
+    FILE_UNMODIFIED = 'unmodified'
+    FILE_DELETED = 'deleted'
+    FILE_MOVED = 'moved'
+
+    def __init__(self, path):
+        self.path = path
+        self.link_path = None
+        self.create_link()
+        self.last_stat = None
+
+    def create_link(self):
+        if self.link_path is not None:
+            return
+
+        if os.path.exists(self.path):
+            count = 0
+            while True:
+                try:
+                    self.link_path = os.path.join(saq.TEMP_DIR, f'{os.path.basename(self.path)}.monitor-{count}')
+                    os.link(self.path, self.link_path)
+                    logging.debug(f"created file monitor for {self.path} linked to {self.link_path}")
+                    break
+                except FileExistsError:
+                    count += 1
+                    continue
+                except Exception as e:
+                    logging.error(f"unable to create link {self.link_path} for file monitor for {self.path}: {e}")
+                    report_exception()
+
+    def delete_link(self):
+        if self.link_path is not None:
+            try:
+                os.unlink(self.link_path)
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                logging.error(f"unable to delete monitor link {self.link_path} for {self.path}: {e}")
+
+    def close(self):
+        self.delete_link()
+
+    def status(self):
+        """Returns FileMonitorLink.FILE_NEW if this is the first call to status(),
+                   FileMonitorLink.FILE_MOVED if the path points to a different file than it was before,
+                   FileMonitorLink.FILE_MODIFIED if the file has been modified,
+                   FileMonitorLink.FILE_DELETED if the file has been deleted,
+                   FileMonitorLink.FILE_UNMODIFIED if the file has not changed."""
+
+        old_stat = self.last_stat
+
+        try:
+            self.last_stat = os.stat(self.path)
+        except FileNotFoundError:
+            return FileMonitorLink.FILE_DELETED
+
+        self.create_link()
+
+        # is this the first time we've called status() for this file?
+        if old_stat is None:
+            return FileMonitorLink.FILE_NEW
+
+        link_stat = os.stat(self.link_path)
+        # did the inode change?
+        if link_stat.st_ino != self.last_stat.st_ino:
+            return FileMonitorLink.FILE_MOVED
+
+        # same inode -- did the last modified timestamp change?
+        if old_stat.st_mtime != self.last_stat.st_mtime:
+            return FileMonitorLink.FILE_MODIFIED
+
+        # did the size of the file change?
+        if old_stat.st_size != self.last_stat.st_size:
+            return FileMonitorLink.FILE_MODIFIED
+
+        return FileMonitorLink.FILE_UNMODIFIED
