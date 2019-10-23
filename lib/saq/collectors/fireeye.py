@@ -4,9 +4,15 @@ import base64
 import collections
 import datetime
 import functools
+import io
+import json
 import logging
 import os, os.path
+import re
+import shutil
 import sqlite3
+import tempfile
+import zipfile
 
 import requests
 
@@ -34,13 +40,30 @@ KEY_SHA256 = 'sha256'
 KEY_DST = 'dst'
 KEY_SMTP_TO = 'smtpTo'
 KEY_IP = 'ip'
+KEY_ID = 'id'
 
-def require_token(func):
-    @functools.wraps(func)
-    def wrapper(self, *args, **kwargs):
-        return self._execute_api_call(func, *args, **kwargs)
+KEY_ARTIFACTS_INFO_LIST = 'artifactsInfoList'
+KEY_ARTIFACT_TYPE = 'artifactType'
+KEY_ARTIFACT_NAME = 'artifactName'
 
-    return wrapper
+ARTIFACT_TYPE_RAW_EMAIL = 'raw_email'
+
+class FireEyeSubmission(Submission):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.temp_dir = None
+
+    def generate_temp_dir(self):
+        self.temp_dir = tempfile.mkdtemp(dir=saq.TEMP_DIR)
+
+    def success(self, *args, **kwargs):
+        if self.temp_dir is not None:
+            try:
+                shutil.rmtree(self.temp_dir)
+            except Exception as e:
+                logging.error(f"unable to delete temporary submission dir {self.temp_dir}: {e}")
+
+        return super().success(*args, **kwargs)
 
 class FireEyeCollector(Collector):
     def __init__(self, *args, **kwargs):
@@ -146,8 +169,11 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
 
         try:
             # attempt the api call
+            #logging.info(f"MARKER: target = {target}")
+            #logging.info(f"MARKER: args = {args}")
+            #logging.info(f"MARKER: kwargs = {kwargs}")
             return target(*args, **kwargs)
-        except requests.exceptions.HttpError as e:
+        except requests.exceptions.HTTPError as e:
             # if we got a 4** it means our token expired
             # XXX I'm not sure what code exactly gets returned here, pretty sure it's in the 400 range
             if e.response.status_code >= 400 and e.response.status_code <= 499:
@@ -171,8 +197,11 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
         self.api_token = response.headers['X-FeApi-Token']
         logging.debug(f"got api token {self.api_token}")
 
-    @require_token
-    def get_alerts(self):
+    def get_alerts(self, *args, **kwargs):
+        return self._execute_api_call(self._impl_get_alerts, *args, **kwargs)
+
+    def _impl_get_alerts(self):
+
         # if we don't have a last_api_call, then we default to 48 hours ago
         if self.last_api_call is None:
             self.last_api_call = local_time() - datetime.timedelta(hours=48)
@@ -200,13 +229,68 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
             self.last_api_call = next_api_call
 
         logging.debug(f"next fireeye api call will start at {self.last_api_call}")
-
         json_result = response.json()
+
         if KEY_ALERT not in json_result:
             logging.error(f"missing {KEY_ALERT} in fireeye json result")
 
         for alert in json_result[KEY_ALERT]:
             yield alert
+
+    def get_artifacts(self, *args, **kwargs):
+        return self._execute_api_call(self._impl_get_artifacts, *args, **kwargs)
+
+    def _impl_get_artifacts(self, target_dir, alert_type, alert_id):
+        """Returns a tuple of (dict, str) where dict is the JSON for the artifact metadata
+           and str is the path to the zip file that contains the artifacts."""
+
+        #if os.path.exists('fireeye_artifacts.zip'):
+            #with open('fireeye_artifacts.json', 'r') as fp:
+                #artifact_map = json.load(fp)
+
+            #return artifact_map, 'fireeye_artifacts.zip'
+
+        # XXX documentation isn't clear as to what this should be
+        alert_type = alert_type.lower()
+        alert_type = re.sub(r'[^a-zA-Z0-9]', '', alert_type)
+        logging.debug(f"using alert_type {alert_type}")
+
+        # first download the metadata of what's available for this alert id
+        headers = { 
+            'X-FeApi-Token': self.api_token,
+            'Accept': 'application/json' }
+
+        response = requests.get(f'https://{self.fe_host}/wsapis/v1.2.0/artifacts/{alert_type}/{alert_id}/meta',
+            verify=False, # <-- XXX fix
+            headers=headers)
+
+        response.raise_for_status()
+        json_result = response.json()
+
+        headers = { 
+            'X-FeApi-Token': self.api_token,
+            'Accept': 'application/octet-stream' }
+
+        response = requests.get(f'https://{self.fe_host}/wsapis/v1.2.0/artifacts/{alert_type}/{alert_id}',
+            stream=True,
+            verify=False, # <-- XXX fix
+            headers=headers)
+
+        response.raise_for_status()
+
+        zip_path = os.path.join(target_dir, f'fe_artifacts_{alert_id}.zip')
+        with open(zip_path, 'wb') as fp:
+            for buffer in response.iter_content(io.DEFAULT_BUFFER_SIZE):
+                fp.write(buffer)
+
+        logging.info(f"saved fireeye artifacts for {alert_id} to {zip_path}")
+
+        # XXX DEBUG
+        #shutil.copy2(zip_path, 'fireeye_artifacts.zip')
+        #with open('fireeye_artifacts.json', 'w') as fp:
+            #json.dump(json_result, fp)
+
+        return json_result, zip_path
 
     def is_alert_processed(self, uuid):
         """Returns True if this alert has already been processed, False otherwise."""
@@ -241,7 +325,7 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
         if len(self.submission_list) > 0:
             return self.submission_list.popleft()
 
-        for alert in self.get_alerts(self):
+        for alert in self.get_alerts():
             if self.is_alert_processed(alert['uuid']):
                 logging.debug(f"skipping alert {alert['uuid']} -- already processed")
                 continue
@@ -277,7 +361,6 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                     observables.append({'type': F_EMAIL_ADDRESS, 'value': alert[KEY_SRC][KEY_SMTP_MAIL_FROM]})
                 if KEY_IP in alert[KEY_SRC]:
                     observables.append({'type': F_IPV4, 'value': alert[KEY_SRC][KEY_IP]})
-                    
 
             if KEY_DST in alert:
                 if KEY_SMTP_TO in alert[KEY_DST]:
@@ -293,7 +376,7 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                 if KEY_SUBJECT in alert[KEY_SMTP_MESSAGE]:
                     description += "Subject " + alert[KEY_SMTP_MESSAGE][KEY_SUBJECT]
 
-            self.submission_list.append(Submission(
+            submission = FireEyeSubmission(
                 description = description,
                 analysis_mode = ANALYSIS_MODE_CORRELATION,
                 tool = 'FireEye',
@@ -303,7 +386,39 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                 details = alert,
                 observables = observables,
                 tags = [],
-                files = []))
+                files = [])
+
+            submission.generate_temp_dir()
+
+            # attempt to download and add any artifacts that fireeye generates for the alert
+            files = []
+            try:
+                artifact_meta, artifact_zip_path = self.get_artifacts(submission.temp_dir, alert[KEY_NAME], alert[KEY_ID])
+                zip_fp = zipfile.ZipFile(artifact_zip_path)
+                for artifact_entry in artifact_meta[KEY_ARTIFACTS_INFO_LIST]:
+                    file_name = artifact_entry[KEY_ARTIFACT_NAME]
+                    file_type = artifact_entry[KEY_ARTIFACT_TYPE]
+                    logging.info(f"extracting {file_name} type {file_type} from {artifact_zip_path}")
+                    zip_fp.extract(file_name, path=submission.temp_dir)
+                    submission.files.append((os.path.join(submission.temp_dir, file_name), file_name))
+                    directives = []
+                    if file_type == 'rawemail':
+                        directives.append(DIRECTIVE_ORIGINAL_EMAIL) # make sure this is treated as an email
+                        directives.append(DIRECTIVE_NO_SCAN) # make sure we don't scan it with yara
+                        # remember that we want to scan the extracted stuff with yara
+
+                    submission.observables.append({'type': F_FILE, 
+                                                   'value': file_name, 
+                                                   'tags': [ file_type, ], 
+                                                   'directives': directives})
+
+                os.remove(artifact_zip_path)
+
+            except Exception as e:
+                logging.error(f"unable to process artifact file: {e}")
+                report_exception()
+
+            self.submission_list.append(submission)
 
         if len(self.submission_list) == 0:
             return None
