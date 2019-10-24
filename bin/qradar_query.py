@@ -6,6 +6,7 @@
 
 import argparse
 import configparser
+import json
 import logging
 import os
 import sys
@@ -60,4 +61,4 @@ def callback(status_json):
     sys.stderr.flush()
 
 result = api_client.execute_aql_query(aql_query, status_callback=callback if args.status else None)
-print(result)
+json.dump(result, sys.stdout)
