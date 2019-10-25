@@ -68,5 +68,5 @@ do
         rm $sql.stdout
     fi
 
-    touch $installed_marker
+    touch $sql.installed
 done

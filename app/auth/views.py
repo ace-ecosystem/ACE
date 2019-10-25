@@ -20,6 +20,7 @@ def login():
         try:
             user = db.session.query(User).filter_by(username=form.username.data).one()
         except:
+            logging.warning(f"login failed: invalid username {form.username.data}")
             flash('Invalid default username. Turning Authentication on.')
             saq.CONFIG['gui']['authentication'] = 'on'
             return render_template('auth/login.html', form=form)
@@ -34,6 +35,7 @@ def login():
         try:
             user = db.session.query(User).filter_by(username=form.username.data).one()
         except:
+            logging.warning(f"login failed: invalid username {form.username.data}")
             flash('Invalid username or password.')
             return render_template('auth/login.html', form=form)
 
@@ -49,6 +51,7 @@ def login():
             return response
 
         flash('Invalid username or password.')
+        logging.warning(f"login failed: invalid password for {form.username.data}")
 
     return render_template('auth/login.html', form=form)
 

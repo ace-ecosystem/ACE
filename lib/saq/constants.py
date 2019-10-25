@@ -467,6 +467,7 @@ ANALYSIS_TYPE_CLOUDPHISH = 'cloudphish'
 ANALYSIS_TYPE_MANUAL = 'manual'
 ANALYSIS_TYPE_FAQUEUE = 'faqueue'
 ANALYSIS_TYPE_FALCON = 'falcon'
+ANALYSIS_TYPE_FIREEYE = 'fireeye'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'

@@ -171,6 +171,12 @@ def local_time():
     """Returns datetime.datetime.now() in UTC time zone."""
     return saq.LOCAL_TIMEZONE.localize(datetime.datetime.now()).astimezone(pytz.UTC)
 
+def format_iso8601(d):
+    """Given datetime d, return an iso 8601 formatted string YYYY-MM-DDTHH:mm:ss.fff-zz:zz"""
+    assert isinstance(d, datetime.datetime)
+    d, f, z = d.strftime('%Y-%m-%dT%H:%M:%S %f %z').split()
+    return f'{d}.{f[:3]}-{z[1:3]}:{z[3:]}'
+
 def abs_path(path):
     """Given a path, return SAQ_HOME/path if path is relative, or path if path is absolute."""
     if os.path.isabs(path):
