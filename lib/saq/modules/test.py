@@ -336,7 +336,7 @@ class DelayedAnalysisTestModule(AnalysisModule):
         return F_TEST
 
     def execute_analysis(self, test):
-        analysis = test.get_analysis(DelayedAnalysisTestAnalysis)
+        analysis = test.get_analysis(DelayedAnalysisTestAnalysis, instance=self.instance)
         if not analysis:
             analysis = self.create_analysis(test)
             # the observable value is the format M:SS|M:SS
@@ -507,6 +507,10 @@ class WaitAnalyzerModule_A(AnalysisModule):
             return self.execute_analysis_05(test)
         elif test.value == 'test_6':
             return self.execute_analysis_06(test)
+        elif test.value == 'test_7':
+            return self.execute_analysis_07(test)
+        elif test.value == 'test_8':
+            return self.execute_analysis_08(test)
         elif test.value == 'test_engine_032a':
             return self.execute_analysis_test_engine_032a(test)
         
@@ -547,6 +551,28 @@ class WaitAnalyzerModule_A(AnalysisModule):
         self.create_analysis(test)
         return True
 
+    def execute_analysis_07(self, test):
+        # NOTE the execution order of modules is alphabetically by the config section name of the module
+        analysis = self.wait_for_analysis(test, WaitAnalysis_B, instance='instance1')
+        if not analysis:
+            return False
+
+        self.create_analysis(test)
+        return True
+
+    def execute_analysis_08(self, test):
+        if self.instance == 'instance1':
+            analysis = self.wait_for_analysis(test, WaitAnalysis_A, instance='instance2')
+            if not analysis:
+                return False
+
+            self.create_analysis(test)
+            return True
+
+        elif self.instance == 'instance2':
+            self.create_analysis(test)
+            return True
+
 class WaitAnalysis_B(Analysis):
     def initialize_details(self):
         pass
@@ -574,6 +600,8 @@ class WaitAnalyzerModule_B(AnalysisModule):
             return self.execute_analysis_05(test)
         elif test.value == 'test_6':
             return self.execute_analysis_06(test)
+        elif test.value == 'test_7':
+            return self.execute_analysis_07(test)
 
     def execute_analysis_01(self, test):
         self.create_analysis(test)
@@ -606,6 +634,10 @@ class WaitAnalyzerModule_B(AnalysisModule):
 
         analysis = self.create_analysis(test)
         return self.delay_analysis(test, analysis, seconds=2)
+
+    def execute_analysis_07(self, test):
+        self.create_analysis(test)
+        return True
 
 class WaitAnalysis_C(Analysis):
     def initialize_details(self):
@@ -773,4 +805,26 @@ class GroupingTargetAnalyzer(AnalysisModule):
 
     def execute_analysis(self, test):
         analysis = self.create_analysis(test)
+        return True
+
+class TestInstanceAnalysis(Analysis):
+    def initialize_details(self):
+        pass
+
+class TestInstanceAnalyzer(AnalysisModule):
+    @property
+    def sql(self):
+        return self.config['sql']
+
+    @property
+    def valid_observable_types(self):
+        return F_TEST
+
+    @property
+    def generated_analysis_type(self):
+        return TestInstanceAnalysis
+
+    def execute_analysis(self, test):
+        analysis = self.create_analysis(test)
+        analysis.details = { 'sql': self.sql }
         return True

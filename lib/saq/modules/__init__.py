@@ -1,6 +1,7 @@
 # vim: sw=4:ts=4:et:cc=120
 
 import datetime
+import inspect
 import json
 import logging
 import os
@@ -15,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 import saq
 
-from saq.analysis import Analysis, Observable
+from saq.analysis import Analysis, Observable, MODULE_PATH
 from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
 from saq.util import create_timedelta, parse_event_time
@@ -45,6 +46,14 @@ class AnalysisModule(object):
         self.config_section = config_section
         self.config = None
         self._load_config()
+
+        # the instance defines the specific instance of the given analysis module
+        # some analysis modules can have multiple instances
+        # which are basically analysis modules that share the same python code but have different configurations
+        # for example, a SplunkQueryAnalysisModule might have different instances for the different splunk searches
+        # you might want to run
+        # if this value is missing then it defaults to None, which is the "default" instance
+        self.instance = self.config.get('instance', None)
 
         # a refernce to the RootAnalysis object we're analyzing
         self.root = None
@@ -189,6 +198,7 @@ class AnalysisModule(object):
         """Called when saq.CONFIG changes."""
         pass
 
+    # TODO use the library we wrote for monitor the files
     def watch_file(self, path, callback):
         """Watches the given file and executes callback when it detects that the file has been modified."""
         if path in self.watched_files:
@@ -279,7 +289,11 @@ class AnalysisModule(object):
 
     @property
     def name(self):
-        return self.config_section[len('analysis_module_'):]
+        result = self.config_section[len('analysis_module_'):]
+        if self.instance is not None:
+            result += f':{self.instance}'
+
+        return result
 
     @property
     def shutdown(self):
@@ -311,18 +325,19 @@ class AnalysisModule(object):
         if self.name not in self.root.state:
             self.root.state[self.name] = value
 
-    def wait_for_analysis(self, observable, analysis_type):
+    def wait_for_analysis(self, observable, analysis_type, instance=None):
         """Waits for the given Analysis (by type) be available for the given Observable."""
         from saq.engine import WaitForAnalysisException
 
         assert isinstance(observable, Observable)
-        assert isinstance(analysis_type, type)
+        assert inspect.isclass(analysis_type) and issubclass(analysis_type, Analysis)
+        assert instance is None or isinstance(instance, str)
 
         # do we already have a dependency here?
-        dep = observable.get_dependency(str(analysis_type))
+        dep = observable.get_dependency(MODULE_PATH(analysis_type, instance=instance))
         
-        # have we already analyzed this observable for this anaysis type?
-        analysis = observable.get_analysis(analysis_type)
+        # have we already analyzed this observable for this analysis type?
+        analysis = observable.get_analysis(analysis_type, instance=instance)
         
         # if the dependency has been completed or resolved then we just return whatever we got
         # even if it was nothing
@@ -331,7 +346,7 @@ class AnalysisModule(object):
 
         # if we haven't analyzed this yet or we have and it hasn't completed yet (delayed) then we wait
         if analysis is None or isinstance(analysis, Analysis) and not analysis.completed:
-            raise WaitForAnalysisException(observable, analysis_type)
+            raise WaitForAnalysisException(observable, analysis_type, instance=instance)
 
         # otherwise we return the analysis
         return analysis
@@ -422,7 +437,7 @@ class AnalysisModule(object):
             logging.critical("called create_analysis on {} which does not actually create Analysis".format(self))
             return None
 
-        analysis = observable.get_analysis(self.generated_analysis_type)
+        analysis = observable.get_analysis(self.generated_analysis_type, instance=self.instance)
         if analysis:
             logging.debug("returning existing analysis {} in call to create analysis from {} for {}".format(
                           analysis, self, observable))
@@ -430,6 +445,7 @@ class AnalysisModule(object):
         
         # otherwise we create and initialize a new one
         analysis = self.generated_analysis_type()
+        analysis.instance = self.instance
         analysis.initialize_details()
         observable.add_analysis(analysis)
         return analysis
@@ -501,7 +517,7 @@ class AnalysisModule(object):
                     return False
 
             # have we already generated analysis for this target?
-            current_analysis = obj.get_analysis(self.generated_analysis_type)
+            current_analysis = obj.get_analysis(self.generated_analysis_type, instance=self.instance)
             if current_analysis is not None:
                 # did it return nothing?
                 if isinstance(current_analysis, bool) and not current_analysis:
@@ -527,7 +543,11 @@ class AnalysisModule(object):
         return self.should_analyze(obj)
 
     def __str__(self):
-        return type(self).__name__
+        result = type(self).__name__
+        if self.instance is not None:
+            result += f':{self.instance}'
+
+        return result
 
     def cancel_analysis(self):
         """Try to cancel the analysis loop."""
@@ -762,7 +782,7 @@ configuration."""
 
             if target_observable.time >= start_time and target_observable.time <= end_time:
                 # does this target_observable already have this analysis generated?
-                if target_observable.get_analysis(self.generated_analysis_type):
+                if target_observable.get_analysis(self.generated_analysis_type, instance=self.instance):
                     logging.debug(f"{target_observable} already has analysis for "
                                   f"{self.generated_analysis_type} between times {start_time} and {end_time} "
                                   f"{observable}")

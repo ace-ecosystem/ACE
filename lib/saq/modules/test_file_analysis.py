@@ -249,6 +249,10 @@ class TestCase(ACEModuleTestCase):
         }
 
         for file_name in results.keys():
+            if not os.path.exists(os.path.join('test_data/ole_files', file_name)):
+                self.skipTest(f"missing test data {file_name}")
+
+        for file_name in results.keys():
             root = create_root_analysis(uuid=str(uuid.uuid4()))
             root.initialize_storage()
             target_path = os.path.join('test_data/ole_files', file_name)
@@ -385,6 +389,9 @@ class TestCase(ACEModuleTestCase):
         self.assertFalse(analysis)
 
     def test_file_analysis_002_archive_002_ace(self):
+
+        if not os.path.exists('test_data/ace/dhl_report.ace'):
+            self.skipTest("missing test data")
 
         root = create_root_analysis(uuid=str(uuid.uuid4()))
         root.initialize_storage()
@@ -691,6 +698,9 @@ class TestCase(ACEModuleTestCase):
 
     def test_file_analysis_005_pcode_000_extract_pcode(self):
 
+        if not os.path.exists('test_data/ole_files/word2013_macro_stripped.doc'):
+            self.skipTest("missing test data")
+
         root = create_root_analysis(uuid=str(uuid.uuid4()))
         root.initialize_storage()
         shutil.copy('test_data/ole_files/word2013_macro_stripped.doc', root.storage_dir)
@@ -722,6 +732,9 @@ class TestCase(ACEModuleTestCase):
         self.assertIsNotNone(_file.redirection)
 
     def test_file_analysis_005_office_file_archiver_000_archive(self):
+
+        if not os.path.exists('test_data/ole_files/Paid Invoice.doc'):
+            self.skipTest("missing test data")
 
         # clear existing archive dir
         target_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['analysis_module_office_file_archiver']['office_archive_dir'])
