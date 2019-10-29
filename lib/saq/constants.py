@@ -472,4 +472,3 @@ ANALYSIS_TYPE_FIREEYE = 'fireeye'
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'
 INTEL_DB_CRITS = 'crits'
-

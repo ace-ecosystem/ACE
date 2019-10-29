@@ -9,11 +9,23 @@ import unittest
 
 import saq
 
-from saq.analysis import _JSONEncoder, RootAnalysis, _get_io_write_count, _get_io_read_count
+from saq.analysis import _JSONEncoder, RootAnalysis, _get_io_write_count, _get_io_read_count, MODULE_PATH, SPLIT_MODULE_PATH
 from saq.modules import AnalysisModule
+from saq.modules.test import BasicTestAnalysis, BasicTestAnalyzer, TestInstanceAnalysis
 from saq.constants import *
 from saq.observables import create_observable
 from saq.test import *
+
+class TestCase(ACEBasicTestCase):
+    def test_MODULE_PATH(self):
+        self.assertEquals(MODULE_PATH(BasicTestAnalysis()), 'saq.modules.test:BasicTestAnalysis')
+        self.assertEquals(MODULE_PATH(BasicTestAnalyzer('analysis_module_basic_test')), 'saq.modules.test:BasicTestAnalysis')
+        self.assertEquals(MODULE_PATH(BasicTestAnalysis), 'saq.modules.test:BasicTestAnalysis')
+
+        self.assertEquals(SPLIT_MODULE_PATH(MODULE_PATH(BasicTestAnalysis())), ('saq.modules.test', 'BasicTestAnalysis', None))
+        analysis = TestInstanceAnalysis()
+        analysis.instance = 'instance1'
+        self.assertEquals(SPLIT_MODULE_PATH(MODULE_PATH(analysis)), ('saq.modules.test', 'TestInstanceAnalysis', 'instance1'))
 
 class JSONSeralizerTestCase(ACEBasicTestCase):
     def test_encoding(self):

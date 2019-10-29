@@ -17,7 +17,7 @@ from multiprocessing import Queue, cpu_count, Event
 from queue import Empty
 
 import saq, saq.test
-from saq.analysis import RootAnalysis, _get_io_read_count, _get_io_write_count, Observable
+from saq.analysis import RootAnalysis, _get_io_read_count, _get_io_write_count, Observable, Analysis
 from saq.constants import *
 from saq.database import get_db_connection, use_db, acquire_lock, clear_expired_locks, initialize_node
 from saq.engine import Engine, DelayedAnalysisRequest, add_workload
@@ -340,6 +340,7 @@ class TestCase(ACEEngineTestCase):
 
         self.assertEquals(log_count('loading module '), 0)
 
+    @unittest.skip("not needed to be tested any more")
     def test_globally_enabled_modules(self):
 
         # if we globally enable ALL modules then we should see the correct modules get loaded
@@ -521,6 +522,35 @@ class TestCase(ACEEngineTestCase):
         self.assertTrue(analysis.delayed_request)
         self.assertEquals(analysis.request_count, 2)
         self.assertTrue(analysis.completed)
+
+    def test_delayed_analysis_single_instance(self):
+
+        # same as previous test test_delayed_analysis_single except this module we're testing is instanced
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()), analysis_mode='test_groups')
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable = root.add_observable(F_TEST, '0:01|0:05')
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_test_delayed_analysis_instance')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        from saq.modules.test import DelayedAnalysisTestAnalysis
+
+        root = create_root_analysis(uuid=root.uuid, storage_dir=storage_dir_from_uuid(root.uuid))
+        root.load()
+        analysis = root.get_observable(observable.id).get_analysis(DelayedAnalysisTestAnalysis, instance='instance1')
+        self.assertIsNotNone(analysis)
+        self.assertTrue(analysis.initial_request)
+        self.assertTrue(analysis.delayed_request)
+        self.assertEquals(analysis.request_count, 2)
+        self.assertTrue(analysis.completed)
+        self.assertEquals(analysis.instance, 'instance1')
 
     def test_delayed_analysis_multiple(self):
 
@@ -916,6 +946,60 @@ class TestCase(ACEEngineTestCase):
 
         self.assertEquals(log_count("depends on"), 1)
 
+    def test_wait_for_analysis_instance(self):
+
+        # same as test_wait_for_analysis except we wait for instanced modules
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()), analysis_mode='test_groups')
+        root.initialize_storage()
+        test_observable = root.add_observable(F_TEST, 'test_7') # <-- test 7
+        root.save()
+        root.schedule()
+
+        engine = TestEngine(analysis_pools={'test_groups': 1})
+        engine.enable_module('analysis_module_test_wait_a_instance', 'test_groups')
+        engine.enable_module('analysis_module_test_wait_b_instance', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root = RootAnalysis(uuid=root.uuid, storage_dir=root.storage_dir)
+        root.load()
+        test_observable = root.get_observable(test_observable.id)
+        self.assertIsNotNone(test_observable)
+        from saq.modules.test import WaitAnalysis_A, WaitAnalysis_B
+        self.assertIsNotNone(test_observable.get_analysis(WaitAnalysis_A, instance='instance1'))
+        self.assertIsNotNone(test_observable.get_analysis(WaitAnalysis_B, instance='instance1'))
+
+        self.assertEquals(log_count("depends on"), 1)
+
+    def test_wait_for_analysis_instance_multi(self):
+
+        # same as test_wait_for_analysis_instance except we wait for another instance of the same module
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()), analysis_mode='test_groups')
+        root.initialize_storage()
+        test_observable = root.add_observable(F_TEST, 'test_8') # <-- test 8
+        root.save()
+        root.schedule()
+
+        engine = TestEngine(analysis_pools={'test_groups': 1})
+        engine.enable_module('analysis_module_test_wait_a_instance', 'test_groups')
+        engine.enable_module('analysis_module_test_wait_a_instance_2', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root = RootAnalysis(uuid=root.uuid, storage_dir=root.storage_dir)
+        root.load()
+        test_observable = root.get_observable(test_observable.id)
+        self.assertIsNotNone(test_observable)
+        from saq.modules.test import WaitAnalysis_A, WaitAnalysis_B
+        self.assertIsNotNone(test_observable.get_analysis(WaitAnalysis_A, instance='instance1'))
+        self.assertIsNotNone(test_observable.get_analysis(WaitAnalysis_A, instance='instance1'))
+
+        self.assertEquals(log_count("depends on"), 1)
+
     def test_wait_for_disabled_analysis(self):
         root = create_root_analysis(uuid=str(uuid.uuid4()), analysis_mode='test_groups')
         root.initialize_storage()
@@ -1248,9 +1332,11 @@ class TestCase(ACEEngineTestCase):
         from saq.modules.test import DependencyTestAnalysis, KEY_SUCCESS, KEY_FAIL
         analysis = test_observable.get_analysis(DependencyTestAnalysis)
         for key in analysis.details[KEY_SUCCESS].keys():
-            self.assertTrue(analysis.details[KEY_SUCCESS][key])
+            with self.subTest(target=KEY_SUCCESS, key=key):
+                self.assertTrue(analysis.details[KEY_SUCCESS][key])
         for key in analysis.details[KEY_FAIL].keys():
-            self.assertFalse(analysis.details[KEY_FAIL][key])
+            with self.subTest(target=KEY_FAIL, key=key):
+                self.assertFalse(analysis.details[KEY_FAIL][key])
 
     def test_analysis_mode_priority(self):
 
@@ -2735,3 +2821,35 @@ class TestCase(ACEEngineTestCase):
         from saq.modules.test import GenericTestAnalysis
         analysis = file_observable.get_analysis(GenericTestAnalysis)
         self.assertIsNotNone(analysis)
+
+    def test_module_instance(self):
+        root = create_root_analysis(analysis_mode='test_groups')
+        root.initialize_storage()
+        test_observable = root.add_observable(F_TEST, 'blah')
+        root.save()
+        root.schedule()
+
+        engine = TestEngine(pool_size_limit=1, local_analysis_modes=['test_groups', ANALYSIS_MODE_CORRELATION])
+        engine.enable_module('analysis_module_instance_1', 'test_groups')
+        engine.enable_module('analysis_module_instance_2', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        self.assertEquals(log_count('loading module '), 2)
+
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+    
+        test_observable = root.get_observable(test_observable.id)
+        self.assertIsInstance(test_observable, Observable)
+        
+        from saq.modules.test import TestInstanceAnalysis
+        analysis_instance_1 = test_observable.get_analysis(TestInstanceAnalysis, instance='instance1')
+        self.assertIsInstance(analysis_instance_1, Analysis)
+        self.assertEquals(analysis_instance_1.details, {'sql': 'SELECT * FROM whatever'})
+
+
+        analysis_instance_2 = test_observable.get_analysis(TestInstanceAnalysis, instance='instance2')
+        self.assertIsInstance(analysis_instance_2, Analysis)
+        self.assertEquals(analysis_instance_2.details, {'sql': 'SELECT * FROM thatonething'})
