@@ -460,13 +460,24 @@ class AnalysisModule(object):
     @property
     def valid_observable_types(self):
         """Returns a single (or list of) Observable type that are valid for this module.  
+           If the configuration setting valid_observable_types is present then those values are used.
            Defaults to None (all types are valid.)  Return None to disable the check."""
-        return None
+
+        if 'valid_observable_types' not in self.config:
+            return None
+
+        return [_.strip() for _ in self.config['valid_observable_types'].split(',')]
 
     @property
     def required_directives(self):
-        """Returns a list of required directives for the analysis to occur.  Defaults to empty list."""
-        return []
+        """Returns a list of required directives for the analysis to occur. 
+           If the configuration setting required_directives is present, then those values are used.
+           Defaults to an empty list."""
+
+        if 'required_directives' not in self.config:
+            return []
+
+        return [_.strip() for _ in self.config['required_directives'].split(',')]
 
     def accepts(self, obj):
         """Returns True if this object should be analyzed by this module, False otherwise."""

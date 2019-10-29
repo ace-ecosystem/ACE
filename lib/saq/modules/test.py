@@ -172,6 +172,22 @@ class BasicTestAnalyzer(AnalysisModule):
         time.sleep(3)
         return True
 
+class ConfigurableModuleTestAnalysis(TestAnalysis):
+    def initialize_details(self):
+        self.details = { KEY_TEST_RESULT: True }
+
+    def generate_summary(self):
+        return "This is a summary."
+
+class ConfigurableModuleTestAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return ConfigurableModuleTestAnalysis
+
+    def execute_analysis(self, test):
+        analysis = self.create_analysis(test)
+        return True
+
 class GenericTestAnalysis(TestAnalysis):
     def initialize_details(self):
         return { }
