@@ -41,6 +41,7 @@ KEY_DST = 'dst'
 KEY_SMTP_TO = 'smtpTo'
 KEY_IP = 'ip'
 KEY_ID = 'id'
+KEY_UUID = 'uuid'
 
 KEY_ARTIFACTS_INFO_LIST = 'artifactsInfoList'
 KEY_ARTIFACT_TYPE = 'artifactType'
@@ -375,6 +376,9 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
             if KEY_SMTP_MESSAGE in alert:
                 if KEY_SUBJECT in alert[KEY_SMTP_MESSAGE]:
                     description += "Subject " + alert[KEY_SMTP_MESSAGE][KEY_SUBJECT]
+
+            if KEY_UUID in alert:
+                observables.append({'type': F_FIREEYE_UUID, 'value': alert[KEY_UUID]})
 
             submission = FireEyeSubmission(
                 description = description,

@@ -672,7 +672,7 @@ correlate_parser.add_argument('-m', '--analysis-mode', required=False, dest='ana
 correlate_parser.add_argument('-d', '--storage-dir', required=False, dest='storage_dir', default='ace.out',
     help="Specify an output directory.  Defaults to ace.out.")
 correlate_parser.add_argument('-t', '--reference-time', required=False, dest='reference_time', default=None,
-    help="Specify a datetime in YYYY-MM-DD HH:MM:SS format that observables (of a temporal type) should be referenced from.")
+    help="Specify a datetime in YYYY-MM-DD HH:MM:SS Z format that observables (of a temporal type) should be referenced from.")
 correlate_parser.add_argument('--description', required=False, dest='description', default="ACE Manual Correlation",
     help="Supply a description.  This will be displayed as part of the alert if this correlation is later imported as an alert.")
 correlate_parser.add_argument('--comment', required=False, dest='comment', default=None,

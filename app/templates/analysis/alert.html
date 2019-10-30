@@ -144,7 +144,7 @@
                                 {% endfor %}
                                 {# if an alert has been archived then we do not create links because the analysis has been deleted #}
                                 {% if observable_analysis_node.obj.jinja_is_drillable and not alert.archived %}
-                                    <a href="{{ url_for('analysis.index', alert_uuid=alert.uuid, observable_uuid=observable_node.obj.id, module_path=observable_analysis_node.obj.module_path) }}" title="{{observable_analysis_node.obj.__doc__}}">
+                                    <a href="{{ url_for('analysis.index', alert_uuid=alert.uuid, observable_uuid=observable_node.obj.id, module_path=observable_analysis_node.obj.module_path) }}" title="{{observable_analysis_node.obj.question}}">
                                         {{observable_analysis_node.obj.jinja_display_name}}
                                     </a>
                                 {% else %}

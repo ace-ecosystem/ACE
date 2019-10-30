@@ -768,13 +768,19 @@ configuration."""
         """Returns True if the value of this observable has already been analyzed in another observable
            that has an observation time with range of this observable."""
 
+        logging.info(f"MARKER: 1 for {observable}")
+
         # for this to have any meaning, the observations must have correponding times
         if not observable.time:
             return False
+
+        logging.info(f"MARKER: 2 for {observable}")
         
         # is this feature enabled for this analysis module?
         if not self.is_grouped_by_time:
             return False
+
+        logging.info(f"MARKER: 3 for {observable}")
 
         start_time = observable.time - self.observation_grouping_time_range
         end_time = observable.time + self.observation_grouping_time_range
