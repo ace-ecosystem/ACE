@@ -316,6 +316,8 @@ DIRECTIVE_EXCLUDE_ALL = 'exclude_all'
 DIRECTIVE_WHITELISTED = 'whitelisted'
 # indicates this observable should be tracked across different analysis requests
 DIRECTIVE_TRACKED = 'tracked'
+# indicates that ACE should treat this IP address as an asset and try to figure out the details
+DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
 
 DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'Archive the file',
@@ -330,7 +332,8 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_DELAY: 'instructs various analysis modules to delay the analysis',
     DIRECTIVE_EXCLUDE_ALL: 'instructs ACE to NOT analyze this observable at all',
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
-    DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests'
+    DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
+    DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
 }
 
 VALID_DIRECTIVES = [

@@ -427,11 +427,24 @@ class TestCase(ACEEngineTestCase):
         root = create_root_analysis(uuid=str(uuid.uuid4()))
         root.storage_dir = storage_dir_from_uuid(root.uuid)
         root.initialize_storage()
+
+        # wrong type, correct directive and tag
         user_observable = root.add_observable(F_USER, 'username')
         user_observable.add_directive(DIRECTIVE_ARCHIVE)
+        user_observable.add_tag('test')
+
+        # right type, no directive or tag
         test_observable = root.add_observable(F_TEST, 'test1')
+
+        # right type with directive, no tag
         test_observable_with_directive = root.add_observable(F_TEST, 'test2')
         test_observable_with_directive.add_directive(DIRECTIVE_ARCHIVE)
+
+        # right type, directive and tag
+        test_observable_with_tag = root.add_observable(F_TEST, 'test_with_tag')
+        test_observable_with_tag.add_directive(DIRECTIVE_ARCHIVE)
+        test_observable_with_tag.add_tag('test')
+
         root.analysis_mode = 'test_single'
         root.save()
         root.schedule()
@@ -463,6 +476,14 @@ class TestCase(ACEEngineTestCase):
         self.assertIsNotNone(test_observable_with_directive)
         from saq.modules.test import ConfigurableModuleTestAnalysis
         analysis = test_observable_with_directive.get_analysis(ConfigurableModuleTestAnalysis)
+
+        # this should NOT have analysis since it is missing the tag requirement
+        self.assertIsNone(analysis)
+
+        test_observable_with_tag = root.get_observable(test_observable_with_tag.id)
+        self.assertIsNotNone(test_observable_with_tag)
+        from saq.modules.test import ConfigurableModuleTestAnalysis
+        analysis = test_observable_with_tag.get_analysis(ConfigurableModuleTestAnalysis)
 
         # this should have analysis since it meets all the requirements in the configuration settings
         self.assertIsNotNone(analysis)

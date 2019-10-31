@@ -108,6 +108,21 @@ class QRadarAPIAnalyzer(AnalysisModule):
     def generated_analysis_type(self):
         return QRadarAPIAnalysis
 
+    def process_qradar_event(self, analysis, event, event_time):
+        """Called for each event processed by the module. Can be overridden by subclasses."""
+        pass
+
+    def process_qradar_field_mapping(self, analysis, event, event_time, observable, event_field):
+        """Called each time an observable is created from the observable-field mapping. 
+           Can be overridden by subclasses."""
+        pass
+
+    def filter_observable_value(self, event_field, observable_type, observable_value):
+        """Called for each observable value added to analysis. 
+           Returns the observable value to add to the analysis.
+           By default, the observable_value is returned as-is."""
+        return observable_value
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -161,19 +176,15 @@ class QRadarAPIAnalyzer(AnalysisModule):
                                      .replace('<O_VALUE>', observable.value) # TODO property escape stuff
 
         # figure out the start and stop time
-        event_time = self.root.event_time_datetime
+        source_event_time = self.root.event_time_datetime
         if observable.time is not None:
-            event_time = observable.time
+            source_event_time = observable.time
 
-        start_time = event_time - self.relative_duration_before
-        stop_time = event_time + self.relative_duration_after
+        start_time = source_event_time - self.relative_duration_before
+        stop_time = source_event_time + self.relative_duration_after
         
-        logging.debug(f"start_time = {start_time} stop_time = {stop_time} event_time = {event_time}")
-
         start_time_str = start_time.strftime('%Y-%m-%d %H:%M %z')
         stop_time_str = stop_time.strftime('%Y-%m-%d %H:%M %z')
-
-        logging.debug(f"start_time_str = {start_time_str} stop_time_str = {stop_time_str} event_time = {event_time}")
 
         target_query = target_query.replace('<O_START>', start_time_str)\
                                    .replace('<O_STOP>', stop_time_str)
@@ -193,8 +204,10 @@ class QRadarAPIAnalyzer(AnalysisModule):
             # 2019-10-29 19:50:38.592 -0400
 
             if 'deviceTimeFormatted' in event:
-                observable_time = datetime.datetime.strptime(event['deviceTimeFormatted'], '%Y-%m-%d %H:%M:%S.%f %z')
-                observable_time = observable_time.astimezone(pytz.UTC)
+                event_time = datetime.datetime.strptime(event['deviceTimeFormatted'], '%Y-%m-%d %H:%M:%S.%f %z')
+                event_time = event_time.astimezone(pytz.UTC)
+
+            self.process_qradar_event(analysis, event, event_time)
 
             for event_field in event.keys():
                 if event[event_field] is None:
@@ -203,7 +216,11 @@ class QRadarAPIAnalyzer(AnalysisModule):
                 # do we have this field mapped?
                 if event_field in self.observable_mapping:
                     observable = analysis.add_observable(self.observable_mapping[event_field], 
-                                                         event[event_field], 
+                                                         self.filter_observable_value(event_field, 
+                                                                                      self.observable_mapping[event_field], 
+                                                                                      event[event_field]), 
                                                          o_time=observable_time)
+
+                self.process_qradar_field_mapping(analysis, event, event_time, observable, event_field)
 
         return True

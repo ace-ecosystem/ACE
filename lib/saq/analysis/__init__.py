@@ -582,7 +582,11 @@ class Analysis(TaggableObject, DetectableObject):
 
         # have we figured out where we are saving the data to?
         if self.external_details_path is None:
-            self.external_details_path = '{}_{}.json'.format(type(self).__name__, str(uuid.uuid4()))
+            target_name = type(self).__name__
+            if self.instance is not None:
+                target_name += '_' + self.instance
+
+            self.external_details_path = '{}_{}.json'.format(target_name, str(uuid.uuid4()))
 
         # make sure the containing directory exists
         if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir)):
