@@ -82,7 +82,9 @@ chmod 400 ssl/root/ca/.intermediate_ca.pwd
 ( 
     cd ssl/root/ca && \
     cat intermediate/openssl.cnf > intermediate/openssl.temp.cnf && \
+    HOSTNAME="$(hostname)" && \
     echo 'DNS.1 = localhost' >> intermediate/openssl.temp.cnf && \
+    echo "DNS.2 = ${HOSTNAME}" >> intermediate/openssl.temp.cnf && \
     echo 'IP.1 = 127.0.0.1' >> intermediate/openssl.temp.cnf && \
     openssl genrsa -out intermediate/private/localhost.key.pem 2048 && \
     chmod 400 intermediate/private/localhost.key.pem && \
