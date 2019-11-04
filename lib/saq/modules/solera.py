@@ -16,12 +16,14 @@ from saq.modules import AnalysisModule
 from saq.constants import *
 from saq.util import create_directory, create_timedelta
 
-KEY_ERROR = 'ERROR'
+KEY_ERROR = 'error'
+KEY_PCAP_PATHS = 'pcap_paths'
 
 class SoleraPcapExtractionAnalysis(Analysis):
     def initialize_details(self):
         self.details = { 
             KEY_ERROR: None,
+            KEY_PCAP_PATHS: [],
         }
 
     @property
@@ -32,10 +34,22 @@ class SoleraPcapExtractionAnalysis(Analysis):
     def error(self, value):
         self.details[KEY_ERROR] = value
 
+    @property
+    def pcap_paths(self):
+        return self.details[KEY_PCAP_PATHS]
+
+    @pcap_paths.setter
+    def pcap_paths(self, value):
+        self.details[KEY_PCAP_PATHS] = value
+
     def generate_summary(self):
         result = 'Solera PCAP Extraction - '
         if self.error:
             result += self.error
+        elif len(self.pcap_paths) == 0:
+            result += 'no data available'
+        else:
+            result += f'extracted {len(self.pcap_paths)} pcap files'
 
         return result
 
@@ -154,9 +168,10 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
 
             for pcap_file in os.listdir(pcap_dir):
                 pcap_path = os.path.join(pcap_dir, pcap_file)
-                # for pcap-ng (the default), a size of 72 bytes means the pcap is empty
+                # for pcap-ng (the default), a size of 72 bytes means the pcap is empty of content
+                # also, a file of 0 means the pcap data was missing entirely
                 # so we remove those
-                if os.path.getsize(pcap_path) == 72:
+                if os.path.getsize(pcap_path) in [ 72, 0 ]:
                     logging.debug(f"removing empty pcap file {pcap_path}")
                     try:
                         os.remove(pcap_path)
@@ -169,6 +184,7 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
                 # add it as an observable to the analysis
                 pcap_file = analysis.add_observable(F_FILE, os.path.relpath(pcap_path, start=self.root.storage_dir))
                 pcap_file.add_tag('pcap')
+                analysis.pcap_paths.append(pcap_file.value)
             
             return True
 
