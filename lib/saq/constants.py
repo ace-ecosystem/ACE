@@ -318,6 +318,8 @@ DIRECTIVE_WHITELISTED = 'whitelisted'
 DIRECTIVE_TRACKED = 'tracked'
 # indicates that ACE should treat this IP address as an asset and try to figure out the details
 DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
+# download the pcap for the given observable and given time
+DIRECTIVE_EXTRACT_PCAP = 'extract_pcap'
 
 DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'Archive the file',
@@ -334,6 +336,7 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
     DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
     DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
+    DIRECTIVE_EXTRACT_PCAP: 'extract PCAP for the given observable and given time',
 }
 
 VALID_DIRECTIVES = [
