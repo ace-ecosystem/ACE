@@ -17,7 +17,7 @@ class Config(object):
     GOOGLE_ANALYTICS = saq.CONFIG['gui'].getboolean('google_analytics')
 
     # also see lib/saq/database.py:initialize_database
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{username}:{password}@{hostname}/{database}?charset=utf8'.format(
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{username}:{password}@{hostname}/{database}?charset=utf8mb4'.format(
         username=saq.CONFIG.get('database_ace', 'username'),
         password=saq.CONFIG.get('database_ace', 'password'),
         hostname=saq.CONFIG.get('database_ace', 'hostname'),
@@ -31,6 +31,7 @@ class Config(object):
     SQLALCHEMY_DATABASE_OPTIONS = { 
         'pool_recycle': 60,
         'pool_size': 5,
+        'connect_args': { 'init_command': 'SET NAMES utf8mb4' }
     }
 
     def __init__(self, *args, **kwargs):
@@ -45,8 +46,6 @@ class Config(object):
                 ssl_options['cert'] = abs_path(saq.CONFIG['database_ace']['ssl_cert'])
             if 'ssl_key' in saq.CONFIG['database_ace']:
                 ssl_options['key'] = abs_path(saq.CONFIG['database_ace']['ssl_key'])
-
-            self.SQLALCHEMY_DATABASE_OPTIONS['connect_args'] = {}
             self.SQLALCHEMY_DATABASE_OPTIONS['connect_args']['ssl'] = ssl_options
 
     @staticmethod

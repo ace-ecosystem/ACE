@@ -271,7 +271,7 @@ def _get_db_connection(name='ace'):
         'db': _section['database'],
         'user': _section['username'],
         'passwd': _section['password'],
-        'charset': 'utf8'
+        'charset': 'utf8mb4',
     }
 
     if 'hostname' in _section:
@@ -282,6 +282,8 @@ def _get_db_connection(name='ace'):
     
     if 'unix_socket' in _section:
         kwargs['unix_socket'] = _section['unix_socket']
+
+    kwargs['init_command'] = 'SET NAMES utf8mb4'
 
     if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
         kwargs['ssl'] = {}

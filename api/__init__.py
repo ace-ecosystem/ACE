@@ -64,7 +64,7 @@ def create_app(testing=False):
         INSTANCE_NAME = saq.CONFIG.get('global', 'instance_name')
 
         # also see lib/saq/database.py:initialize_database
-        SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{username}:{password}@{hostname}/{database}?charset=utf8'.format(
+        SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{username}:{password}@{hostname}/{database}?charset=utf8mb4'.format(
             username=saq.CONFIG.get('database_ace', 'username'),
             password=saq.CONFIG.get('database_ace', 'password'),
             hostname=saq.CONFIG.get('database_ace', 'hostname'),
@@ -78,6 +78,7 @@ def create_app(testing=False):
         SQLALCHEMY_DATABASE_OPTIONS = { 
             'pool_recycle': 60,
             'pool_size': 5,
+            'connect_args': { 'init_command': "SET NAMES utf8mb4; SET @@collation_connection='utf8mb4_unicode_520_ci';" },
         }
 
         def __init__(self, *args, **kwargs):
