@@ -553,6 +553,9 @@ def correlate(args):
         for directive in args.directives:
             observable.add_directive(directive)
 
+        for tag in args.tags:
+            observable.add_tag(tag)
+
         index += 2
 
         if args.split:
@@ -679,6 +682,8 @@ correlate_parser.add_argument('--comment', required=False, dest='comment', defau
     help="Optional generic comment to add to the details of the alert.")
 correlate_parser.add_argument('--add-directive', required=False, dest='directives', action='append', default=[],
     help="Adds the given directive to all observables specified.  This option can be used multiple times.")
+correlate_parser.add_argument('--add-tag', required=False, dest='tags', action='append', default=[],
+    help="Adds the given tag to all observables specified.  This option can be used multiple times.")
 correlate_parser.add_argument('--alert-type', required=False, dest='alert_type', default='cli_analysis',
     help="Optionally set the alert type.  Some analysis is only performed for alerts of a certain type.")
 correlate_parser.add_argument('--company-name', required=False, dest='company_name', default=None,
