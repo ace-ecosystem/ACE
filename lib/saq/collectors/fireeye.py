@@ -15,6 +15,8 @@ import zipfile
 
 import requests
 
+from urllib.parse import urlparse
+
 import saq
 from saq.constants import *
 from saq.collectors import Collector, Submission
@@ -194,17 +196,7 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                             for malware_sample in malware:
                                 if ((KEY_TYPE in malware_sample and malware_sample[KEY_TYPE] == 'link')
                                 and KEY_URL in malware_sample):
-                                    url = observables.append({'type': F_URL, 'value': malware_sample[KEY_URL]})
-                                    if url:
-                                        url.add_tag('malicious')
-                                        try:
-                                            parsed_url = urlparse(url.value)
-                                            if parsed_url.hostname is not None:
-                                                fqdn = analysis.add_observable(F_FQDN, parsed_url.hostname)
-                                                fqdn.add_tag('malicious')
-                                        except Exception as e:
-                                            logging.warning(f"unable to parse url {url.value}: {e}")
-
+                                    url = observables.append({'type': F_URL, 'value': malware_sample[KEY_URL], 'tags': [ 'malicious' ]})
                                 # for email alerts these are hashes
                                 if alert[KEY_PRODUCT] == 'EMAIL_MPS':
                                     if KEY_MD5 in malware_sample:
@@ -215,7 +207,8 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                                 # but for web alerts these are URLs lol
                                 elif alert[KEY_PRODUCT] == 'WEB_MPS':
                                     if KEY_MD5 in malware_sample:
-                                        observables.append({'type': F_URL, 'value': malware_sample[KEY_MD5]}) # <-- that is correct
+                                        url = observables.append({'type': F_URL, 'value': malware_sample[KEY_MD5], 'tags': [ 'malicious' ]}) # <-- that is correct
+                                        
 
             if KEY_SRC in alert:
                 if KEY_SMTP_MAIL_FROM in alert[KEY_SRC]:
