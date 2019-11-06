@@ -35,6 +35,7 @@ tzlocal
 urlfinderlib
 vxstreamlib
 yara_scanner
+gglsbl-rest-client
 Flask
 Flask-Bootstrap
 Flask-Login
