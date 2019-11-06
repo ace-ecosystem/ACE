@@ -47,12 +47,15 @@ do
         continue
     fi
 
-    echo "installing $sql on database $database"
-    if ! $MYSQL_COMMAND --database=$database < $sql 2> $sql.stderr > $sql.stdout
-    then
-        echo "unable to install $sql (command returned error result $?)"
-        exit 1
-    fi
+    for db in $database $database-unittest $database-unittest-2
+    do
+        echo "installing $sql on database $db"
+        if ! $MYSQL_COMMAND --database=$db < $sql 2> $sql.stderr > $sql.stdout
+        then
+            echo "unable to install $sql on $db (command returned error result $?)"
+            exit 1
+        fi
+    done
 
     if [ -s $sql.stderr ]
     then
