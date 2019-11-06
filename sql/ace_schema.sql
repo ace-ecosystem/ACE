@@ -260,7 +260,7 @@ CREATE TABLE `incoming_workload` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `type_id` int(11) NOT NULL COMMENT 'Each added work item has a work type, which collectors use to know which workload items belong to them.',
   `mode` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'The analysis mode the work will be submit with. This determines what nodes are selected for receiving the work.',
-  `work` blob NOT NULL COMMENT 'A python pickle of the **kwargs for ace_api.submit (see source code)',
+  `work` longblob NOT NULL COMMENT 'A python pickle of the **kwargs for ace_api.submit (see source code)',
   PRIMARY KEY (`id`),
   KEY `fk_type_id_idx` (`type_id`),
   CONSTRAINT `fk_type_id` FOREIGN KEY (`type_id`) REFERENCES `incoming_workload_type` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
