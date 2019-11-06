@@ -1226,6 +1226,7 @@ class Engine(object):
                                                           minutes=0 if timeout_minutes is None else timeout_minutes,
                                                           seconds=0 if timeout_seconds is None else timeout_seconds)
                 if datetime.datetime.now() > timeout:
+                    # TODO this should raise an exception
                     logging.warning("delayed analysis for {} in {} has timed out".format(observable, analysis_module))
                     return False
 

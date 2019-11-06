@@ -611,7 +611,7 @@ class AnalysisModule(object):
         # create a new semaphore client to use
         self.semaphore = NetworkSemaphoreClient()
 
-        #logging.debug("analysis module {0} acquiring semaphore {1}".format(self, self.semaphore_name))
+        logging.debug("analysis module {0} acquiring semaphore {1}".format(self, self.semaphore_name))
         try:
             if not self.semaphore.acquire(self.semaphore_name):
                 raise RuntimeError("acquire returned False")

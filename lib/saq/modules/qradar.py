@@ -189,6 +189,8 @@ class QRadarAPIAnalyzer(AnalysisModule):
         target_query = target_query.replace('<O_START>', start_time_str)\
                                    .replace('<O_STOP>', stop_time_str)
 
+        analysis.query = target_query
+
         try:
             analysis.query_results = client.execute_aql_query(target_query) # TODO timeout, query_timeout
         except Exception as e:

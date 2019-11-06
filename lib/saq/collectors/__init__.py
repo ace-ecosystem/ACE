@@ -7,6 +7,7 @@
 import logging
 import os, os.path
 import pickle
+import queue
 import shutil
 import signal
 import socket
@@ -532,8 +533,21 @@ class Collector(object):
         if self.test_mode is not None:
             logging.info("*** COLLECTOR {} STARTED IN TEST MODE {} ***".format(self, self.test_mode))
 
+        # the (optional) list of Submission items to send to remote nodes
+        # NOTE that subclasses can simply override get_next_submission and not use this queue
+        self.submission_list = queue.Queue()
+
         # the total number of submissions sent to the RemoteNode objects (added to the incoming_workload table)
         self.submission_count = 0
+
+        # primary collection thread that pulls Submission objects to be sent to remote nodes
+        self.collection_thread = None
+
+        # repeatedly calls execute_workload_cleanup
+        self.cleanup_thread = None
+
+        # optional thread a subclass can use (by overriding the execute_extended_collection function)
+        self.extended_collection_thread = None
 
         # how often to collect, defaults to 1 second
         # NOTE there is no wait if something was previously collected
@@ -595,6 +609,9 @@ class Collector(object):
         self.cleanup_thread = threading.Thread(target=self.cleanup_loop, name="Collector Cleanup")
         self.cleanup_thread.start()
 
+        self.extended_collection_thread = threading.Thread(target=self.execute_extended_collection_loop, name="Extended")
+        self.extended_collection_thread.start()
+
         # start the node groups
         for group in self.remote_node_groups:
             group.start()
@@ -618,6 +635,9 @@ class Collector(object):
         logging.info("waiting for cleanup thread to terminate...")
         self.cleanup_thread.join()
 
+        logging.info("waiting for extended collection thread to terminate...")
+        self.extended_collection_thread.join()
+
         logging.info("collection ended")
 
     def cleanup_loop(self):
@@ -638,6 +658,7 @@ class Collector(object):
 
         disable_cached_db_connections()
         logging.debug("exited cleanup loop")
+
 
     @use_db
     def execute_workload_cleanup(self, db, c):
@@ -803,6 +824,36 @@ HAVING
 
         return work_id
 
+    # subclasses can override this function to provide additional functionality
+    def execute_extended_collection_loop(self):
+        while True:
+            if self.shutdown_event.is_set():
+                return
+
+            try:
+                wait_seconds = self.execute_extended_collection()
+                if wait_seconds is None:
+                    wait_seconds = 1
+
+                logging.debug(f"waiting for {wait_seconds} seconds before executing extended collection again")
+                self.shutdown_event.wait(wait_seconds)
+                continue
+            except NotImplementedError:
+                return
+            except Exception as e:
+                logging.error(f"unable to execute extended collection: {e}")
+                report_exception()
+                self.shutdown_event.wait(1)
+                continue
+
+    def execute_extended_collection(self):
+        """Executes custom collection routines. 
+           Returns the number of seconds to wait until the next time this should be called."""
+        raise NotImplementedError()
+
     def get_next_submission(self):
         """Returns the next Submission object to be submitted to the remote nodes."""
-        raise NotImplementedError()
+        try:
+            return self.submission_list.get(block=True, timeout=1)
+        except queue.Empty:
+            return None
