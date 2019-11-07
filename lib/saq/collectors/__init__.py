@@ -546,7 +546,7 @@ class Collector(object):
         # repeatedly calls execute_workload_cleanup
         self.cleanup_thread = None
 
-        # optional thread a subclass can use (by overriding the execute_extended_collection function)
+        # optional thread a subclass can use (by overriding the extended_collection functions)
         self.extended_collection_thread = None
 
         # how often to collect, defaults to 1 second
@@ -609,7 +609,7 @@ class Collector(object):
         self.cleanup_thread = threading.Thread(target=self.cleanup_loop, name="Collector Cleanup")
         self.cleanup_thread.start()
 
-        self.extended_collection_thread = threading.Thread(target=self.execute_extended_collection_loop, name="Extended")
+        self.extended_collection_thread = threading.Thread(target=self.extended_collection, name="Extended")
         self.extended_collection_thread.start()
 
         # start the node groups
@@ -825,23 +825,25 @@ HAVING
         return work_id
 
     # subclasses can override this function to provide additional functionality
-    def execute_extended_collection_loop(self):
+    def extended_collection(self):
+        self.execute_in_loop(self.execute_extended_collection)
+
+    def execute_in_loop(self, target):
         while True:
             if self.shutdown_event.is_set():
                 return
 
             try:
-                wait_seconds = self.execute_extended_collection()
+                wait_seconds = target()
                 if wait_seconds is None:
                     wait_seconds = 1
 
-                logging.debug(f"waiting for {wait_seconds} seconds before executing extended collection again")
                 self.shutdown_event.wait(wait_seconds)
                 continue
             except NotImplementedError:
                 return
             except Exception as e:
-                logging.error(f"unable to execute extended collection: {e}")
+                logging.error(f"unable to execute {target}: {e}")
                 report_exception()
                 self.shutdown_event.wait(1)
                 continue
