@@ -192,7 +192,9 @@ class QRadarAPIAnalyzer(AnalysisModule):
         analysis.query = target_query
 
         try:
-            analysis.query_results = client.execute_aql_query(target_query) # TODO timeout, query_timeout
+            analysis.query_results = client.execute_aql_query(target_query, 
+                                                              continue_check_callback=lambda x: not self.engine.shutdown 
+                                                                                                and not self.engine.controlled_shutdown)
         except Exception as e:
             analysis.query_error = str(e)
             return True

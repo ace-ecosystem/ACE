@@ -25,7 +25,10 @@ from saq.modules import AnalysisModule
 from saq.util import is_ipv4
 
 import requests
-from gglsbl_rest_client import GGLSBL_Rest_Service_Client as GRS_Client
+try:
+    from gglsbl_rest_client import GGLSBL_Rest_Service_Client as GRS_Client
+except ImportError as e:
+    logging.warning(str(e))
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 

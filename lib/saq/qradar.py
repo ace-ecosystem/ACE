@@ -50,7 +50,7 @@ class QRadarAPIClient(object):
         self.headers = {'Content-Type': 'application/json', 
                         'SEC': self.token}
 
-    def execute_aql_query(self, query, timeout=None, query_timeout=None, delete=True, status_callback=None):
+    def execute_aql_query(self, query, timeout=None, query_timeout=None, delete=True, status_callback=None, continue_check_callback=None):
         logging.debug(f"executing qradar query {query}")
         response = requests.post(f'{self.url}/ariel/searches', params={'query_expression' : query},
             headers=self.headers,
@@ -75,6 +75,10 @@ class QRadarAPIClient(object):
                     logging.error(f"query {query} search_id {search_id} timed out")
                     self.delete_aql_query(search_id)
                     raise QueryTimeoutError()
+
+            # should we keep checking?
+            if continue_check_callback is not None and not continue_check_callback(self):
+                raise QueryError("continue_check_callback returned False")
 
             # check the status of the query
             response = requests.get(f'{self.url}/ariel/searches/{search_id}', headers=self.headers, verify=False)

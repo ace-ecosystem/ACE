@@ -267,4 +267,4 @@ class FireEyeAPIClient(object):
 
     def __exit__(self, type, value, traceback):
         self.close()
-        return self
+        return False

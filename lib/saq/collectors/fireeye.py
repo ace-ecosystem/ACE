@@ -11,6 +11,7 @@ import re
 import shutil
 import sqlite3
 import tempfile
+import threading
 import zipfile
 
 import requests
@@ -23,6 +24,15 @@ from saq.collectors import Collector, Submission
 from saq.error import report_exception
 from saq.fireeye import *
 from saq.util import local_time, format_iso8601
+
+# utility function to return the list of tags a given url should have
+# some of the urls we get from fireeye are file:///, ehdr://, etc...
+# no reason to tag them as malicious since they are meaningless
+def _get_tags_for_url(url):
+    if url.lower().startswith('http'):
+        return [ 'malicious' ]
+
+    return []
 
 class FireEyeCollector(Collector):
     def __init__(self, *args, **kwargs):
@@ -41,10 +51,16 @@ class FireEyeCollector(Collector):
                     c.execute("""
 CREATE TABLE uuid_tracking (
     uuid TEXT,
-    insert_date INTEGER
+    insert_date INTEGER,
+    last_artifact_result INTEGER,
+    last_artifact_result_text TEXT,
+    last_artifact_attempt INTEGER
 )""")
                     c.execute("""
 CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
+""")
+                    c.execute("""
+CREATE INDEX last_artifact_result_index ON uuid_tracking(last_artifact_result)
 """)
                     db.commit()
 
@@ -74,6 +90,16 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                 os.remove(self.last_api_call_path)
             except:
                 pass
+
+        # where we store fireeye artifacts we download
+        # these are later picked up by the FireEyeArtifactAnalyzer (in lib/saq/modules/fireeye.py)
+        self.artifact_storage_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['fireeye']['artifact_storage_dir'])
+        if not os.path.isdir(self.artifact_storage_dir):
+            os.makedirs(self.artifact_storage_dir, exist_ok=True)
+
+        # primary collection threads
+        self.alert_collection_thread = None
+        self.artifact_collection_thread = None
 
     def stop(self, *args, **kwargs):
         super().stop(*args, **kwargs)
@@ -171,7 +197,22 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
             logging.error(f"unable to track fireeye alert uuid {uuid}: {e}")
             report_exception()
 
-    def execute_extended_collection(self):
+    def extended_collection(self):
+        self.alert_collection_thread = threading.Thread(target=self.execute_in_loop, 
+                                                        args=(self.collect_alerts,),
+                                                        name="Alert Collection")
+        self.alert_collection_thread.start()
+
+        self.artifact_collection_thread = threading.Thread(target=self.execute_in_loop,
+                                                           args=(self.collect_artifacts,),
+                                                           name="Artifact Collection")
+        self.artifact_collection_thread.start()
+
+        # wait for these threads to finish
+        self.alert_collection_thread.join()
+        self.artifact_collection_thread.join()
+
+    def collect_alerts(self):
         for alert in self.get_alerts():
             if self.shutdown_event.is_set():
                 break
@@ -196,7 +237,7 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                             for malware_sample in malware:
                                 if ((KEY_TYPE in malware_sample and malware_sample[KEY_TYPE] == 'link')
                                 and KEY_URL in malware_sample):
-                                    url = observables.append({'type': F_URL, 'value': malware_sample[KEY_URL], 'tags': [ 'malicious' ]})
+                                    url = observables.append({'type': F_URL, 'value': malware_sample[KEY_URL], 'tags': _get_tags_for_url(malware_sample[KEY_URL])})
                                 # for email alerts these are hashes
                                 if alert[KEY_PRODUCT] == 'EMAIL_MPS':
                                     if KEY_MD5 in malware_sample:
@@ -207,12 +248,12 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                                 # but for web alerts these are URLs lol
                                 elif alert[KEY_PRODUCT] == 'WEB_MPS':
                                     if KEY_MD5 in malware_sample:
-                                        url = observables.append({'type': F_URL, 'value': malware_sample[KEY_MD5], 'tags': [ 'malicious' ]}) # <-- that is correct
+                                        url = observables.append({'type': F_URL, 'value': malware_sample[KEY_MD5], 'tags': _get_tags_for_url(malware_sample[KEY_MD5])}) # <-- that is correct
                                         
 
             if KEY_SRC in alert:
                 if KEY_SMTP_MAIL_FROM in alert[KEY_SRC]:
-                    description += "From " + alert[KEY_SRC][KEY_SMTP_MAIL_FROM] + " "
+                    #description += "From " + alert[KEY_SRC][KEY_SMTP_MAIL_FROM] + " "
                     observables.append({'type': F_EMAIL_ADDRESS, 'value': alert[KEY_SRC][KEY_SMTP_MAIL_FROM]})
                 if KEY_IP in alert[KEY_SRC]:
                     observables.append({'type': F_IPV4, 'value': alert[KEY_SRC][KEY_IP]})
@@ -225,7 +266,13 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
                 if KEY_IP in alert[KEY_DST]:
                     observables.append({'type': F_IPV4, 'value': alert[KEY_DST][KEY_IP]})
                     if KEY_SRC in alert and KEY_IP in alert[KEY_SRC]:
-                        observables.append({'type': F_IPV4_CONVERSATION, 'value': create_ipv4_conversation(alert[KEY_SRC][KEY_IP], alert[KEY_DST][KEY_IP])})
+                        ipv4_conversation = observables.append({'type': F_IPV4_CONVERSATION, 
+                                                                'value': create_ipv4_conversation(alert[KEY_SRC][KEY_IP], 
+                                                                                                  alert[KEY_DST][KEY_IP])})
+                        # if this was caught by the WEB MPS then let's grab the pcap
+                        if alert[KEY_PRODUCT] == 'WEB_MPS':
+                            ipv4_conversation.add_directive(DIRECTIVE_EXTRACT_PCAP)
+                            
 
             if KEY_SMTP_MESSAGE in alert:
                 if KEY_SUBJECT in alert[KEY_SMTP_MESSAGE]:
@@ -253,3 +300,109 @@ CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
             self.submission_list.put(submission)
 
         return saq.CONFIG['fireeye'].getint('query_frequency', 60) # wait for N seconds before we look again
+
+    def collect_artifacts(self):
+        with sqlite3.connect(self.alert_uuid_cache_path) as db:
+            c = db.cursor()
+            # get the next alert that needs to have artifact downloaded
+            c.execute("""
+SELECT uuid 
+FROM uuid_tracking 
+WHERE last_artifact_result IS NULL OR last_artifact_result <> 200 
+ORDER BY last_artifact_attempt ASC, insert_date ASC
+LIMIT 1
+""")
+            row = c.fetchone()
+            if row is None:
+                return 1
+
+            uuid = row[0]
+            c.execute("UPDATE uuid_tracking SET last_artifact_attempt = ? WHERE uuid = ?", 
+                     (datetime.datetime.now().timestamp(), uuid))
+            db.commit()
+
+        artifact_result = 0 # we're storing the HTTP response but if we don't even get that we store a 0
+        artifact_result_text = None
+
+        # first check to see if we've already downloaded it
+        # you're typically only going to see this in the development environmnent
+        target_dir = os.path.join(self.artifact_storage_dir, f'{uuid}')
+        if os.path.exists(target_dir):
+            logging.info(f"already downloaded artifacts for {uuid}")
+            try:
+                with open(os.path.join(target_dir, 'artifact.json')) as fp:
+                    artifact_json = json.load(fp)
+                    # we treat this like we just downloaded it
+                    artifact_result = 200 
+                    artifact_result_text = json.dumps(artifact_json)
+            except Exception as e:
+                logging.error(f"unable to parse artifact json: {e}")
+                report_exception()
+
+        # if we haven't already downloaded it then go get it
+        if artifact_result != 200:
+            logging.info(f"attempting to download artifacts for {uuid}")
+            files = []
+            fe_client = None
+            try:
+                with FireEyeAPIClient(saq.CONFIG['fireeye']['host'],
+                                      saq.CONFIG['fireeye']['user_name'],
+                                      saq.CONFIG['fireeye']['password']) as fe_client:
+
+                    # store the artifacts in a temporary directory until they are completed downloading
+                    output_dir = os.path.join(self.artifact_storage_dir, f'{uuid}_temp')
+                    if os.path.exists(output_dir):
+                        logging.warning(f"output dir {output_dir} already exists -- deleting")
+                        shutil.rmtree(output_dir)
+                    os.mkdir(output_dir)
+            
+                    try:
+                        artifact_json = fe_client.get_artifacts_by_uuid(output_dir, uuid)
+                        with open(os.path.join(output_dir, 'artifact.json'), 'w') as fp:
+                            json.dump(artifact_json, fp)
+
+                        for artifact_entry in artifact_json[KEY_ARTIFACTS_INFO_LIST]:
+                            file_name = artifact_entry[KEY_ARTIFACT_NAME]
+                            file_type = artifact_entry[KEY_ARTIFACT_TYPE]
+                            if not os.path.exists(os.path.join(output_dir, file_name)):
+                                logging.warning(f"artifact file {file_name} does not exist in {output_dir}")
+                                continue
+
+                            logging.info(f"recording artifact {file_name} for {uuid}")
+
+                        artifact_result = 200
+                        artifact_result_text = json.dumps(artifact_json)
+
+                        # move the directory to where the fireeye artifact analysis module is expecting to see it
+                        final_dir = os.path.join(self.artifact_storage_dir, uuid)
+                        if os.path.exists(final_dir):
+                            logging.warning(f"final output dir {final_dir} already exists -- deleting")
+                            shutil.rmtree(final_dir)
+
+                        shutil.move(output_dir, os.path.join(self.artifact_storage_dir, uuid))
+
+                    except requests.exceptions.HTTPError as e:
+                        # in my testing I'm finding FireEye returning 404 then later returning the data for the same call
+                        # the calls takes a LONG time to complete (60+ seconds)
+                        # it must be downloading it from the cloud or something
+                        # and then I think 500 level error codes are when the system is getting behind
+                        if e.response.status_code == 404 or ( 500 <= e.response.status_code <= 599 ):
+                            artifact_result = e.response.status_code
+                            artifact_result_text = str(e)
+
+            except Exception as e:
+                logging.error(f"unable to download artifacts for uuid {uuid}: {e}")
+                report_exception()
+                artifact_result_text = str(e)
+
+        with sqlite3.connect(self.alert_uuid_cache_path) as db:
+            c = db.cursor()
+            logging.debug(f"storing last_artifact_result {artifact_result} for uuid {uuid}")
+            c.execute("""
+UPDATE uuid_tracking
+SET last_artifact_result = ?,
+    last_artifact_result_text = ?
+WHERE uuid = ?""", 
+            (uuid, artifact_result, artifact_result_text))
+            db.commit()
+            return 0 # don't wait to process the next one

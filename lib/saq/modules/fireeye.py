@@ -1,8 +1,10 @@
 # vim: sw=4:ts=4:et:cc=120
 
-import os, os.path
 import datetime
+import json
 import logging
+import os, os.path
+import shutil
 import zipfile
 
 import saq
@@ -13,33 +15,35 @@ from saq.modules import AnalysisModule
 from saq.constants import *
 from saq.util import create_directory
 
-KEY_ERROR = 'error'
-KEY_ARTIFACTS = 'artifacts'
 
 class FireEyeArtifactAnalysis(Analysis):
+
+    KEY_ERROR = 'error'
+    KEY_ARTIFACTS = 'artifacts'
+
     def initialize_details(self):
         self.details = {
-            KEY_ERROR: None,
-            KEY_ARTIFACTS: [],
+            FireEyeArtifactAnalysis.KEY_ERROR: None,
+            FireEyeArtifactAnalysis.KEY_ARTIFACTS: [],
         }
 
     @property
     def error(self):
         """Returns the error message returned by the API call."""
-        return self.details[KEY_ERROR]
+        return self.details[FireEyeArtifactAnalysis.KEY_ERROR]
 
     @error.setter
     def error(self, value):
-        self.details[KEY_ERROR] = value
+        self.details[FireEyeArtifactAnalysis.KEY_ERROR] = value
 
     @property
     def artifacts(self):
         """Returns a list of tuple (artifact_name, artifact_type)."""
-        return self.details[KEY_ARTIFACTS]
+        return self.details[FireEyeArtifactAnalysis.KEY_ARTIFACTS]
 
     @artifacts.setter
     def artifacts(self, value):
-        self.details[KEY_ARTIFACTS] = value
+        self.details[FireEyeArtifactAnalysis.KEY_ARTIFACTS] = value
 
     def generate_summary(self):
         result = 'FireEye Artifact Analyzer - '
@@ -68,40 +72,48 @@ class FireEyeArtifactAnalyzer(AnalysisModule):
             analysis = self.create_analysis(observable)
 
         output_dir = os.path.join(self.root.storage_dir, f'fireeye_artifacts_{observable.id}')
-        if not os.path.exists(output_dir):
-            create_directory(output_dir)
+        
+        # the FireEye collector (slowly) gets the artifacts and caches them here
+        artifact_storage_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['fireeye']['artifact_storage_dir'])
+        # each subdir is the UUID of the alert
+        artifact_dir = os.path.join(artifact_storage_dir, observable.value)
+        # has the collector been able to get this yet?
+        if not os.path.isdir(artifact_dir):
+            # come back and check later
+            if self.delay_analysis(observable, analysis, seconds=30, timeout_minutes=60):
+                return True
+
+        # copy the contents of the directory into the alert storage directory
+        target_dir = os.path.join(self.root.storage_dir, f'fireeye_artifact_{observable.value}')
+        shutil.copytree(artifact_dir, target_dir)
+
+        # parse the artifact JSON and add observables
+        artifact_json_path = os.path.join(target_dir, 'artifact.json')
+        with open(artifact_json_path, 'r') as fp:
+            artifact_json = json.load(fp)
 
         # attempt to download and add any artifacts that fireeye generates for the alert
         files = []
         fe_client = None
         try:
-            self.acquire_semaphore()
-            fe_client = FireEyeAPIClient(saq.CONFIG['fireeye']['host'],
-                                         saq.CONFIG['fireeye']['user_name'],
-                                         saq.CONFIG['fireeye']['password'])
-    
-            try:
-                artifact_json = fe_client.get_artifacts_by_uuid(output_dir, observable.value)
-            except requests.exceptions.HTTPError as e:
-                # in my testing I'm finding FireEye returning 404 then later returning the data for the same call
-                # the calls takes a LONG time to complete (60+ seconds)
-                # it must be downloading it from the cloud or something
-                # and then I think 500 level error codes are when the system is getting behind
-                if e.response.status_code == 404 or ( 500 <= e.response.status_code <= 599 ):
-                    if self.delay_analysis(observable, analysis, seconds=30, timeout_minutes=20):
-                        return True
-                raise
-
             for artifact_entry in artifact_json[KEY_ARTIFACTS_INFO_LIST]:
                 file_name = artifact_entry[KEY_ARTIFACT_NAME]
+                if not os.path.exists(os.path.join(target_dir, file_name)):
+                    logging.warning(f"file {file_name} specified in {artifact_json_path} does not exist")
+                    continue
+
                 file_type = artifact_entry[KEY_ARTIFACT_TYPE]
-                file_observable = analysis.add_observable(F_FILE, os.path.relpath(os.path.join(output_dir, file_name),
+                file_observable = analysis.add_observable(F_FILE, os.path.relpath(os.path.join(target_dir, file_name),
                                                                                   start=self.root.storage_dir)) 
                 file_observable.add_tag(file_type)
                 if file_type == 'rawemail':
                     file_observable.add_directive(DIRECTIVE_ORIGINAL_EMAIL) # make sure this is treated as an email
                     file_observable.add_directive(DIRECTIVE_NO_SCAN) # make sure we don't scan it with yara
                     # remember that we want to scan the extracted stuff with yara
+                    file_observable.add_tag('malicious')
+
+                if file_type == 'archived_object':
+                    file_observable.add_tag('malicious')
 
                 analysis.artifacts.append((file_name, file_type))
 
@@ -109,9 +121,5 @@ class FireEyeArtifactAnalyzer(AnalysisModule):
             logging.error(f"unable to process artifact file: {e}")
             analysis.error = str(e)
             report_exception()
-        finally:
-            self.release_semaphore()
-            if fe_client is not None:
-                fe_client.close()
 
         return True

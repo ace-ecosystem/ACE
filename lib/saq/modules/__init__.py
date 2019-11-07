@@ -300,6 +300,10 @@ class AnalysisModule(object):
         """Returns True if the current analysis engine is shutting down, False otherwise."""
         return self.engine.shutdown
 
+    @property
+    def controlled_shutdown(self):
+        return self.engine.controlled_shutdown
+
     def sleep(self, seconds):
         """Utility function to sleep for N seconds without blocking shutdown."""
         while not self.shutdown and not self.cancel_analysis_flag and seconds > 0:
@@ -490,6 +494,12 @@ class AnalysisModule(object):
 
         return [_.strip() for _ in self.config['required_tags'].split(',')]
 
+    def custom_requirement(self, observable):
+        """Optional function is called as an additional check to see if this observalbe should be
+           analyzed by this module. Returns True if it should be, False if not.
+           If this function is not overridden then it is ignored."""
+        raise NotImplementedError()
+
     def accepts(self, obj):
         """Returns True if this object should be analyzed by this module, False otherwise."""
 
@@ -543,6 +553,14 @@ class AnalysisModule(object):
                 if not obj.has_tag(tag):
                     #logging.debug("{} does not have required directive {} for {}".format(obj, directive, self))
                     return False
+
+            # does the module have a custom requirement routine defined?
+            try:
+                if not self.custom_requirement(obj):
+                    logging.debug(f"{obj} does not pass custom requirements for {self}")
+                    return False
+            except NotImplementedError:
+                pass
 
             # have we already generated analysis for this target?
             current_analysis = obj.get_analysis(self.generated_analysis_type, instance=self.instance)
