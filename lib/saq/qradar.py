@@ -50,7 +50,7 @@ class QRadarAPIClient(object):
         self.headers = {'Content-Type': 'application/json', 
                         'SEC': self.token}
 
-    def execute_aql_query(self, query, timeout=None, query_timeout=None, delete=True, status_callback=None, continue_check_callback=None):
+    def execute_aql_query(self, query, timeout=None, query_timeout=None, delete=True, status_callback=None, continue_check_callback=None, retries=5):
         logging.debug(f"executing qradar query {query}")
         response = requests.post(f'{self.url}/ariel/searches', params={'query_expression' : query},
             headers=self.headers,
@@ -68,6 +68,8 @@ class QRadarAPIClient(object):
         if self.query_timeout is not None:
             self.query_limit = datetime.datetime.now() + datetime.timedelta(minutes=self.query_timeout)
 
+        attempt = 0
+
         while True:
             # has the query been executing for too long?
             if self.query_limit is not None:
@@ -82,6 +84,35 @@ class QRadarAPIClient(object):
 
             # check the status of the query
             response = requests.get(f'{self.url}/ariel/searches/{search_id}', headers=self.headers, verify=False)
+
+            # a response of 404 means QRadar "lost" the query, or it doesn't now about it anymore
+            if response.status_code == 404:
+                logging.info(f"MARKER: status_code = {response.status_code}")
+                logging.info(f"MARKER: json = {response.json()}")
+                error_json = response.json()
+                if 'code' in error_json and error_json['code'] == 1002:
+                    logging.warning(f"lost qradar query {search_id}")
+                    attempt += 1
+                    if attempt < retries:
+                        logging.debug(f"executing qradar query {query} attempt #{attempt}")
+                        response = requests.post(f'{self.url}/ariel/searches', params={'query_expression' : query},
+                            headers=self.headers,
+                            verify=False)
+
+                        response.raise_for_status()
+                        self.request_json = response.json()
+                        
+                        if KEY_SEARCH_ID not in self.request_json:
+                            raise KeyError(f"missing {KEY_SEARCH_ID}")
+
+                        search_id = self.request_json[KEY_SEARCH_ID]
+                        logging.debug(f"got search_id {search_id} for {query}")
+
+                        if self.query_timeout is not None:
+                            self.query_limit = datetime.datetime.now() + datetime.timedelta(minutes=self.query_timeout)
+
+                        continue
+            
             if response.status_code < 200 or response.status_code > 299:
                 logging.error(f"unexpected error code for query {search_id}: {response.status_code} {response.text}")
                 self.delete_aql_query(search_id)
@@ -99,7 +130,7 @@ class QRadarAPIClient(object):
                     except Exception as e:
                         logging.error(f"uncaught exception during status callback: {e}")
 
-                time.sleep(2)
+                time.sleep(4) # this should be 1
                 continue
 
             # did it get cancelled or error out
