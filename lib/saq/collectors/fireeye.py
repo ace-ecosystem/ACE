@@ -25,6 +25,10 @@ from saq.error import report_exception
 from saq.fireeye import *
 from saq.util import local_time, format_iso8601
 
+ARTIFACT_STATUS_READY = 1
+ARTIFACT_STATUS_COMPLETE = 2
+ARTIFACT_STATUS_ERROR = 3
+
 # utility function to return the list of tags a given url should have
 # some of the urls we get from fireeye are file:///, ehdr://, etc...
 # no reason to tag them as malicious since they are meaningless
@@ -52,15 +56,17 @@ class FireEyeCollector(Collector):
 CREATE TABLE uuid_tracking (
     uuid TEXT,
     insert_date INTEGER,
-    last_artifact_result INTEGER,
-    last_artifact_result_text TEXT,
-    last_artifact_attempt INTEGER
+    artifact_status INTEGER DEFAULT 1,
+    last_artifact_http_result INTEGER,
+    last_artifact_http_result_text TEXT,
+    last_artifact_attempt INTEGER,
+    error_message TEXT
 )""")
                     c.execute("""
 CREATE INDEX insert_date_index ON uuid_tracking(insert_date)
 """)
                     c.execute("""
-CREATE INDEX last_artifact_result_index ON uuid_tracking(last_artifact_result)
+CREATE INDEX artifact_status_index ON uuid_tracking(artifact_status)
 """)
                     db.commit()
 
@@ -144,8 +150,15 @@ CREATE INDEX last_artifact_result_index ON uuid_tracking(last_artifact_result)
         duration = self.get_duration()
         start_time = format_iso8601(self.last_api_call)
 
-        for alert in self.fe_client.get_alerts(self.last_api_call, duration):
-            yield alert
+        try:
+            for alert in self.fe_client.get_alerts(self.last_api_call, duration):
+                yield alert
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 503:
+                logging.warning("fireeye returned 503 (unavailable)")
+                return
+
+            raise e
 
         # the next time we make this call, we start at last_api_call + duration_in_hours
         next_api_call = self.last_api_call + datetime.timedelta(hours=duration)
@@ -269,9 +282,10 @@ CREATE INDEX last_artifact_result_index ON uuid_tracking(last_artifact_result)
                         ipv4_conversation = observables.append({'type': F_IPV4_CONVERSATION, 
                                                                 'value': create_ipv4_conversation(alert[KEY_SRC][KEY_IP], 
                                                                                                   alert[KEY_DST][KEY_IP])})
-                        # if this was caught by the WEB MPS then let's grab the pcap
-                        if alert[KEY_PRODUCT] == 'WEB_MPS':
-                            ipv4_conversation.add_directive(DIRECTIVE_EXTRACT_PCAP)
+                        if ipv4_conversation is not None:
+                            # if this was caught by the WEB MPS then let's grab the pcap
+                            if alert[KEY_PRODUCT] == 'WEB_MPS':
+                                ipv4_conversation.add_directive(DIRECTIVE_EXTRACT_PCAP)
                             
 
             if KEY_SMTP_MESSAGE in alert:
@@ -301,108 +315,113 @@ CREATE INDEX last_artifact_result_index ON uuid_tracking(last_artifact_result)
 
         return saq.CONFIG['fireeye'].getint('query_frequency', 60) # wait for N seconds before we look again
 
-    def collect_artifacts(self):
+    def get_next_artifact_uuid(self):
+        """Returns the next uuid to collect artifacts for, or None if none are currently required."""
         with sqlite3.connect(self.alert_uuid_cache_path) as db:
             c = db.cursor()
             # get the next alert that needs to have artifact downloaded
             c.execute("""
 SELECT uuid 
 FROM uuid_tracking 
-WHERE last_artifact_result IS NULL OR last_artifact_result <> 200 
+WHERE artifact_status = ?
 ORDER BY last_artifact_attempt ASC, insert_date ASC
 LIMIT 1
-""")
+""",
+            (ARTIFACT_STATUS_READY,))
             row = c.fetchone()
             if row is None:
-                return 1
+                return None
 
-            uuid = row[0]
+            return row[0]
+
+    def update_artifact_last_attempt(self, uuid):
+        with sqlite3.connect(self.alert_uuid_cache_path) as db:
+            c = db.cursor()
             c.execute("UPDATE uuid_tracking SET last_artifact_attempt = ? WHERE uuid = ?", 
                      (datetime.datetime.now().timestamp(), uuid))
             db.commit()
 
-        artifact_result = 0 # we're storing the HTTP response but if we don't even get that we store a 0
-        artifact_result_text = None
+    def update_artifact_status(self, uuid, status, http_result=None, http_result_text=None, error_message=None):
+        with sqlite3.connect(self.alert_uuid_cache_path) as db:
+            c = db.cursor()
+            c.execute("""
+UPDATE uuid_tracking
+SET artifact_status = ?,
+    last_artifact_http_result = ?,
+    last_artifact_http_result_text = ?,
+    error_message = ?
+WHERE uuid = ?""", 
+            (status, http_result, http_result_text, error_message, uuid))
+            db.commit()
+
+    def collect_artifacts(self):
+        uuid = self.get_next_artifact_uuid()
+        if uuid is None:
+            return 1
+
+        self.update_artifact_last_attempt(uuid)
+
+        artifact_http_result = None 
+        artifact_http_result_text = None
 
         # first check to see if we've already downloaded it
         # you're typically only going to see this in the development environmnent
         target_dir = os.path.join(self.artifact_storage_dir, f'{uuid}')
         if os.path.exists(target_dir):
             logging.info(f"already downloaded artifacts for {uuid}")
-            try:
-                with open(os.path.join(target_dir, 'artifact.json')) as fp:
-                    artifact_json = json.load(fp)
-                    # we treat this like we just downloaded it
-                    artifact_result = 200 
-                    artifact_result_text = json.dumps(artifact_json)
-            except Exception as e:
-                logging.error(f"unable to parse artifact json: {e}")
-                report_exception()
+            self.update_artifact_status(uuid, ARTIFACT_STATUS_COMPLETE)
+            # don't wait for next request
+            return 0
 
-        # if we haven't already downloaded it then go get it
-        if artifact_result != 200:
-            logging.info(f"attempting to download artifacts for {uuid}")
-            files = []
-            fe_client = None
-            try:
-                with FireEyeAPIClient(saq.CONFIG['fireeye']['host'],
-                                      saq.CONFIG['fireeye']['user_name'],
-                                      saq.CONFIG['fireeye']['password']) as fe_client:
+        logging.info(f"attempting to download artifacts for {uuid}")
+        try:
+            with FireEyeAPIClient(saq.CONFIG['fireeye']['host'],
+                                  saq.CONFIG['fireeye']['user_name'],
+                                  saq.CONFIG['fireeye']['password']) as fe_client:
 
-                    # store the artifacts in a temporary directory until they are completed downloading
-                    output_dir = os.path.join(self.artifact_storage_dir, f'{uuid}_temp')
-                    if os.path.exists(output_dir):
-                        logging.warning(f"output dir {output_dir} already exists -- deleting")
-                        shutil.rmtree(output_dir)
-                    os.mkdir(output_dir)
-            
-                    try:
-                        artifact_json = fe_client.get_artifacts_by_uuid(output_dir, uuid)
-                        with open(os.path.join(output_dir, 'artifact.json'), 'w') as fp:
-                            json.dump(artifact_json, fp)
+                # store the artifacts in a temporary directory until they are completed downloading
+                output_dir = os.path.join(self.artifact_storage_dir, f'{uuid}_temp')
+                if os.path.exists(output_dir):
+                    logging.warning(f"output dir {output_dir} already exists -- deleting")
+                    shutil.rmtree(output_dir)
+                os.mkdir(output_dir)
+        
+                try:
+                    artifact_json = fe_client.get_artifacts_by_uuid(output_dir, uuid)
+                    with open(os.path.join(output_dir, 'artifact.json'), 'w') as fp:
+                        json.dump(artifact_json, fp)
 
-                        for artifact_entry in artifact_json[KEY_ARTIFACTS_INFO_LIST]:
-                            file_name = artifact_entry[KEY_ARTIFACT_NAME]
-                            file_type = artifact_entry[KEY_ARTIFACT_TYPE]
-                            if not os.path.exists(os.path.join(output_dir, file_name)):
-                                logging.warning(f"artifact file {file_name} does not exist in {output_dir}")
-                                continue
+                    for artifact_entry in artifact_json[KEY_ARTIFACTS_INFO_LIST]:
+                        file_name = artifact_entry[KEY_ARTIFACT_NAME]
+                        file_type = artifact_entry[KEY_ARTIFACT_TYPE]
+                        if not os.path.exists(os.path.join(output_dir, file_name)):
+                            logging.warning(f"artifact file {file_name} does not exist in {output_dir}")
+                            continue
 
-                            logging.info(f"recording artifact {file_name} for {uuid}")
+                        logging.info(f"recording artifact {file_name} for {uuid}")
 
-                        artifact_result = 200
-                        artifact_result_text = json.dumps(artifact_json)
+                    # move the directory to where the fireeye artifact analysis module is expecting to see it
+                    final_dir = os.path.join(self.artifact_storage_dir, uuid)
+                    if os.path.exists(final_dir):
+                        logging.warning(f"final output dir {final_dir} already exists -- deleting")
+                        shutil.rmtree(final_dir)
 
-                        # move the directory to where the fireeye artifact analysis module is expecting to see it
-                        final_dir = os.path.join(self.artifact_storage_dir, uuid)
-                        if os.path.exists(final_dir):
-                            logging.warning(f"final output dir {final_dir} already exists -- deleting")
-                            shutil.rmtree(final_dir)
+                    shutil.move(output_dir, os.path.join(self.artifact_storage_dir, uuid))
+                    self.update_artifact_status(uuid, ARTIFACT_STATUS_COMPLETE)
 
-                        shutil.move(output_dir, os.path.join(self.artifact_storage_dir, uuid))
+                except requests.exceptions.HTTPError as e:
+                    # in my testing I'm finding FireEye returning 404 then later returning the data for the same call
+                    # the calls takes a LONG time to complete (60+ seconds)
+                    # it must be downloading it from the cloud or something
+                    # and then I think 500 level error codes are when the system is getting behind
+                    if e.response.status_code == 404 or ( 500 <= e.response.status_code <= 599 ):
+                        self.update_artifact_status(uuid, ARTIFACT_STATUS_READY, 
+                                                    http_result = e.response.status_code,
+                                                    http_result_text = str(e.response))
 
-                    except requests.exceptions.HTTPError as e:
-                        # in my testing I'm finding FireEye returning 404 then later returning the data for the same call
-                        # the calls takes a LONG time to complete (60+ seconds)
-                        # it must be downloading it from the cloud or something
-                        # and then I think 500 level error codes are when the system is getting behind
-                        if e.response.status_code == 404 or ( 500 <= e.response.status_code <= 599 ):
-                            artifact_result = e.response.status_code
-                            artifact_result_text = str(e)
+        except Exception as e:
+            logging.error(f"unable to download artifacts for uuid {uuid}: {e}")
+            report_exception()
+            self.update_artifact_status(uuid, ARTIFACT_STATUS_ERROR, error_message=str(e))
 
-            except Exception as e:
-                logging.error(f"unable to download artifacts for uuid {uuid}: {e}")
-                report_exception()
-                artifact_result_text = str(e)
-
-        with sqlite3.connect(self.alert_uuid_cache_path) as db:
-            c = db.cursor()
-            logging.debug(f"storing last_artifact_result {artifact_result} for uuid {uuid}")
-            c.execute("""
-UPDATE uuid_tracking
-SET last_artifact_result = ?,
-    last_artifact_result_text = ?
-WHERE uuid = ?""", 
-            (uuid, artifact_result, artifact_result_text))
-            db.commit()
-            return 0 # don't wait to process the next one
+        return 0 # don't wait to process the next one
