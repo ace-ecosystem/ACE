@@ -14,7 +14,7 @@ Super fast How-To
 #. Add ace to sudo.
 #. Login as user ace.
 #. `sudo mkdir /opt/ace && sudo chown ace:ace /opt/ace && cd /opt/ace`
-#. `git clone https://github.com/IntegralDefense/ACE.git .`
+#. `git clone https://github.com/ace-ecosystem/ACE.git .`
 #. `./installer/source_install`
 #. `source load_environment`
 #. `./ace add-user username email_address`
