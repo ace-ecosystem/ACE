@@ -83,7 +83,7 @@ chmod 400 ssl/root/ca/.intermediate_ca.pwd
     cd ssl/root/ca && \
     cat intermediate/openssl.cnf > intermediate/openssl.temp.cnf && \
     echo 'DNS.1 = localhost' >> intermediate/openssl.temp.cnf && \
-    echo "DNS.2 = $(hostname -f)" >> intermediate/openssl.temp.cnf && \  # API_PREFIX uses FQDN of host by default in ACE. If this line is not added, it will cause SSL errors during alert submissions.
+    echo "DNS.2 = $(hostname -f)" >> intermediate/openssl.temp.cnf && \  # API_PREFIX uses FQDN of host by default in ACE. If this line is not added, it will cause SSL errors during ace_api calls.
     echo 'IP.1 = 127.0.0.1' >> intermediate/openssl.temp.cnf && \
     openssl genrsa -out intermediate/private/localhost.key.pem 2048 && \
     chmod 400 intermediate/private/localhost.key.pem && \
