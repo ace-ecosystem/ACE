@@ -14,11 +14,13 @@ Super fast How-To
 #. Add ace to sudo.
 #. Login as user ace.
 #. `sudo mkdir /opt/ace && sudo chown ace:ace /opt/ace && cd /opt/ace`
-#. `git clone https://github.com/IntegralDefense/ACE.git .`
+#. `git clone https://github.com/ace-ecosystem/ACE.git .`
 #. `./installer/source_install`
 #. `source load_environment`
 #. `./ace add-user username email_address`
 #. Goto https://127.0.0.1/ace/ or whatever IP address you're using.
+
+If you run into certificate / SSL issues, see the Troubleshooting and Help section below.
 
 Detailed Installation
 ---------------------
@@ -94,6 +96,44 @@ Troubleshooting & Help
 ----------------------
 
 There are a couple snags and gotchas that you can run into when installing ACE. This section will detail a few, but it's still a work in process. So, please send any issues or questions to ace-support@integraldefense.com. Please include as much detail as possible and we will get back to you as soon as we can. Thanks!
+
+SSL Errors
+++++++++++
+
+You may run into an SSL error that will include the following text::
+
+   Caused by SSLError(SSLError("bad handshake: Error([('SSL routines', 'tls_process_server_certificate', 'certificate verify failed')],)",),))
+
+This error is less common when running on a local VM; However, it is fairly common when
+ACE is installed on a server with a domain. For example, AWS EC2 assigns a hostname such as
+ip-10-10-10-10.ec2.internal to their EC2 instances.
+
+Two quick options to fix this error if you are planning on using your ACE machine with the default installation:
+
+- Add the FQDN of your host as the ServerName in /opt/ace/etc/saq_apache.conf
+- Add the FQDN of your host as a ServerAlias in /opt/ace/etc/saq_apache.conf
+
+Then, restart the apache service (authentication required)::
+
+   $ service apache2 restart
+
+
+Example 1::
+
+   # /opt/ace/etc/saq_apache.conf
+
+   <VirtualHost *:443>
+       ServerName ip-10-10-10-10.ec2.internal
+       # Rest of the config...
+
+Example 2::
+
+   # /opt/ace/etc/saq_apache.conf
+
+   <VirtualHost *:443>
+       ServerName ace.local
+       ServerAlias ip-10-10-10-10.ec2.internal
+       # Rest of the config...
 
 No Web GUI?
 +++++++++++
