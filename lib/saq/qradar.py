@@ -157,3 +157,6 @@ class QRadarAPIClient(object):
             logging.debug(f"got result {response.status_code} for deletion of {search_id}")
         except Exception as e:
             logging.error(f"unable to delete query {search_id}: {e}")
+
+from saq.integration import register_integration
+register_integration('qradar')

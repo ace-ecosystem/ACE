@@ -259,6 +259,44 @@ def daemonize(daemon_name):
     os.dup2(0, 2)
 
 # ============================================================================
+# configuration settings
+#
+
+def enable_integration(args):
+    import saq.integration
+    saq.integration.enable_integration(args.integration)
+    sys.exit(0)
+
+def disable_integration(args):
+    import saq.integration
+    saq.integration.disable_integration(args.integration)
+    sys.exit(0)
+
+def list_integrations(args):
+    import saq.integration
+    saq.integration.list_integrations()
+    sys.exit(0)
+
+integration_parser = subparsers.add_parser('integration')
+integration_sp = integration_parser.add_subparsers(dest='integration_cmd')
+
+enable_integration_parser = integration_sp.add_parser('enable',
+    help="Enables the given integration.")
+enable_integration_parser.add_argument('integration',
+    help="The integration to enable. Use ace integration list to get the list of available integrations.")
+enable_integration_parser.set_defaults(func=enable_integration)
+
+list_integration_parser = integration_sp.add_parser('list',
+    help="List the available integrations and show enabled/disabled status.")
+list_integration_parser.set_defaults(func=list_integrations)
+
+disable_integration_parser = integration_sp.add_parser('disable',
+    help="Disables the given integration.")
+disable_integration_parser.add_argument('integration',
+    help="The integration to disable. Use ace integration list to get the list of available integrations.")
+disable_integration_parser.set_defaults(func=disable_integration)
+
+# ============================================================================
 # export observables
 #
 

@@ -96,6 +96,16 @@ LOGGING_BASE_CONFIG = {
     },
 }
 
+def apply_config(source, override):
+    """Takes the loaded ConfigParser override and applies it to source such that any 
+       configuration values in source are overridden by those specified in override."""
+    for section_name in override:
+        if section_name in source:
+            for value_name in override[section_name]:
+                source[section_name][value_name] = override[section_name][value_name]
+        else:
+            source[section_name] = override[section_name]
+
 def load_configuration():
 
     global CONFIG
@@ -104,18 +114,37 @@ def load_configuration():
         default_config = ConfigParser(allow_no_value=True)
         default_config.read(os.path.join(SAQ_HOME, 'etc', 'saq.default.ini'))
 
+        # load integrations (see lib/saq/integration.py)
+        integration_config_path = os.path.join(SAQ_HOME, 'etc', 'saq.integrations.ini')
+
+        # if this is the first time running and we don't have it yet, copy it over from the defaults file
+        if not os.path.exists(integration_config_path):
+            default_integration_config_path = os.path.join(SAQ_HOME, 'etc', 'saq.integrations.default.ini')
+            if os.path.exists(default_integration_config_path):
+                shutil.copy(default_integration_config_path, integration_config_path)
+
+        if os.path.exists(integration_config_path):
+            integration_config = ConfigParser(allow_no_value=True)
+            integration_config.read(integration_config_path)
+            apply_config(default_config, integration_config)
+
+        if 'integrations' in default_config:
+            for integration in default_config['integrations'].keys():
+                if default_config['integrations'].getboolean(integration):
+                    # load this integration
+                    target_config_path = os.path.join(SAQ_HOME, 'etc', f'saq.{integration}.ini')
+                    if not os.path.exists(target_config_path):
+                        sys.stderr.write(f"integration {integration} file {target_config_path} does not exist\n")
+                        continue
+
+                    integration_config = ConfigParser(allow_no_value=True)
+                    integration_config.read(target_config_path)
+                    apply_config(default_config, integration_config)
+
         for config_path in CONFIG_PATHS:
             override = ConfigParser(allow_no_value=True)
-            #print("loading {}".format(config_path))
             override.read(config_path)
-
-            # clobber defaults
-            for section_name in override:
-                if section_name in default_config:
-                    for value_name in override[section_name]:
-                        default_config[section_name][value_name] = override[section_name][value_name]
-                else:
-                    default_config[section_name] = override[section_name]
+            apply_config(default_config, override)
 
         # make sure all OVERRIDE settings are actually overridden
         errors = {}
@@ -140,7 +169,7 @@ def load_configuration():
         CONFIG = default_config
 
     except Exception as e:
-        logging.error("unable to load configuration: {}".format(e))
+        sys.stderr.write("unable to load configuration: {}\n".format(e))
         traceback.print_exc()
 
 def initialize_logging(logging_config_path):

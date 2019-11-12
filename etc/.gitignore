@@ -43,3 +43,10 @@ crits-ssdeep/
 pcap_extract.ini
 amc_mda.ini
 amc_mda_logging.ini
+
+saq.integrations.ini
+saq.vxstream.ini
+saq.solera.ini
+saq.fireeye.ini
+saq.qradar.ini
+saq.falcon.ini
