@@ -410,6 +410,84 @@ class TestCase(ACEEngineTestCase):
         self.assertTrue(isinstance(observable.get_analysis(BasicTestAnalysis), bool))
         self.assertFalse(observable.get_analysis(BasicTestAnalysis))
 
+    def test_configurable_module(self):
+
+        # some settings of an AnalysisModule can be specified in the configuration file
+        # we should have the following configuration settings for this module
+        #
+        # [analysis_module_configurable_module_test]
+        # module = saq.modules.test
+        # class = ConfigurableModuleTestAnalyzer
+        # enabled = no
+        # 
+        # valid_observable_types = ipv4,test
+        # required_directives = archive
+        #
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+
+        # wrong type, correct directive and tag
+        user_observable = root.add_observable(F_USER, 'username')
+        user_observable.add_directive(DIRECTIVE_ARCHIVE)
+        user_observable.add_tag('test')
+
+        # right type, no directive or tag
+        test_observable = root.add_observable(F_TEST, 'test1')
+
+        # right type with directive, no tag
+        test_observable_with_directive = root.add_observable(F_TEST, 'test2')
+        test_observable_with_directive.add_directive(DIRECTIVE_ARCHIVE)
+
+        # right type, directive and tag
+        test_observable_with_tag = root.add_observable(F_TEST, 'test_with_tag')
+        test_observable_with_tag.add_directive(DIRECTIVE_ARCHIVE)
+        test_observable_with_tag.add_tag('test')
+
+        root.analysis_mode = 'test_single'
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_configurable_module_test', 'test_single')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root.load()
+        user_observable = root.get_observable(user_observable.id)
+        self.assertIsNotNone(user_observable)
+        from saq.modules.test import ConfigurableModuleTestAnalysis
+        analysis = user_observable.get_analysis(ConfigurableModuleTestAnalysis)
+
+        # this should be empty since this module does not analyze user
+        self.assertIsNone(analysis)
+
+        test_observable = root.get_observable(test_observable.id)
+        self.assertIsNotNone(test_observable)
+        from saq.modules.test import ConfigurableModuleTestAnalysis
+        analysis = test_observable.get_analysis(ConfigurableModuleTestAnalysis)
+
+        # this should also be empty since this module requires the directive
+        self.assertIsNone(analysis)
+
+        test_observable_with_directive = root.get_observable(test_observable_with_directive.id)
+        self.assertIsNotNone(test_observable_with_directive)
+        from saq.modules.test import ConfigurableModuleTestAnalysis
+        analysis = test_observable_with_directive.get_analysis(ConfigurableModuleTestAnalysis)
+
+        # this should NOT have analysis since it is missing the tag requirement
+        self.assertIsNone(analysis)
+
+        test_observable_with_tag = root.get_observable(test_observable_with_tag.id)
+        self.assertIsNotNone(test_observable_with_tag)
+        from saq.modules.test import ConfigurableModuleTestAnalysis
+        analysis = test_observable_with_tag.get_analysis(ConfigurableModuleTestAnalysis)
+
+        # this should have analysis since it meets all the requirements in the configuration settings
+        self.assertIsNotNone(analysis)
+
     def test_time_range_grouped_analysis(self):
 
         root = create_root_analysis(uuid=str(uuid.uuid4()))

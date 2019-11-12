@@ -553,6 +553,9 @@ def correlate(args):
         for directive in args.directives:
             observable.add_directive(directive)
 
+        for tag in args.tags:
+            observable.add_tag(tag)
+
         index += 2
 
         if args.split:
@@ -672,13 +675,15 @@ correlate_parser.add_argument('-m', '--analysis-mode', required=False, dest='ana
 correlate_parser.add_argument('-d', '--storage-dir', required=False, dest='storage_dir', default='ace.out',
     help="Specify an output directory.  Defaults to ace.out.")
 correlate_parser.add_argument('-t', '--reference-time', required=False, dest='reference_time', default=None,
-    help="Specify a datetime in YYYY-MM-DD HH:MM:SS format that observables (of a temporal type) should be referenced from.")
+    help="Specify a datetime in YYYY-MM-DD HH:MM:SS Z format that observables (of a temporal type) should be referenced from.")
 correlate_parser.add_argument('--description', required=False, dest='description', default="ACE Manual Correlation",
     help="Supply a description.  This will be displayed as part of the alert if this correlation is later imported as an alert.")
 correlate_parser.add_argument('--comment', required=False, dest='comment', default=None,
     help="Optional generic comment to add to the details of the alert.")
 correlate_parser.add_argument('--add-directive', required=False, dest='directives', action='append', default=[],
     help="Adds the given directive to all observables specified.  This option can be used multiple times.")
+correlate_parser.add_argument('--add-tag', required=False, dest='tags', action='append', default=[],
+    help="Adds the given tag to all observables specified.  This option can be used multiple times.")
 correlate_parser.add_argument('--alert-type', required=False, dest='alert_type', default='cli_analysis',
     help="Optionally set the alert type.  Some analysis is only performed for alerts of a certain type.")
 correlate_parser.add_argument('--company-name', required=False, dest='company_name', default=None,

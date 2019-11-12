@@ -582,7 +582,11 @@ class Analysis(TaggableObject, DetectableObject):
 
         # have we figured out where we are saving the data to?
         if self.external_details_path is None:
-            self.external_details_path = '{}_{}.json'.format(type(self).__name__, str(uuid.uuid4()))
+            target_name = type(self).__name__
+            if self.instance is not None:
+                target_name += '_' + self.instance
+
+            self.external_details_path = '{}_{}.json'.format(target_name, str(uuid.uuid4()))
 
         # make sure the containing directory exists
         if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir)):
@@ -627,6 +631,13 @@ class Analysis(TaggableObject, DetectableObject):
         self.external_details_path = None
         self.external_details = None
         self.external_details_loaded = False
+
+    @property
+    def question(self):
+        """Returns the question this analysis was trying to answer.
+           By default this returns the __doc__ by default, or subclasses can override it.
+           This result is returned to the analyst when they mouse-over in the GUI."""
+        return self.__doc__
         
     @property
     def details(self):

@@ -123,6 +123,9 @@ data/
 extra/
 bro/ace_local.bro
 
+# site modules
+/lib/saq/modules/site
+
 # SSL
 !ssl/root/ca/openssl.cnf
 !ssl/root/ca/intermediate/openssl.cnf
@@ -152,3 +155,6 @@ data_unittest
 updates/**/*.installed
 updates/**/*.stderr
 updates/**/*.stdout
+
+# proprietary libaries
+lib/SoleraConnector.py

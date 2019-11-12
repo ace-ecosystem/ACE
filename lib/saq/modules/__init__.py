@@ -460,13 +460,35 @@ class AnalysisModule(object):
     @property
     def valid_observable_types(self):
         """Returns a single (or list of) Observable type that are valid for this module.  
+           If the configuration setting valid_observable_types is present then those values are used.
            Defaults to None (all types are valid.)  Return None to disable the check."""
-        return None
+
+        if 'valid_observable_types' not in self.config:
+            return None
+
+        return [_.strip() for _ in self.config['valid_observable_types'].split(',')]
 
     @property
     def required_directives(self):
-        """Returns a list of required directives for the analysis to occur.  Defaults to empty list."""
-        return []
+        """Returns a list of required directives for the analysis to occur. 
+           If the configuration setting required_directives is present, then those values are used.
+           Defaults to an empty list."""
+
+        if 'required_directives' not in self.config:
+            return []
+
+        return [_.strip() for _ in self.config['required_directives'].split(',')]
+
+    @property
+    def required_tags(self):
+        """Returns a list of required tags for the analysis to occur. 
+           If the configuration setting required_tags is present, then those values are used.
+           Defaults to an empty list."""
+
+        if 'required_tags' not in self.config:
+            return []
+
+        return [_.strip() for _ in self.config['required_tags'].split(',')]
 
     def accepts(self, obj):
         """Returns True if this object should be analyzed by this module, False otherwise."""
@@ -513,6 +535,12 @@ class AnalysisModule(object):
             # does this analysis module require directives?
             for directive in self.required_directives:
                 if not obj.has_directive(directive):
+                    #logging.debug("{} does not have required directive {} for {}".format(obj, directive, self))
+                    return False
+
+            # does this analysis module require tags?
+            for tag in self.required_tags:
+                if not obj.has_tag(tag):
                     #logging.debug("{} does not have required directive {} for {}".format(obj, directive, self))
                     return False
 
@@ -583,7 +611,7 @@ class AnalysisModule(object):
         # create a new semaphore client to use
         self.semaphore = NetworkSemaphoreClient()
 
-        #logging.debug("analysis module {0} acquiring semaphore {1}".format(self, self.semaphore_name))
+        logging.debug("analysis module {0} acquiring semaphore {1}".format(self, self.semaphore_name))
         try:
             if not self.semaphore.acquire(self.semaphore_name):
                 raise RuntimeError("acquire returned False")
@@ -760,7 +788,7 @@ configuration."""
         # for this to have any meaning, the observations must have correponding times
         if not observable.time:
             return False
-        
+
         # is this feature enabled for this analysis module?
         if not self.is_grouped_by_time:
             return False

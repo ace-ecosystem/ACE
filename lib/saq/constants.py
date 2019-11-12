@@ -30,7 +30,7 @@ F_DISPOSITION = 'disposition'
 #
 # WARNING
 # XXX NOTE
-# when you add a new observable type you ALSO need to edit lib/saq/analysis.py
+# when you add a new observable type you ALSO need to edit lib/saq/observables/__init__.py
 # and add a matching entry to the _OBSERVABLE_TYPE_MAPPING dictionary
 
 F_CIDR = 'cidr'
@@ -61,6 +61,7 @@ F_SNORT_SIGNATURE = 'snort_sig'
 F_MESSAGE_ID = 'message_id'
 F_PROCESS_GUID = 'process_guid'
 F_TEST = 'test'
+F_FIREEYE_UUID = 'fireeye_uuid'
 
 OBSERVABLE_DESCRIPTIONS = {
     F_CIDR: 'IPv4 range in CIDR notation',
@@ -91,8 +92,10 @@ OBSERVABLE_DESCRIPTIONS = {
     F_MESSAGE_ID: 'email Message-ID',
     F_PROCESS_GUID: 'CarbonBlack global process identifier',
     F_TEST: 'unit testing observable',
+    F_FIREEYE_UUID: 'UUID used to identify a FireEye alert',
 }
 
+# DEPRECATED
 # this is used in vis.js in the GUI
 # see http://www.rapidtables.com/web/color/RGB_Color.htm
 OBSERVABLE_NODE_COLORS = {
@@ -123,6 +126,7 @@ OBSERVABLE_NODE_COLORS = {
     F_MESSAGE_ID : "#E6E6FA", # lavender
     F_PROCESS_GUID : "#E6E6FA", # lavender
     F_TEST : "#E6E6FA", # lavender
+    F_FIREEYE_UUID : "#E6E6FA", # lavender
 }
 
 VALID_OBSERVABLE_TYPES = sorted([
@@ -154,6 +158,7 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_MESSAGE_ID,
     F_PROCESS_GUID,
     F_TEST,
+    F_FIREEYE_UUID,
 ])
 
 DEPRECATED_OBSERVABLES = sorted([
@@ -311,6 +316,10 @@ DIRECTIVE_EXCLUDE_ALL = 'exclude_all'
 DIRECTIVE_WHITELISTED = 'whitelisted'
 # indicates this observable should be tracked across different analysis requests
 DIRECTIVE_TRACKED = 'tracked'
+# indicates that ACE should treat this IP address as an asset and try to figure out the details
+DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
+# download the pcap for the given observable and given time
+DIRECTIVE_EXTRACT_PCAP = 'extract_pcap'
 
 DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'Archive the file',
@@ -325,7 +334,9 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_DELAY: 'instructs various analysis modules to delay the analysis',
     DIRECTIVE_EXCLUDE_ALL: 'instructs ACE to NOT analyze this observable at all',
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
-    DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests'
+    DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
+    DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
+    DIRECTIVE_EXTRACT_PCAP: 'extract PCAP for the given observable and given time',
 }
 
 VALID_DIRECTIVES = [
