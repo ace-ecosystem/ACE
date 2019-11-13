@@ -28,7 +28,7 @@ import requests
 import tzlocal
 
 # this is set to True when unit testing, False otherwise
-UNIT_TESTING = False
+UNIT_TESTING = 'SAQ_UNIT_TESTING' in os.environ
 
 # disable the verbose logging in the requests module
 logging.getLogger("requests").setLevel(logging.WARNING)

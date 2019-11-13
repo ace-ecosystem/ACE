@@ -1569,7 +1569,8 @@ ORDER BY
 
         where_clause = ' AND '.join(['({})'.format(clause) for clause in where_clause])
 
-        #logging.debug("looking for work with {} ({})".format(where_clause, ','.join([str(_) for _ in params])))
+        if saq.UNIT_TESTING:
+            logging.debug("looking for work with {} ({})".format(where_clause, ','.join([str(_) for _ in params])))
 
         c.execute("""
 SELECT

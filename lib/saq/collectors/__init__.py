@@ -274,7 +274,8 @@ WHERE
 
         # if we get nothing from this query then no work is available for this group
         if not available_modes:
-            #logging.debug("no work available for {}".format(self))
+            if saq.UNIT_TESTING:
+                logging.debug("no work available for {}".format(self))
             return NO_WORK_AVAILABLE
 
         # flatten this out to a list of analysis modes

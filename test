@@ -30,6 +30,8 @@ else
     mkdir data_unittest/logs
 fi
 
+export SAQ_UNIT_TESTING=1
+
 # if we passed no parameters then we run all the tests
 if [ "$#" -eq "0" ]
 then

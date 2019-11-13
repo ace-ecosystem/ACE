@@ -91,3 +91,10 @@ def disable_integration(integration):
     print(f"{integration} disabled")
     list_integrations()
     return True
+
+def integration_enabled(integration):
+    """Returns True if the given integration is exists and is enabled, False otherwise."""
+    if integration not in saq.CONFIG[SECTION_INTEGRATIONS]:
+        return False
+
+    return saq.CONFIG[SECTION_INTEGRATIONS].getboolean(integration, False)
