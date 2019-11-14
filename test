@@ -63,10 +63,10 @@ then
         saq.modules.test_crits \
         saq.modules.test_intel \
         saq.observables.test \
-        api.analysis.test \
-        api.engine.test \
-        api.cloudphish.test \
-        api.events.test \
+        aceapi.analysis.test \
+        aceapi.engine.test \
+        aceapi.cloudphish.test \
+        aceapi.events.test \
         test_ace_api \
 
         #saq.collectors.test_cb_binaries \

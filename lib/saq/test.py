@@ -482,15 +482,15 @@ class ACEBasicTestCase(TestCase):
         self.initialize_test_client()
 
     def initialize_test_client(self):
-        from api import create_app
+        from aceapi import create_app
         self.app = create_app(testing=True)
         self.app_context = self.app.test_request_context()                      
         self.app_context.push()                           
         self.client = self.app.test_client()
 
         # Hopefully temporary hack to ensure session is cleared after each test
-        import api
-        api.db.session.close()
+        import aceapi
+        aceapi.db.session.close()
 
     def tearDown(self):
         close_test_comms()
@@ -768,10 +768,10 @@ class ACEBasicTestCase(TestCase):
         # this is a bit weird because I want the urls to be the same as they
         # are configured for apache, where they are all starting with /api
         
-        import api
+        import aceapi
         from saq.database import initialize_database
 
-        app = api.create_app(testing=True)
+        app = aceapi.create_app(testing=True)
         from werkzeug.serving import run_simple
         from werkzeug.wsgi import DispatcherMiddleware
         from flask import Flask
@@ -790,7 +790,7 @@ class ACEBasicTestCase(TestCase):
             saq.CONFIG.get('api', 'ssl_key') if ssl_key is None else ssl_key )
 
         initialize_database()
-        saq.db = api.db.session
+        saq.db = aceapi.db.session
 
         logging.info(f"starting api server on {listen_address} port {listen_port}")
         run_simple(listen_address, listen_port, application, ssl_context=ssl_context, use_reloader=False)

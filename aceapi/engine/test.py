@@ -12,7 +12,7 @@ import saq
 from saq.analysis import RootAnalysis
 from saq.constants import *
 from saq.database import acquire_lock, release_lock, use_db
-from api.test import *
+from aceapi.test import *
 from saq.test import *
 from saq.util import storage_dir_from_uuid
 

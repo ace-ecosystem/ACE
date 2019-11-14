@@ -11,7 +11,7 @@ from subprocess import Popen, PIPE
 from unittest import TestCase
 
 import saq
-from api.test import APIBasicTestCase
+from aceapi.test import APIBasicTestCase
 from saq.analysis import RootAnalysis
 from saq.brocess import query_brocess_by_fqdn
 from saq.constants import *

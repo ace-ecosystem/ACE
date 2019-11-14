@@ -17,7 +17,7 @@ from saq.analysis import RootAnalysis
 from saq.constants import *
 from saq.database import acquire_lock, use_db
 from saq.test import *
-from api.cloudphish.test import CloudphishTestCase, TEST_URL
+from aceapi.cloudphish.test import CloudphishTestCase, TEST_URL
 from saq.util import *
 
 import pytz

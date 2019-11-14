@@ -412,7 +412,7 @@ def get_file(uuid, file_uuid_or_name):
 
     # NOTE we use an absolute path here because if we don't then
     # send_from_directory makes it relavive from the app root path
-    # which is (/opt/ace/api)
+    # which is (/opt/ace/aceapi)
 
     target_path = os.path.join(saq.SAQ_HOME, root.storage_dir, file_observable.value)
     if not os.path.exists(target_path):
