@@ -75,6 +75,8 @@ def set_encryption_password(password):
     except Exception as e:
         logging.warning("unable to save encryption password validation hash: {}".format(e))
 
+    # TODO if the password changed then we need to go through and reset all the encrypted configuration values
+
 def get_aes_key(password):
     """Returns the binary key to be used to actually encrypt and decrypt."""
     assert isinstance(password, str)

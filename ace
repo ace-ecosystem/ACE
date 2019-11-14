@@ -296,6 +296,7 @@ disable_integration_parser.add_argument('integration',
     help="The integration to disable. Use ace integration list to get the list of available integrations.")
 disable_integration_parser.set_defaults(func=disable_integration)
 
+
 # ============================================================================
 # export observables
 #
@@ -3432,6 +3433,10 @@ verify_modules_parsers = subparsers.add_parser('verify-modules',
     help="Executes verify_environment() on all modules that are enabled.")
 verify_modules_parsers.set_defaults(func=verify_modules)
 
+# ============================================================================
+# encryption/decryption utilities
+#
+
 def set_encryption_password(args):
     from saq.crypto import set_encryption_password
     while True:
@@ -3486,6 +3491,82 @@ decrypt_file_parser = subparsers.add_parser('decrypt-file',
 decrypt_file_parser.add_argument('source_path', help="The file to decrypt from.")
 decrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
 decrypt_file_parser.set_defaults(func=decrypt_file)
+
+def store_config_password(args):
+    if saq.ENCRYPTION_PASSWORD is None:
+        logging.error("missing encryption password (use the -p) option\n")
+        sys.exit(1)
+
+    # make sure the given configuration setting exists
+    section, key = args.config_setting.split('.', 1)
+    if section not in saq.CONFIG:
+        logging.error(f"unknown config section {section}")
+        sys.exit(1)
+
+    if key not in saq.CONFIG[section]:
+        logging.error(f"unknown value name {key} in section {section}")
+        sys.exit(1)
+
+    while True:
+        password = getpass.getpass("Enter the password:")
+        password_2 = getpass.getpass("Re-enter the password for verification:")
+
+        if password != password_2:
+            logging.error("passwords do not match, try again")
+            continue
+
+        break
+
+    from saq.configuration import store_encrypted_password
+    store_encrypted_password(section, key, password)
+    sys.exit(0)
+
+store_config_password_parser = subparsers.add_parser('store-config-password',
+    help="Encrypt and store a password as one of the configuration settings.")
+store_config_password_parser.add_argument('config_setting',
+    help="The configuration setting to set the password for.")
+store_config_password_parser.set_defaults(func=store_config_password)
+
+def list_config_passwords(args):
+    from saq.configuration import get_encrypted_passwords
+    encrypted_passwords = get_encrypted_passwords()
+    if encrypted_passwords is None:
+        print("no passwords have been encrypted")
+        return
+
+    for key in encrypted_passwords.keys():
+        value = encrypted_passwords[key]
+        if value is None:
+            value = "<encrypted>"
+
+        print(f"{key} = {value}")
+
+    sys.exit(0)
+
+list_config_passwords_parser = subparsers.add_parser('list-config-passwords',
+    help="List the config settings that have their password stored as an encrypted value.")
+list_config_passwords_parser.set_defaults(func=list_config_passwords)
+
+def delete_config_password(args):
+    from saq.configuration import delete_encrypted_password
+    section, key = args.config_setting.split('.', 1)
+    if section not in saq.CONFIG:
+        logging.error(f"unknown config section {section}")
+        sys.exit(1)
+
+    if key not in saq.CONFIG[section]:
+        logging.error(f"unknown value name {key} in section {section}")
+        sys.exit(1)
+
+    count = delete_encrypted_password(section, key)
+    print(f"deleted {count} records")
+    sys.exit(0)
+
+delete_config_password_parser = subparsers.add_parser('delete-config-password',
+    help="Deletes a given encrypted password.")
+delete_config_password_parser.add_argument('config_setting',
+    help="The configuration setting to delete the password for.")
+delete_config_password_parser.set_defaults(func=delete_config_password)
 
 def add_bro_http_whitelist(args):
     import saq
@@ -3691,6 +3772,9 @@ if __name__ == '__main__':
             break
 
         saq.ENCRYPTION_PASSWORD = get_aes_key(password)
+
+    # NOTE we call this function if the user provides a password or not
+    saq.CONFIG.load_encrypted_passwords()
 
     if args.debug_on_error:
         def info(type, value, tb):

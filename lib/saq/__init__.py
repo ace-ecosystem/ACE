@@ -12,10 +12,10 @@ import sys
 import time
 import traceback
 
-from configparser import ConfigParser
 from getpass import getpass
 
 import ace_api
+from saq.configuration import load_configuration
 from saq.constants import *
 from saq.messaging import initialize_message_system
 from saq.network_semaphore import initialize_fallback_semaphores
@@ -95,82 +95,6 @@ LOGGING_BASE_CONFIG = {
         },
     },
 }
-
-def apply_config(source, override):
-    """Takes the loaded ConfigParser override and applies it to source such that any 
-       configuration values in source are overridden by those specified in override."""
-    for section_name in override:
-        if section_name in source:
-            for value_name in override[section_name]:
-                source[section_name][value_name] = override[section_name][value_name]
-        else:
-            source[section_name] = override[section_name]
-
-def load_configuration():
-
-    global CONFIG
-
-    try:
-        default_config = ConfigParser(allow_no_value=True)
-        default_config.read(os.path.join(SAQ_HOME, 'etc', 'saq.default.ini'))
-
-        # load integrations (see lib/saq/integration.py)
-        integration_config_path = os.path.join(SAQ_HOME, 'etc', 'saq.integrations.ini')
-
-        # if this is the first time running and we don't have it yet, copy it over from the defaults file
-        if not os.path.exists(integration_config_path):
-            default_integration_config_path = os.path.join(SAQ_HOME, 'etc', 'saq.integrations.default.ini')
-            if os.path.exists(default_integration_config_path):
-                shutil.copy(default_integration_config_path, integration_config_path)
-
-        if os.path.exists(integration_config_path):
-            integration_config = ConfigParser(allow_no_value=True)
-            integration_config.read(integration_config_path)
-            apply_config(default_config, integration_config)
-
-        if 'integrations' in default_config:
-            for integration in default_config['integrations'].keys():
-                if default_config['integrations'].getboolean(integration):
-                    # load this integration
-                    target_config_path = os.path.join(SAQ_HOME, 'etc', f'saq.{integration}.ini')
-                    if not os.path.exists(target_config_path):
-                        sys.stderr.write(f"integration {integration} file {target_config_path} does not exist\n")
-                        continue
-
-                    integration_config = ConfigParser(allow_no_value=True)
-                    integration_config.read(target_config_path)
-                    apply_config(default_config, integration_config)
-
-        for config_path in CONFIG_PATHS:
-            override = ConfigParser(allow_no_value=True)
-            override.read(config_path)
-            apply_config(default_config, override)
-
-        # make sure all OVERRIDE settings are actually overridden
-        errors = {}
-        for section_name in default_config:
-            for value_name in default_config[section_name]:
-                if default_config[section_name][value_name] == 'OVERRIDE':
-                    if section_name not in errors:
-                        errors[section_name] = []
-                    errors[section_name].append(value_name)
-
-        if errors:
-            for section_name in errors.keys():
-                sys.stderr.write("[{}]\n".format(section_name))
-                for value_name in errors[section_name]:
-                    sys.stderr.write("{} = \n".format(value_name))
-                sys.stderr.write("\n")
-                
-            sys.stderr.write("missing overrides detection in configuration settings\n")
-            sys.stderr.write("you can copy-paste the above into your config file if you do not need these settings\n\n")
-            sys.exit(1)
-
-        CONFIG = default_config
-
-    except Exception as e:
-        sys.stderr.write("unable to load configuration: {}\n".format(e))
-        traceback.print_exc()
 
 def initialize_logging(logging_config_path):
     try:

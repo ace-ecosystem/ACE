@@ -45,6 +45,7 @@ then
         saq.database.test \
         saq.test_email \
         saq.test_crawlphish \
+        saq.test_configuration \
         saq.test_crypto \
         saq.test_util \
         saq.test_locks \
