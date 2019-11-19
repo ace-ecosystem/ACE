@@ -3508,8 +3508,8 @@ def store_config_password(args):
         sys.exit(1)
 
     while True:
-        password = getpass.getpass("Enter the password:")
-        password_2 = getpass.getpass("Re-enter the password for verification:")
+        password = getpass.getpass(f"Enter the value to be encrypted and stored for section {section} option {key}:")
+        password_2 = getpass.getpass("Re-enter the value for verification:")
 
         if password != password_2:
             logging.error("passwords do not match, try again")

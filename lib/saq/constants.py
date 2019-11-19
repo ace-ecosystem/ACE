@@ -433,11 +433,13 @@ METRIC_THREAD_COUNT = 'thread_count'
 R_DOWNLOADED_FROM = 'downloaded_from'
 R_EXTRACTED_FROM = 'extracted_from'
 R_REDIRECTED_FROM = 'redirected_from'
+R_IS_HASH_OF = 'is_hash_of'
 
 VALID_RELATIONSHIP_TYPES = [
     R_DOWNLOADED_FROM,
     R_EXTRACTED_FROM,
     R_REDIRECTED_FROM,
+    R_IS_HASH_OF,
 ]
 
 TARGET_EMAIL_RECEIVED = 'email.received'

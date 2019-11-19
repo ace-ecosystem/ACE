@@ -313,9 +313,17 @@ class FileHashAnalyzer(AnalysisModule):
         result.sha1 = _file.sha1_hash
         result.sha256 = _file.sha256_hash
 
-        if o_md5: o_md5.add_link(_file)
-        if o_sha1: o_sha1.add_link(_file)
-        if o_sha256: o_sha256.add_link(_file)
+        if o_md5: 
+            o_md5.add_link(_file)
+            o_md5.add_relationship(R_IS_HASH_OF, _file)
+
+        if o_sha1: 
+            o_sha1.add_link(_file)
+            o_sha1.add_relationship(R_IS_HASH_OF, _file)
+        
+        if o_sha256: 
+            o_sha256.add_link(_file)
+            o_sha256.add_relationship(R_IS_HASH_OF, _file)
 
         return True
 

@@ -208,9 +208,10 @@ class Worker(object):
                         logging.debug("both queues are empty - broke out of engine loop")
                         break # break out of the main loop
 
-                    logging.debug("queue sizes workload {} delayed {}".format(
-                                   CURRENT_ENGINE.workload_queue_size,
-                                   CURRENT_ENGINE.delayed_analysis_queue_size))
+                    if saq.UNIT_TESTING:
+                        logging.debug("queue sizes workload {} delayed {}".format(
+                                       CURRENT_ENGINE.workload_queue_size,
+                                       CURRENT_ENGINE.delayed_analysis_queue_size))
 
                 # if execute returns True it means it discovered and processed a work_item
                 # in that case we assume there is more work to do and we check again immediately

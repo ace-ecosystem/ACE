@@ -44,6 +44,7 @@ class AnalysisModule(object):
 
         # the section in the configuration that applies to this analysis module
         self.config_section = config_section
+        self.config_section_name = config_section[len('analysis_module_'):]
         self.config = None
         self._load_config()
 
@@ -703,7 +704,7 @@ class AnalysisModule(object):
         if seconds is None:
             seconds = 0
 
-        logging.info("adding delayed analysis for "
+        logging.debug("adding delayed analysis for "
                       "{} by {} on {} analysis {} hours {} minutes {} seconds {}".format(
                       self.root, self, observable, analysis, hours, minutes, seconds))
 

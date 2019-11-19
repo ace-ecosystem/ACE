@@ -30,10 +30,15 @@ class SandboxAnalysisModule(AnalysisModule):
         if not self.use_proxy:
             return {}
 
-        return {
-            'http': saq.CONFIG['proxy']['http'],
-            'https': saq.CONFIG['proxy']['https'],
-        }
+        return saq.PROXIES
+
+    @property
+    def verify_ssl(self):
+        """Return True if we should do cert verfication for the sandbox."""
+        if 'verify_ssl' in self.config:
+            return self.config.getboolean('verify_ssl')
+        
+        return True
 
     @property
     def valid_observable_types(self):
