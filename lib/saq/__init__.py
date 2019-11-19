@@ -71,7 +71,10 @@ class CustomFileHandler(logging.StreamHandler):
         if self.current_filename != current_filename:
             # close the current stream
             if self.stream:
-                self.stream.close()
+                try:
+                    self.stream.close()
+                except OSError as e:
+                    logging.warning(f"Error closing stream: {e}")
             
             # and open a new one
             self.stream = open(os.path.join(self.log_dir, current_filename), 'a')
