@@ -345,10 +345,6 @@ class FalconSandboxAnalyzer(SandboxAnalysisModule):
         return self.config.getboolean('download_iocs')
 
     @property
-    def required_directives(self):
-        return [ ] # files and urls require DIRECTIVE_SANDBOX but hashes do not
-
-    @property
     def generated_analysis_type(self):
         return FalconSandboxAnalysis
 
@@ -366,6 +362,11 @@ class FalconSandboxAnalyzer(SandboxAnalysisModule):
             return self.execute_analysis_hash(target)
 
     def execute_analysis_file(self, target):
+        hash_analysis = self.wait_for_analysis(target, FileHashAnalysis)
+        if not hash_analysis:
+            logging.debug(f"did not get FileHashAnalysis for {target}")
+            return False
+            
         # has this file already been submitted?
         result = self.vx.search_hash(target.sha256_hash)
         result.raise_for_status()
@@ -378,10 +379,6 @@ class FalconSandboxAnalyzer(SandboxAnalysisModule):
             # the results of the search seem to match the results of the report summary
             analysis.report_summary = json_result[0]
             return True # we're done here -- the actual analysis details will come from the analysis of the hash
-
-        # now we're checking to see if we should actually submit the file
-        if not target.has_directive(DIRECTIVE_SANDBOX):
-            return False
 
         # does this file even exist?
         local_path = os.path.join(self.root.storage_dir, target.value)
@@ -402,6 +399,9 @@ class FalconSandboxAnalyzer(SandboxAnalysisModule):
         result.raise_for_status()
         analysis.submission_result = result.json()
         analysis.submit_date = datetime.datetime.now()
+
+        # then we make sure the hash has the sandbox directive
+        hash_analysis.get_observable_by_type(F_SHA256).add_directive(DIRECTIVE_SANDBOX)
         return True
 
     def execute_analysis_url(self, target):
@@ -432,10 +432,6 @@ class FalconSandboxAnalyzer(SandboxAnalysisModule):
 
             return True # we're done here -- the actual analysis details will come from the analysis of the hash
 
-        # now we're checking to see if we should actually submit the url
-        if not target.has_directive(DIRECTIVE_SANDBOX):
-            return False
-
         analysis = self.create_analysis(target)
         sha256_observable = analysis.add_observable(F_SHA256, sha256_hash)
         if sha256_observable:
@@ -445,6 +441,7 @@ class FalconSandboxAnalyzer(SandboxAnalysisModule):
             # not sure how they are computing the hash for the url
             # so this is really the only module that can do anything with it
             sha256_observable.limit_analysis(self)
+            sha256_observable.add_directive(DIRECTIVE_SANDBOX)
 
         # this url needs to be submitted
         logging.info(f"submitting url {target.value} to falcon sandbox environment {self.environment_id}")
