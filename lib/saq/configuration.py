@@ -35,7 +35,7 @@ class EncryptedPasswordInterpolation(Interpolation):
 
         key = f'{section}.{option}'
         # if we're asking for an encrypted password and we've decrypted it, return that value
-        if key in parser.encrypted_passwords:
+        if parser.encrypted_passwords is not None and key in parser.encrypted_passwords:
             if parser.encrypted_passwords[key] is None:
                 # if we haven't decrypted it and we're asking for it, raise an error
                 raise RuntimeError(f"configuration section {section} option {option} has encrypted password but no decrypt key was used\n"
