@@ -226,8 +226,8 @@ class WhoisAnalyzer(AnalysisModule):
             if isinstance(_domain_name, list):
                 _domain_name = _domain_name[0]
 
+            analysis.domain_name = _domain_name
             analysis.registrar = whois_result.get("registrar", None)
-
             analysis.name_servers = whois_result.get("name_servers", [])
 
             # Get the full whois result
