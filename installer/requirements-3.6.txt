@@ -46,5 +46,6 @@ MarkupSafe
 Pandas
 Pillow
 PyMySQL
+python-whois
 SQLAlchemy>=1.3.0
 WTForms
