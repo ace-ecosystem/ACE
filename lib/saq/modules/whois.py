@@ -2,17 +2,15 @@
 
 A few outcomes can be expected and must be handled.
 
-**Note that although some of these whois_results do not tell an analyst the
-'creation time' of the domain, the lack of creation time might
-say 'something' to the analyst about that domain/zone. Some things to
+**Note that although some of these whois results do not tell an analyst
+the 'creation time' of the domain, the lack of creation time might
+say something to the analyst about that domain/zone. Some things to
 consider:
 
-    - The TLD is unknown/unsupported by the whois package.
-    - The whois_result is an object of Nonetype -- no whois_result found.
+    - The TLD is unknown/unsupported by the python-whois package.
+    - All results are 'None' for a domain... it might not exist.
     - The whois whois_result for the TLD doesn't include
         a creation time.
-    - Whois linux program is not installed in the OS of the
-        analysis server.
     - There were actual whois_results.
 """
 
@@ -22,6 +20,7 @@ from datetime import datetime
 from saq.analysis import Analysis, Observable
 from saq.constants import F_FQDN, F_URL
 from saq.modules import AnalysisModule
+
 
 KEY_AGE_CREATED_IN_DAYS = "age_created_in_days"
 KEY_AGE_LAST_UPDATED_IN_DAYS = "age_last_updated_in_days"
@@ -33,8 +32,6 @@ KEY_NAME_SERVERS = "nameservers"
 KEY_REGISTRAR = "registrar"
 KEY_DOMAIN_NAME = "domain_name"
 KEY_WHOIS_TEXT = "whois_text"
-
-NOT_IMPLEMENTED = "not_implemented"
 
 
 class WhoisAnalysis(Analysis):
