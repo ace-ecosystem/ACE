@@ -220,21 +220,35 @@ class WhoisAnalyzer(AnalysisModule):
 
         else:
 
-            analysis.domain_name = whois_result.get("domain_name", [None])[0]
+            # Results could be lists or strings for some of the queries.
+
+            _domain_name = whois_result.get("domain_name", None)
+            if isinstance(_domain_name, list):
+                _domain_name = _domain_name[0]
+
             analysis.registrar = whois_result.get("registrar", None)
+
             analysis.name_servers = whois_result.get("name_servers", [])
 
             # Get the full whois result
             analysis.whois_text = whois_result.text
 
-            # creation date validation
-            _creation_date = whois_result.get("creation_date", [None])[0]
+            # Creation date validation
+            # First see if it's a single result or a list of results.
+            #   Sometimes it includes both a tz-agnostic and tz-aware
+            #   datetime object.
+            _creation_date = whois_result.get("creation_date", None)
+            if isinstance(_creation_date, list):
+                _creation_date = _creation_date[0]
+            # Now check to see it's an actual datetime object...
             if not isinstance(_creation_date, datetime):
                 analysis.datetime_created_missing_or_invalid = True
                 logging.debug(f"Whois result contains unexpected creation date format/contents.")
 
-            # last updated date validation
-            _updated_date = whois_result.get("updated_date", [None])[0]
+            # Last updated date validation
+            _updated_date = whois_result.get("updated_date", None)
+            if isinstance(_updated_date, list):
+                _updated_date = _updated_date[0]
             if not isinstance(_updated_date, datetime):
                 analysis.datetime_updated_missing_or_invalid = True
                 logging.debug(f"Whois result contains unexpected updated date format/contents.")
