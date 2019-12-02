@@ -12,7 +12,10 @@ from saq.collectors import Collector, Submission
 
 class BroSMTPStreamCollector(Collector):
     def __init__(self, *args, **kwargs):
-        super().__init__(delete_files=True, workload_type='smtp', *args, **kwargs)
+        super().__init__(service_config=saq.CONFIG['service_bro_smtp_collector'],
+                         workload_type='smtp', 
+                         delete_files=True, 
+                         *args, **kwargs)
 
         # the location of the incoming smtp streams
         self.bro_smtp_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['bro']['smtp_dir'])

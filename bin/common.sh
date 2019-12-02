@@ -17,3 +17,12 @@ then
         exit 1
     fi
 fi
+
+# make sure our PATH is set correctly
+if [[ ":${PATH}:" != *":${SAQ_HOME}:"* ]]; then
+    export PATH="${PATH}:${SAQ_HOME}"
+fi
+
+if [[ ":${PATH}:" != *":${SAQ_HOME}/bin:"* ]]; then
+    export PATH="${PATH}:${SAQ_HOME}/bin"
+fi

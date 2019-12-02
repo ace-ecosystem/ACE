@@ -39,6 +39,7 @@ from saq.database import Alert, use_db, release_cached_db_connection, enable_cac
 from saq.error import report_exception
 from saq.modules import AnalysisModule
 from saq.performance import record_metric
+from saq.service import ACEService
 from saq.util import *
 
 import iptools
@@ -87,7 +88,7 @@ class Worker(object):
 
         # how long do we execute before we die
         # a value of 0 indicates we never die on our own
-        self.auto_refresh_frequency = saq.CONFIG['engine'].getint('auto_refresh_frequency', 0)
+        self.auto_refresh_frequency = saq.CONFIG['service_engine'].getint('auto_refresh_frequency', 0)
         self.next_auto_refresh_time = None # datetime.datetime
 
     def start(self):
@@ -377,7 +378,7 @@ def load_module(section):
     try:
         _module = importlib.import_module(module_name)
     except Exception as e:
-        logging.error("unable to import module {}".format(module_name, e))
+        logging.error("unable to import module {}: {}".format(module_name, e))
         report_exception()
         return None
 
@@ -402,18 +403,22 @@ def load_module(section):
 
     return analysis_module
 
-class Engine(object):
+class Engine(ACEService):
     """Analysis Correlation Engine"""
 
     # 
     # INITIALIZATION
     # ------------------------------------------------------------------------
 
-    def __init__(self, name='ace', local_analysis_modes=None, 
-                                   analysis_pools=None, 
-                                   pool_size_limit=None, 
-                                   copy_analysis_on_error=None,
-                                   single_threaded_mode=False):
+    def __init__(self, name='ace', 
+                       local_analysis_modes=None, 
+                       analysis_pools=None, 
+                       pool_size_limit=None, 
+                       copy_analysis_on_error=None,
+                       single_threaded_mode=False, 
+                       *args, **kwargs):
+
+        super().__init__(service_config=saq.CONFIG['service_engine'], *args, **kwargs)
 
         assert local_analysis_modes is None or isinstance(local_analysis_modes, list)
         assert analysis_pools is None or isinstance(analysis_pools, dict)
@@ -425,9 +430,6 @@ class Engine(object):
         # the name of the engine, usually you want the default unless you're doing something different
         # like unit testing
         self.name = name
-
-        # the engine configuration
-        self.config = saq.CONFIG['engine']
 
         # we just cache the current hostname of this engine here
         self.hostname = socket.gethostname()
@@ -484,7 +486,7 @@ class Engine(object):
         if local_analysis_modes is not None:
             self.local_analysis_modes = local_analysis_modes
         else:
-            self.local_analysis_modes = [_.strip() for _ in self.config['local_analysis_modes'].split(',') if _]
+            self.local_analysis_modes = [_.strip() for _ in self.service_config['local_analysis_modes'].split(',') if _]
 
         # load the analysis pool settings
         # if we specified analysis_pools on the constructor then we use that instead
@@ -494,19 +496,19 @@ class Engine(object):
                 self.add_analysis_pool(analysis_mode, analysis_pools[analysis_mode])
         else:
             self.analysis_pools = {}
-            for key in self.config.keys():
+            for key in self.service_config.keys():
                 if not key.startswith('analysis_pool_size_'):
                     continue
 
                 analysis_mode = key[len('analysis_pool_size_'):]
-                self.add_analysis_pool(analysis_mode, self.config.getint(key))
+                self.add_analysis_pool(analysis_mode, self.service_config.getint(key))
 
         # the maximum size of the analysis pool if no analysis pools are defined
         # default is None which means to use the cpu_count 
         self.pool_size_limit = pool_size_limit
 
         # the default analysis mode for RootAnalysis objects assigned to invalid (unknown) analysis modes
-        self.default_analysis_mode = self.config['default_analysis_mode']
+        self.default_analysis_mode = self.service_config['default_analysis_mode']
 
         # make sure this analysis mode is valid
         if 'analysis_mode_{}'.format(self.default_analysis_mode) not in saq.CONFIG:
@@ -573,7 +575,7 @@ class Engine(object):
         self.maintenance_control = None # threading.Event()
 
         # how often do we update the nodes database table for this engine (in seconds)
-        self.node_status_update_frequency = self.config.getint('node_status_update_frequency')
+        self.node_status_update_frequency = self.service_config.getint('node_status_update_frequency')
         # and then when will be the next time we make this update?
         self.next_status_update_time = None
 
@@ -590,22 +592,22 @@ class Engine(object):
         if copy_analysis_on_error is not None:
             self.copy_analysis_on_error = copy_analysis_on_error
         else:
-            self.copy_analysis_on_error = self.config.getboolean('copy_analysis_on_error')
+            self.copy_analysis_on_error = self.service_config.getboolean('copy_analysis_on_error')
 
         # in single threaded mode we don't start any extra processes or threads
         # this is useful for debugging
         self.single_threaded_mode = single_threaded_mode
 
         # are we using a different directory for the workload?
-        self.work_dir = self.config['work_dir']
+        self.work_dir = self.service_config['work_dir']
 
         # how often do we check to see if an analyst dispositioned the alert we're currently analyzing
         # (in the case where we are analyzing an alert)
         # in seconds
-        self.alert_disposition_check_frequency = self.config.getint('alert_disposition_check_frequency')
+        self.alert_disposition_check_frequency = self.service_config.getint('alert_disposition_check_frequency')
 
         # list of analysis modes we do NOT consider for alert status when we find a detection
-        self.non_detectable_modes = [_.strip() for _ in self.config['non_detectable_modes'].split(',')]
+        self.non_detectable_modes = [_.strip() for _ in self.service_config['non_detectable_modes'].split(',')]
 
         # by default alerting is turned on
         self.alerting_enabled = True
@@ -1055,8 +1057,22 @@ class Engine(object):
         return self.immediate_event.is_set()
 
     #
+    # SERVICE FUNCTIONS
+    # ------------------------------------------------------------------------
+
+    def execute_service(self):
+        # if we're in debug mode then we only want to run everything on a single thread
+        self.single_threaded_mode = self.service_is_debug
+        return self.start()
+
+    def stop_service(self, *args, **kwargs):
+        super().stop_service(*args, **kwargs)
+        self.stop()
+
+    #
     # CONTROL FUNCTIONS
     # ------------------------------------------------------------------------
+
 
     def start(self, mode=None):
         """Starts the engine."""

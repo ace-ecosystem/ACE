@@ -241,7 +241,7 @@ class TestCase(ACEEngineTestCase):
 
     def test_missing_analysis_mode(self):
 
-        saq.CONFIG['engine']['default_analysis_mode'] = 'test_single'
+        saq.CONFIG['service_engine']['default_analysis_mode'] = 'test_single'
 
         root = create_root_analysis(uuid=str(uuid.uuid4()))
         root.analysis_mode = None # <-- no analysis mode here
@@ -793,7 +793,7 @@ class TestCase(ACEEngineTestCase):
         self.assertEquals(_get_io_read_count(), 5) 
 
     def test_autorefresh(self):
-        saq.CONFIG['engine']['auto_refresh_frequency'] = '3'
+        saq.CONFIG['service_engine']['auto_refresh_frequency'] = '3'
         engine = TestEngine(pool_size_limit=1)
         engine.start()
         wait_for_log_count('triggered reload of worker modules', 1)
@@ -1799,7 +1799,7 @@ class TestCase(ACEEngineTestCase):
 
     def test_local_analysis_mode_missing_default(self):
 
-        saq.CONFIG['engine']['default_analysis_mode'] = 'test_single'
+        saq.CONFIG['service_engine']['default_analysis_mode'] = 'test_single'
 
         # when we specify a default analysis mode that is not in the locally supported modes of the engine
         # it should automatically get added to the list of locally supported modes
@@ -1834,7 +1834,7 @@ class TestCase(ACEEngineTestCase):
 
     def test_local_analysis_mode_missing_pool(self):
     
-        saq.CONFIG['engine']['default_analysis_mode'] = 'test_empty'
+        saq.CONFIG['service_engine']['default_analysis_mode'] = 'test_empty'
 
         # test_empty is specified as the only supported mode
         # but we specify a pool for test_single
@@ -1902,8 +1902,8 @@ class TestCase(ACEEngineTestCase):
         saq.CONFIG['analysis_mode_test_single']['cleanup'] = 'no'
 
         # and this node handles the test_single mode
-        saq.CONFIG['engine']['local_analysis_modes'] = 'test_single'
-        saq.CONFIG['engine']['analysis_pool_size_test_single'] = '1'
+        saq.CONFIG['service_engine']['local_analysis_modes'] = 'test_single'
+        saq.CONFIG['service_engine']['analysis_pool_size_test_single'] = '1'
 
         engine = TestEngine()
         engine.enable_module('analysis_module_basic_test')
@@ -1982,8 +1982,8 @@ class TestCase(ACEEngineTestCase):
         saq.CONFIG['analysis_mode_test_single']['cleanup'] = 'no'
 
         # and this node handles the test_single mode
-        saq.CONFIG['engine']['local_analysis_modes'] = 'test_single'
-        saq.CONFIG['engine']['analysis_pool_size_test_single'] = '1'
+        saq.CONFIG['service_engine']['local_analysis_modes'] = 'test_single'
+        saq.CONFIG['service_engine']['analysis_pool_size_test_single'] = '1'
 
         engine = TestEngine(local_analysis_modes=['test_single'],
                             analysis_pools={'test_single': 1})
@@ -2057,7 +2057,7 @@ class TestCase(ACEEngineTestCase):
     def test_primary_node(self, db, c):
 
         # test having a node become the primary node
-        saq.CONFIG['engine']['node_status_update_frequency'] = '1'
+        saq.CONFIG['service_engine']['node_status_update_frequency'] = '1'
         engine = TestEngine()
         engine.start()
         
