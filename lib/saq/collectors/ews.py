@@ -81,7 +81,7 @@ class EWSCollectionBaseConfiguration(object):
 
     @property
     def tracking_db_path(self):
-        return os.path.join(self.persistence_dir, f'{self.target_mailbox}@{self.server}.db')
+        return os.path.join(self.collector.persistence_dir, f'{self.target_mailbox}@{self.server}.db')
 
     def start(self):
         self.execution_thread = threading.Thread(target=self.run, name=f'EWS Collection {type(self).__name__}')
