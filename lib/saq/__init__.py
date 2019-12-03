@@ -163,6 +163,7 @@ def initialize(saq_home=None,
     global SAQ_NODE_ID
     global SAQ_RELATIVE_DIR
     global SEMAPHORES_ENABLED
+    global SERVICES_DIR
     global STATS_DIR
     global TEMP_DIR
     global TOR_PROXY
@@ -206,6 +207,9 @@ def initialize(saq_home=None,
 
     # directory where pid files are stored for daemons
     DAEMON_DIR = None
+
+    # directory where files are stored for running services
+    SERVICES_DIR = None
 
     # path to the certifcate chain used by all SSL certs
     CA_CHAIN_PATH = None
@@ -313,6 +317,7 @@ def initialize(saq_home=None,
     DATA_DIR = os.path.join(SAQ_HOME, CONFIG['global']['data_dir'])
     TEMP_DIR = os.path.join(DATA_DIR, CONFIG['global']['tmp_dir'])
     DAEMON_DIR = os.path.join(DATA_DIR, 'var', 'daemon')
+    SERVICES_DIR = os.path.join(DATA_DIR, 'var', 'services')
     COMPANY_NAME = CONFIG['global']['company_name']
     COMPANY_ID = CONFIG['global'].getint('company_id')
 
@@ -460,6 +465,7 @@ def initialize(saq_home=None,
         os.path.join(DATA_DIR, CONFIG['splunk_logging']['splunk_log_dir']),
         os.path.join(DATA_DIR, CONFIG['elk_logging']['elk_log_dir']),
         os.path.join(TEMP_DIR),
+        SERVICES_DIR,
         DAEMON_DIR, ]: 
         #os.path.join(SAQ_HOME, maliciousdir) ]: # XXX remove
         try:

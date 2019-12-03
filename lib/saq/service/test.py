@@ -62,7 +62,7 @@ class TestCase(ACEBasicTestCase):
         service = TestService()
         self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
         service.start_service(threaded=True)
-        self.assertEquals(service.service_status, SERVICE_STATUS_RUNNING)
+        self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
         service.stop_service()
         service.wait_service()
         self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
@@ -71,14 +71,14 @@ class TestCase(ACEBasicTestCase):
         service = TestService()
         self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
         service.start_service(threaded=True)
-        self.assertEquals(service.service_status, SERVICE_STATUS_RUNNING)
+        self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
         os.kill(os.getpid(), signal.SIGINT)
         self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_STOPPED)
 
         service = TestService()
         self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
         service.start_service(threaded=True)
-        self.assertEquals(service.service_status, SERVICE_STATUS_RUNNING)
+        self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
         os.kill(os.getpid(), signal.SIGTERM)
         self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_STOPPED)
 
@@ -88,7 +88,7 @@ class TestCase(ACEBasicTestCase):
             service = get_service_class(service_name)()
             self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
             service.start_service(threaded=True)
-            self.assertEquals(service.service_status, SERVICE_STATUS_RUNNING)
+            self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
             services.append(service)
 
         self.assertEquals(len(services), 2)
@@ -104,11 +104,9 @@ class TestCase(ACEBasicTestCase):
         service = TestService()
         self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
         service.start_service(daemon=True)
-        self.wait_for_condition(lambda: os.path.exists(get_daemon_pid_path('test')))
-        self.assertEquals(service.service_status, SERVICE_STATUS_RUNNING)
-        service.stop_service(daemon=True)
-        self.wait_for_condition(lambda: not os.path.exists(get_daemon_pid_path('test')))
-        self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
+        self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
+        stop_service(service.service_name)
+        self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_STOPPED)
 
     def test_start_multi_service_daemon(self):
         services = []
@@ -116,32 +114,29 @@ class TestCase(ACEBasicTestCase):
             service = get_service_class(service_name)()
             self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
             service.start_service(daemon=True)
-            self.wait_for_condition(lambda: os.path.exists(get_daemon_pid_path(service_name)))
-            self.assertEquals(service.service_status, SERVICE_STATUS_RUNNING)
+            self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
             services.append(service)
 
         self.assertEquals(len(services), 2)
     
         for service in services:
-            service.stop_service(daemon=True)
+            stop_service(service.service_name)
 
         for service in services:
-            self.wait_for_condition(lambda: not os.path.exists(get_daemon_pid_path(service.service_name)))
-            self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
+            self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_STOPPED)
 
     def test_start_service_daemon_stale(self):
         service = TestService()
         self.assertEquals(service.service_status, SERVICE_STATUS_STOPPED)
         service.start_service(daemon=True)
-        self.wait_for_condition(lambda: os.path.exists(get_daemon_pid_path('test')))
-        self.assertEquals(service.service_status, SERVICE_STATUS_RUNNING)
-        daemon_pid = get_daemon_pid('test')
-        os.kill(daemon_pid, signal.SIGKILL)
-        process = psutil.Process(daemon_pid)
+        self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
+        service_pid = get_service_pid(service.service_name)
+        os.kill(service_pid, signal.SIGKILL)
+        process = psutil.Process(service_pid)
         process.wait(5)
         service = TestService()
         self.assertEquals(service.service_status, SERVICE_STATUS_STALE)
         service.start_service(daemon=True)
         self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
-        service.stop_service(daemon=True)
+        stop_service(service.service_name)
         self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_STOPPED)

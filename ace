@@ -188,22 +188,60 @@ def start_service(args):
         logging.error("you can only debug one service at a time")
         sys.exit(1)
 
-    # reorder the services by load order
-    # TODO!
-
-    services = []
+    # check service depedencies and reorder startup
+    # first iterate over all the dependencies
+    # if any are listed that are not running yet AND are not in our list to start
+    # then we bail on startup
+    dependencies = set() # of service names
     for service_name in service_names:
+        for dep_service_name in saq.service.get_service_dependencies(service_name):
+            if saq.service.get_service_status(dep_service_name) != saq.service.SERVICE_STATUS_RUNNING:
+                if dep_service_name not in service_names:
+                    if args.no_deps:
+                        print(f"NOPE: service {service_name} depends on {dep_service_name} and you're not starting it")
+                        sys.exit(1)
+                    else:
+                        dependencies.add(dep_service_name)
+
+    service_names.extend(list(dependencies))
+    targets = []
+    for service_name in service_names:
+        targets.append((service_name, saq.service.get_service_dependencies(service_name)))
+
+    # https://stackoverflow.com/a/11564323
+    def topological_sort(source):
+        """perform topo sort on elements.
+
+        :arg source: list of ``(name, [list of dependancies])`` pairs
+        :returns: list of names, with dependancies listed first
+        """
+        pending = [(name, set(deps)) for name, deps in source] # copy deps so we can modify set in-place       
+        emitted = []        
+        while pending:
+            next_pending = []
+            next_emitted = []
+            for entry in pending:
+                name, deps = entry
+                deps.difference_update(emitted) # remove deps we emitted last pass
+                if deps: # still has deps? recheck during next pass
+                    next_pending.append(entry) 
+                else: # no more deps? time to emit
+                    yield name 
+                    emitted.append(name) # <-- not required, but helps preserve original ordering
+                    next_emitted.append(name) # remember what we emitted for difference_update() in next pass
+            if not next_emitted: # all entries have unmet deps, one of two things is wrong...
+                raise ValueError("cyclic or missing dependancy detected: %r" % (next_pending,))
+            pending = next_pending
+            emitted = next_emitted
+
+    # go ahead and install signal handlers to stop the services we're about to start up
+    services = [] # of ACEService objects
+    # at this point we have the list of services we want to start
+    for service_name in list(topological_sort(targets)): # in the order they need to be started
         try:
-            logging.info(f"starting service {service_name}")
             service = saq.service.get_service_class(service_name)()
             service.start_service(daemon=args.daemon, debug=args.debug, threaded=not args.daemon and not args.debug)
             services.append(service)
-        except KeyboardInterrupt:
-            logging.warning("caught keyboard interrupt")
-            service.stop_service()
-            service.wait_service()
-            if args.debug:
-                sys.exit(1)
         except Exception as e:
             logging.error(f"unable to load service {service_name}: {e}")
             traceback.print_exc()
@@ -213,27 +251,8 @@ def start_service(args):
     if args.daemon:
         sys.exit(0)
 
-    try:
-        for service in services:
-            service.wait_service()
-
-        sys.exit(0)
-
-    except KeyboardInterrupt:
-        try:
-            logging.warning("caught keyboard interrupt")
-            for service in services:
-                service.stop_service()
-
-            for service in services:
-                service.wait_service()
-
-            sys.exit(0)
-
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            traceback.print_exc()
-            sys.exit(1)
+    for service in services:
+        service.wait_service()
 
     sys.exit(0)
 
@@ -245,6 +264,8 @@ start_service_parser.add_argument('-d', '--daemon', '--background', action='stor
     help="Starts the service and then executes in the background, tracking the PID.")
 start_service_parser.add_argument('--all', action='store_true', default=False,
     help="Starts all enabled services.")
+start_service_parser.add_argument('--no-deps', action='store_true', default=False,
+    help="Do NOT automatically start service dependencies.")
 start_service_parser.add_argument('services', nargs="*",
     help="The names of the services to start. Use ace service list to get a list of names.")
 start_service_parser.set_defaults(func=start_service)
@@ -259,12 +280,12 @@ def stop_service(args):
         service_names = args.services
 
     for service_name in service_names:
-        service_status = saq.service.get_daemon_status(service_name)
+        service_status = saq.service.get_service_status(service_name)
         if service_status is None:
             logging.error(f"unknown service {service_name}")
-        elif service_status == saq.service.DAEMON_STATUS_RUNNING:
+        elif service_status == saq.service.SERVICE_STATUS_RUNNING:
             logging.info(f"stopping service {service_name}")
-            saq.service.kill_daemon(service_name)
+            saq.service.stop_service(service_name)
         else:
             if not args.all:
                 logging.info(f"service {service_name} status already ({service_status})")
@@ -280,12 +301,12 @@ stop_service_parser.add_argument('services', nargs="*",
 stop_service_parser.set_defaults(func=stop_service)
 
 def status_service(args):
-    from saq.service import get_all_service_names, get_service_config, get_daemon_status
+    from saq.service import get_all_service_names, get_service_config, get_service_status
     print("{:<30}{:<15}{:<15}{}".format('SERVICE', 'STATUS', 'ENABLED', 'DESCRIPTION'))
     for service_name in get_all_service_names():
         service_config = get_service_config(service_name)
         print("{:<30}{:<15}{:<15}{}".format(service_name, 
-                                      get_daemon_status(service_name),
+                                      get_service_status(service_name),
                                       service_config.get('enabled', fallback=None),
                                       service_config.get('description', fallback=None)))
 

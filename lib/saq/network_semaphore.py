@@ -298,6 +298,9 @@ class NetworkSemaphoreServer(ACEService):
         self.monitor_thread.daemon = True
         self.monitor_thread.start()
 
+        self.server_thread.join()
+        self.monitor_thread.join()
+
     def stop_service(self, *args, **kwargs):
         super().stop_service(*args, **kwargs)
 

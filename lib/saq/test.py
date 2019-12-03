@@ -590,6 +590,7 @@ class ACEBasicTestCase(TestCase):
         os.mkdir(os.path.join(saq.DATA_DIR, 'var'))
         os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'tmp'))
         os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'daemon'))
+        os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'services'))
 
     def reset_log_exports(self):
         # reset splunk export logs

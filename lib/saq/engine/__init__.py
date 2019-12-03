@@ -1061,9 +1061,12 @@ class Engine(ACEService):
     # ------------------------------------------------------------------------
 
     def execute_service(self):
-        # if we're in debug mode then we only want to run everything on a single thread
         self.single_threaded_mode = self.service_is_debug
-        return self.start()
+        self.start()
+
+        # in threaded or deamon mode, we want to wait for the engine to stop
+        if self.service_is_threaded or self.service_is_daemon:
+            self.engine_process.join()
 
     def stop_service(self, *args, **kwargs):
         super().stop_service(*args, **kwargs)
@@ -1077,6 +1080,7 @@ class Engine(ACEService):
     def start(self, mode=None):
         """Starts the engine."""
 
+        # if we're in debug mode then we only want to run everything on a single thread
         if self.single_threaded_mode:
             return self.single_threaded_start(mode=mode)
 

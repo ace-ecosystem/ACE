@@ -38,6 +38,7 @@ class YSSService(ACEService):
             backlog=self.service_config.getint('backlog'))
 
         self.yss_server.start()
+        self.yss_server.wait()
 
     def stop_service(self, *args, **kwargs):
         super().stop_service(*args, **kwargs)
