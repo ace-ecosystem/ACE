@@ -109,7 +109,7 @@ class TestCase(ACEBasicTestCase):
         # test that a single worker can work two items
         
         # create a single worker
-        saq.CONFIG['engine']['max_concurrent_remediation_count'] = '1'
+        saq.CONFIG['service_engine']['max_concurrent_remediation_count'] = '1'
 
         manager = initialize_remediation_system_manager()
         start_remediation_system_manager()

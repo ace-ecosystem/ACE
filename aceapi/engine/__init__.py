@@ -32,7 +32,7 @@ def download(uuid):
     validate_uuid(uuid)
 
     target_dir = storage_dir_from_uuid(uuid)
-    if saq.CONFIG['engine']['work_dir'] and not os.path.isdir(target_dir):
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(target_dir):
         target_dir = workload_storage_dir(uuid)
 
     if not os.path.isdir(target_dir):
@@ -175,7 +175,7 @@ def clear(uuid, lock_uuid, db, c):
         abort(Response("nope", 400))
 
     target_dir = storage_dir_from_uuid(uuid)
-    if saq.CONFIG['engine']['work_dir'] and not os.path.isdir(target_dir):
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(target_dir):
         target_dir = workload_storage_dir(uuid)
 
     if not os.path.isdir(target_dir):

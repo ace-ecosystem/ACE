@@ -36,7 +36,7 @@ class BroHTTPTestCase(BroHTTPBaseTestCase):
     def test_processing(self):
         self.process_pcap(os.path.join(saq.SAQ_HOME, 'test_data', 'pcaps', 'http_download_pdf.pcap'))
 
-        collector = BroHTTPStreamCollector()
+        collector = BroHTTPStreamCollector(config=saq.CONFIG['collector_bro_http'])
         collector.load_groups()
         collector.start()
 

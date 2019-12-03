@@ -796,7 +796,7 @@ class RemediationSystem(object):
         self.control_event = threading.Event()
 
         # start the workers first so they can start reading the the queue
-        for index in range(saq.CONFIG['engine'].getint('max_concurrent_remediation_count')):
+        for index in range(saq.CONFIG['service_engine'].getint('max_concurrent_remediation_count')):
             worker_thread = threading.Thread(target=self.worker_loop, name=f"Remediation Worker #{index}")
             worker_thread.start()
             self.worker_threads.append(worker_thread)

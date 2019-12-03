@@ -136,11 +136,14 @@ def initialize(saq_home=None,
     global COMPANY_NAME
     global CONFIG
     global CONFIG_PATHS
+    global DAEMON_DIR
     global DAEMON_MODE
     global DATA_DIR
     global DEFAULT_ENCODING
     global DUMP_TRACEBACKS
+    global ECS_SOCKET_PATH
     global ENCRYPTION_PASSWORD
+    global ENCRYPTION_PASSWORD_PLAINTEXT
     global EXCLUDED_SLA_ALERT_TYPES
     global EXECUTION_THREAD_LONG_TIMEOUT
     global FORCED_ALERTS
@@ -160,11 +163,10 @@ def initialize(saq_home=None,
     global SAQ_NODE_ID
     global SAQ_RELATIVE_DIR
     global SEMAPHORES_ENABLED
+    global SERVICES_DIR
     global STATS_DIR
     global TEMP_DIR
     global TOR_PROXY
-    global YSS_BASE_DIR
-    global YSS_SOCKET_DIR
 
     SAQ_HOME = None
     SAQ_NODE = None
@@ -184,9 +186,12 @@ def initialize(saq_home=None,
     MANAGED_NETWORKS = None
     # set this to True to force all anlaysis to result in an alert being generated
     FORCED_ALERTS = False
-    # the gpg private key password for encrypting/decrypting archive files
-    # this can be provided on the command line so that these files can also be analyzed
+    # the private key password for encrypting/decrypting archive files
+    # NOTE this is the decrypted random string of bytes that is used to encrypt/decrypt using AES
+    # NOTE both of these can stay None if encryption is not being used
     ENCRYPTION_PASSWORD = None
+    # *this* is the password that is used to encrypt/decrypt the ENCRYPTION_PASSWORD at rest
+    ENCRYPTION_PASSWORD_PLAINTEXT = None
 
     # the global log level setting
     LOG_LEVEL = logging.INFO
@@ -200,6 +205,12 @@ def initialize(saq_home=None,
     # are we running as a daemon in the background?
     DAEMON_MODE = False
 
+    # directory where pid files are stored for daemons
+    DAEMON_DIR = None
+
+    # directory where files are stored for running services
+    SERVICES_DIR = None
+
     # path to the certifcate chain used by all SSL certs
     CA_CHAIN_PATH = None
 
@@ -210,10 +221,6 @@ def initialize(saq_home=None,
     GLOBAL_SLA_SETTINGS = None
     OTHER_SLA_SETTINGS = []
     EXCLUDED_SLA_ALERT_TYPES = []
-
-    # Yara Scanner Server base directory
-    YSS_BASE_DIR = None
-    YSS_SOCKET_DIR = None
 
     # set to True to cause tracebacks to be dumped to standard output
     # useful when debugging or testing
@@ -250,6 +257,9 @@ def initialize(saq_home=None,
     if not os.path.isdir(SAQ_HOME):
         sys.stderr.write("invalid root SAQ directory {0}\n".format(SAQ_HOME)) 
         sys.exit(1)
+
+    # path to the unix socket for the encryption cache service
+    ECS_SOCKET_PATH = os.path.join(SAQ_HOME, '.ecs')
 
     # XXX not sure we need this SAQ_RELATIVE_DIR anymore -- check it out
     # this system was originally designed to run out of /opt/saq
@@ -306,6 +316,8 @@ def initialize(saq_home=None,
 
     DATA_DIR = os.path.join(SAQ_HOME, CONFIG['global']['data_dir'])
     TEMP_DIR = os.path.join(DATA_DIR, CONFIG['global']['tmp_dir'])
+    DAEMON_DIR = os.path.join(DATA_DIR, 'var', 'daemon')
+    SERVICES_DIR = os.path.join(DATA_DIR, 'var', 'services')
     COMPANY_NAME = CONFIG['global']['company_name']
     COMPANY_ID = CONFIG['global'].getint('company_id')
 
@@ -425,14 +437,6 @@ def initialize(saq_home=None,
     CA_CHAIN_PATH = os.path.join(SAQ_HOME, CONFIG['SSL']['ca_chain_path'])
     ace_api.set_default_ssl_ca_path(CA_CHAIN_PATH)
 
-    # XXX this should probably move to the yara scanning module
-    # set the location we'll be running yss out of
-    YSS_BASE_DIR = os.path.join(SAQ_HOME, CONFIG['yara']['yss_base_dir'])
-    if not os.path.exists(YSS_BASE_DIR):
-        logging.critical("[yara][yss_base_dir] is set to {} but does not exist".format(YSS_BASE_DIR))
-
-    YSS_SOCKET_DIR = os.path.join(YSS_BASE_DIR, CONFIG['yara']['yss_socket_dir'])
-
     # initialize the database connection
     initialize_database()
 
@@ -450,9 +454,7 @@ def initialize(saq_home=None,
 
     # make sure some key directories exists
     for dir_path in [ 
-        # anaysis data
         os.path.join(DATA_DIR, CONFIG['global']['node']),
-        #os.path.join(SAQ_HOME, 'var', 'locks'), # XXX remove
         os.path.join(DATA_DIR, 'review', 'rfc822'),
         os.path.join(DATA_DIR, 'review', 'misc'),
         os.path.join(DATA_DIR, CONFIG['global']['error_reporting_dir']),
@@ -463,11 +465,11 @@ def initialize(saq_home=None,
         os.path.join(DATA_DIR, CONFIG['splunk_logging']['splunk_log_dir']),
         os.path.join(DATA_DIR, CONFIG['elk_logging']['elk_log_dir']),
         os.path.join(TEMP_DIR),
-        os.path.join(SAQ_HOME, CONFIG['yara']['yss_base_dir'], 'logs'), ]: # XXX this should be in YSS
+        SERVICES_DIR,
+        DAEMON_DIR, ]: 
         #os.path.join(SAQ_HOME, maliciousdir) ]: # XXX remove
         try:
-            if not os.path.isdir(dir_path):
-                os.makedirs(dir_path)
+            create_directory(dir_path)
         except Exception as e:
             logging.error("unable to create required directory {}: {}".format(dir_path, str(e)))
             sys.exit(1)
@@ -478,6 +480,7 @@ def initialize(saq_home=None,
             logging.debug("removing proxy environment variable for {}".format(proxy_key))
             del os.environ[proxy_key]
 
+
     # set up the PROXY global dict (to be used with the requests library)
     for proxy_key in [ 'http', 'https' ]:
         if CONFIG['proxy']['host'] and CONFIG['proxy']['port'] and CONFIG['proxy']['transport']:
@@ -486,6 +489,7 @@ def initialize(saq_home=None,
                 CONFIG['proxy']['password'], CONFIG['proxy']['host'], CONFIG['proxy']['port'])
             else:
                 PROXIES[proxy_key] = '{}://{}:{}'.format(CONFIG['proxy']['transport'], CONFIG['proxy']['host'], CONFIG['proxy']['port'])
+
             logging.debug("proxy for {} set to {}".format(proxy_key, PROXIES[proxy_key]))
 
     # load any additional proxies specified in the config sections proxy_*

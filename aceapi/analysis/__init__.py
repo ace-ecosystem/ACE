@@ -67,7 +67,7 @@ def submit():
     root.uuid = str(uuid.uuid4())
 
     # does the engine use a different drive for the workload?
-    analysis_mode = r[KEY_ANALYSIS_MODE] if KEY_ANALYSIS_MODE in r else saq.CONFIG['engine']['default_analysis_mode']
+    analysis_mode = r[KEY_ANALYSIS_MODE] if KEY_ANALYSIS_MODE in r else saq.CONFIG['service_engine']['default_analysis_mode']
     if analysis_mode != ANALYSIS_MODE_CORRELATION:
         root.storage_dir = workload_storage_dir(root.uuid)
     else:
@@ -77,7 +77,7 @@ def submit():
 
     try:
 
-        root.analysis_mode = r[KEY_ANALYSIS_MODE] if KEY_ANALYSIS_MODE in r else saq.CONFIG['engine']['default_analysis_mode']
+        root.analysis_mode = r[KEY_ANALYSIS_MODE] if KEY_ANALYSIS_MODE in r else saq.CONFIG['service_engine']['default_analysis_mode']
         root.company_id = saq.CONFIG['global'].getint('company_id')
         root.tool = r[KEY_TOOL] if KEY_TOOL in r else 'api'
         root.tool_instance = r[KEY_TOOL_INSTANCE] if KEY_TOOL_INSTANCE in r else 'api({})'.format(request.remote_addr)
@@ -233,7 +233,7 @@ def resubmit(uuid):
 def get_analysis(uuid):
 
     storage_dir = storage_dir_from_uuid(uuid)
-    if saq.CONFIG['engine']['work_dir'] and not os.path.isdir(storage_dir):
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
         storage_dir = workload_storage_dir(uuid)
 
     if not os.path.exists(storage_dir):
@@ -252,7 +252,7 @@ def get_status(uuid):
         abort(Response(str(e), 400))
 
     storage_dir = storage_dir_from_uuid(uuid)
-    if saq.CONFIG['engine']['work_dir'] and not os.path.isdir(storage_dir):
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
         storage_dir = workload_storage_dir(uuid)
 
     if not os.path.exists(storage_dir):
@@ -374,7 +374,7 @@ WHERE
 @analysis_bp.route('/details/<uuid>/<name>', methods=['GET'])
 def get_details(uuid, name):
     storage_dir = storage_dir_from_uuid(uuid)
-    if saq.CONFIG['engine']['work_dir'] and not os.path.isdir(storage_dir):
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
         storage_dir = workload_storage_dir(uuid)
 
     root = RootAnalysis(storage_dir=storage_dir)
@@ -391,7 +391,7 @@ def get_details(uuid, name):
 @analysis_bp.route('/file/<uuid>/<file_uuid_or_name>', methods=['GET'])
 def get_file(uuid, file_uuid_or_name):
     storage_dir = storage_dir_from_uuid(uuid)
-    if saq.CONFIG['engine']['work_dir'] and not os.path.isdir(storage_dir):
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
         storage_dir = workload_storage_dir(uuid)
 
     root = RootAnalysis(storage_dir=storage_dir)

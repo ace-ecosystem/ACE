@@ -12,6 +12,7 @@ from saq.collectors.email import EmailCollector
 from saq.collectors.test import CollectorBaseTestCase
 from saq.database import use_db
 from saq.test import *
+from saq.service import *
 
 class EmailCollectorBaseTestCase(CollectorBaseTestCase):
     def setUp(self, *args, **kwargs):
@@ -39,8 +40,7 @@ class EmailCollectorBaseTestCase(CollectorBaseTestCase):
 class EmailCollectorTestCase(EmailCollectorBaseTestCase):
     def test_startup(self):
         collector = EmailCollector()
-        collector.load_groups()
-        collector.start()
+        collector.start_service()
 
         wait_for_log_count('no work available', 1, 5)
         collector.stop()
@@ -51,7 +51,7 @@ class EmailCollectorTestCase(EmailCollectorBaseTestCase):
 
         collector = EmailCollector()
         collector.load_groups()
-        collector.start()
+        collector.start_service()
 
         # look for all the expected log entries
         wait_for_log_count('found email', 1, 5)
@@ -73,7 +73,7 @@ class EmailCollectorTestCase(EmailCollectorBaseTestCase):
 
         collector = EmailCollector()
         collector.load_groups()
-        collector.start()
+        collector.start_service()
 
         # look for all the expected log entries
         wait_for_log_count('found email', email_count, 5)
@@ -96,9 +96,10 @@ rule blacklist : blacklist {
 
         self.submit_email(os.path.join(saq.SAQ_HOME, 'test_data', 'emails', 'pdf_attachment.email.rfc822'))
 
-        collector = EmailCollector(blacklist_yara_rule_path=blacklist_yara_rule_path)
+        saq.CONFIG['service_email_collector']['blacklist_yara_rule_path'] = blacklist_yara_rule_path
+        collector = EmailCollector()
         collector.load_groups()
-        collector.start()
+        collector.start_service()
 
         # look for all the expected log entries
         wait_for_log_count('matched blacklist rule', 1, 5)
@@ -136,9 +137,9 @@ rule assignment: unittest {
         saq.CONFIG['collection_group_qa']['database'] = 'ace_qa'
         saq.CONFIG['collection_group_qa']['company_id'] = '1'
 
-        collector = EmailCollector(assignment_yara_rule_path=assignment_yara_rule_path)
-        collector.load_groups()
-        collector.initialize()
+        saq.CONFIG['service_email_collector']['assignment_yara_rule_path'] = assignment_yara_rule_path
+        collector = EmailCollector()
+        collector.initialize_service_environment()
         collector.execute()
 
         # look for all the expected log entries
@@ -171,7 +172,7 @@ class EmailCollectorEngineTestCase(EmailCollectorBaseTestCase, ACEEngineTestCase
 
         collector = EmailCollector()
         collector.load_groups()
-        collector.start()
+        collector.start_service()
 
         # look for all the expected log entries
         wait_for_log_count('found email', 1, 5)
@@ -201,7 +202,7 @@ class EmailCollectorEngineTestCase(EmailCollectorBaseTestCase, ACEEngineTestCase
 
         collector = EmailCollector()
         collector.load_groups()
-        collector.start()
+        collector.start_service()
 
         # look for all the expected log entries
         wait_for_log_count('found email', email_count, 5)

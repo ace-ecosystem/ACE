@@ -589,6 +589,8 @@ class ACEBasicTestCase(TestCase):
         shutil.rmtree(os.path.join(saq.DATA_DIR, 'var'))
         os.mkdir(os.path.join(saq.DATA_DIR, 'var'))
         os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'tmp'))
+        os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'daemon'))
+        os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'services'))
 
     def reset_log_exports(self):
         # reset splunk export logs
@@ -677,8 +679,8 @@ class ACEBasicTestCase(TestCase):
         failed_alert_subdir = os.path.join(saq.SAQ_HOME, '.saq_alerts')
 
         subdirs = [ data_subdir, failed_alert_subdir ]
-        if saq.CONFIG['engine']['work_dir']:
-            subdirs.append(saq.CONFIG['engine']['work_dir'])
+        if saq.CONFIG['service_engine']['work_dir']:
+            subdirs.append(saq.CONFIG['service_engine']['work_dir'])
 
         for subdir in subdirs:
             if os.path.isdir(subdir):

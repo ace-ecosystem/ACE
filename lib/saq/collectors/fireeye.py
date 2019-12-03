@@ -40,7 +40,10 @@ def _get_tags_for_url(url):
 
 class FireEyeCollector(Collector):
     def __init__(self, *args, **kwargs):
-        super().__init__(workload_type='fireeye', delete_files=True, *args, **kwargs)
+        super().__init__(service_config=saq.CONIFG['service_fireeye_collector'],
+                         workload_type='fireeye', 
+                         delete_files=True, 
+                         *args, **kwargs)
 
         self.fe_client = FireEyeAPIClient(saq.CONFIG['fireeye']['host'],
                                           saq.CONFIG['fireeye']['user_name'],

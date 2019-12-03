@@ -151,8 +151,8 @@ def storage_dir_from_uuid(uuid):
 def workload_storage_dir(uuid):
     """Returns the path (relative to SAQ_HOME) to the storage directory for the current engien for the given uuid."""
     validate_uuid(uuid)
-    if saq.CONFIG['engine']['work_dir']:
-        return os.path.join(saq.CONFIG['engine']['work_dir'], uuid)
+    if saq.CONFIG['service_engine']['work_dir']:
+        return os.path.join(saq.CONFIG['service_engine']['work_dir'], uuid)
     else:
         return storage_dir_from_uuid(uuid)
 
@@ -318,3 +318,4 @@ class FileMonitorLink(object):
             return FileMonitorLink.FILE_MODIFIED
 
         return FileMonitorLink.FILE_UNMODIFIED
+
