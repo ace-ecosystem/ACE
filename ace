@@ -195,13 +195,12 @@ def start_service(args):
     dependencies = set() # of service names
     for service_name in service_names:
         for dep_service_name in saq.service.get_service_dependencies(service_name):
+            dependencies.add(dep_service_name)
             if saq.service.get_service_status(dep_service_name) != saq.service.SERVICE_STATUS_RUNNING:
                 if dep_service_name not in service_names:
                     if args.no_deps:
                         print(f"NOPE: service {service_name} depends on {dep_service_name} and you're not starting it")
                         sys.exit(1)
-                    else:
-                        dependencies.add(dep_service_name)
 
     service_names.extend(list(dependencies))
     targets = []
@@ -239,6 +238,9 @@ def start_service(args):
     # at this point we have the list of services we want to start
     for service_name in list(topological_sort(targets)): # in the order they need to be started
         try:
+            if saq.service.get_service_status(service_name) == saq.service.SERVICE_STATUS_RUNNING:
+                continue
+
             service = saq.service.get_service_class(service_name)()
             service.start_service(daemon=args.daemon, debug=args.debug, threaded=not args.daemon and not args.debug)
             services.append(service)
