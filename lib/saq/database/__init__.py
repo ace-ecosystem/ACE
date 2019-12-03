@@ -209,7 +209,7 @@ def _get_cached_db_connection(name='ace'):
         pass
 
     try:
-        logging.info("opening new cached database connection to {}".format(name))
+        logging.debug("opening new cached database connection to {}".format(name))
 
         with _global_db_cache_lock:
             _global_db_cache[db_identifier] = _get_db_connection(name)
@@ -2057,8 +2057,8 @@ def add_workload(root, exclusive_uuid=None, db=None, c=None):
     # NOTE you should always specify an analysis mode
     if root.analysis_mode is None:
         logging.warning(f"missing analysis mode for call to add_workload({root}) - "
-                        f"using engine default {saq.CONFIG['engine']['default_analysis_mode']}")
-        root.analysis_mode = saq.CONFIG['engine']['default_analysis_mode']
+                        f"using engine default {saq.CONFIG['service_engine']['default_analysis_mode']}")
+        root.analysis_mode = saq.CONFIG['service_engine']['default_analysis_mode']
 
     # make sure we've initialized our node id
     if saq.SAQ_NODE_ID is None:

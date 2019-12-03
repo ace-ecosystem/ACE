@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
 source $(dirname "$0")/common.sh
 cd $SAQ_HOME
-
-python3 ace --start --daemon -L etc/http_collector_logging.ini bro-http-collector
+ace -L etc/http_collector_logging.ini collector start --daemon bro_http

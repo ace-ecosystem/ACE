@@ -1467,8 +1467,13 @@ class Observable(TaggableObject, DetectableObject):
         """Limit the analysis of this observable to the analysis module specified by configuration section name.
            For example, if you have a section for a module called [analysis_module_something] then you would pass
            the value "something" as the analysis_module."""
-        assert isinstance(analysis_module, str)
-        self._limited_analysis.append(analysis_module)
+        from saq.modules import AnalysisModule
+        assert isinstance(analysis_module, str) or isinstance(analysis_module, AnalysisModule)
+
+        if isinstance(analysis_module, AnalysisModule):
+            self._limited_analysis.append(analysis_module.config_section_name)
+        else:
+            self._limited_analysis.append(analysis_module)
 
     @property
     def excluded_analysis(self):

@@ -1,7 +1,7 @@
 # vim: sw=4:ts=4:et
 
 from saq.database import get_db_connection
-from api.test import APIBasicTestCase
+from aceapi.test import APIBasicTestCase
 
 from flask import url_for
 

@@ -4,12 +4,12 @@
 # These objects collect things for remote ACE nodes to analyze.
 #
 
+import importlib
 import logging
 import os, os.path
 import pickle
 import queue
 import shutil
-import signal
 import socket
 import threading
 import uuid
@@ -24,6 +24,8 @@ from saq.database import use_db, \
                          disable_cached_db_connections
 
 from saq.error import report_exception
+from saq.service import ACEService
+from saq.util import create_directory
 
 import urllib3.exceptions
 import requests.exceptions
@@ -208,7 +210,7 @@ class RemoteNodeGroup(object):
         # each node (engine) should update it's status every [engine][node_status_update_frequency] seconds
         # so we wait for twice that long until we think a node is offline
         # at which point we no longer consider it for submissions
-        self.node_status_update_frequency = saq.CONFIG['engine'].getint('node_status_update_frequency')
+        self.node_status_update_frequency = saq.CONFIG['service_engine'].getint('node_status_update_frequency')
 
         # the directory that contains any files that to be transfered along with submissions
         self.incoming_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['incoming_dir'])
@@ -482,38 +484,15 @@ LIMIT %s""".format(','.join(['%s' for _ in available_modes]))
         return "RemoteNodeGroup(name={}, coverage={}, full_delivery={}, company_id={}, database={})".format(
                 self.name, self.coverage, self.full_delivery, self.company_id, self.database)
 
-class Collector(object):
-    def __init__(self, workload_type, delete_files=False, test_mode=None, collection_frequency=1):
+class Collector(ACEService):
+    def __init__(self, workload_type=None, delete_files=False, test_mode=None, collection_frequency=1, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         # often used as the "tool_instance" property of analysis
         self.fqdn = socket.getfqdn()
 
         # the type of work this collector collects
         # this maps to incoming_workload_type.name in the database
         self.workload_type = workload_type
-
-        # get the workload type_id from the database, or, add it if it does not already exist
-        try:
-            with get_db_connection() as db:
-                c = db.cursor()
-                c.execute("SELECT id FROM incoming_workload_type WHERE name = %s", (self.workload_type,))
-                row = c.fetchone()
-                if row is None:
-                    c.execute("INSERT INTO incoming_workload_type ( name ) VALUES ( %s )", (self.workload_type,))
-                    db.commit()
-                    c.execute("SELECT id FROM incoming_workload_type WHERE name = %s", (self.workload_type,))
-                    row = c.fetchone()
-                    if row is None:
-                        raise ValueError("unable to create workload type for {}".format(self.workload_type))
-
-                self.workload_type_id = row[0]
-                logging.debug("got workload type id {} for {}".format(self.workload_type_id, self.workload_type))
-
-        except Exception as e:
-            logging.critical("unable to get workload type_id from database: {}".format(self.workload_type))
-            raise e
-
-        # set this to True to gracefully shut down the collector
-        self.shutdown_event = threading.Event()
 
         # the list of RemoteNodeGroup targets this collector will send to
         self.remote_node_groups = []
@@ -554,15 +533,123 @@ class Collector(object):
         # NOTE there is no wait if something was previously collected
         self.collection_frequency = collection_frequency
 
-        # create any required directories
+        # XXX meh -- maybe this should be hard coded, or at least in a configuratin file or something
+        # get the workload type_id from the database, or, add it if it does not already exist
+        try:
+            with get_db_connection() as db:
+                c = db.cursor()
+                c.execute("SELECT id FROM incoming_workload_type WHERE name = %s", (self.workload_type,))
+                row = c.fetchone()
+                if row is None:
+                    c.execute("INSERT INTO incoming_workload_type ( name ) VALUES ( %s )", (self.workload_type,))
+                    db.commit()
+                    c.execute("SELECT id FROM incoming_workload_type WHERE name = %s", (self.workload_type,))
+                    row = c.fetchone()
+                    if row is None:
+                        raise ValueError("unable to create workload type for {}".format(self.workload_type))
+
+                self.workload_type_id = row[0]
+                logging.debug("got workload type id {} for {}".format(self.workload_type_id, self.workload_type))
+
+        except Exception as e:
+            logging.critical("unable to get workload type_id from database: {}".format(self.workload_type))
+            raise e
+
+    def initialize_collector(self):
+        """Called automatically at the end of initialize_environment."""
+        pass
+
+    # 
+    # ACEService implementation
+    # ------------
+
+    def execute_service(self):
+        if self.service_is_debug:
+            return self.debug()
+        else:
+            return self.start()
+
+        if not self.service_is_debug:
+            self.wait()
+
+    def wait_service(self, *args, **kwargs):
+        super().wait_service(*args, **kwargs)
+        if not self.service_is_debug:
+            self.wait()
+
+    def initialize_service_environment(self):
+
+        # make sure these directories exist
         for dir_path in [ self.incoming_dir, self.persistence_dir ]:
-            if not os.path.isdir(dir_path):
-                try:
-                    logging.info("creating directory {}".format(dir_path))
-                    os.makedirs(dir_path)
-                except Exception as e:
-                    logging.critical("unable to create director {}: {}".format(dir_path, e))
-                    sys.exit(1)
+            create_directory(dir_path)
+
+        # load the remote node groups if we haven't already
+        if not self.remote_node_groups:
+            self.load_groups()
+
+        # make sure at least one is loaded
+        if not self.remote_node_groups:
+            raise RuntimeError("no RemoteNodeGroup objects have been added to {}".format(self))
+
+        # call any subclass-defined initialization routines
+        self.initialize_collector()
+
+    #
+    # ------------
+
+    def start(self):
+
+        # if we're starting and we haven't loaded any groups yet then go ahead and load them here
+        if not self.remote_node_groups:
+            self.load_groups()
+
+        self.collection_thread = threading.Thread(target=self.loop, name="Collector")
+        self.collection_thread.start()
+
+        self.cleanup_thread = threading.Thread(target=self.cleanup_loop, name="Collector Cleanup")
+        self.cleanup_thread.start()
+
+        self.extended_collection_thread = threading.Thread(target=self.extended_collection, name="Extended")
+        self.extended_collection_thread.start()
+
+        # start the node groups
+        for group in self.remote_node_groups:
+            group.start()
+
+    def debug(self):
+        # if we're starting and we haven't loaded any groups yet then go ahead and load them here
+        if not self.remote_node_groups:
+            self.load_groups()
+
+        try:
+            self.debug_extended_collection()
+        except NotImplementedError:
+            pass
+
+        self.execute()
+        self.execute_workload_cleanup()
+
+        # start the node groups
+        #for group in self.remote_node_groups:
+            #group.start()
+
+    def stop(self, *args, **kwargs):
+        return self.stop_service(*args, **kwargs)
+
+    def wait(self):
+        logging.info("waiting for collection thread to terminate...")
+        self.collection_thread.join()
+        for group in self.remote_node_groups:
+            logging.info("waiting for {} thread to terminate...".format(group))
+            group.wait()
+
+        logging.info("waiting for cleanup thread to terminate...")
+        self.cleanup_thread.join()
+
+        logging.info("waiting for extended collection thread to terminate...")
+        self.extended_collection_thread.join()
+
+        logging.info("collection ended")
 
     @use_db
     def add_group(self, name, coverage, full_delivery, company_id, database, db, c):
@@ -575,7 +662,7 @@ class Collector(object):
         else:
             group_id = row[0]
 
-        remote_node_group = RemoteNodeGroup(name, coverage, full_delivery, company_id, database, group_id, self.workload_type_id, self.shutdown_event)
+        remote_node_group = RemoteNodeGroup(name, coverage, full_delivery, company_id, database, group_id, self.workload_type_id, self.service_shutdown_event)
         self.remote_node_groups.append(remote_node_group)
         logging.info("added {}".format(remote_node_group))
         return remote_node_group
@@ -596,50 +683,11 @@ class Collector(object):
                          group_name, coverage, full_delivery, company_id, database))
             self.add_group(group_name, coverage, full_delivery, company_id, database)
 
-    def start(self):
-        # you need to add at least one group to send to
-        if not self.remote_node_groups:
-            raise RuntimeError("no RemoteNodeGroup objects have been added to {}".format(self))
-
-        signal.signal(signal.SIGTERM, self._signal_handler)
-        signal.signal(signal.SIGINT, self._signal_handler)
-
-        self.collection_thread = threading.Thread(target=self.loop, name="Collector")
-        self.collection_thread.start()
-
-        self.cleanup_thread = threading.Thread(target=self.cleanup_loop, name="Collector Cleanup")
-        self.cleanup_thread.start()
-
-        self.extended_collection_thread = threading.Thread(target=self.extended_collection, name="Extended")
-        self.extended_collection_thread.start()
-
-        # start the node groups
-        for group in self.remote_node_groups:
-            group.start()
-
     def _signal_handler(self, signum, frame):
         self.stop()
 
     def initialize(self):
         pass
-
-    def stop(self):
-        self.shutdown_event.set()
-
-    def wait(self):
-        logging.info("waiting for collection thread to terminate...")
-        self.collection_thread.join()
-        for group in self.remote_node_groups:
-            logging.info("waiting for {} thread to terminate...".format(group))
-            group.wait()
-
-        logging.info("waiting for cleanup thread to terminate...")
-        self.cleanup_thread.join()
-
-        logging.info("waiting for extended collection thread to terminate...")
-        self.extended_collection_thread.join()
-
-        logging.info("collection ended")
 
     def cleanup_loop(self):
         logging.debug("starting cleanup loop")
@@ -652,14 +700,13 @@ class Collector(object):
                     wait_time = 0
 
             except Exception as e:
-                logging.exception("unable to execute workload cleanup")
+                logging.exception(f"unable to execute workload cleanup: {e}")
 
-            if self.shutdown_event.wait(wait_time):
+            if self.service_shutdown_event.wait(wait_time):
                 break
 
         disable_cached_db_connections()
         logging.debug("exited cleanup loop")
-
 
     @use_db
     def execute_workload_cleanup(self, db, c):
@@ -714,10 +761,10 @@ HAVING
             except Exception as e:
                 logging.error("unexpected exception thrown during loop for {}: {}".format(self, e))
                 report_exception()
-                if self.shutdown_event.wait(1):
+                if self.service_shutdown_event.wait(1):
                     break
 
-            if self.shutdown_event.is_set():
+            if self.is_service_shutdown:
                 break
 
         disable_cached_db_connections()
@@ -734,8 +781,11 @@ HAVING
 
         # did we not get anything to submit?
         if next_submission is None:
+            if self.service_is_debug:
+                return
+
             # wait until we check again (defaults to 1 second, passed in on constructor)
-            self.shutdown_event.wait(self.collection_frequency)
+            self.service_shutdown_event.wait(self.collection_frequency)
             return
 
         if not isinstance(next_submission, Submission):
@@ -831,7 +881,7 @@ HAVING
 
     def execute_in_loop(self, target):
         while True:
-            if self.shutdown_event.is_set():
+            if self.is_service_shutdown:
                 return
 
             try:
@@ -839,19 +889,23 @@ HAVING
                 if wait_seconds is None:
                     wait_seconds = 1
 
-                self.shutdown_event.wait(wait_seconds)
+                self.service_shutdown_event.wait(wait_seconds)
                 continue
             except NotImplementedError:
                 return
             except Exception as e:
                 logging.error(f"unable to execute {target}: {e}")
                 report_exception()
-                self.shutdown_event.wait(1)
+                self.service_shutdown_event.wait(1)
                 continue
 
     def execute_extended_collection(self):
         """Executes custom collection routines. 
            Returns the number of seconds to wait until the next time this should be called."""
+        raise NotImplementedError()
+
+    def debug_extended_collection(self):
+        """Executes custom collection routines in debug mode. """
         raise NotImplementedError()
 
     def get_next_submission(self):

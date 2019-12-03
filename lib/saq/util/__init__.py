@@ -24,16 +24,11 @@ URL_REGEX_B = re.compile(rb'(((?:(?:https?|ftp)://)[A-Za-z0-9\.\-]+)((?:\/[\+~%\
 URL_REGEX_STR = re.compile(r'(((?:(?:https?|ftp)://)[A-Za-z0-9\.\-]+)((?:\/[\+~%\/\.\w\-_]*)?\??(?:[\-\+=&;%@\.\w_:\?]*)#?(?:[\.\!\/\\\w:%\?&;=-]*))?(?<!=))', re.I)
 
 def create_directory(path):
-    """Creates the given directory if it does not already exist.
-       Returns True on success, False otherwise and logs the error message."""
-    try:
-        if not os.path.isdir(path):
-            os.makedirs(path)
+    """Creates the given directory and returns the path."""
+    if not os.path.isdir(path):
+        os.makedirs(path)
 
-        return True
-    except Exception as e:
-        logging.error("unable to create directory {}: {}".format(path, e))
-        return False
+    return path
 
 def is_ipv4(value):
     """Returns True if the given value is a dotted-quad IP address or CIDR notation."""
@@ -156,8 +151,8 @@ def storage_dir_from_uuid(uuid):
 def workload_storage_dir(uuid):
     """Returns the path (relative to SAQ_HOME) to the storage directory for the current engien for the given uuid."""
     validate_uuid(uuid)
-    if saq.CONFIG['engine']['work_dir']:
-        return os.path.join(saq.CONFIG['engine']['work_dir'], uuid)
+    if saq.CONFIG['service_engine']['work_dir']:
+        return os.path.join(saq.CONFIG['service_engine']['work_dir'], uuid)
     else:
         return storage_dir_from_uuid(uuid)
 
@@ -323,3 +318,4 @@ class FileMonitorLink(object):
             return FileMonitorLink.FILE_MODIFIED
 
         return FileMonitorLink.FILE_UNMODIFIED
+

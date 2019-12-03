@@ -37,6 +37,7 @@ if [ "$#" -eq "0" ]
 then
     PYTHONPATH=lib python3 -W ignore -m unittest -f -v \
         saq.analysis.test \
+        saq.service.test \
         saq.util.test \
         saq.collectors.test \
         saq.collectors.test_http \
@@ -63,10 +64,10 @@ then
         saq.modules.test_crits \
         saq.modules.test_intel \
         saq.observables.test \
-        api.analysis.test \
-        api.engine.test \
-        api.cloudphish.test \
-        api.events.test \
+        aceapi.analysis.test \
+        aceapi.engine.test \
+        aceapi.cloudphish.test \
+        aceapi.events.test \
         test_ace_api \
 
         #saq.collectors.test_cb_binaries \

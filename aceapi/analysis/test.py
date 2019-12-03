@@ -12,7 +12,7 @@ from saq.analysis import _JSONEncoder
 from saq.constants import *
 from saq.database import use_db
 from saq.test import *
-from api.test import APIBasicTestCase
+from aceapi.test import APIBasicTestCase
 from saq.util import parse_event_time
 
 import pytz

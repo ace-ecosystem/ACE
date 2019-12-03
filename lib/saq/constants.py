@@ -433,11 +433,13 @@ METRIC_THREAD_COUNT = 'thread_count'
 R_DOWNLOADED_FROM = 'downloaded_from'
 R_EXTRACTED_FROM = 'extracted_from'
 R_REDIRECTED_FROM = 'redirected_from'
+R_IS_HASH_OF = 'is_hash_of'
 
 VALID_RELATIONSHIP_TYPES = [
     R_DOWNLOADED_FROM,
     R_EXTRACTED_FROM,
     R_REDIRECTED_FROM,
+    R_IS_HASH_OF,
 ]
 
 TARGET_EMAIL_RECEIVED = 'email.received'
@@ -472,6 +474,7 @@ ANALYSIS_MODE_DISPOSITIONED = 'dispositioned'
 
 ANALYSIS_TYPE_GENERIC = 'generic'
 ANALYSIS_TYPE_MAILBOX = 'mailbox'
+ANALYSIS_TYPE_EWS = 'ews'
 ANALYSIS_TYPE_BRO_SMTP = 'bro - smtp'
 ANALYSIS_TYPE_BRO_HTTP = 'bro - http'
 ANALYSIS_TYPE_CLOUDPHISH = 'cloudphish'

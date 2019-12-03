@@ -6,6 +6,7 @@ import collections
 import datetime
 import fnmatch
 import getpass
+import importlib
 import io
 import json
 import logging
@@ -125,139 +126,6 @@ def display_analysis(root):
         for detection in detections:
             print('* {}'.format(detection))
 
-def kill_daemon(daemon_name):
-
-    import psutil
-
-    daemon_pid_path = os.path.join(saq.DATA_DIR, 'var', 'daemon', daemon_name)
-    if not os.path.exists(daemon_pid_path):
-        logging.warning("daemon file {} does not exist (process not running?)".format(daemon_pid_path))
-        sys.exit(1)
-
-    deamon_pid = None
-    try:
-        with open(daemon_pid_path, 'r') as fp:
-            daemon_pid = int(fp.read())
-    except Exception as e:
-        logging.error("cannot read PID from {}: {}".format(daemon_pid_path, e))
-        sys.exit(1)
-
-    try:
-        parent = psutil.Process(daemon_pid)
-
-        logging.info("sending SIGTERM to {}".format(parent.pid))
-        # this should gracefully allow the system to come to a stop
-        parent.terminate()
-
-        try:
-            parent.wait(timeout=60)
-            logging.info("system shut down")
-        except Exception as e:
-            logging.error("unable to terminate process {}: {}".format(parent.pid, e))
-
-            # but if it doesn't work then we walk the tree kill all processes
-            for child in parent.children(recursive=True):
-                try:
-                    child.kill()
-                    logging.info("killed child process {}".format(child.pid))
-                except Exception as e:
-                    logging.error("unable to kill child process {}: {}".format(child, e))
-
-            try:
-                parent.kill()
-            except Exception as e:
-                logging.error("unable to kill process {}: {}".format(parent.pid, e))
-
-    except Exception as e:
-        logging.error("unable to stop process {}: {}".format(parent, e))
-
-    try:
-        os.remove(daemon_pid_path)
-    except Exception as e:
-        logging.error("unable to delete PID file {}: {}".format(daemon_pid_path, e))
-        sys.exit(1)
-
-    sys.exit(0)
-
-def daemonize(daemon_name):
-    # are we already running?
-    daemon_dir = os.path.join(saq.DATA_DIR, 'var', 'daemon')
-    if not os.path.exists(daemon_dir):
-        try:
-            os.makedirs(daemon_dir)
-        except Exception as e:
-            logging.error("unable to create {}: {}".format(daemon_dir, str(e)))
-            sys.exit(1)
-
-    daemon_pid_path = os.path.join(saq.DATA_DIR, 'var', 'daemon', daemon_name)
-    if os.path.exists(daemon_pid_path):
-        pid = None
-        with open(daemon_pid_path, 'r') as fp:
-            pid = int(fp.read())
-        
-        if pid > 0:
-            try:
-                os.kill(pid, 0)
-            except OSError:
-                logging.warning("deamon PID file {} exists, but the process is not running. Proceeding to start engine.")
-            else:
-                import psutil
-                process = psutil.Process(pid)
-                logging.error("deamon PID file {} exists and '{}' is running with the contained PID={}: use command with -k to kill existing daemon".format(daemon_pid_path, process.name(), pid))
-                sys.exit(1)
-
-    pid = None
-
-    # http://code.activestate.com/recipes/278731-creating-a-daemon-the-python-way/
-    try:
-        pid = os.fork()
-        #print("got pid {}".format(pid))
-    except OSError as e:
-        logging.fatal("{} ({})".format(e.strerror, e.errno))
-        sys.exit(1)
-
-    if pid == 0:
-        os.setsid()
-
-        try:
-            pid = os.fork()
-            #print("got pid {}".format(pid))
-        except OSError as e:
-            logging.fatal("{} ({})".format(e.strerror, e.errno))
-            sys.exit(1)
-
-        if pid > 0:
-            # write the pid to a file
-            with open(daemon_pid_path, 'w') as fp:
-                fp.write(str(pid))
-
-            print("started background process {}".format(pid))
-            #print("pid {} exiting...".format(os.getpid()))
-            os._exit(0)
-    else:
-        #print("pid {} exiting...".format(os.getpid()))
-        os._exit(0)
-
-    import resource
-    maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
-    if (maxfd == resource.RLIM_INFINITY):
-        maxfd = MAXFD
-
-    for fd in range(0, maxfd):
-        try:
-            os.close(fd)
-        except OSError:   # ERROR, fd wasn't open to begin with (ignored)
-            pass
-
-    if (hasattr(os, "devnull")):
-        REDIRECT_TO = os.devnull
-    else:
-        REDIRECT_TO = "/dev/null"
-
-    os.open(REDIRECT_TO, os.O_RDWR)
-    os.dup2(0, 1)
-    os.dup2(0, 2)
-
 # ============================================================================
 # configuration settings
 #
@@ -296,6 +164,157 @@ disable_integration_parser.add_argument('integration',
     help="The integration to disable. Use ace integration list to get the list of available integrations.")
 disable_integration_parser.set_defaults(func=disable_integration)
 
+# ============================================================================
+# service control/start/stop
+#
+
+service_parser = subparsers.add_parser('service')
+service_sp = service_parser.add_subparsers(dest='service_cmd')
+
+def start_service(args):
+    import saq.service
+
+    # get the list of the services to start
+    if args.all:
+        service_names = saq.service.get_all_service_names()
+    else:
+        service_names = args.services
+
+    # replace any dashes with underscores to make it easier to type
+    service_names = [_.replace('-', '_') for _ in service_names]
+
+    # you can only debug one service at a time
+    if args.debug and len(service_names) > 1:
+        logging.error("you can only debug one service at a time")
+        sys.exit(1)
+
+    # check service depedencies and reorder startup
+    # first iterate over all the dependencies
+    # if any are listed that are not running yet AND are not in our list to start
+    # then we bail on startup
+    dependencies = set() # of service names
+    for service_name in service_names:
+        for dep_service_name in saq.service.get_service_dependencies(service_name):
+            dependencies.add(dep_service_name)
+            if saq.service.get_service_status(dep_service_name) != saq.service.SERVICE_STATUS_RUNNING:
+                if dep_service_name not in service_names:
+                    if args.no_deps:
+                        print(f"NOPE: service {service_name} depends on {dep_service_name} and you're not starting it")
+                        sys.exit(1)
+
+    service_names.extend(list(dependencies))
+    targets = []
+    for service_name in service_names:
+        targets.append((service_name, saq.service.get_service_dependencies(service_name)))
+
+    # https://stackoverflow.com/a/11564323
+    def topological_sort(source):
+        """perform topo sort on elements.
+
+        :arg source: list of ``(name, [list of dependancies])`` pairs
+        :returns: list of names, with dependancies listed first
+        """
+        pending = [(name, set(deps)) for name, deps in source] # copy deps so we can modify set in-place       
+        emitted = []        
+        while pending:
+            next_pending = []
+            next_emitted = []
+            for entry in pending:
+                name, deps = entry
+                deps.difference_update(emitted) # remove deps we emitted last pass
+                if deps: # still has deps? recheck during next pass
+                    next_pending.append(entry) 
+                else: # no more deps? time to emit
+                    yield name 
+                    emitted.append(name) # <-- not required, but helps preserve original ordering
+                    next_emitted.append(name) # remember what we emitted for difference_update() in next pass
+            if not next_emitted: # all entries have unmet deps, one of two things is wrong...
+                raise ValueError("cyclic or missing dependancy detected: %r" % (next_pending,))
+            pending = next_pending
+            emitted = next_emitted
+
+    # go ahead and install signal handlers to stop the services we're about to start up
+    services = [] # of ACEService objects
+    # at this point we have the list of services we want to start
+    for service_name in list(topological_sort(targets)): # in the order they need to be started
+        try:
+            if saq.service.get_service_status(service_name) == saq.service.SERVICE_STATUS_RUNNING:
+                continue
+
+            service = saq.service.get_service_class(service_name)()
+            service.start_service(daemon=args.daemon, debug=args.debug, threaded=not args.daemon and not args.debug)
+            services.append(service)
+        except Exception as e:
+            logging.error(f"unable to load service {service_name}: {e}")
+            traceback.print_exc()
+            sys.exit(1)
+
+    # if we're running in daemon mode then we're done here
+    if args.daemon:
+        sys.exit(0)
+
+    for service in services:
+        service.wait_service()
+
+    sys.exit(0)
+
+start_service_parser = service_sp.add_parser('start',
+    help="Start ACE services.")
+start_service_parser.add_argument('--debug', action='store_true', default=False,
+    help="Starts the service in debug mode.")
+start_service_parser.add_argument('-d', '--daemon', '--background', action='store_true', default=False,
+    help="Starts the service and then executes in the background, tracking the PID.")
+start_service_parser.add_argument('--all', action='store_true', default=False,
+    help="Starts all enabled services.")
+start_service_parser.add_argument('--no-deps', action='store_true', default=False,
+    help="Do NOT automatically start service dependencies.")
+start_service_parser.add_argument('services', nargs="*",
+    help="The names of the services to start. Use ace service list to get a list of names.")
+start_service_parser.set_defaults(func=start_service)
+
+def stop_service(args):
+    import saq.service
+
+    # get the list of the services to start
+    if args.all:
+        service_names = saq.service.get_all_service_names()
+    else:
+        service_names = args.services
+
+    for service_name in service_names:
+        service_status = saq.service.get_service_status(service_name)
+        if service_status is None:
+            logging.error(f"unknown service {service_name}")
+        elif service_status == saq.service.SERVICE_STATUS_RUNNING:
+            logging.info(f"stopping service {service_name}")
+            saq.service.stop_service(service_name)
+        else:
+            if not args.all:
+                logging.info(f"service {service_name} status already ({service_status})")
+
+    sys.exit(0)
+
+stop_service_parser = service_sp.add_parser('stop',
+    help="Stops the services.")
+stop_service_parser.add_argument('--all', action='store_true', default=False,
+    help="Stops all running services.")
+stop_service_parser.add_argument('services', nargs="*",
+    help="The names of the service to stop. Use ace service list to get a list of names.")
+stop_service_parser.set_defaults(func=stop_service)
+
+def status_service(args):
+    from saq.service import get_all_service_names, get_service_config, get_service_status
+    print("{:<30}{:<15}{:<15}{}".format('SERVICE', 'STATUS', 'ENABLED', 'DESCRIPTION'))
+    for service_name in get_all_service_names():
+        service_config = get_service_config(service_name)
+        print("{:<30}{:<15}{:<15}{}".format(service_name, 
+                                      get_service_status(service_name),
+                                      service_config.get('enabled', fallback=None),
+                                      service_config.get('description', fallback=None)))
+
+status_service_parser = service_sp.add_parser('status',
+    help="Lists the available services and their status.")
+status_service_parser.set_defaults(func=status_service)
 
 # ============================================================================
 # export observables
@@ -761,10 +780,15 @@ correlate_parser.set_defaults(func=correlate)
 # correlation engine
 #
 
-def correlation_engine(args):
+engine_parser = subparsers.add_parser('engine')
+engine_sp = engine_parser.add_subparsers(dest='engine_cmd')
+
+def start_engine(args):
+
     from saq.engine import Engine
     from saq.error import report_exception
     from saq.process_server import initialize_process_server
+    from saq.util import daemonize, kill_daemon
 
     daemon_name = 'correlation-engine'
     disable_proxy()
@@ -803,9 +827,20 @@ def correlation_engine(args):
 
     sys.exit(0)
 
-correlation_engine_parser = subparsers.add_parser('correlation-engine',
-    help="Start/Stop the ACE correlation analysis engine.")
-correlation_engine_parser.set_defaults(func=correlation_engine)
+engine_start_parser = engine_sp.add_parser('start',
+    help="Starts the Analysis Correlation Engine.")
+engine_start_parser.add_argument('-d', '--daemon', '--background', action='store_true', default=False,
+    help="Fork the process into the background and manage the PID.")
+engine_start_parser.set_defaults(func=start_engine)
+
+def stop_engine(args):
+    from saq.util import kill_daemon
+    daemon_name = 'correlation-engine'
+    sys.exit(0 if kill_daemon(daemon_name) else 1)
+
+engine_stop_parser = engine_sp.add_parser('stop',
+    help="Stops the Analysis Correlation Engine.")
+engine_stop_parser.set_defaults(func=stop_engine)
 
 # ============================================================================
 # Remediation System
@@ -813,6 +848,7 @@ correlation_engine_parser.set_defaults(func=correlation_engine)
 
 def remediation_system(args):
     from saq.remediation import initialize_remediation_system_manager, start_remediation_system_manager, stop_remediation_system_manager, wait_remediation_system_manager
+    from saq.util import daemonize, kill_daemon
 
     daemon_name = 'remediation-system'
 
@@ -860,6 +896,7 @@ remediation_system_parser.set_defaults(func=remediation_system)
 
 def message_system(args):
     from saq.messaging import initialize_message_system, start_message_system, stop_message_system, wait_message_system
+    from saq.util import daemonize, kill_daemon
 
     daemon_name = 'message-dispatch-system'
 
@@ -980,6 +1017,7 @@ def ace(args):
     from saq.engine import Engine
     from saq.error import report_exception
     from saq.process_server import initialize_process_server
+    from saq.util import daemonize, kill_daemon
 
     daemon_name = 'ace'
     disable_proxy()
@@ -1021,362 +1059,53 @@ ace_engine_parser = subparsers.add_parser('ace-engine',
 ace_engine_parser.set_defaults(func=ace)
 
 # ============================================================================
-# start/stop the falcon siem collector
+# start/stop collectors
 #
 
-def falcon_collector(args):
+def list_collectors(args):
+    import saq.collectors
+    import saq.service
+    saq.collectors.initialize_collectors()
 
-    from saq.collectors.falcon import FalconCollector
-    from saq.error import report_exception
-
-    daemon_name = 'falcon'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        try:
-            collector = FalconCollector()
-            collector.load_groups()
-            collector.start()
-
-        except KeyboardInterrupt as e:
-            logging.info("caught user interrupt")
-            try:
-                collector.stop()
-                collector.wait()
-            except Exception as e:
-                logging.error("uncaught exception: {}".format(e))
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
+    print("{:<15}{:<15}{}".format('COLLECTOR', 'STATUS', 'DESCRIPTION'))
+    for name, (cls, config) in sorted(saq.collectors.COLLECTOR_REGISTRATION.items()):
+        # determine the status of the collector
+        print("{:<15}{:<15}{}".format(name, saq.service.get_daemon_status(name), config['description']))
 
     sys.exit(0)
 
-# falcon-collector
-falcon_collector_parser = subparsers.add_parser('falcon-collector',
-    help="Start/Stop the Falcon SIEM Collector")
-falcon_collector_parser.set_defaults(func=falcon_collector)
+def start_collector(args):
+    import saq.collectors
+    saq.collectors.initialize_collectors()
+    sys.exit(0 if saq.collectors.start_collector(args.name, daemon=args.daemon, debug=args.debug) else 1)
 
-# ============================================================================
-# start/stop the fireeye collector
-#
+def stop_collector(args):
+    import saq.collectors
+    saq.collectors.initialize_collectors()
+    sys.exit(0 if saq.collectors.stop_collector(args.name) else 1)
 
-def fireeye_collector(args):
+collector_parser = subparsers.add_parser('collector')
+collector_sp = collector_parser.add_subparsers(dest='collector_cmd')
 
-    from saq.collectors.fireeye import FireEyeCollector
-    from saq.error import report_exception
+list_collectors_parser = collector_sp.add_parser('list',
+    help="Lists the available collectors and their descriptions.")
+list_collectors_parser.set_defaults(func=list_collectors)
 
-    daemon_name = 'fireeye'
-    disable_proxy()
+start_collector_parser = collector_sp.add_parser('start',
+    help="Starts the given collector.")
+start_collector_parser.add_argument('--debug', action='store_true', default=False,
+    help="Starts the collector in debug mode.")
+start_collector_parser.add_argument('-d', '--daemon', '--background', action='store_true', default=False,
+    help="Starts the collector and then executes in the background, tracking the PID.")
+start_collector_parser.add_argument('name',
+    help="The name of the collector to start. See ace collector list.")
+start_collector_parser.set_defaults(func=start_collector)
 
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        try:
-            collector = FireEyeCollector()
-            collector.load_groups()
-            collector.start()
-
-        except KeyboardInterrupt as e:
-            logging.info("caught user interrupt")
-            try:
-                collector.stop()
-                collector.wait()
-            except Exception as e:
-                logging.error("uncaught exception: {}".format(e))
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-# falcon-collector
-fireeye_collector_parser = subparsers.add_parser('fireeye-collector',
-    help="Start/Stop the FireEye Collector")
-fireeye_collector_parser.set_defaults(func=fireeye_collector)
-
-
-# ============================================================================
-# start/stop the carbon black binary collector
-#
-
-def cb_binary_collector(args):
-
-    from saq.collectors.cb_binaries import CarbonBlackBinaryCollector
-    from saq.error import report_exception
-
-    daemon_name = 'cb_binary'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        try:
-            kwargs = {}
-            if args.download_batch_size is not None:
-                kwargs['download_batch_size'] = args.download_batch_size
-            if args.initial_search_offset is not None:
-                kwargs['initial_search_offset'] = args.initial_search_offset
-            if args.storage_dir is not None:
-                kwargs['storage_dir'] = args.storage_dir
-            if args.collection_frequency is not None:
-                kwargs['collection_frequency'] = args.collection_frequency
-
-            collector = CarbonBlackBinaryCollector(**kwargs)
-            collector.load_groups()
-            collector.start()
-
-        except KeyboardInterrupt as e:
-            logging.info("caught user interrupt")
-            try:
-                collector.stop()
-                collector.wait()
-            except Exception as e:
-                logging.error("uncaught exception: {}".format(e))
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-# cb-binary-collector
-cb_binary_collector_parser = subparsers.add_parser('cb-binary-collector',
-    help="Start/Stop the Carbon Black Binary Collector")
-cb_binary_collector_parser.add_argument('-c', '--collection-frequency', type=int, default=10,
-    help="The number of seconds to wait between requests to Carbon Black for new binaries. Defaults to 10 seconds.")
-cb_binary_collector_parser.add_argument('--download-batch-size', type=int, default=None,
-    help="The total number of carbon black binaries to download at once.")
-cb_binary_collector_parser.add_argument('--initial-search-offset', type=int, default=None,
-    help="The initial offset to use (in hours) if running this for the first time.")
-#cb_binary_collector_parser.add_argument('--search-offset', type=int, default=None,
-    #help="The number of minutes to look back for new binaries.")
-cb_binary_collector_parser.add_argument('--storage-dir',  default=None,
-    help="The directory to store the binaries in. Relative directories are relative to DATA_DIR.")
-cb_binary_collector_parser.set_defaults(func=cb_binary_collector)
-
-# ============================================================================
-# start/stop the BRO HTTP stream collector
-#
-
-def bro_http_collector(args):
-
-    from saq.collectors.http import BroHTTPStreamCollector
-    from saq.error import report_exception
-
-    daemon_name = 'bro_http'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        try:
-            collector = BroHTTPStreamCollector()
-            collector.load_groups()
-            collector.start()
-
-        except KeyboardInterrupt as e:
-            logging.info("caught user interrupt")
-            try:
-                collector.stop()
-                collector.wait()
-            except Exception as e:
-                logging.error("uncaught exception: {}".format(e))
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-bro_http_collector_parser = subparsers.add_parser('bro-http-collector',
-    help="Start/Stop the Bro HTTP Stream Collector")
-bro_http_collector_parser.set_defaults(func=bro_http_collector)
-
-# ============================================================================
-# start/stop the BRO SMTP stream collector
-#
-
-def bro_smtp_collector(args):
-
-    from saq.collectors.smtp import BroSMTPStreamCollector
-    from saq.error import report_exception
-
-    daemon_name = 'bro_smtp'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        try:
-            collector = BroSMTPStreamCollector()
-            collector.load_groups()
-            collector.start()
-
-        except KeyboardInterrupt as e:
-            logging.info("caught user interrupt")
-            try:
-                collector.stop()
-                collector.wait()
-            except Exception as e:
-                logging.error("uncaught exception: {}".format(e))
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-bro_smtp_collector_parser = subparsers.add_parser('bro-smtp-collector',
-    help="Start/Stop the Bro SMTP Stream Collector")
-bro_smtp_collector_parser.set_defaults(func=bro_smtp_collector)
-
-# ============================================================================
-# start/stop the email collector
-#
-
-def email_collector(args):
-
-    from saq.collectors.email import EmailCollector
-    from saq.error import report_exception
-
-    daemon_name = 'email'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        try:
-            collector = EmailCollector(assignment_yara_rule_path=args.assignment_rule,
-                                       blacklist_yara_rule_path=args.blacklist_rule)
-            collector.load_groups()
-            collector.start()
-
-        except KeyboardInterrupt as e:
-            logging.info("caught user interrupt")
-            try:
-                collector.stop()
-                collector.wait()
-            except Exception as e:
-                logging.error("uncaught exception: {}".format(e))
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-email_collector_parser = subparsers.add_parser('email-collector',
-    help="Start/Stop the Email Collector")
-email_collector_parser.add_argument('--blacklist-rule', default='etc/blacklist.yar',
-    help="Path to the yara rule used for blacklisting emails.")
-email_collector_parser.add_argument('--assignment-rule', default='etc/remote_assignments.yar',
-    help="Path to the yara rule used for assigning emails to collection groups.")
-email_collector_parser.set_defaults(func=email_collector)
-
-# ============================================================================
-# start carbon black binary processor
-#
-
-def carbon_black(args):
-    from saq.engine.cb_engine import CarbonBlackCollectionEngine
-    from saq.error import report_exception
-    from saq.process_server import initialize_process_server
-
-    daemon_name = 'carbon-black'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {0}".format(daemon_name))
-            daemonize(daemon_name)
-
-        initialize_process_server()
-
-        cb_engine = None
-
-        # add the capability for a graceful shutdown
-        def handle_sigterm(signum, frame):
-            logging.warning("received SIGTERM")
-            cb_engine.stop()
-
-        signal.signal(signal.SIGTERM, handle_sigterm)
-    
-        try:
-            cb_engine = CarbonBlackCollectionEngine()
-            cb_engine.start()
-            cb_engine.wait()
-        except KeyboardInterrupt as e:
-            logging.warning("caught user interrupt")
-            cb_engine.wait()
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-# carbon-black-binary
-carbon_black_parser = subparsers.add_parser('carbon-black',
-    help="Start/Stop the Carbon Black binary analysis engine.")
-carbon_black_parser.set_defaults(func=carbon_black)
+stop_collector_parser = collector_sp.add_parser('stop',
+    help="Stops the given collector.")
+stop_collector_parser.add_argument('name',
+    help="The name of the collector to stop. See ace collector list.")
+stop_collector_parser.set_defaults(func=stop_collector)
 
 # ============================================================================
 # start Network Semaphore
@@ -1385,6 +1114,7 @@ carbon_black_parser.set_defaults(func=carbon_black)
 def network_semaphore(args):
     import saq
     from saq.network_semaphore import NetworkSemaphoreServer
+    from saq.util import daemonize
     daemon_name = 'network-semaphore'
 
     if args.stop:
@@ -3301,6 +3031,8 @@ check_url_parser.add_argument('url', help="The URL to check.")
 check_url_parser.set_defaults(func=check_url)
 
 def test_daemonize(args):
+    from saq.util import daemonize, kill_daemon
+
     if args.kill_daemon:
         kill_daemon('test-daemon')
 
@@ -3508,8 +3240,8 @@ def store_config_password(args):
         sys.exit(1)
 
     while True:
-        password = getpass.getpass("Enter the password:")
-        password_2 = getpass.getpass("Re-enter the password for verification:")
+        password = getpass.getpass(f"Enter the value to be encrypted and stored for section {section} option {key}:")
+        password_2 = getpass.getpass("Re-enter the value for verification:")
 
         if password != password_2:
             logging.error("passwords do not match, try again")
@@ -3758,20 +3490,35 @@ if __name__ == '__main__':
     import saq
     saq.initialize(saq_home=saq_home, config_paths=[], logging_config_path=None, args=args, relative_dir=args.relative_dir)
 
-    # are we prompting for the decryption password?
-    if args.provide_decryption_password:
-        from saq.crypto import test_encryption_password, get_aes_key
+    # has the encryption password been set yet?
+    import saq.crypto
+    if saq.crypto.is_set():
 
-        while True:
-            password = getpass.getpass("Enter the decryption password:")
-            # first check to see if the given password matches the sha256 hash
-            if not test_encryption_password(password):
-                logging.error("invalid encryption password")
-                continue
+        # are we prompting for the decryption password?
+        if args.provide_decryption_password:
+            from saq.crypto import test_encryption_password, get_aes_key
 
-            break
+            while True:
+                saq.ENCRYPTION_PASSWORD_PLAINTEXT = getpass.getpass("Enter the decryption password:")
+                # first check to see if the given password matches the sha256 hash
+                if not saq.crypto.test_encryption_password(saq.ENCRYPTION_PASSWORD_PLAINTEXT):
+                    logging.error("invalid encryption password")
+                    continue
 
-        saq.ENCRYPTION_PASSWORD = get_aes_key(password)
+                break
+    
+        # if we're not prompting for it, are we running the encryption cache service yet?
+        else:
+            logging.debug("reading encryption password from ecs")
+            saq.ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
+            if saq.ENCRYPTION_PASSWORD_PLAINTEXT is not None:
+                if not saq.crypto.test_encryption_password(saq.ENCRYPTION_PASSWORD_PLAINTEXT):
+                    logging.error("read password from ecs but the password is wrong")
+                    saq.ENCRYPTION_PASSWORD_PLAINTEXT = None
+
+        # if we've got the plaintext password, use it to decrypt the actual password used to encrypt/decrypt
+        if saq.ENCRYPTION_PASSWORD_PLAINTEXT is not None:
+            saq.ENCRYPTION_PASSWORD = saq.crypto.get_aes_key(saq.ENCRYPTION_PASSWORD_PLAINTEXT)
 
     # NOTE we call this function if the user provides a password or not
     saq.CONFIG.load_encrypted_passwords()

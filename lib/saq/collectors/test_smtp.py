@@ -40,7 +40,7 @@ class BroSMTPTestCase(BroSMTPBaseTestCase):
     def test_processing(self):
         self.process_pcap(os.path.join(saq.SAQ_HOME, 'test_data', 'pcaps', 'smtp.pcap'))
 
-        collector = BroSMTPStreamCollector()
+        collector = BroSMTPStreamCollector(config=saq.CONFIG['collector_bro_smtp'])
         collector.load_groups()
         collector.start()
 
@@ -67,7 +67,7 @@ class BroSMTPEngineTestCase(BroSMTPBaseTestCase, ACEEngineTestCase):
         engine.enable_module('analysis_module_bro_smtp_analyzer', 'email')
         engine.start()
 
-        collector = BroSMTPStreamCollector()
+        collector = BroSMTPStreamCollector(config=saq.CONFIG['collector_bro_smtp'])
         collector.load_groups()
         collector.start()
 
