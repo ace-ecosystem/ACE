@@ -125,6 +125,7 @@ bro/ace_local.bro
 
 # site modules
 /lib/saq/modules/site
+/lib/saq/collectors/site
 
 # SSL
 !ssl/root/ca/openssl.cnf

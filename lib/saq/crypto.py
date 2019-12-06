@@ -7,6 +7,7 @@ import io
 import logging
 import os.path
 import random
+import socket
 import struct
 
 import Crypto.Random
@@ -15,6 +16,7 @@ from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 
 import saq
+from saq.service import ACEService
 
 CHUNK_SIZE = 64 * 1024
 
@@ -30,6 +32,26 @@ def _get_validation_hash():
     except Exception as e:
         logging.warning("unable to load encryption password validation hash: {}".format(e))
         return None
+
+def is_set():
+    """Returns True if the encryption password has been set, False otherwise."""
+    return _get_validation_hash() is not None
+
+def read_ecs():
+    """Reads the encryption password from the encryption cache service. Returns None if the service is unavailable."""
+    try:
+        client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client_socket.settimeout(3)
+        client_socket.connect(saq.ECS_SOCKET_PATH)
+        return client_socket.recv(4096).decode('utf8').strip()
+    except Exception as e:
+        logging.debug(f"unable to read from ecs: {e}")
+        return None
+    finally:
+        try:
+            client_socket.close()
+        except:
+            pass
 
 def _compute_validation_hash(password):
     assert isinstance(password, str)
@@ -188,3 +210,73 @@ def decrypt_chunk(chunk, password=None):
     decryptor = AES.new(password, AES.MODE_CBC, iv)
     result = decryptor.decrypt(chunk)
     return result[:original_size]
+
+class EncryptionCacheService(ACEService):
+    def __init__(self, *args, **kwargs):
+        if saq.ENCRYPTION_PASSWORD_PLAINTEXT is None:
+            raise RuntimeError("missing password -- make sure you use the -p option")
+
+        super().__init__(service_config=saq.CONFIG['service_ecs'], 
+                         *args, **kwargs)
+
+    def initialize_service_environment(self):
+        if os.path.exists(saq.ECS_SOCKET_PATH):
+            os.remove(saq.ECS_SOCKET_PATH)
+
+    def execute_service(self):
+        logging.info(f"starting encryption cache service on {saq.ECS_SOCKET_PATH}")
+        while not self.is_service_shutdown:
+            try:
+                if os.path.exists(saq.ECS_SOCKET_PATH):
+                    os.remove(saq.ECS_SOCKET_PATH)
+
+                server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                server.settimeout(1)
+                server.bind(saq.ECS_SOCKET_PATH)
+                server.listen(5)
+
+                os.chmod(saq.ECS_SOCKET_PATH, 0o600)
+
+                while not self.is_service_shutdown:
+                    #logging.debug("waiting for next connection")
+                    try:
+                        client_socket, address = server.accept()
+                        logging.debug("sending password")
+                        client_socket.send(f'{saq.ENCRYPTION_PASSWORD_PLAINTEXT}\n'.encode('utf8'))
+                    except socket.timeout:
+                        continue
+                    except Exception as e:
+                        logging.error(f"error handling client: {e}")
+                    finally:
+                        try:
+                            #logging.debug("closing client connection")
+                            client_socket.close()
+                        except:
+                            pass
+
+            except Exception as e:
+                logging.error(f"uncaught exception: {e}")
+                continue
+            finally:
+                try:
+                    server.close()
+                except:
+                    pass
+
+    def stop_service(self, *args, **kwargs):
+        super().stop_service(*args, **kwargs)
+
+        try:
+            # trigger the loop iteration on the loop that is blocking on write
+            # by causing a BrokenPipeError exception
+            with open(saq.ECS_SOCKET_PATH, 'r') as fp:
+                pass
+        except:
+            pass
+
+    def cleanup_service(self):
+        if os.path.exists(saq.ECS_SOCKET_PATH):
+            try:
+                os.remove(saq.ECS_SOCKET_PATH)
+            except Exception as e:
+                pass

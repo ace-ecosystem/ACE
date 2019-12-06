@@ -165,7 +165,7 @@ class TestCase(ACEModuleTestCase):
         # 4) ace detects the disposition and stops analyzing the alert
         # 5) ace picks up the alert in ANALYSIS_MODE_DISPOSITIONED mode
 
-        saq.CONFIG['engine']['alert_disposition_check_frequency'] = '1'
+        saq.CONFIG['service_engine']['alert_disposition_check_frequency'] = '1'
         
         # create an analysis that turns into an alert
         root = create_root_analysis(analysis_mode='test_single')

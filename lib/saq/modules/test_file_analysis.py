@@ -16,6 +16,8 @@ from saq.constants import *
 from saq.test import *
 from saq.analysis import Analysis, RootAnalysis
 
+from saq.service.yara import YSSService
+
 UNITTEST_SOCKET_DIR = 'socket_unittest'
 
 def get_yara_rules_dir():
@@ -24,67 +26,78 @@ def get_yara_rules_dir():
 class TestCase(ACEModuleTestCase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.yss_process = None
-        self.yss_stdout_buffer = []
-        self.yss_stderr_buffer = []
-        self.yss_stdout_reader_thread = None
-        self.yss_stderr_reader_thread = None
+
+        self.yara_service = None
+
+        #self.yss_process = None
+        #self.yss_stdout_buffer = []
+        #self.yss_stderr_buffer = []
+        #self.yss_stdout_reader_thread = None
+        #self.yss_stderr_reader_thread = None
 
     # TODO get rid of this externa execution and replace with just using the class
     def initialize_yss(self):
 
+        service_config = saq.CONFIG['service_yara']
+        service_config['socket_dir'] = UNITTEST_SOCKET_DIR
+        service_config['signature_dir'] = get_yara_rules_dir()
+        self.yara_service = YSSService()
+        self.yara_service.start_service(threaded=True)
+
         # clear existing logs
-        yss_log_path = os.path.join(saq.YSS_BASE_DIR, 'logs', 'unittest_yss.log')
-        if os.path.exists(yss_log_path):
-            try:
-                os.remove(yss_log_path)
-            except Exception as e:
-                logging.error("unable to remove yss log {}: {}".format(yss_log_path, e))
+        #yss_log_path = os.path.join('logs', 'unittest_yss.log')
+        #if os.path.exists(yss_log_path):
+            #try:
+                #os.remove(yss_log_path)
+            #except Exception as e:
+                #logging.error("unable to remove yss log {}: {}".format(yss_log_path, e))
 
-        with open(yss_log_path, 'wb') as fp:
-            pass
+        #with open(yss_log_path, 'wb') as fp:
+            #pass
 
-        self.yss_process = Popen([ 'yss', 
-                                   '--base-dir', saq.YSS_BASE_DIR,
-                                   '--socket-dir', UNITTEST_SOCKET_DIR,
-                                   '--pid-file', '.yss_unittest.pid',
-                                   '-L', os.path.join('etc', 'unittest_logging.ini'),
-                                   '-d', get_yara_rules_dir(), ], 
-                                 stdout=PIPE, stderr=PIPE, 
-                                 universal_newlines=True, cwd=saq.YSS_BASE_DIR)
+        #self.yss_process = Popen([ 'yss', 
+                                   #'--base-dir', saq.SAQ_HOME,
+                                   #'--socket-dir', UNITTEST_SOCKET_DIR,
+                                   #'--pid-file', '.yss_unittest.pid',
+                                   #'-L', os.path.join('etc', 'unittest_logging.ini'),
+                                   #'-d', get_yara_rules_dir(), ], 
+                                 #stdout=PIPE, stderr=PIPE, 
+                                 #universal_newlines=True, cwd=saq.SAQ_HOME)
 
-        def _pipe_reader(pipe, buf, marker):
-            try:
-                while True:
-                    line = pipe.readline()
-                    if line == '':
-                        break
+        #def _pipe_reader(pipe, buf, marker):
+            #try:
+                #while True:
+                    #line = pipe.readline()
+                    #if line == '':
+                        #break
 
-                    logging.info("YSS: {}: {}".format(marker, line.strip()))
-                    buf.append(line.strip())
+                    #logging.info("YSS: {}: {}".format(marker, line.strip()))
+                    #buf.append(line.strip())
 
-            except Exception as e:
-                logging.error("error reading yss_process pipe: {}".format(e))
+            #except Exception as e:
+                #logging.error("error reading yss_process pipe: {}".format(e))
 
-        self.yss_stdout_reader_thread = threading.Thread(target=_pipe_reader, 
-                                                         args=(self.yss_process.stdout, self.yss_stdout_buffer, 'STDOUT'))
-        self.yss_stdout_reader_thread.start()
+        #self.yss_stdout_reader_thread = threading.Thread(target=_pipe_reader, 
+                                                         #args=(self.yss_process.stdout, self.yss_stdout_buffer, 'STDOUT'))
+        #self.yss_stdout_reader_thread.start()
 
-        self.yss_stderr_reader_thread = threading.Thread(target=_pipe_reader, 
-                                                         args=(self.yss_process.stdout, self.yss_stderr_buffer, 'STDERR'))
-        self.yss_stderr_reader_thread.start()
+        #self.yss_stderr_reader_thread = threading.Thread(target=_pipe_reader, 
+                                                         #args=(self.yss_process.stdout, self.yss_stderr_buffer, 'STDERR'))
+        #self.yss_stderr_reader_thread.start()
 
         # wait for yss to start
-        def _condition():
-            return os.path.exists(yss_log_path)
-        wait_for(_condition, timeout=1)
+        #def _condition():
+            #return os.path.exists(yss_log_path)
+        #wait_for(_condition, timeout=1)
 
-        tail_process = Popen(['tail', '-f', yss_log_path], stdout=PIPE)
-        for line in tail_process.stdout:
-            if b'waiting for client' in line:
-                break
+        wait_for_log_count('waiting for client', 1)
 
-        tail_process.kill()
+        #tail_process = Popen(['tail', '-f', yss_log_path], stdout=PIPE)
+        #for line in tail_process.stdout:
+            #if b'waiting for client' in line:
+                #break
+
+        #tail_process.kill()
 
     def setUp(self):
 
@@ -93,38 +106,33 @@ class TestCase(ACEModuleTestCase):
         # change the yara scanning to point to /opt/saq/yara_scanner
         #saq.CONFIG['analysis_module_yara_scanner_v3_4']['base_dir'] = YSS_BASE_DIR
         # change the location of the unix sockets we're using
-        self.old_socket_dir = saq.YSS_SOCKET_DIR
-        saq.YSS_SOCKET_DIR = UNITTEST_SOCKET_DIR
-
-        # change what rules are getting loaded
-        existing_rule_dirs = [key for key in saq.CONFIG['yara'].keys() if key.startswith('signature_')]
-        for key in existing_rule_dirs:
-            del saq.CONFIG['yara'][key]
+        saq.CONFIG['service_yara']['socket_dir'] = UNITTEST_SOCKET_DIR
+        saq.CONFIG['service_yara']['signature_dir'] = os.path.join('test_data', 'yara_rules')
             
-        saq.CONFIG['yara']['signature_dir_custom'] = 'test_data/yara_rules/custom'
-        saq.CONFIG['yara']['signature_dir_crits'] = 'test_data/yara_rules/crits'
+        #saq.CONFIG['yara']['signature_dir_custom'] = 'test_data/yara_rules/custom'
+        #saq.CONFIG['yara']['signature_dir_crits'] = 'test_data/yara_rules/crits'
 
     def tearDown(self):
-        if self.yss_process:
-            try:
-                self.yss_process.terminate()
-                self.yss_process.wait(5)
-            except Exception as e:
-                print(self.yss_process.poll())
-                logging.error("unable to terminate yss process {}: {}:".format(self.yss_process.pid, e))
-                try:
-                    self.yss_process.kill()
-                    self.yss_process.wait(5)
-                except Exception as e:
-                    logging.critical("unable to kill yss process {}: {}".format(self.yss_process.pid, e))
+        if self.yara_service is not None:
+            self.yara_service.stop_service()
 
-            self.yss_stdout_reader_thread.join()
-            self.yss_stdout_reader_thread = None
-            self.yss_stderr_reader_thread.join()
-            self.yss_stderr_reader_thread = None
+        #if self.yss_process:
+            #try:
+                #self.yss_process.terminate()
+                #self.yss_process.wait(5)
+            #except Exception as e:
+                #print(self.yss_process.poll())
+                #logging.error("unable to terminate yss process {}: {}:".format(self.yss_process.pid, e))
+                #try:
+                    #self.yss_process.kill()
+                    #self.yss_process.wait(5)
+                #except Exception as e:
+                    #logging.critical("unable to kill yss process {}: {}".format(self.yss_process.pid, e))
 
-        # set the socket dir back
-        saq.YSS_SOCKET_DIR = self.old_socket_dir
+            #self.yss_stdout_reader_thread.join()
+            #self.yss_stdout_reader_thread = None
+            #self.yss_stderr_reader_thread.join()
+            #self.yss_stderr_reader_thread = None
 
         # reset the config since we changed stuff
         saq.load_configuration()
@@ -543,7 +551,6 @@ class TestCase(ACEModuleTestCase):
         # the yara rule should have detections
         self.assertTrue(yara_rule.detections)
 
-    @unittest.skip
     def test_file_analysis_004_yara_001_local_scan(self):
         
         # we do not initalize the local yss scanner so it should not be available for scanning

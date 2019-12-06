@@ -30,24 +30,21 @@ class CarbonBlackBinarySubmission(Submission):
         logging.debug("saved submission for {} to {}".format(binary_path, submit_path))
 
 class CarbonBlackBinaryCollector(Collector):
-    def __init__(self, 
-                 download_batch_size=10, 
-                 initial_search_offset=24, 
-                 search_offset=60, # <-- DEPRECATED
-                 storage_dir='storage', 
-                 *args, **kwargs):
+    def __init__(self, *args, **kwargs):
 
-        super().__init__(workload_type='cb', *args, **kwargs)
+        super().__init__(service_config=saq.CONFIG['service_cb_binary_collector'], 
+                         workload_type='cb', 
+                         *args, **kwargs)
 
         # carbon black config data
         self.cb_url = saq.CONFIG['carbon_black']['url']
         self.cb_token = saq.CONFIG['carbon_black']['token']
 
         # collection increment (how many to download at one time)
-        self.download_batch_size = download_batch_size
+        self.download_batch_size = self.service_config.getint('download_batch_size')
 
         # when starting up, how far back do we go to start (in hours)?
-        self.initial_search_offset = initial_search_offset
+        self.initial_search_offset = self.service_config.getint('initial_search_offset')
 
         # path to the persistent locations
         self.last_search_time_path = os.path.join(self.persistence_dir, 'cb_last_search_time')
@@ -64,7 +61,7 @@ class CarbonBlackBinaryCollector(Collector):
 
         # TODO eventually this moves into a generic file storage system
         # where we store the archive of carbon black binaries
-        self.storage_dir = os.path.join(saq.DATA_DIR, storage_dir)
+        self.storage_dir = os.path.join(saq.DATA_DIR, self.service_config['storage_dir'])
         if not os.path.isdir(self.storage_dir):
             try:
                 os.makedirs(self.storage_dir)
