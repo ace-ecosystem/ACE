@@ -40,6 +40,7 @@ import logging
 import os, os.path
 import secrets
 import shutil
+import signal
 import sys
 import threading
 import time
@@ -475,6 +476,7 @@ class ACEBasicTestCase(TestCase):
     def setUp(self):
         #saq.DUMP_TRACEBACKS = True
         logging.info("TEST: {}".format(self.id()))
+        self.save_signal_handlers()
         initialize_test_environment()
         self.reset()
         open_test_comms()
@@ -498,6 +500,7 @@ class ACEBasicTestCase(TestCase):
         # anything logged at CRITICAL log level will cause the test the fail
         #self.assertFalse(memory_log_handler.search(lambda e: e.levelno == logging.CRITICAL))
 
+        import saq
         saq.DUMP_TRACEBACKS = False
 
         self.stop_api_server()
@@ -514,6 +517,11 @@ class ACEBasicTestCase(TestCase):
 
         # clear the database session this test used
         saq.db.remove()
+        self.restore_signal_handlers()
+        
+        # clear all the registered services
+        import saq.service
+        saq.service._registered_services = []
 
     def create_test_file(self, file_path='.unittest_test_data', file_content=None, root_analysis=None):
         """Creates a test file and returns the path to the newly created file.
@@ -806,6 +814,16 @@ class ACEBasicTestCase(TestCase):
 
         self.api_server_process.join()
         self.api_server_process = None
+
+    def save_signal_handlers(self):
+        self.sigterm_handler = signal.getsignal(signal.SIGTERM)
+        self.sigint_handler = signal.getsignal(signal.SIGINT)
+        self.sighup_handler = signal.getsignal(signal.SIGHUP)
+
+    def restore_signal_handlers(self):
+        signal.signal(signal.SIGTERM, self.sigterm_handler)
+        signal.signal(signal.SIGINT, self.sigint_handler)
+        signal.signal(signal.SIGHUP, self.sighup_handler)
 
 class ACEEngineTestCase(ACEBasicTestCase):
 
