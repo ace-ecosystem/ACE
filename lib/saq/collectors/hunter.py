@@ -30,18 +30,27 @@ import operator
 import os, os.path
 import signal
 import threading
+import sqlite3
 
 import saq
 from saq.constants import *
 from saq.collectors import Collector, Submission
 from saq.error import report_exception
-from saq.util import local_time, create_timedelta, abs_path
+from saq.util import local_time, create_timedelta, abs_path, create_directory
+
+def get_hunt_db_path(hunt_type):
+    return os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir'], 'hunt', f'{hunt_type}.db')
+
+def open_hunt_db(hunt_type):
+    """Utility function to open sqlite3 database with correct parameters."""
+    return sqlite3.connect(get_hunt_db_path(hunt_type), detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
 
 class Hunt(object):
     """Abstract class that represents a single hunt."""
 
     def __init__(self, enabled=None, name=None, description=None, type=None,
                        frequency=None, tags=[]):
+
         self.enabled = enabled
         self.name = name
         self.description = description
@@ -50,13 +59,41 @@ class Hunt(object):
         self.tags = tags
 
         # the last time the hunt was executed
-        self.last_executed_time = None # datetime.datetime
+        #self.last_executed_time = None # datetime.datetime
 
         # a threading.RLock that is held while executing
         self.execution_lock = threading.RLock()
 
         # a way for the controlling thread to wait for the hunt execution thread to start
         self.startup_barrier = threading.Barrier(2)
+
+    @property
+    def last_executed_time(self):
+        # if we don't already have this value then load it from the sqlite db
+        if hasattr(self, '_last_executed_time'):
+            return self._last_executed_time
+        else:
+            with open_hunt_db(self.type) as db:
+                c = db.cursor()
+                c.execute("SELECT last_executed_time FROM hunt WHERE hunt_name = ?",
+                         (self.name,))
+                row = c.fetchone()
+                if row is None:
+                    self._last_executed_time = None
+                    return self._last_executed_time
+                else:
+                    self._last_executed_time = row[0]
+                    return self._last_executed_time
+
+    @last_executed_time.setter
+    def last_executed_time(self, value):
+        with open_hunt_db(self.type) as db:
+            c = db.cursor()
+            c.execute("INSERT OR REPLACE INTO hunt(hunt_name, last_executed_time) VALUES ( ?, ? )",
+                     (self.name, value))
+            db.commit()
+
+        self._last_executed_time = value
 
     def __str__(self):
         return f"{self.type} Hunt({self.name})"
@@ -118,7 +155,8 @@ class Hunt(object):
         return True
 
     def load_from_ini(self, path):
-        """Loads the settings for the hunt from an ini formatted file."""
+        """Loads the settings for the hunt from an ini formatted file. This function must return the 
+           ConfigParser object used to load the settings."""
         config = configparser.ConfigParser()
         config.read(path)
 
@@ -169,11 +207,12 @@ CONCURRENCY_TYPE_LOCAL_SEMAPHORE = 'local_semaphore'
 
 class HuntManager(object):
     """Manages the hunting for a single hunt type."""
-    def __init__(self, hunt_type, rule_dirs, hunt_cls, concurrency_limit):
+    def __init__(self, hunt_type, rule_dirs, hunt_cls, concurrency_limit, persistence_dir):
         assert isinstance(hunt_type, str)
         assert isinstance(rule_dirs, list)
         assert issubclass(hunt_cls, Hunt)
         assert concurrency_limit is None or isinstance(concurrency_limit, int) or isinstance(concurrency_limit, str)
+        assert isinstance(persistence_dir, str)
 
         # primary execution thread
         self.manager_thread = None
@@ -193,6 +232,19 @@ class HuntManager(object):
 
         # the class used to instantiate the rules in the given rules directories
         self.hunt_cls = hunt_cls
+
+        # sqlite3 database used to keep track of hunt persistence data
+        create_directory(os.path.dirname(get_hunt_db_path(self.hunt_type)))
+        if not os.path.exists(get_hunt_db_path(self.hunt_type)):
+            with open_hunt_db(self.hunt_type) as db:
+                c = db.cursor()
+                c.execute("""
+CREATE TABLE hunt ( 
+    hunt_name TEXT,
+    last_executed_time timestamp )""")
+                c.execute("""
+CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
+                db.commit()
 
         # the list of Hunt objects that are being managed
         self._hunts = []
@@ -501,7 +553,8 @@ class HunterCollector(Collector):
             manager = HuntManager(hunt_type=hunt_type, 
                                   rule_dirs=[_.strip() for _ in section['rule_dirs'].split(',')],
                                   hunt_cls=class_definition,
-                                  concurrency_limit=section.get('concurrency_limit', fallback=None))
+                                  concurrency_limit=section.get('concurrency_limit', fallback=None),
+                                  persistence_dir=self.persistence_dir)
             manager.start()
             self.hunt_managers.append(manager)
 
