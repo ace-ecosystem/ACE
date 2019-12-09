@@ -572,7 +572,6 @@ class ACEBasicTestCase(TestCase):
     def reset(self):
         """Resets everything back to the default state."""
         self.reset_config()
-        self.reset_hal9000()
         self.reset_brocess()
         self.reset_cloudphish()
         self.reset_correlation()

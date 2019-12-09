@@ -73,7 +73,7 @@ class LoggingSemaphore(Semaphore):
         logging.debug(f"release: semaphore {self.semaphore_name} count is {self.count}")
 
 class NetworkSemaphoreClient(object):
-    def __init__(self):
+    def __init__(self, cancel_request_callback=None):
         # the remote connection to the network semaphore server
         self.socket = None
         # this is set to True if the client was able to acquire a semaphore
@@ -88,6 +88,18 @@ class NetworkSemaphoreClient(object):
         self.fallback_semaphore = None
         # use this to cancel the request to acquire a semaphore
         self.cancel_request_flag = False
+        # OR use this function to determine if we should cancel the request
+        # the function returns True if the request should be cancelled, False otherwise
+        self.cancel_request_callback = cancel_request_callback
+
+    @property
+    def request_is_cancelled(self):
+        """Returns True if the request has been cancelled, False otherwise.
+           The request is cancelled if cancel_request_flag is True OR 
+           cancel_request_callback is defined and it returns True."""
+        
+        return self.cancel_request_flag or ( self.cancel_request_callback is not None
+                                             and self.cancel_request_callback() )
 
     def acquire(self, semaphore_name):
         if self.semaphore_acquired:
@@ -107,7 +119,7 @@ class NetworkSemaphoreClient(object):
             # wait for the acquire to complete
             wait_start = datetime.datetime.now()
 
-            while not self.cancel_request_flag:
+            while not self.request_is_cancelled:
                 command = self.socket.recv(128).decode('ascii')
                 if command == '':
                     raise RuntimeError("detected client disconnect")
@@ -144,7 +156,7 @@ class NetworkSemaphoreClient(object):
             # use the fallback semaphore
             try:
                 logging.warning(f"acquiring fallback semaphore {semaphore_name}")
-                while not self.cancel_request_flag:
+                while not self.request_is_cancelled:
                     if fallback_semaphores[semaphore_name].acquire(blocking=True, timeout=1):
                         logging.debug(f"fallback semaphore {semaphore_name} acquired")
                         self.fallback_semaphore = fallback_semaphores[semaphore_name]
@@ -409,7 +421,7 @@ class NetworkSemaphoreServer(ACEService):
             try:
                 while True:
                     logging.debug(f"attempting to acquire semaphore {semaphore_name}")
-                    semaphore_acquired = semaphore.acquire(blocking=True, timeout=3)
+                    semaphore_acquired = semaphore.acquire(blocking=True, timeout=1)
                     if not semaphore_acquired:
                         logging.warning("{} waiting for semaphore {} cumulative waiting time {}".format(
                             remote_connection, semaphore_name, datetime.datetime.now() - request_time))
