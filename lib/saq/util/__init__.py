@@ -347,12 +347,13 @@ class RegexObservableParser:
         ex: delimeter of '_' might be used to join two email address
         like 'email1@email.com_email2@email2.com'.
     """
-    def __init__(self, regex, observable_type, capture_groups=None, delimiter='_', directives=None):
+    def __init__(self, regex, observable_type, capture_groups=None, delimiter='_', tags=None, directives=None):
         self.regex = re.compile(regex)
         self.observable_type = observable_type
         self.matches = None
         self.capture_groups = capture_groups
         self.delimiter = delimiter
+        self.tags = tags or []
         self.directives = directives or []
     
     def _parse(self, text):
@@ -398,18 +399,23 @@ class RegexObservableParser:
 class RegexObservableParserGroup:
     """API for turning parsed data sources into
         observables ready for submission.
+
+    Add RegexObservableParsers and then parse your content. This class
+        runs the content through each parser and converts the results
+        into observables.
     """
 
     def __init__(self, tags=None):
         self.parsers = []
-        self.directives_map = []
+        self._directives_map = None
+        self._tags_map = None
         self._observable_map = None
         self._observables = None
-        self.tags = tags or ['general_alert']
+        self.tags = tags or []
 
     def add(
         self, regex, observable_type, capture_groups=None, delimiter='_',
-        override_class=None, directives=None,
+        override_class=None, tags=None, directives=None,
     ):
         """Add a parser to the list of parsers for this group.
             
@@ -418,11 +424,14 @@ class RegexObservableParserGroup:
         """
         _parser_class = override_class or RegexObservableParser
 
+        _tags = tags or self.tags # If no tags given, add group tag.
+
         parser = _parser_class(
             regex,
             observable_type,
             capture_groups=capture_groups,
             delimiter=delimiter,
+            tags=_tags,
             directives=directives,
         )
         
@@ -436,6 +445,7 @@ class RegexObservableParserGroup:
         self._observable_map = {_parser.observable_type: set() for _parser in self.parsers}
         
         self._directives_map = {} # Keeps track of observable/directives pairs
+        self._tags_map = {} # Keeps track of observable/tag pairs
         
         for parser in self.parsers:
             parser.parse(content)
@@ -444,6 +454,7 @@ class RegexObservableParserGroup:
                 #    filtered out automatically.
                 self._observable_map[parser.observable_type].add(match)
                 self._directives_map[match] = parser.directives
+                self._tags_map[match] = parser.tags
 
     @property
     def observable_map(self):
@@ -462,7 +473,7 @@ class RegexObservableParserGroup:
                 observable_details = {
                     'type': observable_type,
                     'value': observable,
-                    'tags': self.tags,
+                    'tags': self._tags_map[observable],
                     'directives': self._directives_map[observable],
                 }
                 self._observables.append(observable_details)
