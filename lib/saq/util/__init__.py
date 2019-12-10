@@ -377,7 +377,7 @@ class RegexObservableParser:
         # Create the desired string from the capture groups.
         # Handy for conversation observables.
         # IndexError or AttributeError handled in parent method.
-        _formatted = delimiter.join(
+        _formatted = self.delimiter.join(
             [_matches.group(capture_group) for capture_group in self.capture_groups]
         )
 
@@ -410,7 +410,7 @@ class RegexObservableParserGroup:
         self._directives_map = None
         self._tags_map = None
         self._observable_map = None
-        self._observables = None
+        self._observables = []
         self.tags = tags or []
 
     def add(
@@ -465,7 +465,7 @@ class RegexObservableParserGroup:
     @property
     def observables(self):
         # Return the observables ready for submission to ACE.
-        if self._observables is not None:
+        if self._observables:
             return self._observables
 
         for observable_type, observable_set in self._observable_map.items():
