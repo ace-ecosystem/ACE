@@ -33,9 +33,10 @@ import threading
 import sqlite3
 
 import saq
-from saq.constants import *
 from saq.collectors import Collector, Submission
+from saq.constants import *
 from saq.error import report_exception
+from saq.network_semaphore import NetworkSemaphoreClient
 from saq.util import local_time, create_timedelta, abs_path, create_directory
 
 def get_hunt_db_path(hunt_type):
@@ -59,6 +60,7 @@ class Hunt(object):
         self.tags = tags
 
         # the last time the hunt was executed
+        # see the last_executed_time property
         #self.last_executed_time = None # datetime.datetime
 
         # a threading.RLock that is held while executing
@@ -89,14 +91,14 @@ class Hunt(object):
     def last_executed_time(self, value):
         with open_hunt_db(self.type) as db:
             c = db.cursor()
-            c.execute("INSERT OR REPLACE INTO hunt(hunt_name, last_executed_time) VALUES ( ?, ? )",
-                     (self.name, value))
+            c.execute("UPDATE hunt SET last_executed_time = ? WHERE hunt_name = ?",
+                     (value, self.name))
             db.commit()
 
         self._last_executed_time = value
 
     def __str__(self):
-        return f"{self.type} Hunt({self.name})"
+        return f"Hunt({self.name}[{self.type}])"
 
     def cancel(self):
         """Called when the hunt needs to be cancelled, such as when the system is shutting down.
@@ -116,10 +118,12 @@ class Hunt(object):
         logging.debug(f"clearing barrier for {self}")
         self.startup_barrier.wait()
 
+        submission_list = None
+
         try:
             logging.info(f"executing {self}")
             start_time = datetime.datetime.now()
-            self.execute()
+            return self.execute()
             self.record_execution_time(datetime.datetime.now() - start_time)
         except Exception as e:
             logging.error(f"{self} failed: {e}")
@@ -130,7 +134,7 @@ class Hunt(object):
             self.execution_lock.release()
 
     def execute(self):
-        """Called to execute the hunt."""
+        """Called to execute the hunt. Returns a list of zero or more saq.collector.Submission objects."""
         raise NotImplementedError()
 
     def wait(self, *args, **kwargs):
@@ -207,12 +211,16 @@ CONCURRENCY_TYPE_LOCAL_SEMAPHORE = 'local_semaphore'
 
 class HuntManager(object):
     """Manages the hunting for a single hunt type."""
-    def __init__(self, hunt_type, rule_dirs, hunt_cls, concurrency_limit, persistence_dir):
+    def __init__(self, collector, hunt_type, rule_dirs, hunt_cls, concurrency_limit, persistence_dir):
+        assert isinstance(collector, Collector)
         assert isinstance(hunt_type, str)
         assert isinstance(rule_dirs, list)
         assert issubclass(hunt_cls, Hunt)
         assert concurrency_limit is None or isinstance(concurrency_limit, int) or isinstance(concurrency_limit, str)
         assert isinstance(persistence_dir, str)
+
+        # reference to the collector (used to send the Submission objects)
+        self.collector = collector
 
         # primary execution thread
         self.manager_thread = None
@@ -238,10 +246,12 @@ class HuntManager(object):
         if not os.path.exists(get_hunt_db_path(self.hunt_type)):
             with open_hunt_db(self.hunt_type) as db:
                 c = db.cursor()
+                # XXX have to support all future schemas here -- not a great design
                 c.execute("""
 CREATE TABLE hunt ( 
-    hunt_name TEXT,
-    last_executed_time timestamp )""")
+    hunt_name TEXT NOT NULL,
+    last_executed_time timestamp,
+    last_end_time timestamp )""")
                 c.execute("""
 CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                 db.commit()
@@ -304,6 +314,11 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         self.load_hunts_from_config()
         self.manager_thread = threading.Thread(target=self.loop, name=f"Hunt Manager {self.hunt_type}")
         self.manager_thread.start()
+
+    def debug(self):
+        self.manager_control_event.clear()
+        self.load_hunts_from_config()
+        self.execute()
 
     def stop(self):
         logging.info(f"stopping {self}")
@@ -376,7 +391,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
 
     def execute_threaded_hunt(self, hunt):
         try:
-            hunt.execute_with_lock()
+            submissions = hunt.execute_with_lock()
         except Exception as e:
             logging.error(f"uncaught exception: {e}")
             report_exception()
@@ -384,6 +399,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
             self.release_concurrency_lock(hunt.semaphore)
             # at this point this hunt has finished and is eligible to execute again
             self.wait_control_event.set()
+
+        for submission in submissions:
+            self.collector.submission_list.put(submission)
 
     def cancel_hunts(self):
         """Cancels all the currently executing hunts."""
@@ -429,7 +447,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
             result = NetworkSemaphoreClient(cancel_request_callback=self.manager_control_event.is_set)
                                                                 # make sure we cancel outstanding request 
                                                                 # when shutting down
-            self.concurrency_semaphore.acquire(self.concurrency_semaphore)
+            result.acquire(self.concurrency_semaphore)
         else:
             logging.debug(f"acquiring local concurrency semaphore for hunt type {self.hunt_type}")
             while not self.manager_control_event.is_set():
@@ -459,45 +477,68 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                 continue
 
             # load each .ini file found in this rules directory
-            for hunt_config in os.listdir(rule_dir):
-                if not hunt_config.endswith('.ini'):
-                    continue
+            for root, dirnames, filenames in os.walk(rule_dir):
+                for hunt_config in filenames:
+                    if not hunt_config.endswith('.ini'):
+                        continue
 
-                hunt_config = os.path.join(rule_dir, hunt_config)
-                hunt = self.hunt_cls()
-                logging.debug(f"loading hunt from {hunt_config}")
-                hunt.load_from_ini(hunt_config)
-                hunt.type = self.hunt_type
-                logging.info(f"loaded {hunt} from {hunt_config}")
-                self.add_hunt(hunt)
+                    hunt_config = os.path.join(root, hunt_config)
+                    hunt = self.hunt_cls()
+                    logging.debug(f"loading hunt from {hunt_config}")
+                    hunt.load_from_ini(hunt_config)
+                    hunt.type = self.hunt_type
+                    logging.info(f"loaded {hunt} from {hunt_config}")
+                    self.add_hunt(hunt)
 
         # remember that we loaded the hunts from the configuration file
         # this is used when we receive the signal to reload the hunts
         self.hunts_loaded_from_config = True
 
     def add_hunt(self, hunt):
+        assert isinstance(hunt, Hunt)
+        if hunt.type != self.hunt_type:
+            raise ValueError(f"hunt {hunt} has wrong type for {self}")
+
         # make sure this hunt doesn't already exist
         for _hunt in self._hunts:
             if _hunt.name == hunt.name:
                 raise KeyError(f"duplicate hunt {hunt.name}")
+
+        with open_hunt_db(self.hunt_type) as db:
+            c = db.cursor()
+            c.execute("INSERT OR IGNORE INTO hunt(hunt_name) VALUES ( ? )",
+                     (hunt.name,))
+            db.commit()
 
         self._hunts.append(hunt)
         self.wait_control_event.set()
         return hunt
 
     def remove_hunt(self, hunt):
+        assert isinstance(hunt, Hunt)
+
+        with open_hunt_db(hunt.type) as db:
+            c = db.cursor()
+            c.execute("DELETE FROM hunt WHERE hunt_name = ?",
+                     (hunt.name,))
+            db.commit()
+
         self._hunts.remove(hunt)
         self.wait_control_event.set()
         return hunt
 
-    def update_hunt(self, hunt):
-        for index, hunt in enumerate(self.hunts):
-            old_hunt = self.hunts[index]
-            self.hunts[index] = hunt
-            self.wait_control_event.set()
-            return old_hunt
+    #def update_hunt(self, hunt):
+        #assert isinstance(hunt, Hunt)
+        #if hunt.type != self.hunt_type:
+            #raise ValueError(f"hunt {hunt} has wrong type for {self}")
 
-        raise KeyError(f"unknown hunt {hunt.name}")
+        #for index, hunt in enumerate(self.hunts):
+            #old_hunt = self.hunts[index]
+            #self.hunts[index] = hunt
+            #self.wait_control_event.set()
+            #return old_hunt
+
+        #raise KeyError(f"unknown hunt {hunt.name}")
 
     def record_semaphore_acquire_time(self, time_delta):
         pass
@@ -518,6 +559,9 @@ class HunterCollector(Collector):
         super().reload_service(*args, **kwargs)
         for manager in self.hunt_managers:
             manager.signal_reload()
+
+    def debug_extended_collection(self):
+        self.extended_collection()
 
     def extended_collection(self):
         # load each type of hunt from the configuration settings
@@ -550,13 +594,23 @@ class HunterCollector(Collector):
                               class_name, module_name, section))
                 continue
 
-            manager = HuntManager(hunt_type=hunt_type, 
+            logging.debug(f"loading hunt manager for {hunt_type} class {class_definition}")
+            manager = HuntManager(collector=self,
+                                  hunt_type=hunt_type, 
                                   rule_dirs=[_.strip() for _ in section['rule_dirs'].split(',')],
                                   hunt_cls=class_definition,
                                   concurrency_limit=section.get('concurrency_limit', fallback=None),
                                   persistence_dir=self.persistence_dir)
-            manager.start()
+
+            if self.service_is_debug:
+                manager.debug()
+            else:
+                manager.start()
+
             self.hunt_managers.append(manager)
+
+        if self.service_is_debug:
+            return
 
         # wait for this service the end
         self.service_shutdown_event.wait()

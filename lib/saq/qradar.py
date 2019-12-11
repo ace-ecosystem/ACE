@@ -87,8 +87,6 @@ class QRadarAPIClient(object):
 
             # a response of 404 means QRadar "lost" the query, or it doesn't now about it anymore
             if response.status_code == 404:
-                logging.info(f"MARKER: status_code = {response.status_code}")
-                logging.info(f"MARKER: json = {response.json()}")
                 error_json = response.json()
                 if 'code' in error_json and error_json['code'] == 1002:
                     logging.warning(f"lost qradar query {search_id}")

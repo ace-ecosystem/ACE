@@ -31,7 +31,26 @@ def manager_kwargs():
              'concurrency_limit': 1,
              'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir'])}
 
-class TestCase(CollectorBaseTestCase):
+class HunterBaseTestCase(CollectorBaseTestCase):
+    def setUp(self, *args, **kwargs):
+        super().setUp(*args, **kwargs)
+    
+        # delete all the existing hunt types
+        hunt_type_sections = [_ for _ in saq.CONFIG.sections() if _.startswith('hunt_type_')]
+        for hunt_type_section in hunt_type_sections:
+            del saq.CONFIG[hunt_type_section]
+
+class TestCase(HunterBaseTestCase):
+    def setUp(self, *args, **kwargs):
+        super().setUp(*args, **kwargs)
+
+        saq.CONFIG.add_section('hunt_type_test')
+        s = saq.CONFIG['hunt_type_test']
+        s['module'] = 'saq.collectors.test_hunter'
+        s['class'] = 'TestHunt'
+        s['rule_dirs'] = 'hunts/test'
+        s['concurrency_limit'] = '1'
+
     def test_start_stop(self):
         collector = HunterCollector()
         collector.start_service()
@@ -98,9 +117,9 @@ class TestCase(CollectorBaseTestCase):
         collector = HunterCollector()
         collector.start_service()
         # testing that the execution order works
-        wait_for_log_count('unit test execute marker: test Hunt(unit_test_2)', 4)
-        self.assertEquals(log_count('unit test execute marker: test Hunt(unit_test_1)'), 1)
-        self.assertTrue(log_count('next hunt is test Hunt(unit_test_2)') > 0)
+        wait_for_log_count('unit test execute marker: Hunt(unit_test_2[test])', 4)
+        self.assertEquals(log_count('unit test execute marker: Hunt(unit_test_1[test])'), 1)
+        self.assertTrue(log_count('next hunt is Hunt(unit_test_2[test])') > 0)
         collector.stop_service()
         collector.wait_service()
 
@@ -131,11 +150,13 @@ class TestCase(CollectorBaseTestCase):
     def test_reload_hunts_on_sighup(self):
         collector = HunterCollector()
         collector.start_service()
-        wait_for_log_count('loaded test Hunt(unit_test_1) from', 1)
-        wait_for_log_count('loaded test Hunt(unit_test_2) from', 1)
+        wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 1)
+        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 1)
         os.kill(os.getpid(), signal.SIGHUP)
         wait_for_log_count('received signal to reload hunts', 1)
-        wait_for_log_count('loaded test Hunt(unit_test_1) from', 2)
-        wait_for_log_count('loaded test Hunt(unit_test_2) from', 2)
+        wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 2)
+        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 2)
         collector.stop_service()
         collector.wait_service()
+
+    # TODO test the semaphore locking
