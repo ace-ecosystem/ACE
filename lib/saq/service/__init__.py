@@ -26,7 +26,10 @@ _registered_services = [] # of ACEService objects
 
 def _service_signal_handler(signum, frame):
     for service in _registered_services:
-        service.stop_service()
+        if signum == signal.SIGHUP:
+            service.reload_service()
+        else:
+            service.stop_service()
 
 def register_service(service):
     """Register the given service for tracking purporses."""
@@ -36,8 +39,10 @@ def register_service(service):
     # if this is the first time we register a service then we need
     # to install the signal handlers to gracefully shutdown the service
     if not _registered_services:
+        logging.debug("registering signal handlers")
         signal.signal(signal.SIGTERM, _service_signal_handler)
         signal.signal(signal.SIGINT, _service_signal_handler)
+        signal.signal(signal.SIGHUP, _service_signal_handler)
 
     # this is a bit confusing so this needs explained here
     # if you are running daemon services, then they each run in their own process
@@ -92,6 +97,8 @@ class ACEService(object):
         self.service_is_threaded = False
         # are we debugging the service?
         self.service_is_debug = False
+        # does this service need to reload? (SIGHUP)
+        self.service_reload_flag = False
         # does this service depend on other services?
         self.service_dependencies = get_service_dependencies(self.service_name)
 
@@ -151,6 +158,15 @@ class ACEService(object):
         # we only wait if the service was started in threaded mode
         if self.service_is_threaded:
             self.service_thread.join(timeout=timeout)
+
+    def reload_service(self):
+        """Called when the service receives a SIGHUP, or can also be called manually.
+           Typically used to reload configuration data."""
+        service_reload_flag = True
+
+    def sleep(self, time):
+        """Sleeps for time seconds using the Event object."""
+        self.service_shutdown_event.wait(time)
 
     def background_service(self):
         """Execute this service in the background."""

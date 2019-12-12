@@ -140,6 +140,11 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         target_folder.refresh()
 
         for message in target_folder.all().order_by('-datetime_received'):
+
+            # XXX not sure why this is happening?
+            if message.id is None:
+                continue
+
             try:
                 # if we're not deleting emails then we need to make sure we keep track of which ones we've already processed
                 if not self.delete_emails:
