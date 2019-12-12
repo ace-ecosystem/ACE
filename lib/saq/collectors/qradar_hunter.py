@@ -13,7 +13,7 @@ from saq.qradar import QRadarAPIClient
 from saq.util import *
 
 class QRadarHunt(QueryHunt):
-    def execute_query(self, start_time, end_time):
+    def execute_query(self, start_time, end_time, unit_test_query_results=None):
         submissions = [] # of Submission objects
         client = QRadarAPIClient(saq.CONFIG['qradar']['url'], 
                                  saq.CONFIG['qradar']['token'])
@@ -38,7 +38,11 @@ class QRadarHunt(QueryHunt):
                               files=[])
 
         # TODO implement the continue check callback
-        query_results = client.execute_aql_query(target_query, continue_check_callback=None)
+        if unit_test_query_results is not None:
+            query_results = unit_test_query_results
+        else:
+            query_results = client.execute_aql_query(target_query, continue_check_callback=None)
+
         event_grouping = {} # key = self.group_by field value, value = Submission
 
         # this is used when grouping is specified but some events don't have that field
@@ -68,8 +72,14 @@ class QRadarHunt(QueryHunt):
                 if field_name in event and event[field_name] is not None:
                     observable = { 'type': observable_type, 
                                    'value': event[field_name] }
+
                     if field_name in self.temporal_fields:
                         observable['time'] = event_time
+
+                    if field_name in self.directives:
+                        observable['directives'] = self.directives[field_name]
+
+                    observables.append(observable)
 
             # if we are NOT grouping then each row is an alert by itself
             if self.group_by is None or self.group_by not in event:
@@ -110,5 +120,10 @@ class QRadarHunt(QueryHunt):
                     event_grouping[event[self.group_by]].event_time = event_time
                 elif event_time < event_grouping[event[self.group_by]].event_time:
                     event_grouping[event[self.group_by]].event_time = event_time
+
+        # update the descriptions of grouped alerts with the event counts
+        if self.group_by is not None:
+            for submission in submissions:
+                submission.description += f' ({len(submission.details)} events)'
 
         return submissions

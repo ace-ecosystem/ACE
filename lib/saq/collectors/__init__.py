@@ -485,7 +485,12 @@ LIMIT %s""".format(','.join(['%s' for _ in available_modes]))
                 self.name, self.coverage, self.full_delivery, self.company_id, self.database)
 
 class Collector(ACEService):
-    def __init__(self, workload_type=None, delete_files=False, test_mode=None, collection_frequency=1, *args, **kwargs):
+    def __init__(self, workload_type=None, 
+                       delete_files=False, 
+                       test_mode=None, 
+                       collection_frequency=1, 
+                       *args, **kwargs):
+
         super().__init__(*args, **kwargs)
         # often used as the "tool_instance" property of analysis
         self.fqdn = socket.getfqdn()
@@ -558,6 +563,11 @@ class Collector(ACEService):
     def initialize_collector(self):
         """Called automatically at the end of initialize_environment."""
         pass
+
+    def queue_submission(self, submission):
+        """Adds the given Submission object to the queue."""
+        assert isinstance(submission, Submission)
+        self.submission_list.put(submission)
 
     # 
     # ACEService implementation

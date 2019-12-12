@@ -23,6 +23,7 @@ class QueryHunt(Hunt):
                        observable_mapping=None,
                        temporal_fields=None,
                        directives=None,
+                       directive_options=None,
                        *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -48,6 +49,7 @@ class QueryHunt(Hunt):
         self.observable_mapping = observable_mapping # key = field, value = observable type
         self.temporal_fields = temporal_fields # of fields
         self.directives = directives # key = field, value = [ directive ]
+        self.directive_options = directive_options # key = field, value = { key = option_name value = option_value }
 
     def execute_query(self, start_time, end_time):
         """Called to execute the query over the time period given by the start_time and end_time parameters.
@@ -194,10 +196,22 @@ class QueryHunt(Hunt):
         directives_section = config['directives']
     
         self.directives = {}
+        self.directive_options = {}
+
         for key, value in directives_section.items():
             self.directives[key] = []
             directives = [_.strip() for _ in value.split(',')]
             for directive in directives:
+                # does this directive have any options? these are : delimited
+                if ':' in directive:
+                    options = directive.split(':')
+                    directive = options.pop(0)
+                    self.directive_options[directive] = {}
+                    for option in options:
+                        # option_name=option_value
+                        option_name, option_value = option.split('=', 1)
+                        self.directive_options[key][option_name] = option_value
+                
                 if directive not in VALID_DIRECTIVES:
                     raise ValueError(f"invalid directive {directive}")
 

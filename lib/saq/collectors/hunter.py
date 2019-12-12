@@ -105,7 +105,7 @@ class Hunt(object):
            This must be safe to call even if the hunt is not currently executing."""
         raise NotImplementedError()
 
-    def execute_with_lock(self):
+    def execute_with_lock(self, *args, **kwargs):
         # we use this lock to determine if a hunt is running, and, to wait for execution to complete.
         logging.debug(f"waiting for execution lock on {self}")
         self.execution_lock.acquire()
@@ -123,7 +123,7 @@ class Hunt(object):
         try:
             logging.info(f"executing {self}")
             start_time = datetime.datetime.now()
-            return self.execute()
+            return self.execute(*args, **kwargs)
             self.record_execution_time(datetime.datetime.now() - start_time)
         except Exception as e:
             logging.error(f"{self} failed: {e}")
@@ -133,7 +133,7 @@ class Hunt(object):
             self.startup_barrier.reset()
             self.execution_lock.release()
 
-    def execute(self):
+    def execute(self, *args, **kwargs):
         """Called to execute the hunt. Returns a list of zero or more saq.collector.Submission objects."""
         raise NotImplementedError()
 
@@ -400,8 +400,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
             # at this point this hunt has finished and is eligible to execute again
             self.wait_control_event.set()
 
-        for submission in submissions:
-            self.collector.submission_list.put(submission)
+        if submissions is not None:
+            for submission in submissions:
+                self.collector.queue_submission(submission)
 
     def cancel_hunts(self):
         """Cancels all the currently executing hunts."""
