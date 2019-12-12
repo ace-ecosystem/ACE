@@ -5,6 +5,7 @@
 
 import datetime
 import logging
+import threading
 import time
 
 import requests
@@ -25,6 +26,9 @@ class QueryTimeoutError(RuntimeError):
     pass
 
 class QueryError(RuntimeError):
+    pass
+
+class QueryCanceledError(RuntimeError):
     pass
 
 class QRadarAPIClient(object):
@@ -50,7 +54,16 @@ class QRadarAPIClient(object):
         self.headers = {'Content-Type': 'application/json', 
                         'SEC': self.token}
 
+        # this is set to True when the query should be canceled
+        self.cancel_flag = False
+
+        # used to wait until the next attempt to query the status of a search
+        self.wait_control_event = threading.Event()
+
     def execute_aql_query(self, query, timeout=None, query_timeout=None, delete=True, status_callback=None, continue_check_callback=None, retries=5):
+        self.cancel_flag = False
+        self.wait_control_event.clear()
+
         logging.debug(f"executing qradar query {query}")
         response = requests.post(f'{self.url}/ariel/searches', params={'query_expression' : query},
             headers=self.headers,
@@ -71,6 +84,12 @@ class QRadarAPIClient(object):
         attempt = 0
 
         while True:
+            # was the query canceled?
+            if self.cancel_flag:
+                logging.warning(f"query {search_id} canceled")
+                self.delete_aql_query(search_id)
+                raise QueryCanceledError(f"query {search_id} canceled")
+
             # has the query been executing for too long?
             if self.query_limit is not None:
                 if datetime.datetime.now() > self.query_limit:
@@ -128,7 +147,7 @@ class QRadarAPIClient(object):
                     except Exception as e:
                         logging.error(f"uncaught exception during status callback: {e}")
 
-                time.sleep(4) # this should be 1
+                self.wait_control_event.wait(3)
                 continue
 
             # did it get cancelled or error out
@@ -147,6 +166,11 @@ class QRadarAPIClient(object):
 
             self.delete_aql_query(search_id)
             raise QueryError(f"search result download returned {response.status_code}: {response.text}")
+
+    def cancel_aql_query(self):
+        """Cancels the currently executing AQL query."""
+        self.cancel_flag = True
+        self.wait_control_event.set()
 
     def delete_aql_query(self, search_id):
         logging.debug(f"deleting {search_id}")

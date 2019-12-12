@@ -9,14 +9,19 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.collectors import Submission
 from saq.collectors.query_hunter import QueryHunt
-from saq.qradar import QRadarAPIClient
+from saq.qradar import QRadarAPIClient, QueryCanceledError
 from saq.util import *
 
 class QRadarHunt(QueryHunt):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # reference to the client used to make the request
+        self.qradar_client = None
+
     def execute_query(self, start_time, end_time, unit_test_query_results=None):
         submissions = [] # of Submission objects
-        client = QRadarAPIClient(saq.CONFIG['qradar']['url'], 
-                                 saq.CONFIG['qradar']['token'])
+        self.qradar_client = QRadarAPIClient(saq.CONFIG['qradar']['url'], 
+                                             saq.CONFIG['qradar']['token'])
 
         start_time_str = start_time.strftime('%Y-%m-%d %H:%M %z')
         end_time_str = end_time.strftime('%Y-%m-%d %H:%M %z')
@@ -41,7 +46,11 @@ class QRadarHunt(QueryHunt):
         if unit_test_query_results is not None:
             query_results = unit_test_query_results
         else:
-            query_results = client.execute_aql_query(target_query, continue_check_callback=None)
+            try:
+                query_results = self.qradar_client.execute_aql_query(target_query, continue_check_callback=None)
+            except QueryCanceledError:
+                logging.warning(f"query was canceled for {self}")
+                return None
 
         event_grouping = {} # key = self.group_by field value, value = Submission
 
@@ -127,3 +136,10 @@ class QRadarHunt(QueryHunt):
                 submission.description += f' ({len(submission.details)} events)'
 
         return submissions
+
+    def cancel(self):
+        """Cancels the currently executing query."""
+        if self.qradar_client is None:
+            return
+
+        self.qradar_client.cancel_aql_query()

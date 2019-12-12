@@ -25,8 +25,9 @@ def default_hunt(enabled=True, name='test_hunt', description='Test Hunt', type='
                     type=type, frequency=frequency, tags=tags)
 
 def manager_kwargs():
-    return { 'hunt_type': 'test',
-             'rule_dirs': ['hunts/test',],
+    return { 'collector': HunterCollector(),
+             'hunt_type': 'test',
+             'rule_dirs': ['hunts/test/generic',],
              'hunt_cls': TestHunt,
              'concurrency_limit': 1,
              'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir'])}
@@ -48,7 +49,7 @@ class TestCase(HunterBaseTestCase):
         s = saq.CONFIG['hunt_type_test']
         s['module'] = 'saq.collectors.test_hunter'
         s['class'] = 'TestHunt'
-        s['rule_dirs'] = 'hunts/test'
+        s['rule_dirs'] = 'hunts/test/generic'
         s['concurrency_limit'] = '1'
 
     def test_start_stop(self):

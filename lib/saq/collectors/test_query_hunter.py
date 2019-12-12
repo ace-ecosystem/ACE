@@ -6,6 +6,7 @@ import shutil
 
 import saq
 from saq.collectors.hunter import HuntManager, HunterCollector, open_hunt_db
+from saq.collectors.test_hunter import HunterBaseTestCase
 from saq.collectors.query_hunter import QueryHunt
 from saq.collectors.test import CollectorBaseTestCase
 from saq.test import *
@@ -26,8 +27,9 @@ class TestQueryHunt(QueryHunt):
         pass
 
 def manager_kwargs():
-    return { 'hunt_type': 'test_query',
-             'rule_dirs': [create_directory(os.path.join(saq.DATA_DIR, 'hunts/query_test'))],
+    return { 'collector': HunterCollector(),
+             'hunt_type': 'test_query',
+             'rule_dirs': [ 'hunts/test/query', ],
              'hunt_cls': TestQueryHunt,
              'concurrency_limit': 1,
              'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir'])}
@@ -61,52 +63,17 @@ def default_hunt(enabled=True,
                          temporal_fields=temporal_fields,
                          directives=directives)
 
-class TestCase(CollectorBaseTestCase):
+class TestCase(HunterBaseTestCase):
     def setUp(self):
         super().setUp()
+
         saq.CONFIG.add_section('hunt_type_test_query')
         s = saq.CONFIG['hunt_type_test_query']
         s['module'] = 'saq.collectors.test_query_hunter'
         s['class'] = 'TestQueryHunt'
-        self.rule_dir = s['rule_dirs'] = os.path.join(saq.DATA_DIR, 'hunts/query_test')
-        if os.path.isdir(self.rule_dir):
-            shutil.rmtree(self.rule_dir)
-
-        create_directory(self.rule_dir)
-        with open(os.path.join(self.rule_dir, 'test_1.query'), 'w') as fp:
-            fp.write("Test query.")
+        s['rule_dirs'] = 'hunts/test/query'
 
     def test_load_hunt_ini(self):
-
-        with open(os.path.join(self.rule_dir, 'test_1.ini'), 'w') as fp:
-            fp.write("""
-[rule]
-enabled = yes
-name = query_test_1
-description = Query Test Description 1
-type = query_test
-frequency = 00:01:00
-tags = tag1, tag2
-
-time_range = 00:01:00
-max_time_range = 01:00:00
-offset = 00:05:00
-full_coverage = yes
-group_by = field1
-search = data_unittest/hunts/query_test/test_1.query
-use_index_time = yes
-
-[observable_mapping]
-src_ip = ipv4
-dst_ip = ipv4
-
-[temporal_fields]
-src_ip = yes
-dst_ip = yes
-
-[directives]
-""")
-
         manager = HuntManager(**manager_kwargs())
         manager.load_hunts_from_config()
         self.assertEquals(len(manager.hunts), 1)
@@ -128,35 +95,6 @@ dst_ip = yes
         self.assertEquals(hunt.temporal_fields, { 'src_ip': True, 'dst_ip': True })
 
     def test_start_stop(self):
-        with open(os.path.join(self.rule_dir, 'test_1.ini'), 'w') as fp:
-            fp.write("""
-[rule]
-enabled = yes
-name = query_test_1
-description = Query Test Description 1
-type = query_test
-frequency = 00:01:00
-tags = tag1, tag2
-
-time_range = 00:01:00
-full_coverage = yes
-group_by = field1
-search = data_unittest/hunts/query_test/test_1.query
-use_index_time = yes
-
-[observable_mapping]
-src_ip = ipv4
-dst_ip = ipv4
-ipv4_conversation = ipv4_conversation
-
-[temporal_fields]
-src_ip = yes
-dst_ip = yes
-ipv4_conversation = yes
-
-[directives]
-""")
-
         collector = HunterCollector()
         collector.start_service()
         wait_for_log_count('started Hunt Manager(test_query)', 1)

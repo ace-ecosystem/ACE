@@ -325,6 +325,13 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         self.manager_control_event.set()
         self.wait_control_event.set()
 
+        for hunt in self.hunts:
+            try:
+                hunt.cancel()
+            except Exception as e:
+                logging.error("unable to cancel hunt {hunt}: {e}")
+                report_exception()
+
     def wait(self, *args, **kwargs):
         self.manager_control_event.wait(*args, **kwargs)
         for hunt in self._hunts:
@@ -478,6 +485,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                 continue
 
             # load each .ini file found in this rules directory
+            logging.debug(f"searching {rule_dir} for hunt configurations")
             for root, dirnames, filenames in os.walk(rule_dir):
                 for hunt_config in filenames:
                     if not hunt_config.endswith('.ini'):
