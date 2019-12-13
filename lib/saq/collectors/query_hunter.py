@@ -51,7 +51,7 @@ class QueryHunt(Hunt):
         self.directives = directives # key = field, value = [ directive ]
         self.directive_options = directive_options # key = field, value = { key = option_name value = option_value }
 
-    def execute_query(self, start_time, end_time):
+    def execute_query(self, start_time, end_time, *args, **kwargs):
         """Called to execute the query over the time period given by the start_time and end_time parameters.
            Returns a list of zero or more Submission objects."""
         raise NotImplementedError()
@@ -219,18 +219,22 @@ class QueryHunt(Hunt):
 
         return config
 
-    def execute(self):
-        start_time = None
-        end_time = None
-        try:
-            target_start_time = start_time = self.start_time
-            target_end_time = end_time = self.end_time
-            if self.offset:
-                target_start_time -= self.offset
-                target_end_time -= self.offset
+    # start_time and end_time are optionally arguments
+    # to allow manual command line hunting (for research purposes)
+    def execute(self, start_time=None, end_time=None, *args, **kwargs):
 
-            return self.execute_query(target_start_time, target_end_time)
+        offset_start_time = target_start_time = start_time if start_time is not None else self.start_time
+        offset_end_time = target_end_time = end_time if end_time is not None else self.end_time
+
+        try:
+            # the optional offset allows hunts to run at some offset of time
+            if self.offset:
+                offset_start_time -= self.offset
+                offset_end_time -= self.offset
+
+            return self.execute_query(offset_start_time, offset_end_time, *args, **kwargs)
 
         finally:
-            if end_time is not None:
-                self.last_end_time = end_time
+            # if we're not manually hunting then record the last end time
+            if not self.manual_hunt:
+                self.last_end_time = target_end_time

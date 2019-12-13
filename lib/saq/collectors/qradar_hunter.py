@@ -67,7 +67,7 @@ class QRadarHunt(QueryHunt):
 
             # the deviceTime field has the event time as a millisecond timestamp
             if 'deviceTime' in event:
-                event_time = datetime.datetime.fromtimestamp(event['deviceTime'] / 1000.0)
+                event_time = datetime.datetime.fromtimestamp(event['deviceTime'] / 1000.0).astimezone(pytz.UTC)
             elif 'deviceTimeFormatted' in event:
                 event_time = datetime.datetime.strptime(event['deviceTimeFormatted'], '%Y-%m-%d %H:%M:%S.%f %z')
                 event_time = event_time.astimezone(pytz.UTC)
