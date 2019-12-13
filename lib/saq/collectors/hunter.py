@@ -69,6 +69,10 @@ class Hunt(object):
         # a way for the controlling thread to wait for the hunt execution thread to start
         self.startup_barrier = threading.Barrier(2)
 
+        # if this is True then we're executing the Hunt outside of normal operations
+        # in that case we don't want to record any of the execution time stamps
+        self.manual_hunt = False
+
     @property
     def last_executed_time(self):
         # if we don't already have this value then load it from the sqlite db
@@ -171,7 +175,7 @@ class Hunt(object):
         self.description = section_rule['description']
         self.type = section_rule['type']
         self.frequency = create_timedelta(section_rule['frequency'])
-        self.tags = [_.strip() for _ in section_rule['tags'].split(',')]
+        self.tags = [_.strip() for _ in section_rule['tags'].split(',') if _]
 
         return config
 
@@ -281,6 +285,14 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
     def hunts(self):
         """Returns a sorted copy of the list of hunts in execution order."""
         return sorted(self._hunts, key=operator.attrgetter('next_execution_time'))
+
+    def get_hunt_by_name(self, name):
+        """Returns the Hunt with the given name, or None if the hunt does not exist."""
+        for hunt in self._hunts:
+            if hunt.name == name:
+                return hunt
+
+        return None
 
     def signal_reload(self):
         """Signals to this manager that the hunts should be reloaded.
@@ -561,20 +573,19 @@ class HunterCollector(Collector):
                          *args, **kwargs)
 
         # each type of hunt is grouped and managed as a single unit
-        self.hunt_managers = [] # of HuntManager object
+        self.hunt_managers = {} # key = hunt_type, value = HuntManager
 
     def reload_service(self, *args, **kwargs):
         # pass along the SIGHUP to the hunt managers
         super().reload_service(*args, **kwargs)
-        for manager in self.hunt_managers:
+        for manager in self.hunt_managers.values():
             manager.signal_reload()
 
     def debug_extended_collection(self):
         self.extended_collection()
 
-    def extended_collection(self):
-        # load each type of hunt from the configuration settings
-        logging.info("starting hunt managers...")
+    def load_hunt_managers(self):
+        """Loads all configured hunt managers."""
         for section_name in saq.CONFIG.sections():
             if not section_name.startswith('hunt_type_'):
                 continue
@@ -604,19 +615,23 @@ class HunterCollector(Collector):
                 continue
 
             logging.debug(f"loading hunt manager for {hunt_type} class {class_definition}")
-            manager = HuntManager(collector=self,
-                                  hunt_type=hunt_type, 
-                                  rule_dirs=[_.strip() for _ in section['rule_dirs'].split(',')],
-                                  hunt_cls=class_definition,
-                                  concurrency_limit=section.get('concurrency_limit', fallback=None),
-                                  persistence_dir=self.persistence_dir)
+            self.hunt_managers[hunt_type] = \
+                HuntManager(collector=self,
+                            hunt_type=hunt_type, 
+                            rule_dirs=[_.strip() for _ in section['rule_dirs'].split(',')],
+                            hunt_cls=class_definition,
+                            concurrency_limit=section.get('concurrency_limit', fallback=None),
+                            persistence_dir=self.persistence_dir)
 
+    def extended_collection(self):
+        # load each type of hunt from the configuration settings
+        self.load_hunt_managers()
+        logging.info("starting hunt managers...")
+        for manager in self.hunt_managers.values():
             if self.service_is_debug:
                 manager.debug()
             else:
                 manager.start()
-
-            self.hunt_managers.append(manager)
 
         if self.service_is_debug:
             return
@@ -625,9 +640,9 @@ class HunterCollector(Collector):
         self.service_shutdown_event.wait()
 
         # then stop the managers and wait for them to complete
-        for manager in self.hunt_managers:
+        for manager in self.hunt_managers.values():
             manager.stop()
 
         # then wait for the managers to complete
-        for manager in self.hunt_managers:
+        for manager in self.hunt_managers.values():
             manager.wait()
