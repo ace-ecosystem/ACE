@@ -52,6 +52,13 @@ class CollectorBaseTestCase(ACEBasicTestCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
 
+        saq.CONFIG.add_section('service_test_collector')
+        s = saq.CONFIG['service_test_collector']
+        s['module'] = 'saq.collectors.test'
+        s['class'] = 'TestCollector'
+        s['description'] = 'Test Collector'
+        s['enabled'] = 'yes'
+
         with get_db_connection() as db:
             c = db.cursor()
             c.execute("DELETE FROM work_distribution_groups")
@@ -63,9 +70,6 @@ class CollectorBaseTestCase(ACEBasicTestCase):
 
         # default engines to support any analysis mode
         saq.CONFIG['service_engine']['local_analysis_modes'] = ''
-
-        # XXX what is this for?
-        self.service_config = saq.CONFIG['service_test_collector']
 
 class TestCase(CollectorBaseTestCase):
     def create_submission(self):

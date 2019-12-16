@@ -49,3 +49,5 @@ tzlocal
 urlfinderlib
 vxstreamlib
 yara_scanner
+python-whois
+gglsbl-rest-client

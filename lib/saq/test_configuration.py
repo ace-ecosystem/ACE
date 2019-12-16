@@ -11,12 +11,7 @@ from saq.test import *
 class TestCase(ACEBasicTestCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
-        self.old_password = saq.ENCRYPTION_PASSWORD
-        saq.ENCRYPTION_PASSWORD = get_aes_key('test')
-
-    def tearDown(self, *args, **kwargs):
-        super().setUp(*args, **kwargs)
-        saq.ENCRYPTION_PASSWORD = self.old_password
+        set_encryption_password('test')
 
     def test_store_encrypted_password(self):
         store_encrypted_password('proxy', 'password', 'unittest')

@@ -340,7 +340,7 @@ def initialize_test_environment():
         logging.error("unable to create temp dir {}: {}".format(test_dir, e))
 
     # in all our testing we use the password "password" for encryption/decryption
-    saq.ENCRYPTION_PASSWORD = get_aes_key('password')
+    #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
     #initialize_database()
     initialized = True
@@ -589,7 +589,7 @@ class ACEBasicTestCase(TestCase):
         self.reset_var_dir()
 
         # re-enable encryption in case we disabled it
-        saq.ENCRYPTION_PASSWORD = get_aes_key('password')
+        #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
     def reset_var_dir(self):
         # clears out the var directory
