@@ -53,7 +53,7 @@ parser.add_argument('--force-alerts', required=False, dest='force_alerts', defau
 parser.add_argument('--relative-dir', required=False, dest='relative_dir', default=None,
     help="Assume all storage paths are relative to the given directory.  Defaults to current work directory.")
 parser.add_argument('-p', '--provide-decryption-password', required=False, action='store_true', dest='provide_decryption_password', default=False,
-    help="Prompt for the decryption password so that encrypted archive files can be automatically analyzed.")
+    help="Prompt for the decryption password. Read README.CRYPTO for details.")
 parser.add_argument('--trace', required=False, action='store_true', dest='trace', default=False,
     help="Enable execution tracing (debugging option).")
 parser.add_argument('-D', required=False, action='store_true', dest='debug_on_error', default=False,
@@ -3251,8 +3251,19 @@ verify_modules_parsers.set_defaults(func=verify_modules)
 #
 
 def set_encryption_password(args):
-    from saq.crypto import set_encryption_password
+    from saq.crypto import set_encryption_password, get_aes_key, InvalidPasswordError, encryption_key_set
     while True:
+        current_password = None
+        if encryption_key_set() and not args.overwrite:
+            current_password = getpass.getpass("Enter the CURRENT encryption password:")
+            try:
+                get_aes_key(current_password)
+            except InvalidPasswordError:
+                print("ERROR: invalid password")
+                print("if you can't remember you can use the --overwrite option")
+                print("but then you won't be able to access anything you've already encrypted")
+                continue
+            
         password = getpass.getpass("Enter the decryption password:")
         password_2 = getpass.getpass("Re-enter the decryption password for verification:")
 
@@ -3262,19 +3273,22 @@ def set_encryption_password(args):
 
         break
 
-    set_encryption_password(password)
+    set_encryption_password(password, old_password=current_password)
     sys.exit(0)
 
 set_encryption_password_parser = subparsers.add_parser('set-encryption-password',
     help="Sets the password used to encrypt and decrypt archived emails.")
+set_encryption_password_parser.add_argument('-o', '--overwrite', default=False, action='store_true',
+    help="Overwrites an existing password without prompting.")
 set_encryption_password_parser.set_defaults(func=set_encryption_password)
 
 def test_encryption_password(args):
-    from saq.crypto import test_encryption_password
+    import saq.crypto
     password = getpass.getpass("Enter the decryption password:")
-    if test_encryption_password(password):
+    try:
+        saq.crypto.get_aes_key(password)
         logging.info("password OK")
-    else:
+    except saq.crypto.InvalidPasswordError:
         logging.error("invalid password")
 
     sys.exit(0)
@@ -3573,16 +3587,16 @@ if __name__ == '__main__':
 
     # has the encryption password been set yet?
     import saq.crypto
-    if saq.crypto.is_set():
+    from saq.crypto import get_aes_key, InvalidPasswordError
 
+    if saq.crypto.encryption_key_set():
         # are we prompting for the decryption password?
         if args.provide_decryption_password:
-            from saq.crypto import test_encryption_password, get_aes_key
-
             while True:
                 saq.ENCRYPTION_PASSWORD_PLAINTEXT = getpass.getpass("Enter the decryption password:")
-                # first check to see if the given password matches the sha256 hash
-                if not saq.crypto.test_encryption_password(saq.ENCRYPTION_PASSWORD_PLAINTEXT):
+                try:
+                    saq.ENCRYPTION_PASSWORD = get_aes_key(saq.ENCRYPTION_PASSWORD_PLAINTEXT)
+                except InvalidPasswordError:
                     logging.error("invalid encryption password")
                     continue
 
@@ -3593,13 +3607,11 @@ if __name__ == '__main__':
             logging.debug("reading encryption password from ecs")
             saq.ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
             if saq.ENCRYPTION_PASSWORD_PLAINTEXT is not None:
-                if not saq.crypto.test_encryption_password(saq.ENCRYPTION_PASSWORD_PLAINTEXT):
+                try:
+                    saq.ENCRYPTION_PASSWORD = get_aes_key(saq.ENCRYPTION_PASSWORD_PLAINTEXT)
+                except InvalidPasswordError:
                     logging.error("read password from ecs but the password is wrong")
                     saq.ENCRYPTION_PASSWORD_PLAINTEXT = None
-
-        # if we've got the plaintext password, use it to decrypt the actual password used to encrypt/decrypt
-        if saq.ENCRYPTION_PASSWORD_PLAINTEXT is not None:
-            saq.ENCRYPTION_PASSWORD = saq.crypto.get_aes_key(saq.ENCRYPTION_PASSWORD_PLAINTEXT)
 
     # NOTE we call this function if the user provides a password or not
     saq.CONFIG.load_encrypted_passwords()
