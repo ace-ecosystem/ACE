@@ -40,6 +40,7 @@ import logging
 import os, os.path
 import secrets
 import shutil
+import signal
 import sys
 import threading
 import time
@@ -286,13 +287,6 @@ def splunk_query(search_string, *args, **kwargs):
 
 def initialize_test_environment():
     global test_dir
-    #import saq
-
-    # indicate that we are unit testing
-    # this changes the behavior of ACE in various places
-    #code = compile('saq.UNIT_TESTING = True', '<string>', 'exec')
-    #import dis; import pdb; pdb.set_trace()
-    #saq.UNIT_TESTING = True
 
     # there is no reason to run anything as root
     if os.geteuid() == 0:
@@ -311,7 +305,7 @@ def initialize_test_environment():
     import saq
     saq.initialize(saq_home=saq_home, config_paths=[], 
                    logging_config_path=os.path.join(saq_home, 'etc', 'unittest_logging.ini'), 
-                   args=None, relative_dir=None, unittest=True)
+                   args=None, relative_dir=None)
 
     if saq.CONFIG['global']['instance_type'] not in [ 'PRODUCTION', 'QA', 'DEV' ]:
         sys.stderr.write('\n\n *** CRITICAL ERROR *** \n\ninvalid instance_type setting in configuration\n')
@@ -339,7 +333,7 @@ def initialize_test_environment():
         logging.error("unable to create temp dir {}: {}".format(test_dir, e))
 
     # in all our testing we use the password "password" for encryption/decryption
-    saq.ENCRYPTION_PASSWORD = get_aes_key('password')
+    #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
     #initialize_database()
     initialized = True
@@ -475,6 +469,7 @@ class ACEBasicTestCase(TestCase):
     def setUp(self):
         #saq.DUMP_TRACEBACKS = True
         logging.info("TEST: {}".format(self.id()))
+        self.save_signal_handlers()
         initialize_test_environment()
         self.reset()
         open_test_comms()
@@ -498,6 +493,7 @@ class ACEBasicTestCase(TestCase):
         # anything logged at CRITICAL log level will cause the test the fail
         #self.assertFalse(memory_log_handler.search(lambda e: e.levelno == logging.CRITICAL))
 
+        import saq
         saq.DUMP_TRACEBACKS = False
 
         self.stop_api_server()
@@ -514,6 +510,11 @@ class ACEBasicTestCase(TestCase):
 
         # clear the database session this test used
         saq.db.remove()
+        self.restore_signal_handlers()
+        
+        # clear all the registered services
+        import saq.service
+        saq.service._registered_services = []
 
     def create_test_file(self, file_path='.unittest_test_data', file_content=None, root_analysis=None):
         """Creates a test file and returns the path to the newly created file.
@@ -572,7 +573,6 @@ class ACEBasicTestCase(TestCase):
     def reset(self):
         """Resets everything back to the default state."""
         self.reset_config()
-        self.reset_hal9000()
         self.reset_brocess()
         self.reset_cloudphish()
         self.reset_correlation()
@@ -582,7 +582,7 @@ class ACEBasicTestCase(TestCase):
         self.reset_var_dir()
 
         # re-enable encryption in case we disabled it
-        saq.ENCRYPTION_PASSWORD = get_aes_key('password')
+        #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
     def reset_var_dir(self):
         # clears out the var directory
@@ -807,6 +807,16 @@ class ACEBasicTestCase(TestCase):
 
         self.api_server_process.join()
         self.api_server_process = None
+
+    def save_signal_handlers(self):
+        self.sigterm_handler = signal.getsignal(signal.SIGTERM)
+        self.sigint_handler = signal.getsignal(signal.SIGINT)
+        self.sighup_handler = signal.getsignal(signal.SIGHUP)
+
+    def restore_signal_handlers(self):
+        signal.signal(signal.SIGTERM, self.sigterm_handler)
+        signal.signal(signal.SIGINT, self.sigint_handler)
+        signal.signal(signal.SIGHUP, self.sighup_handler)
 
 class ACEEngineTestCase(ACEBasicTestCase):
 

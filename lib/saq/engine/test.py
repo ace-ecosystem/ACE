@@ -2931,3 +2931,50 @@ class TestCase(ACEEngineTestCase):
         analysis_instance_2 = test_observable.get_analysis(TestInstanceAnalysis, instance='instance2')
         self.assertIsInstance(analysis_instance_2, Analysis)
         self.assertEquals(analysis_instance_2.details, {'sql': 'SELECT * FROM thatonething'})
+
+    def test_automation_limit(self):
+
+        saq.CONFIG['analysis_module_generic_test']['automation_limit'] = '1'
+
+        root = create_root_analysis()
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable_1 = root.add_observable(F_TEST, 'test_1')
+        observable_2 = root.add_observable(F_TEST, 'test_2')
+        root.analysis_mode = 'test_single'
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_generic_test', 'test_single')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root.load()
+        from saq.modules.test import GenericTestAnalysis
+        self.assertEquals(len(root.get_analysis_by_type(GenericTestAnalysis)), 1)
+
+        # do the same as before but add the directives that tells to engine to ignore the limits
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable_1 = root.add_observable(F_TEST, 'test_1')
+        observable_2 = root.add_observable(F_TEST, 'test_2')
+        observable_1.add_directive(DIRECTIVE_IGNORE_AUTOMATION_LIMITS)
+        observable_2.add_directive(DIRECTIVE_IGNORE_AUTOMATION_LIMITS)
+        root.analysis_mode = 'test_single'
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_generic_test', 'test_single')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root.load()
+        from saq.modules.test import GenericTestAnalysis
+        # in this case both of them should have been analyzed
+        self.assertEquals(len(root.get_analysis_by_type(GenericTestAnalysis)), 2)

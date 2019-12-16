@@ -40,6 +40,20 @@ class TestService2(ACEService):
             raise RuntimeError("bad environment")
 
 class TestCase(ACEBasicTestCase):
+    def setUp(self, *args, **kwargs):
+        super().setUp(*args, **kwargs)
+        saq.CONFIG.add_section('service_test')
+        s = saq.CONFIG['service_test']
+        s['module'] = 'saq.service.test'
+        s['class'] = 'TestService'
+        s['enabled'] = 'yes'
+
+        saq.CONFIG.add_section('service_test_2')
+        s = saq.CONFIG['service_test_2']
+        s['module'] = 'saq.service.test'
+        s['class'] = 'TestService2'
+        s['enabled'] = 'yes'
+
     def test_discover_services(self):
         # make sure our test service is in the list of discovered services
         service_names = get_all_service_names()

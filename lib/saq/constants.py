@@ -320,39 +320,44 @@ DIRECTIVE_TRACKED = 'tracked'
 DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
 # download the pcap for the given observable and given time
 DIRECTIVE_EXTRACT_PCAP = 'extract_pcap'
+# ignores any automation limits when analyzing this observable (also see saq.modules.AnalysisModule.automation_limit)
+DIRECTIVE_IGNORE_AUTOMATION_LIMITS = 'ignore_automation_limits'
 
 DIRECTIVE_DESCRIPTIONS = {
-    DIRECTIVE_ARCHIVE: 'Archive the file',
+    DIRECTIVE_ARCHIVE: 'archive the file',
     DIRECTIVE_COLLECT_FILE: 'collect the file from the remote endpoint',
     DIRECTIVE_CRAWL: 'crawl the URL',
-    DIRECTIVE_FORCE_DOWNLOAD: 'download the content of the URL no matter what',
-    DIRECTIVE_EXTRACT_URLS: 'extract URLs from the given file',
-    DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
-    DIRECTIVE_ORIGINAL_EMAIL: 'treat this file as the original email file',
-    DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
-    DIRECTIVE_NO_SCAN: 'do not scan this file with yara',
     DIRECTIVE_DELAY: 'instructs various analysis modules to delay the analysis',
     DIRECTIVE_EXCLUDE_ALL: 'instructs ACE to NOT analyze this observable at all',
-    DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
-    DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
-    DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
     DIRECTIVE_EXTRACT_PCAP: 'extract PCAP for the given observable and given time',
+    DIRECTIVE_EXTRACT_URLS: 'extract URLs from the given file',
+    DIRECTIVE_FORCE_DOWNLOAD: 'download the content of the URL no matter what',
+    DIRECTIVE_IGNORE_AUTOMATION_LIMITS: 'ignores any automation limits when analyzing this observable',
+    DIRECTIVE_NO_SCAN: 'do not scan this file with yara',
+    DIRECTIVE_ORIGINAL_EMAIL: 'treat this file as the original email file',
+    DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
+    DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
+    DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
+    DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
+    DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
 }
 
 VALID_DIRECTIVES = [
     DIRECTIVE_ARCHIVE,
     DIRECTIVE_COLLECT_FILE,
     DIRECTIVE_CRAWL,
-    DIRECTIVE_FORCE_DOWNLOAD,
-    DIRECTIVE_EXTRACT_URLS,
-    DIRECTIVE_SANDBOX,
-    DIRECTIVE_ORIGINAL_EMAIL,
-    DIRECTIVE_ORIGINAL_SMTP,
-    DIRECTIVE_NO_SCAN,
     DIRECTIVE_DELAY,
     DIRECTIVE_EXCLUDE_ALL,
-    DIRECTIVE_WHITELISTED,
+    DIRECTIVE_EXTRACT_PCAP,
+    DIRECTIVE_EXTRACT_URLS,
+    DIRECTIVE_FORCE_DOWNLOAD,
+    DIRECTIVE_IGNORE_AUTOMATION_LIMITS,
+    DIRECTIVE_NO_SCAN,
+    DIRECTIVE_ORIGINAL_EMAIL,
+    DIRECTIVE_ORIGINAL_SMTP,
+    DIRECTIVE_SANDBOX,
     DIRECTIVE_TRACKED,
+    DIRECTIVE_WHITELISTED,
 ]
 
 def is_valid_directive(directive):

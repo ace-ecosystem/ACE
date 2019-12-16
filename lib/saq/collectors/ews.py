@@ -108,7 +108,7 @@ class EWSCollectionBaseConfiguration(object):
             if self.collector.service_shutdown_event.wait(self.frequency):
                 break
 
-    def execute(self):
+    def execute(self, *args, **kwargs):
         if not self.delete_emails:
             if not os.path.exists(self.tracking_db_path):
                 with sqlite3.connect(self.tracking_db_path) as db:
@@ -127,11 +127,19 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         # get the next emails from this account
         credentials = Credentials(self.username, self.password)
         config = Configuration(server=self.server, credentials=credentials, auth_type=NTLM) # TODO auth_type should be configurable
-        account = Account(self.target_mailbox, config=config, autodiscover=False, access_type=DELEGATE) # TODO autodiscover, access_type should be configurable
+        
+        _account_class = kwargs.get('account_class') or Account  # Account class connects to exchange.
+        account = _account_class(self.target_mailbox, config=config, autodiscover=False, access_type=DELEGATE) # TODO autodiscover, access_type should be configurable
         
         path_parts = [_.strip() for _ in self.folder.split('/')]
         root = path_parts.pop(0)
-        target_folder = getattr(account, root)
+
+        _account = kwargs.get('account_object') or account
+
+        try:
+            target_folder = getattr(_account, root)
+        except AttributeError:
+            target_folder = _account.public_folders_root
         #print(target_folder.tree())
 
         for path_part in path_parts:
@@ -140,6 +148,11 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         target_folder.refresh()
 
         for message in target_folder.all().order_by('-datetime_received'):
+
+            # XXX not sure why this is happening?
+            if message.id is None:
+                continue
+
             try:
                 # if we're not deleting emails then we need to make sure we keep track of which ones we've already processed
                 if not self.delete_emails:

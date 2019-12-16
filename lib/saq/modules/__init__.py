@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 import saq
 
 from saq.analysis import Analysis, Observable, MODULE_PATH
+from saq.constants import *
 from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
 from saq.util import create_timedelta, parse_event_time
@@ -121,6 +122,9 @@ class AnalysisModule(object):
         if 'observation_grouping_time_range' in self.config:
             self.observation_grouping_time_range = create_timedelta(self.config['observation_grouping_time_range'])
 
+        # automation limit settings control how many times an analysis module runs automatically during correlation
+        self.automation_limit = self.config.getint('automation_limit', fallback=None)
+
     @property
     def is_grouped_by_time(self):
         """Returns True if the observation_grouping_time_range configuration option is being used."""
@@ -224,7 +228,9 @@ class AnalysisModule(object):
             try:
                 current_mtime = os.stat(watched_file.path).st_mtime
                 if watched_file.last_mtime != current_mtime:
-                    logging.info("detected change to {}".format(watched_file.path))
+                    if watched_file.last_mtime != 0:
+                        logging.info("detected change to {}".format(watched_file.path))
+
                     watched_file.last_mtime = current_mtime
 
                     try:
@@ -517,6 +523,8 @@ class AnalysisModule(object):
                 logging.debug("{} is not a valid target type for {}".format(obj, self))
                 return False
 
+        # XXX these isinstance checks are from an older version ace that tried to support analyzing analysis modules
+        # XXX these can probably be removed
         if isinstance(obj, Observable) and self.valid_observable_types is not None:
             # a little hack to allow valid_observable_types to return a single value
             valid_types = self.valid_observable_types
@@ -585,6 +593,17 @@ class AnalysisModule(object):
             else:
                 self.cooldown_timeout = None
                 logging.info("{} exited cooldown mode".format(self))
+
+        # does this module have automation limits?
+        if self.automation_limit is not None:
+            # and is this observable NOT ignoring automation limits?
+            # this can be the case if an analyst is forcing analysis of something
+            if not obj.has_directive(DIRECTIVE_IGNORE_AUTOMATION_LIMITS):
+                # how many times have we already generated analysis with this module?
+                current_analysis_count = len(self.root.get_analysis_by_type(self.generated_analysis_type))
+                if current_analysis_count >= self.automation_limit:
+                    logging.debug(f"{self} reached automation limit of {self.automation_limit} for {self.root}")
+                    return False
 
         # end with custom logic, which defaults to True if not implemented
         return self.should_analyze(obj)

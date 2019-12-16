@@ -128,8 +128,7 @@ def initialize(saq_home=None,
                config_paths=None, 
                logging_config_path=None, 
                args=None, 
-               relative_dir=None, 
-               unittest=False):
+               relative_dir=None):
 
     from saq.database import initialize_database, initialize_node
 
@@ -288,7 +287,6 @@ def initialize(saq_home=None,
     CONFIG_PATHS = [os.path.join(SAQ_HOME, p) if not os.path.isabs(p) else p for p in config_paths]
 
     # add any config files specified in SAQ_CONFIG_PATHS env var (command separated)
-    #sys.stderr.write("SAQ_CONFIG_PATHS = {}\n".format(os.environ['SAQ_CONFIG_PATHS']))
     if 'SAQ_CONFIG_PATHS' in os.environ:
         for config_path in os.environ['SAQ_CONFIG_PATHS'].split(','):
             config_path = config_path.strip()
@@ -300,16 +298,12 @@ def initialize(saq_home=None,
                 if config_path not in CONFIG_PATHS:
                     CONFIG_PATHS.append(config_path)
 
-    # if $SAQ_HOME/etc/saq.ini exists then we use that as the last config if it's not already specified
-    default_config_path = os.path.join(SAQ_HOME, 'etc', 'saq.ini')
-
-    # use unit test config if we are running a unit test
-    if unittest:
-        default_config_path = os.path.join(SAQ_HOME, 'etc', 'saq.unittest.ini')
-
-    if os.path.exists(default_config_path):
-        if default_config_path not in CONFIG_PATHS:
-            CONFIG_PATHS.append(default_config_path)
+    if UNIT_TESTING:
+        # unit testing loads different configurations
+        CONFIG_PATHS.append(os.path.join(SAQ_HOME, 'etc', 'saq.unittest.default.ini'))
+        CONFIG_PATHS.append(os.path.join(SAQ_HOME, 'etc', 'saq.unittest.ini'))
+    else:
+        CONFIG_PATHS.append(os.path.join(SAQ_HOME, 'etc', 'saq.ini'))
 
     try:
         load_configuration()

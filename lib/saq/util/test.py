@@ -3,6 +3,7 @@
 import json
 import os, os.path
 import tempfile
+import unittest
 
 import saq
 from saq.test import *
@@ -146,3 +147,16 @@ class TestCase(ACEBasicTestCase):
             result = list(json_parse(fp_in))
             self.assertEquals(result[0][0], json_value_2)
             self.assertEquals(result[0][1], position_2)
+
+
+class TestNoAceInit(unittest.TestCase):
+
+    def test_fang(self):
+        test_pairs = [
+            {"test_case": 'hxxp://local.local', "expected": 'http://local.local'},
+            {"test_case": 'hXXp://local.local', "expected": 'http://local.local'},
+            {"test_case": 'http://local.local', "expected": 'http://local.local'},
+        ]
+
+        for _test in test_pairs:
+            self.assertEqual(_test['expected'], fang(_test['test_case']))

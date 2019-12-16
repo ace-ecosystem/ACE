@@ -258,10 +258,10 @@ class CrawlphishURLFilter(object):
     def is_in_intel_db(self, value):
         """Returns True if the given value is in your intel database, False otherwise."""
         result = False
-        if saq.CONFIG['crits'].getboolean('enabled'):
+        if 'crits' in saq.CONFIG and saq.CONFIG['crits'].getboolean('enabled'):
             result |= self.is_in_crits(value)
         
-        if saq.CONFIG['sip'].getboolean('enabled'):
+        if 'sip' in saq.CONFIG and saq.CONFIG['sip'].getboolean('enabled'):
             result |= self.is_in_sip(value)
 
         return result

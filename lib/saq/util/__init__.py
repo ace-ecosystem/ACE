@@ -228,6 +228,17 @@ def json_parse(fileobj, decoder=json.JSONDecoder(), buffersize=2048):
                 # Not enough data to decode, read more
                 break
 
+
+def fang(url):
+    """Re-fangs a url that has been de-fanged.
+    If url does not match the defang format, it returns the original string."""
+    _formats = ['hxxp', 'hXXp']
+    for item in _formats:
+        if url.startswith(item):
+            return f"http{url[4:]}"
+    return url
+
+
 #
 # How this works:
 # Let's say we're watching a file that another system is writing to. At some point it decides to roll the file over
@@ -318,4 +329,170 @@ class FileMonitorLink(object):
             return FileMonitorLink.FILE_MODIFIED
 
         return FileMonitorLink.FILE_UNMODIFIED
+
+
+class RegexObservableParser:
+    """Helper class to handle regex and observable mapping.
+
+    If capture_groups are not specified, then the parse will just do a
+    'findall'.
+
+    If capture_groups are specified, it will use the indexes to pull
+    out capture groups in the order they are in the capture_groups kwarg.
+    
+    Attributes
+    ----------
+    regex: str
+        Regular expression to be used for parsing. Take care to include
+        capture groups.
+    observable_type: str
+        Observable type from saq.constants.
+    matches: list
+        Observables gathered from parser.
+    capture_groups: list
+        Integers signifying which capture groups to extract.
+        They will be extracted in the order they are specified in this
+        attribute.
+    delimiter: str
+        Used to join the capture groups.
+        ex: delimeter of '_' might be used to join two email address
+        like 'email1@email.com_email2@email2.com'.
+    """
+    def __init__(self, regex, observable_type, capture_groups=None, delimiter='_', tags=None, directives=None):
+        self.regex = re.compile(regex)
+        self.observable_type = observable_type
+        self.matches = None
+        self.capture_groups = capture_groups
+        self.delimiter = delimiter
+        self.tags = tags or []
+        self.directives = directives or []
+    
+    def _parse(self, text):
+        """Extracts an observable(s) from the text.
+        
+        This can be overridden in a subclass if your regex logic
+        requires somthing different. For example, if you need to
+        join your capture groups through a combination of different
+        delimiters, you'll need to override this.
+        """
+        if self.capture_groups is None:
+            self.matches = self.regex.findall(text)
+            return
+
+        _matches = self.regex.search(text)
+
+        if _matches is None:
+            self.matches = []
+            return
+
+        # Create the desired string from the capture groups.
+        # Handy for conversation observables.
+        # IndexError or AttributeError handled in parent method.
+        _formatted = self.delimiter.join(
+            [_matches.group(capture_group) for capture_group in self.capture_groups]
+        )
+
+        self.matches = [_formatted]
+
+    def parse(self, text):
+        """Get a list of non-overlapping matches."""
+        try:
+            self._parse(text)
+        except (IndexError, AttributeError):
+            # IndexError -> You tried to find a capture group that
+            #     didn't exist.
+            # AttributeError -> The regex search did not return a
+            #     result (so Nonetype returned) and then you tried to
+            #     pull out a capture group from a NoneType.
+            self.matches = []
+
+
+class RegexObservableParserGroup:
+    """API for turning parsed data sources into
+        observables ready for submission.
+
+    Add RegexObservableParsers and then parse your content. This class
+        runs the content through each parser and converts the results
+        into observables.
+    """
+
+    def __init__(self, tags=None):
+        self.parsers = []
+        self._directives_map = None
+        self._tags_map = None
+        self._observable_map = None
+        self._observables = []
+        self.tags = tags or []
+
+    def add(
+        self, regex, observable_type, capture_groups=None, delimiter='_',
+        override_class=None, tags=None, directives=None,
+    ):
+        """Add a parser to the list of parsers for this group.
+            
+            You may pass in a subclass if you want to customize
+            how the regex results are handled.
+        """
+        _parser_class = override_class or RegexObservableParser
+
+        _tags = tags or self.tags # If no tags given, add group tag.
+
+        parser = _parser_class(
+            regex,
+            observable_type,
+            capture_groups=capture_groups,
+            delimiter=delimiter,
+            tags=_tags,
+            directives=directives,
+        )
+        
+        self.parsers.append(parser)
+
+    def parse_content(self, content):
+        """Iterate through parsers and extract observables from the
+            content.
+        """
+
+        self._observable_map = {_parser.observable_type: set() for _parser in self.parsers}
+        
+        self._directives_map = {} # Keeps track of observable/directives pairs
+        self._tags_map = {} # Keeps track of observable/tag pairs
+        
+        for parser in self.parsers:
+            parser.parse(content)
+            for match in parser.matches:
+
+                if parser.observable_type == F_URL:
+                    # hxxp/hXXp to http for analysis
+                    match = fang(match)
+
+                # Note we're adding to a set... so any duplicates will be
+                #    filtered out automatically.
+                self._observable_map[parser.observable_type].add(match)
+                self._directives_map[match] = parser.directives
+                self._tags_map[match] = parser.tags
+
+    @property
+    def observable_map(self):
+        if self._observable_map is not None:
+            return self._observable_map
+        raise ValueError("Must parse content before an observable map can be generated.")
+
+    @property
+    def observables(self):
+        # Return the observables ready for submission to ACE.
+        if self._observables:
+            return self._observables
+
+        for observable_type, observable_set in self._observable_map.items():
+            for observable in observable_set:
+                observable_details = {
+                    'type': observable_type,
+                    'value': observable,
+                    'tags': self._tags_map[observable],
+                    'directives': self._directives_map[observable],
+                }
+                self._observables.append(observable_details)
+
+        return self._observables
 
