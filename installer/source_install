@@ -113,15 +113,37 @@ fi
 if [ ! -e etc/saq.unittest.ini ]
 then
 	echo "generating unittest mysql account for ACE with random password"
-	tr -cd '[:alnum:]' < /dev/urandom | fold -w14 | head -n1 > .mysql.password.sed
-	# modify the configuration files to use it
-	sed -i -e 's;^;s/ACE_DB_USER_PASSWORD/;' -e 's;$;/g;' .mysql.password.sed
-	sed -f .mysql.password.sed etc/saq.unittest.example.ini > etc/saq.unittest.ini
-	sed -f .mysql.password.sed sql/create_unittest_db_user.sql > sql/create_unittest_db_user.exec.sql
-	rm .mysql.password.sed
+	ACE_DB_USER_PASSWORD=$(tr -cd '[:alnum:]' < /dev/urandom | fold -w14 | head -n1)
+    echo<<EOF>etc/saq.unittest.ini
+[database_ace]
+password = $ACE_DB_USER_PASSWORD
+
+[database_brocess]
+password = $ACE_DB_USER_PASSWORD
+
+[database_email_archive]
+password = $ACE_DB_USER_PASSWORD
+
+[database_vt_hash_cache]
+password = $ACE_DB_USER_PASSWORD
+EOF
+    echo<<EOF>sql/create_unittest_db_user.exec.sql
+DROP USER IF EXISTS 'ace-unittest-user'@'localhost';
+FLUSH PRIVILEGES;
+CREATE USER 'ace-unittest-user'@'localhost' IDENTIFIED BY '$ACE_DB_USER_PASSWORD';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`ace-unittest\`.* TO 'ace-unittest-user'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`brocess-unittest\`.* TO 'ace-unittest-user'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`email-archive-unittest\`.* TO 'ace-unittest-user'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`vt-hash-cache-unittest\`.* TO 'ace-unittest-user'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`ace-unittest-2\`.* TO 'ace-unittest-user'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`brocess-unittest-2\`.* TO 'ace-unittest-user'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`email-archive-unittest-2\`.* TO 'ace-unittest-user'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`vt-hash-cache-unittest-2\`.* TO 'ace-unittest-user'@'localhost';
+FLUSH PRIVILEGES;
+EOF
 
 	# create the mysql database user for unittesting
-	sudo mysql < sql/create_unittest_db_user.exec.sql && rm sql/create_unittest_db_user.exec.sql
+	sudo mysql < sql/create_unittest_db_user.exec.sql
 fi
 
 if grep ACE_SECRET_KEY etc/saq.ini > /dev/null 2>&1
