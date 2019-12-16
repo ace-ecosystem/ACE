@@ -113,8 +113,9 @@ fi
 if [ ! -e etc/saq.unittest.ini ]
 then
 	echo "generating unittest mysql account for ACE with random password"
+	GUI_SECRET_KEY=$(tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1)
 	ACE_DB_USER_PASSWORD=$(tr -cd '[:alnum:]' < /dev/urandom | fold -w14 | head -n1)
-    echo<<EOF>etc/saq.unittest.ini
+    cat<<EOF>etc/saq.unittest.ini
 [database_ace]
 password = $ACE_DB_USER_PASSWORD
 
@@ -126,8 +127,15 @@ password = $ACE_DB_USER_PASSWORD
 
 [database_vt_hash_cache]
 password = $ACE_DB_USER_PASSWORD
+
+[api]
+secret_key = $GUI_SECRET_KEY
+
+[gui]
+secret_key = $GUI_SECRET_KEY
+
 EOF
-    echo<<EOF>sql/create_unittest_db_user.exec.sql
+    cat<<EOF>sql/create_unittest_db_user.exec.sql
 DROP USER IF EXISTS 'ace-unittest-user'@'localhost';
 FLUSH PRIVILEGES;
 CREATE USER 'ace-unittest-user'@'localhost' IDENTIFIED BY '$ACE_DB_USER_PASSWORD';
