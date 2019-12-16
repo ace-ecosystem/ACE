@@ -228,7 +228,9 @@ class AnalysisModule(object):
             try:
                 current_mtime = os.stat(watched_file.path).st_mtime
                 if watched_file.last_mtime != current_mtime:
-                    logging.info("detected change to {}".format(watched_file.path))
+                    if watched_file.last_mtime != 0:
+                        logging.info("detected change to {}".format(watched_file.path))
+
                     watched_file.last_mtime = current_mtime
 
                     try:

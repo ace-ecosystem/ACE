@@ -3204,7 +3204,7 @@ def verify_modules(args):
         # is this module disabled globally?
         # modules that are disable globally are not used anywhere
         if not saq.CONFIG.getboolean(section, 'enabled'):
-            logging.warning("analysis module {} disabled (globally)".format(section))
+            logging.debug("analysis module {} disabled (globally)".format(section))
             continue
 
         logging.debug("verifying analysis module from {}".format(section))
