@@ -287,13 +287,6 @@ def splunk_query(search_string, *args, **kwargs):
 
 def initialize_test_environment():
     global test_dir
-    #import saq
-
-    # indicate that we are unit testing
-    # this changes the behavior of ACE in various places
-    #code = compile('saq.UNIT_TESTING = True', '<string>', 'exec')
-    #import dis; import pdb; pdb.set_trace()
-    #saq.UNIT_TESTING = True
 
     # there is no reason to run anything as root
     if os.geteuid() == 0:
@@ -312,7 +305,7 @@ def initialize_test_environment():
     import saq
     saq.initialize(saq_home=saq_home, config_paths=[], 
                    logging_config_path=os.path.join(saq_home, 'etc', 'unittest_logging.ini'), 
-                   args=None, relative_dir=None, unittest=True)
+                   args=None, relative_dir=None)
 
     if saq.CONFIG['global']['instance_type'] not in [ 'PRODUCTION', 'QA', 'DEV' ]:
         sys.stderr.write('\n\n *** CRITICAL ERROR *** \n\ninvalid instance_type setting in configuration\n')

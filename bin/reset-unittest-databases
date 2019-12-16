@@ -7,7 +7,7 @@ then
 fi
 
 # reset or create the unittest database
-for db in ace brocess email-archive hal9000 vt-hash-cache
+for db in ace brocess email-archive vt-hash-cache
 do
 	echo "resetting db $db-unittest"
 	mysqladmin $defaults_file drop -f $db-unittest > /dev/null 2>&1
@@ -20,7 +20,7 @@ do
 done
 
 # reset or create the unittest database
-for db in ace brocess email-archive hal9000 vt-hash-cache
+for db in ace brocess email-archive vt-hash-cache
 do
 	echo "resetting db $db-unittest-2"
 	mysqladmin $defaults_file drop -f $db-unittest-2 > /dev/null 2>&1
