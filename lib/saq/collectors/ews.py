@@ -135,7 +135,11 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         root = path_parts.pop(0)
 
         _account = kwargs.get('account_object') or account
-        target_folder = getattr(_account, root)
+
+        try:
+            target_folder = getattr(_account, root)
+        except AttributeError:
+            target_folder = _account.public_folders_root
         #print(target_folder.tree())
 
         for path_part in path_parts:
