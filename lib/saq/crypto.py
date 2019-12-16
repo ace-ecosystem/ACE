@@ -14,28 +14,21 @@ import Crypto.Random
 
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
+from Crypto.Protocol.KDF import PBKDF2
 
 import saq
 from saq.service import ACEService
+from saq.util import create_directory
 
 CHUNK_SIZE = 64 * 1024
 
-def _get_validation_hash_path():
-    """Returns the full path to the file containing the encryption password validation hash."""
-    return os.path.join(saq.SAQ_HOME, 'etc', 'validation_hash')
+class PasswordNotSetError(Exception):
+    """Thrown when an attempt is made to load the encryption key but it has not been set."""
+    pass
 
-def _get_validation_hash():
-    """Returns the validation hash of the encryption password, or None if it has not been set."""
-    try:
-        with open(_get_validation_hash_path(), 'r') as fp:
-            return fp.read().strip().lower()
-    except Exception as e:
-        logging.warning("unable to load encryption password validation hash: {}".format(e))
-        return None
-
-def is_set():
-    """Returns True if the encryption password has been set, False otherwise."""
-    return _get_validation_hash() is not None
+class InvalidPasswordError(Exception):
+    """Thrown when an invalid password is provided."""
+    pass
 
 def read_ecs():
     """Reads the encryption password from the encryption cache service. Returns None if the service is unavailable."""
@@ -53,60 +46,96 @@ def read_ecs():
         except:
             pass
 
-def _compute_validation_hash(password):
-    assert isinstance(password, str)
+def get_encryption_store_path():
+    """Returns the path to the directory that contains the encryption keys and meta data."""
+    return os.path.join(saq.DATA_DIR, saq.CONFIG['encryption']['encryption_store_path'])
 
-    from Crypto.Hash import SHA256
-    h = SHA256.new()
-    h.update(password.encode())
-    initial_digest = h.digest()
-
-    h = SHA256.new()
-    h.update(initial_digest)
-    return h.hexdigest().lower()
-
-def test_encryption_password(password):
-    """Tests the given password against what is saved in the global section of the config file as the encryption password.
-       Returns True if the password is correct, False if it is incorrect or if the password is not set."""
-    assert isinstance(password, str)
-
-    validation_hash = _get_validation_hash()
-    if validation_hash is None:
-        return False
-    
-    from Crypto.Hash import SHA256
-    h = SHA256.new()
-    h.update(password.encode())
-    initial_digest = h.digest() # this would be the AES key
-
-    h = SHA256.new()
-    h.update(initial_digest)
-    if h.hexdigest().lower() != validation_hash:
+def encryption_key_set():
+    """Returns True if the encryption key has been set, False otherwise."""
+    if not os.path.isdir(get_encryption_store_path()):
         return False
 
-    return True
+    return os.path.exists(os.path.join(get_encryption_store_path(), 'key')) \
+           and os.path.exists(os.path.join(get_encryption_store_path(), 'salt')) \
+           and os.path.exists(os.path.join(get_encryption_store_path(), 'verification')) \
+           and os.path.exists(os.path.join(get_encryption_store_path(), 'iterations'))
 
-def set_encryption_password(password):
-    """Sets the encryption password for the system by saving the validation hash."""
-    assert isinstance(password, str)
+def get_decryption_key(password):
+    """Returns the 32 byte key used to decrypt the encryption key.
+       Raises InvalidPasswordError if the password is incorrect.
+       Raises PasswordNotSetError if the password has not been set."""
 
-    try:
-        with open(_get_validation_hash_path(), 'w') as fp:
-            fp.write(_compute_validation_hash(password))
-        logging.info("updated validation hash")
-    except Exception as e:
-        logging.warning("unable to save encryption password validation hash: {}".format(e))
+    if not encryption_key_set():
+        raise PasswordNotSetError()
 
-    # TODO if the password changed then we need to go through and reset all the encrypted configuration values
+    # the salt and iterations used are stored when we set the password
+    with open(os.path.join(get_encryption_store_path(), 'salt'), 'rb') as fp:
+        salt = fp.read()
+
+    with open(os.path.join(get_encryption_store_path(), 'iterations'), 'r') as fp:
+        iterations = int(fp.read())
+
+    with open(os.path.join(get_encryption_store_path(), 'verification'), 'rb') as fp:
+        target_verification = fp.read()
+
+    result = PBKDF2(password, salt, 64, iterations)
+    if target_verification != result[32:]:
+        raise InvalidPasswordError()
+
+    return result[:32]
 
 def get_aes_key(password):
-    """Returns the binary key to be used to actually encrypt and decrypt."""
-    assert isinstance(password, str)
+    """Returns the 32 byte system encryption key."""
+    decryption_key = get_decryption_key(password)
+    with open(os.path.join(get_encryption_store_path(), 'key'), 'rb') as fp:
+        encrypted_key = fp.read()
 
-    from Crypto.Hash import SHA256
-    h = SHA256.new()
-    h.update(password.encode())
-    return h.digest()
+    return decrypt_chunk(encrypted_key, decryption_key)
+
+def set_encryption_password(password, old_password=None, key=None):
+    """Sets the encryption password for the system. If a password has already been set, then
+       old_password can be provided to change the password. Otherwise, the old password is
+       over-written by the new password.
+       If the key parameter is None then the PRIMARY AES KEY is random. Otherwise, the given key is used.
+       The default of a random key is fine."""
+    assert isinstance(password, str)
+    assert old_password is None or isinstance(old_password, str)
+    assert key is None or (isinstance(key, bytes) and len(key) == 32)
+
+    # has the encryption password been set yet?
+    if encryption_key_set():
+        # did we provide a password for it?
+        if old_password is not None:
+            # get the existing encryption password
+            saq.ENCRYPTION_PASSWORD = get_aes_key(old_password)
+    else:
+        # otherwise we just make a new one
+        if key is None:
+            saq.ENCRYPTION_PASSWORD = Crypto.Random.OSRNG.posix.new().read(32)
+        else:
+            saq.ENCRYPTION_PASSWORD = key
+
+    # now we compute the key to use to encrypt the encryption key using the user-supplied password
+    salt = Crypto.Random.OSRNG.posix.new().read(saq.CONFIG['encryption'].getint('salt_size', fallback=32))
+    iterations =  saq.CONFIG['encryption'].getint('iterations', fallback=8192)
+    result = PBKDF2(password, salt, 64, iterations)
+    user_encryption_key = result[:32] # the first 32 bytes is the user encryption key
+    verification_key = result[32:] # and the second 32 bytes is used for password verification
+
+    create_directory(get_encryption_store_path())
+
+    with open(os.path.join(get_encryption_store_path(), 'verification'), 'wb') as fp:
+        fp.write(verification_key)
+
+    encrypted_encryption_key = encrypt_chunk(saq.ENCRYPTION_PASSWORD, password=user_encryption_key)
+    with open(os.path.join(get_encryption_store_path(), 'key'), 'wb') as fp:
+        fp.write(encrypted_encryption_key)
+
+    with open(os.path.join(get_encryption_store_path(), 'salt'), 'wb') as fp:
+        fp.write(salt)
+
+    with open(os.path.join(get_encryption_store_path(), 'iterations'), 'w') as fp:
+        fp.write(str(iterations))
 
 # https://eli.thegreenplace.net/2010/06/25/aes-encryption-of-files-in-python-with-pycrypto
 def encrypt(source_path, target_path, password=None):
