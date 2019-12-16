@@ -92,12 +92,15 @@ def get_aes_key(password):
 
     return decrypt_chunk(encrypted_key, decryption_key)
 
-def set_encryption_password(password, old_password=None):
+def set_encryption_password(password, old_password=None, key=None):
     """Sets the encryption password for the system. If a password has already been set, then
        old_password can be provided to change the password. Otherwise, the old password is
-       over-written by the new password."""
+       over-written by the new password.
+       If the key parameter is None then the PRIMARY AES KEY is random. Otherwise, the given key is used.
+       The default of a random key is fine."""
     assert isinstance(password, str)
     assert old_password is None or isinstance(old_password, str)
+    assert key is None or (isinstance(key, bytes) and len(key) == 32)
 
     # has the encryption password been set yet?
     if encryption_key_set():
@@ -107,7 +110,10 @@ def set_encryption_password(password, old_password=None):
             saq.ENCRYPTION_PASSWORD = get_aes_key(old_password)
     else:
         # otherwise we just make a new one
-        saq.ENCRYPTION_PASSWORD = Crypto.Random.OSRNG.posix.new().read(32)
+        if key is None:
+            saq.ENCRYPTION_PASSWORD = Crypto.Random.OSRNG.posix.new().read(32)
+        else:
+            saq.ENCRYPTION_PASSWORD = key
 
     # now we compute the key to use to encrypt the encryption key using the user-supplied password
     salt = Crypto.Random.OSRNG.posix.new().read(saq.CONFIG['encryption'].getint('salt_size', fallback=32))
