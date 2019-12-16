@@ -108,7 +108,8 @@ def set_encryption_password(password, old_password=None, key=None):
         if old_password is not None:
             # get the existing encryption password
             saq.ENCRYPTION_PASSWORD = get_aes_key(old_password)
-    else:
+
+    if saq.ENCRYPTION_PASSWORD is None:
         # otherwise we just make a new one
         if key is None:
             saq.ENCRYPTION_PASSWORD = Crypto.Random.OSRNG.posix.new().read(32)

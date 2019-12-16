@@ -41,3 +41,8 @@ password.
 3) ACE decrypts the PRIMARY AES KEY and makes it available globally as
 
 saq.ENCRYPTION_PASSWORD
+
+NOTES
+=====
+You can set the PRIMARY AES KEY to the sha256 hash of a password by using the
+-k option of the ace set-encryption-password command.

@@ -3251,6 +3251,12 @@ verify_modules_parsers.set_defaults(func=verify_modules)
 #
 
 def set_encryption_password(args):
+    from saq.service import get_service_status, SERVICE_STATUS_RUNNING
+    if saq.service.get_service_status('ecs') == SERVICE_STATUS_RUNNING:
+        print("ERROR: the ecs service is currently running")
+        print("stop that service before you change the password")
+        sys.exit(1)
+
     from saq.crypto import set_encryption_password, get_aes_key, InvalidPasswordError, encryption_key_set
     while True:
         current_password = None
@@ -3264,8 +3270,8 @@ def set_encryption_password(args):
                 print("but then you won't be able to access anything you've already encrypted")
                 continue
             
-        password = getpass.getpass("Enter the decryption password:")
-        password_2 = getpass.getpass("Re-enter the decryption password for verification:")
+        password = getpass.getpass("enter the new encryption password:")
+        password_2 = getpass.getpass("enter the new encryption password again for verification:")
 
         if password != password_2:
             logging.error("passwords do not match")
@@ -3276,8 +3282,8 @@ def set_encryption_password(args):
     key = None
     if args.key:
         while True:
-            key = getpass.getpass("Enter the primary encryption key password:")
-            key_2 = getpass.getpass("Re-enter the primary encryption key password for verification:")
+            key = getpass.getpass("enter the primary encryption key password:")
+            key_2 = getpass.getpass("enter the primary encryption key password again for verification:")
 
             if key != key_2:
                 logging.error("passwords do not match")
