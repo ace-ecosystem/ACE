@@ -228,6 +228,17 @@ def json_parse(fileobj, decoder=json.JSONDecoder(), buffersize=2048):
                 # Not enough data to decode, read more
                 break
 
+
+def fang(url):
+    """Re-fangs a url that has been de-fanged.
+    If url does not match the defang format, it returns the original string."""
+    _formats = ['hxxp', 'hXXp']
+    for item in _formats:
+        if url.startswith(item):
+            return f"http{url[4:]}"
+    return url
+
+
 #
 # How this works:
 # Let's say we're watching a file that another system is writing to. At some point it decides to roll the file over
@@ -450,6 +461,11 @@ class RegexObservableParserGroup:
         for parser in self.parsers:
             parser.parse(content)
             for match in parser.matches:
+
+                if parser.observable_type == F_URL:
+                    # hxxp/hXXp to http for analysis
+                    match = fang(match)
+
                 # Note we're adding to a set... so any duplicates will be
                 #    filtered out automatically.
                 self._observable_map[parser.observable_type].add(match)
