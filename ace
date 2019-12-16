@@ -3327,6 +3327,8 @@ def store_config_password(args):
     # make sure the given configuration setting exists
     section, key = args.config_setting.split('.', 1)
     if section not in saq.CONFIG:
+        for key in saq.CONFIG.keys():
+            logging.error(f"{key}")
         logging.error(f"unknown config section {section}")
         sys.exit(1)
 
