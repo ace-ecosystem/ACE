@@ -3273,13 +3273,32 @@ def set_encryption_password(args):
 
         break
 
-    set_encryption_password(password, old_password=current_password)
+    key = None
+    if args.key:
+        while True:
+            key = getpass.getpass("Enter the primary encryption key password:")
+            key_2 = getpass.getpass("Re-enter the primary encryption key password for verification:")
+
+            if key != key_2:
+                logging.error("passwords do not match")
+                continue
+
+            break
+
+        from Crypto.Hash import SHA256
+        h = SHA256.new()
+        h.update(key.encode())
+        key = h.digest()
+
+    set_encryption_password(password, old_password=current_password, key=key)
     sys.exit(0)
 
 set_encryption_password_parser = subparsers.add_parser('set-encryption-password',
     help="Sets the password used to encrypt and decrypt archived emails.")
 set_encryption_password_parser.add_argument('-o', '--overwrite', default=False, action='store_true',
     help="Overwrites an existing password without prompting.")
+set_encryption_password_parser.add_argument('-k', '--key', default=False, action='store_true',
+    help="Use the sha256 hash of a string as the primary encryption key. The input is prompted for.")
 set_encryption_password_parser.set_defaults(func=set_encryption_password)
 
 def test_encryption_password(args):
