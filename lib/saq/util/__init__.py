@@ -461,16 +461,17 @@ class RegexObservableParserGroup:
         for parser in self.parsers:
             parser.parse(content)
             for match in parser.matches:
+                _match = match.strip()
 
                 if parser.observable_type == F_URL:
                     # hxxp/hXXp to http for analysis
-                    match = fang(match)
+                    _match = fang(_match)
 
                 # Note we're adding to a set... so any duplicates will be
                 #    filtered out automatically.
-                self._observable_map[parser.observable_type].add(match)
-                self._directives_map[match] = parser.directives
-                self._tags_map[match] = parser.tags
+                self._observable_map[parser.observable_type].add(_match)
+                self._directives_map[_match] = parser.directives
+                self._tags_map[_match] = parser.tags
 
     @property
     def observable_map(self):
