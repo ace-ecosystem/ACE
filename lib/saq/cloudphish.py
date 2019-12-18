@@ -250,7 +250,7 @@ def _get_cached_analysis(url, db, c):
             file_name = file_name.decode('unicode_internal')
 
         storage_dir = storage_dir_from_uuid(uuid)
-        if saq.CONFIG['engine']['work_dir'] and not os.path.isdir(storage_dir):
+        if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
             storage_dir = workload_storage_dir(uuid)
 
         root_details = None

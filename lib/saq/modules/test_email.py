@@ -15,7 +15,7 @@ import pytz
 
 import saq, saq.test
 from saq.analysis import RootAnalysis
-from saq.crypto import decrypt
+from saq.crypto import *
 from saq.constants import *
 from saq.database import get_db_connection
 from saq.test import *
@@ -498,6 +498,8 @@ class TestCase(ACEModuleTestCase):
 
     def test_archive_1(self):
 
+        set_encryption_password('test')
+
         self.reset_email_archive()
 
         root = create_root_analysis(alert_type='mailbox')
@@ -573,6 +575,8 @@ class TestCase(ACEModuleTestCase):
                     self.assertEquals(value, field_value)
 
     def test_archive_2(self):
+
+        set_encryption_password('test')
 
         self.reset_email_archive()
 

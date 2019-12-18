@@ -680,6 +680,10 @@ class ProcessGUIDObservable(Observable):
     def __init__(self, *args, **kwargs): 
         super().__init__(F_PROCESS_GUID, *args, **kwargs)
 
+class FireEyeUUIDObservable(Observable): 
+    def __init__(self, *args, **kwargs): 
+        super().__init__(F_FIREEYE_UUID, *args, **kwargs)
+
 class TestObservable(Observable):
     def __init__(self, *args, **kwargs): 
         super().__init__(F_TEST, *args, **kwargs)
@@ -728,6 +732,7 @@ _OBSERVABLE_TYPE_MAPPING = {
     F_MESSAGE_ID: MessageIDObservable,
     F_PROCESS_GUID: ProcessGUIDObservable,
     F_TEST: TestObservable,
+    F_FIREEYE_UUID: FireEyeUUIDObservable,
 }
 
 def create_observable(o_type, o_value, o_time=None):

@@ -37,7 +37,7 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.modules import AnalysisModule
 from saq.process_server import Popen, PIPE, DEVNULL, TimeoutExpired
-from saq.util import is_url, URL_REGEX_B, URL_REGEX_STR, is_subdomain
+from saq.util import is_url, URL_REGEX_B, URL_REGEX_STR, is_subdomain, abs_path
 
 from bs4 import BeautifulSoup
 from iptools import IpRangeList
@@ -313,9 +313,17 @@ class FileHashAnalyzer(AnalysisModule):
         result.sha1 = _file.sha1_hash
         result.sha256 = _file.sha256_hash
 
-        if o_md5: o_md5.add_link(_file)
-        if o_sha1: o_sha1.add_link(_file)
-        if o_sha256: o_sha256.add_link(_file)
+        if o_md5: 
+            o_md5.add_link(_file)
+            o_md5.add_relationship(R_IS_HASH_OF, _file)
+
+        if o_sha1: 
+            o_sha1.add_link(_file)
+            o_sha1.add_relationship(R_IS_HASH_OF, _file)
+        
+        if o_sha256: 
+            o_sha256.add_link(_file)
+            o_sha256.add_relationship(R_IS_HASH_OF, _file)
 
         return True
 
@@ -2256,12 +2264,17 @@ class YaraScanner_v3_4(AnalysisModule):
     @property
     def base_dir(self):
         """Base directory of the yara_scanner server."""
-        return saq.YSS_BASE_DIR
+        return saq.SAQ_HOME
 
     @property
     def socket_dir(self):
         """Relative directory of the socket directory of the yara scanner server."""
-        return saq.YSS_SOCKET_DIR
+        return os.path.join(saq.DATA_DIR, saq.CONFIG['service_yara']['socket_dir'])
+
+    @property
+    def signature_dir(self):
+        """Relative or absolute path to directory containing sub directories of yara rules."""
+        return abs_path(saq.CONFIG['service_yara']['signature_dir'])
 
     @property
     def generated_analysis_type(self):
@@ -2274,11 +2287,11 @@ class YaraScanner_v3_4(AnalysisModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        #self.blacklist_path = os.path.join(saq.SAQ_HOME, saq.CONFIG['yara']['blacklist_path'])
+        #self.blacklist_path = os.path.join(saq.SAQ_HOME, saq.CONFIG['service_yara']['blacklist_path'])
         #self.blacklisted_rules = []
 
         # this is where we place files that fail scanning
-        self.scan_failure_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['yara']['scan_failure_dir'])
+        self.scan_failure_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['service_yara']['scan_failure_dir'])
         if not os.path.exists(self.scan_failure_dir):
             try:
                 os.makedirs(self.scan_failure_dir)
@@ -2296,17 +2309,7 @@ class YaraScanner_v3_4(AnalysisModule):
     def initialize_local_scanner(self):
         logging.info("initializing local yara scanner")
         # initialize the scanner and compile the rules
-        self.scanner = yara_scanner.YaraScanner()
-
-        # load yara dirs and repos
-        for option in saq.CONFIG['yara'].keys():
-            if option.startswith('signature_dir'):
-                self.scanner.track_yara_dir(os.path.join(saq.SAQ_HOME, saq.CONFIG['yara'][option]))
-            elif option.startswith('signature_repo'):
-                self.scanner.track_yara_repository(os.path.join(saq.SAQ_HOME, saq.CONFIG['yara'][option]))
-            elif option.startswith('signature_file'):
-                self.scanner.track_yara_file(os.path.join(saq.SAQ_HOME, saq.CONFIG['yara'][option]))
-
+        self.scanner = yara_scanner.YaraScanner(signature_dir=self.signature_dir)
         self.scanner.load_rules()
         self.scanner_start_time = datetime.datetime.now()
         #self.load_blacklist()

@@ -39,6 +39,7 @@ from saq.database import Alert, use_db, release_cached_db_connection, enable_cac
 from saq.error import report_exception
 from saq.modules import AnalysisModule
 from saq.performance import record_metric
+from saq.service import ACEService
 from saq.util import *
 
 import iptools
@@ -65,10 +66,14 @@ class WaitForAnalysisException(Exception):
        An AnalysisModule can call self.wait_for_analysis(observable, analysis) if it needs analysis performed by a 
        given module on a given observable. That function will throw this exception if analysis has not 
        occured yet, then the Engine will catch that and reorder things to perform that analysis next."""
-    def __init__(self, observable, analysis, *args, **kwargs):
+    def __init__(self, observable, analysis, instance=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        assert isinstance(observable, Observable)
+        assert inspect.isclass(analysis) and issubclass(analysis, Analysis)
+        assert instance is None or isinstance(instance, str)
         self.observable = observable
         self.analysis = analysis
+        self.instance = instance
 
 class Worker(object):
     def __init__(self, mode=None):
@@ -83,7 +88,7 @@ class Worker(object):
 
         # how long do we execute before we die
         # a value of 0 indicates we never die on our own
-        self.auto_refresh_frequency = saq.CONFIG['engine'].getint('auto_refresh_frequency', 0)
+        self.auto_refresh_frequency = saq.CONFIG['service_engine'].getint('auto_refresh_frequency', 0)
         self.next_auto_refresh_time = None # datetime.datetime
 
     def start(self):
@@ -204,9 +209,10 @@ class Worker(object):
                         logging.debug("both queues are empty - broke out of engine loop")
                         break # break out of the main loop
 
-                    logging.debug("queue sizes workload {} delayed {}".format(
-                                   CURRENT_ENGINE.workload_queue_size,
-                                   CURRENT_ENGINE.delayed_analysis_queue_size))
+                    if saq.UNIT_TESTING:
+                        logging.debug("queue sizes workload {} delayed {}".format(
+                                       CURRENT_ENGINE.workload_queue_size,
+                                       CURRENT_ENGINE.delayed_analysis_queue_size))
 
                 # if execute returns True it means it discovered and processed a work_item
                 # in that case we assume there is more work to do and we check again immediately
@@ -362,6 +368,7 @@ def exclude_if_local(target_function):
 
     return _wrapper
 
+# XXX feel like this should be in lib/saq/modules/__init__.py
 def load_module(section):
     """Loads an AnalysisModule by config section name."""
     if section not in saq.CONFIG:
@@ -371,7 +378,7 @@ def load_module(section):
     try:
         _module = importlib.import_module(module_name)
     except Exception as e:
-        logging.error("unable to import module {}".format(module_name, e))
+        logging.error("unable to import module {}: {}".format(module_name, e))
         report_exception()
         return None
 
@@ -384,28 +391,34 @@ def load_module(section):
         report_exception()
         return None
 
+    instance = saq.CONFIG[section].get('instance', None)
+
     try:
-        logging.debug("loading module {}".format(section))
+        logging.debug("loading module {} instance {}".format(section, instance))
         return module_class(section)
     except Exception as e:
-        logging.error("unable to load analysis module {}: {}".format(section, e))
+        logging.error("unable to load analysis module {} instance {}".format(section, instance))
         report_exception()
         return None
 
     return analysis_module
 
-class Engine(object):
+class Engine(ACEService):
     """Analysis Correlation Engine"""
 
     # 
     # INITIALIZATION
     # ------------------------------------------------------------------------
 
-    def __init__(self, name='ace', local_analysis_modes=None, 
-                                   analysis_pools=None, 
-                                   pool_size_limit=None, 
-                                   copy_analysis_on_error=None,
-                                   single_threaded_mode=False):
+    def __init__(self, name='ace', 
+                       local_analysis_modes=None, 
+                       analysis_pools=None, 
+                       pool_size_limit=None, 
+                       copy_analysis_on_error=None,
+                       single_threaded_mode=False, 
+                       *args, **kwargs):
+
+        super().__init__(service_config=saq.CONFIG['service_engine'], *args, **kwargs)
 
         assert local_analysis_modes is None or isinstance(local_analysis_modes, list)
         assert analysis_pools is None or isinstance(analysis_pools, dict)
@@ -417,9 +430,6 @@ class Engine(object):
         # the name of the engine, usually you want the default unless you're doing something different
         # like unit testing
         self.name = name
-
-        # the engine configuration
-        self.config = saq.CONFIG['engine']
 
         # we just cache the current hostname of this engine here
         self.hostname = socket.gethostname()
@@ -476,7 +486,7 @@ class Engine(object):
         if local_analysis_modes is not None:
             self.local_analysis_modes = local_analysis_modes
         else:
-            self.local_analysis_modes = [_.strip() for _ in self.config['local_analysis_modes'].split(',') if _]
+            self.local_analysis_modes = [_.strip() for _ in self.service_config['local_analysis_modes'].split(',') if _]
 
         # load the analysis pool settings
         # if we specified analysis_pools on the constructor then we use that instead
@@ -486,19 +496,19 @@ class Engine(object):
                 self.add_analysis_pool(analysis_mode, analysis_pools[analysis_mode])
         else:
             self.analysis_pools = {}
-            for key in self.config.keys():
+            for key in self.service_config.keys():
                 if not key.startswith('analysis_pool_size_'):
                     continue
 
                 analysis_mode = key[len('analysis_pool_size_'):]
-                self.add_analysis_pool(analysis_mode, self.config.getint(key))
+                self.add_analysis_pool(analysis_mode, self.service_config.getint(key))
 
         # the maximum size of the analysis pool if no analysis pools are defined
         # default is None which means to use the cpu_count 
         self.pool_size_limit = pool_size_limit
 
         # the default analysis mode for RootAnalysis objects assigned to invalid (unknown) analysis modes
-        self.default_analysis_mode = self.config['default_analysis_mode']
+        self.default_analysis_mode = self.service_config['default_analysis_mode']
 
         # make sure this analysis mode is valid
         if 'analysis_mode_{}'.format(self.default_analysis_mode) not in saq.CONFIG:
@@ -565,7 +575,7 @@ class Engine(object):
         self.maintenance_control = None # threading.Event()
 
         # how often do we update the nodes database table for this engine (in seconds)
-        self.node_status_update_frequency = self.config.getint('node_status_update_frequency')
+        self.node_status_update_frequency = self.service_config.getint('node_status_update_frequency')
         # and then when will be the next time we make this update?
         self.next_status_update_time = None
 
@@ -582,22 +592,22 @@ class Engine(object):
         if copy_analysis_on_error is not None:
             self.copy_analysis_on_error = copy_analysis_on_error
         else:
-            self.copy_analysis_on_error = self.config.getboolean('copy_analysis_on_error')
+            self.copy_analysis_on_error = self.service_config.getboolean('copy_analysis_on_error')
 
         # in single threaded mode we don't start any extra processes or threads
         # this is useful for debugging
         self.single_threaded_mode = single_threaded_mode
 
         # are we using a different directory for the workload?
-        self.work_dir = self.config['work_dir']
+        self.work_dir = self.service_config['work_dir']
 
         # how often do we check to see if an analyst dispositioned the alert we're currently analyzing
         # (in the case where we are analyzing an alert)
         # in seconds
-        self.alert_disposition_check_frequency = self.config.getint('alert_disposition_check_frequency')
+        self.alert_disposition_check_frequency = self.service_config.getint('alert_disposition_check_frequency')
 
         # list of analysis modes we do NOT consider for alert status when we find a detection
-        self.non_detectable_modes = [_.strip() for _ in self.config['non_detectable_modes'].split(',')]
+        self.non_detectable_modes = [_.strip() for _ in self.service_config['non_detectable_modes'].split(',')]
 
         # by default alerting is turned on
         self.alerting_enabled = True
@@ -722,17 +732,23 @@ class Engine(object):
         """Returns True if the work queue is empty, False otherwise."""
         return self.workload_queue_size == 0
 
-    def _get_analysis_module_by_generated_analysis(self, analysis):
+    def _get_analysis_module_by_generated_analysis(self, spec, instance=None):
         """Internal function to return the loaded AnalysisModule by type or string of generated Analysis."""
+        assert isinstance(spec, str) or (inspect.isclass(spec) and issubclass(spec, Analysis))
+        assert instance is None or isinstance(instance, str)
+        from saq.analysis import MODULE_PATH
+
         for m in self.analysis_modules:
-            if isinstance(analysis, str):
-                if str(m.generated_analysis_type) == analysis:
+            if not m.generated_analysis_type:
+                continue
+            elif isinstance(spec, str):
+                if MODULE_PATH(m.generated_analysis_type, instance=m.instance) == spec:
                     return m
-            elif isinstance(analysis, type):
-                if m.generated_analysis_type == analysis:
+            else:
+                if MODULE_PATH(m.generated_analysis_type, instance=m.instance) == MODULE_PATH(spec, instance=instance):
                     return m
 
-        logging.error("request for analysis module that generates {} failed".format(analysis))
+        logging.error("request for analysis module that generates {} failed".format(spec))
         return None
 
     @use_db
@@ -1041,12 +1057,30 @@ class Engine(object):
         return self.immediate_event.is_set()
 
     #
+    # SERVICE FUNCTIONS
+    # ------------------------------------------------------------------------
+
+    def execute_service(self):
+        self.single_threaded_mode = self.service_is_debug
+        self.start()
+
+        # in threaded or deamon mode, we want to wait for the engine to stop
+        if self.service_is_threaded or self.service_is_daemon:
+            self.engine_process.join()
+
+    def stop_service(self, *args, **kwargs):
+        super().stop_service(*args, **kwargs)
+        self.stop()
+
+    #
     # CONTROL FUNCTIONS
     # ------------------------------------------------------------------------
+
 
     def start(self, mode=None):
         """Starts the engine."""
 
+        # if we're in debug mode then we only want to run everything on a single thread
         if self.single_threaded_mode:
             return self.single_threaded_start(mode=mode)
 
@@ -1213,6 +1247,7 @@ class Engine(object):
                                                           minutes=0 if timeout_minutes is None else timeout_minutes,
                                                           seconds=0 if timeout_seconds is None else timeout_seconds)
                 if datetime.datetime.now() > timeout:
+                    # TODO this should raise an exception
                     logging.warning("delayed analysis for {} in {} has timed out".format(observable, analysis_module))
                     return False
 
@@ -1555,7 +1590,8 @@ ORDER BY
 
         where_clause = ' AND '.join(['({})'.format(clause) for clause in where_clause])
 
-        logging.debug("looking for work with {} ({})".format(where_clause, ','.join([str(_) for _ in params])))
+        if saq.UNIT_TESTING:
+            logging.debug("looking for work with {} ({})".format(where_clause, ','.join([str(_) for _ in params])))
 
         c.execute("""
 SELECT
@@ -2318,6 +2354,8 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                             logging.debug("already analyzed obs {} target {}".format(dep.target_observable, dep.target_analysis_type))
                             dep.increment_status()
                         else:
+                            # NOTE: dep.target_analysis_type is a MODULE_PATH (so if there is an instance it's already
+                            # NOTE: in the string)
                             target_analysis_module = self._get_analysis_module_by_generated_analysis(dep.target_analysis_type)
                             if target_analysis_module is None:
                                 raise RuntimeError("cannot find target analysis for {}".format(dep))
@@ -2429,6 +2467,8 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
 
             # analyze this thing with the analysis modules we've selected sorted by priority
             for analysis_module in sorted(analysis_modules, key=attrgetter('priority')):
+
+                # has an analyst dispositioned this alert while we've been looking at it?
                 if (datetime.datetime.now() - last_disposition_check).total_seconds() > self.alert_disposition_check_frequency:
                     if self.root.analysis_mode == ANALYSIS_MODE_CORRELATION:
                         saq.db.close()
@@ -2494,7 +2534,8 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                     # are we NOT working on a delayed analysis request?
                     # have we delayed analysis here?
                     if analysis_module.generated_analysis_type is not None:
-                        target_analysis = work_item.observable.get_analysis(analysis_module.generated_analysis_type)
+                        target_analysis = work_item.observable.get_analysis(analysis_module.generated_analysis_type, 
+                                                                            instance=analysis_module.instance)
                         if target_analysis and target_analysis.delayed:
                             logging.debug("analysis for {} by {} has been delayed".format(work_item, analysis_module))
                             continue
@@ -2550,10 +2591,13 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
 
                         # did we not generate analysis?
                         if isinstance(analysis_result, bool) and not analysis_result:
-                            work_item.observable.add_no_analysis(analysis_module.generated_analysis_type())
+                            work_item.observable.add_no_analysis(analysis_module.generated_analysis_type,
+                                                                 instance=analysis_module.instance)
 
                         # analysis that was added (if it was) to the observable is considered complete
-                        output_analysis = work_item.observable.get_analysis(analysis_module.generated_analysis_type)
+                        output_analysis = work_item.observable.get_analysis(analysis_module.generated_analysis_type,
+                                                                            instance=analysis_module.instance)
+
                         if output_analysis:
                             # if it hasn't been delayed
                             if not output_analysis.delayed:
@@ -2572,20 +2616,25 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
 
                                     work_item.dependency.set_status_failed('analysis not generated')
                                     work_item.dependency.increment_status()
-                                    work_stack.appendleft(WorkTarget(observable=self.root.get_observable(work_item.dependency.source_observable_id),
-                                                                     analysis_module=self._get_analysis_module_by_generated_analysis(work_item.dependency.source_analysis_type)))
+                                    work_stack.appendleft(WorkTarget(
+                                        observable=self.root.get_observable(work_item.dependency.source_observable_id),
+                                        analysis_module=self._get_analysis_module_by_generated_analysis(
+                                            work_item.dependency.source_analysis_type)))
 
                                 # if we do have output analysis and it's not delayed then we move on to analyze
                                 # the source target again
                                 elif not output_analysis.delayed:
                                     work_item.dependency.increment_status()
                                     logging.debug("dependency status updated {}".format(work_item.dependency))
-                                    work_stack.appendleft(WorkTarget(observable=self.root.get_observable(work_item.dependency.source_observable_id),
-                                                                     analysis_module=self._get_analysis_module_by_generated_analysis(work_item.dependency.source_analysis_type)))
+                                    work_stack.appendleft(WorkTarget(
+                                        observable=self.root.get_observable(work_item.dependency.source_observable_id),
+                                        analysis_module=self._get_analysis_module_by_generated_analysis(
+                                            work_item.dependency.source_analysis_type)))
 
                                 # otherwise (if it's delayed) then we need to wait
                                 else:
-                                    logging.debug("{} {} waiting on delayed analysis".format(analysis_module, work_item.observable))
+                                    logging.debug("{} {} waiting on delayed analysis".format(
+                                                  analysis_module, work_item.observable))
 
                             # if we completed the source analysis of a dependency then we are done
                             elif work_item.dependency.completed:
@@ -2603,13 +2652,17 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                                    work_item, analysis_module, wait_exception.observable, wait_exception.analysis))
 
                     # make sure the requested analysis module is available
-                    if not self._get_analysis_module_by_generated_analysis(wait_exception.analysis):
+                    if not self._get_analysis_module_by_generated_analysis(wait_exception.analysis, 
+                                                                           instance=wait_exception.instance):
                         raise RuntimeError("{} requested to wait for disabled (or missing) module {}".format(
                                       analysis_module, wait_exception.analysis))
 
                     # create the dependency between the two analysis modules
                     work_item.observable.add_dependency(analysis_module.generated_analysis_type,
-                                                        wait_exception.observable, wait_exception.analysis)
+                                                        analysis_module.instance,
+                                                        wait_exception.observable, 
+                                                        wait_exception.analysis,
+                                                        wait_exception.instance)
                     
                 except Exception as e:
                     logging.error("analysis module {} failed on {} for {} reason {}".format(
@@ -2669,20 +2722,31 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
            or the section name of the module in the configuration file.
            The class to query can be either the analysis module itself or the generated analysis.
            Note that this also returns False if you typo the name."""
+
+        from saq.analysis import MODULE_PATH
         
         for module in self.analysis_modules:
-            if isinstance(_type_or_string, type):
-                if isinstance(module, _type_or_string):
-                    return True
-                if module.generated_analysis_type == _type_or_string:
-                    return True
+            # did we pass a class type?
+            if inspect.isclass(_type_or_string):
+                # did we pass an Analysis type?
+                if issubclass(_type_or_string, Analysis):
+                    if module.generated_analysis_type is _type_or_string:
+                        return True
+                # did we pass an AnalysisModule type?
+                elif issubclass(_type_or_string, AnalysisModule):
+                    if type(module) is _type_or_string:
+                        return True
             elif isinstance(_type_or_string, str):
-                if _type_or_string == str(type(module)):
+                if _type_or_string == MODULE_PATH(module):
                     return True
                 elif _type_or_string == module.config_section:
                     return True
                 elif _type_or_string == str(module.generated_analysis_type):
                     return True
+                elif _type_or_string == str(type(module)):
+                    return True
+            else:
+                raise TypeError(f"invalid type {type(_type_or_string)} passed to is_module_enabled")
 
         return False
 
@@ -2713,12 +2777,23 @@ class DelayedAnalysisRequest(object):
         self.root = None
 
     def load(self):
+        logging.debug(f"loading {self}")
         self.root = RootAnalysis(uuid=self.uuid, storage_dir=self.storage_dir)
         self.root.load()
         
         self.observable = self.root.get_observable(self.observable_uuid)
-        self.analysis_module = CURRENT_ENGINE.analysis_module_mapping[self.analysis_module]
-        self.analysis = self.observable.get_analysis(self.analysis_module.generated_analysis_type)
+        if self.observable is None:
+            logging.error(f"unable to load observable {self.observable_uuid} for {self}")
+
+        try:
+            self.analysis_module = CURRENT_ENGINE.analysis_module_mapping[self.analysis_module]
+        except KeyError:
+            logging.error(f"missing analysis module {self.analysis_module} for {self}")
+
+        self.analysis = self.observable.get_analysis(self.analysis_module.generated_analysis_type, 
+                                                     instance=self.analysis_module.instance)
+        if self.analysis is None:
+            logging.error(f"unable to load analysis {self.analysis_module.generated_analysis_type} for {self}")
     
     def __str__(self):
         return "DelayedAnalysisRequest for {} by {} @ {}".format(

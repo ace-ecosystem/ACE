@@ -123,6 +123,10 @@ data/
 extra/
 bro/ace_local.bro
 
+# site modules
+/lib/saq/modules/site
+/lib/saq/collectors/site
+
 # SSL
 !ssl/root/ca/openssl.cnf
 !ssl/root/ca/intermediate/openssl.cnf
@@ -147,3 +151,11 @@ bin/procyon-decompiler*
 
 # unit testing
 data_unittest
+
+# update installation tracking
+updates/**/*.installed
+updates/**/*.stderr
+updates/**/*.stdout
+
+# proprietary libaries
+lib/SoleraConnector.py

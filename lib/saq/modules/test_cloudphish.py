@@ -10,7 +10,7 @@ import unittest
 from subprocess import Popen, PIPE
 
 import saq, saq.test
-from api.cloudphish.test import CloudphishTestCase
+from aceapi.cloudphish.test import CloudphishTestCase
 from saq.analysis import RootAnalysis, Analysis
 from saq.cloudphish import *
 from saq.constants import *

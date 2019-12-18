@@ -25,6 +25,10 @@ from saq.modules import AnalysisModule
 from saq.util import is_ipv4
 
 import requests
+try:
+    from gglsbl_rest_client import GGLSBL_Rest_Service_Client as GRS_Client
+except ImportError as e:
+    logging.warning(str(e))
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -41,6 +45,65 @@ KEY_FINAL_URL = 'final_url'
 KEY_DOWNLOADED = 'downloaded'
 KEY_PROXY = 'proxy'
 KEY_PROXY_NAME = 'proxy_name'
+
+class GglsblAnalysis(Analysis):
+    """URL matches against Google's SafeBrowsing List using the [gglsbl-rest](https://github.com/mlsecproject/gglsbl-rest) service.
+    """
+
+    def initialize_details(self):
+        self.details = {
+                'match_tags': None
+                }
+
+    def generate_summary(self):
+        return "Google SafeBrowsing Results: {}".format(' '.join(self.details['match_tags']))
+
+class GglsblAnalyzer(AnalysisModule):
+    """Lookup a URL against a gglsbl-rest service.
+    """
+
+    @property
+    def generated_analysis_type(self):
+        return GglsblAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_URL
+
+    @property
+    def remote_server(self):
+        return self.config['server']
+
+    @property
+    def remote_port(self):
+        return self.config['port']
+
+    def verify_environment(self):
+        self.verify_config_exists('server');
+        self.verify_config_exists('port');
+
+    def execute_analysis(self, observable):
+        logging.info("Looking up '{}' in gglsbl-rest service at '{}'".format(observable.value, self.remote_server))       
+        try:
+            sbc = GRS_Client(self.remote_server, self.remote_port)
+            result = sbc.lookup(observable.value)
+            matches = result['matches']
+            if matches:
+                logging.info("Matches found for '{}' in gglsbl. Adding analysis.".format(observable.value))
+                observable.add_detection_point("URL has matches on Google Safe Browsing List")
+                analysis = self.create_analysis(observable)
+                analysis.details['result'] = result
+                analysis.details['match_tags'] = list(set([ m['threat'] for m in matches if m['threat_entry'] == 'URL' ]))
+                observable.add_tag('gglsbl match')
+                for tag in analysis.details['match_tags']:
+                    observable.add_tag(tag.replace('_',' ').lower())
+                observable.add_detection_point("URL has matches on Google Safe Browsing List")
+                return True
+            else:
+                return False
+        except Exception as e:
+            logging.error("Error using the gglsbl-rest service at {} : {}".format(self.remote_server, e))
+            return False 
 
 class CrawlphishAnalysis(Analysis):
 
@@ -1223,4 +1286,70 @@ class ProtectedURLAnalyzer(AnalysisModule):
         
         # copy any directives so they apply to the extracted one
         url.copy_directives_to(extracted_url)
+        return True
+
+KEY_FQDN = 'fqdn'
+KEY_ERROR = 'error'
+
+class MaliciousURLAnalysis(Analysis):
+    """If this URL is tagged as malicious, then let's look at the various components of it."""
+    def initialize_details(self):
+        self.details = {
+            KEY_FQDN: None,
+            KEY_ERROR: None,
+        }
+
+    @property
+    def fqdn(self):
+        return self.details[KEY_FQDN]
+
+    @fqdn.setter    
+    def fqdn(self, value):
+        self.details[KEY_FQDN] = value
+
+    @property
+    def error(self):
+        return self.details[KEY_ERROR]
+
+    @error.setter
+    def error(self, value):
+        self.detais[KEY_ERROR] = value
+
+    def generate_summary(self):
+        result = "Malicious URL Analyzer: "
+
+        if self.error is not None:
+            return result + self.error
+        elif self.fqdn is None:
+            return None
+
+        return result + f"fqdn {self.fqdn.value}"
+
+class MaliciousURLAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return MaliciousURLAnalysis
+
+    @property
+    def required_tags(self):
+        return [ 'malicious' ]
+
+    @property
+    def valid_observable_types(self):
+        return [ F_URL ]
+
+    def execute_analysis(self, url):
+
+        analysis = self.create_analysis(url)
+
+        try:
+            parsed_url = urlparse(url.value)
+            if parsed_url.hostname is not None:
+                fqdn = analysis.add_observable(F_FQDN, parsed_url.hostname)
+                fqdn.add_tag('malicious')
+                analysis.fqdn = fqdn
+        except Exception as e:
+            logging.warning(f"unable to parse url {url.value}: {e}")
+            analysis.error = str(e)
+
         return True

@@ -1,8 +1,8 @@
--- MySQL dump 10.13  Distrib 5.7.26, for Linux (x86_64)
+-- MySQL dump 10.13  Distrib 5.7.27, for Linux (x86_64)
 --
 -- Host: localhost    Database: ace
 -- ------------------------------------------------------
--- Server version	5.7.26-0ubuntu0.18.04.1
+-- Server version	5.7.27-0ubuntu0.18.04.1
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -260,7 +260,7 @@ CREATE TABLE `incoming_workload` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `type_id` int(11) NOT NULL COMMENT 'Each added work item has a work type, which collectors use to know which workload items belong to them.',
   `mode` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'The analysis mode the work will be submit with. This determines what nodes are selected for receiving the work.',
-  `work` blob NOT NULL COMMENT 'A python pickle of the **kwargs for ace_api.submit (see source code)',
+  `work` longblob NOT NULL COMMENT 'A python pickle of the **kwargs for ace_api.submit (see source code)',
   PRIMARY KEY (`id`),
   KEY `fk_type_id_idx` (`type_id`),
   CONSTRAINT `fk_type_id` FOREIGN KEY (`type_id`) REFERENCES `incoming_workload_type` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
@@ -564,6 +564,7 @@ CREATE TABLE `users` (
   `email` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
   `omniscience` int(11) NOT NULL DEFAULT '0',
   `timezone` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci DEFAULT NULL COMMENT 'The timezone this user is in. Dates and times will appear in this timezone in the GUI.',
+  `display_name` varchar(45) DEFAULT NULL COMMENT 'The display name of the user. This may be different than the username. This is used in the GUI.',
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`,`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -639,4 +640,4 @@ CREATE TABLE `workload` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-06-07 12:52:52
+-- Dump completed on 2019-10-21 10:14:59

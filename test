@@ -30,18 +30,25 @@ else
     mkdir data_unittest/logs
 fi
 
+export SAQ_UNIT_TESTING=1
+
 # if we passed no parameters then we run all the tests
 if [ "$#" -eq "0" ]
 then
     PYTHONPATH=lib python3 -W ignore -m unittest -f -v \
         saq.analysis.test \
+        saq.service.test \
+        saq.util.test \
         saq.collectors.test \
         saq.collectors.test_http \
         saq.collectors.test_email \
         saq.collectors.test_smtp \
+        saq.collectors.test_hunter \
+        saq.collectors.test_query_hunter \
         saq.database.test \
         saq.test_email \
         saq.test_crawlphish \
+        saq.test_configuration \
         saq.test_crypto \
         saq.test_util \
         saq.test_locks \
@@ -59,10 +66,10 @@ then
         saq.modules.test_crits \
         saq.modules.test_intel \
         saq.observables.test \
-        api.analysis.test \
-        api.engine.test \
-        api.cloudphish.test \
-        api.events.test \
+        aceapi.analysis.test \
+        aceapi.engine.test \
+        aceapi.cloudphish.test \
+        aceapi.events.test \
         test_ace_api \
 
         #saq.collectors.test_cb_binaries \

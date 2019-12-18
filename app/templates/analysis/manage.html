@@ -92,12 +92,12 @@
                                 {% for comment in comments[alert.uuid] %}
                                     <br />
                                     <span style="font-size: x-small;">
-                                        ({{ comment.user.username }}) {{ comment.comment }}
+                                        ({{ comment.user.gui_display }}) {{ comment.comment }}
                                     </span>
                                 {% endfor %}
                             {% endif %}
                         </td>
-                        <td>{{alert.owner}}</td>
+                        <td>{{alert.owner.gui_display}}</td>
                         {% if display_disposition %}<td>{{alert.disposition}}</td>{% endif %}
                         <td style="white-space: nowrap;">{% if alert.is_over_sla %}SLA Danger: {{alert.business_time_str}}
                             {% elif alert.is_approaching_sla %}SLA Warning: {{alert.business_time_str}}
@@ -204,7 +204,7 @@
                         <ul class="list-unstyled">
                             <li><input type="checkbox" name="analyst_none" {{filter_state['analyst_none']}}> nobody</li>
                             {% for user in all_users %}
-                            <li><input type="checkbox" name="analyst_{{user.id}}" {{filter_state['analyst_{0}'.format(user.id)]}}> {{user.username}}</li>
+                            <li><input type="checkbox" name="analyst_{{user.id}}" {{filter_state['analyst_{0}'.format(user.id)]}}> {{user.gui_display}}</li>
                             {% endfor %}
                         </ul>
                     </div>
@@ -220,7 +220,7 @@
                         <ul class="list-unstyled">
                             <li><input type="checkbox" name="owner_none" {{filter_state['owner_none']}}> nobody</li>
                             {% for user in all_users %}
-                            <li><input type="checkbox" name="owner_{{user.id}}" {{filter_state['owner_{0}'.format(user.id)]}}> {{user.username}}</li>
+                            <li><input type="checkbox" name="owner_{{user.id}}" {{filter_state['owner_{0}'.format(user.id)]}}> {{user.gui_display}}</li>
                             {% endfor %}
                         </ul>
                     </div>

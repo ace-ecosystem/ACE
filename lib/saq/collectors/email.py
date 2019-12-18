@@ -14,8 +14,11 @@ import yara
 
 class EmailCollector(Collector):
     """Collects emails received by local email system."""
-    def __init__(self, assignment_yara_rule_path=None, blacklist_yara_rule_path=None, *args, **kwargs):
-        super().__init__(delete_files=True, workload_type='email', *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(service_config=saq.CONFIG['service_email_collector'],
+                         workload_type='email', 
+                         delete_files=True, 
+                         *args, **kwargs)
 
         # the location of the incoming emails
         self.email_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['email']['email_dir'])
@@ -35,9 +38,10 @@ class EmailCollector(Collector):
 
         # inbound emails are scanned by this yara context to support node assignment
         self.yara_context = None
-        self.assignment_yara_rule_path = assignment_yara_rule_path
-        self.blacklist_yara_rule_path = blacklist_yara_rule_path
+        self.assignment_yara_rule_path = self.service_config['assignment_yara_rule_path']
+        self.blacklist_yara_rule_path = self.service_config['blacklist_yara_rule_path']
 
+    def initialize_collector(self):
         rule = ''
 
         if self.assignment_yara_rule_path:
