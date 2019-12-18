@@ -15,7 +15,7 @@ import pytz
 
 import saq, saq.test
 from saq.analysis import RootAnalysis
-from saq.crypto import decrypt
+from saq.crypto import *
 from saq.constants import *
 from saq.database import get_db_connection
 from saq.test import *
@@ -164,6 +164,7 @@ class TestCase(ACEModuleTestCase):
         # these should be the same
         self.assertEquals(analysis.details, root.details)
 
+    @unittest.skip("Missing test data.")
     def test_bro_smtp_stream_analysis(self):
         import saq
         import saq.modules.email
@@ -210,6 +211,7 @@ class TestCase(ACEModuleTestCase):
         email_analysis = email_file.get_analysis(saq.modules.email.EmailAnalysis)
         self.assertIsNotNone(email_analysis)
 
+    @unittest.skip("Missing test data.")
     def test_bro_smtp_stream_analysis_no_end_command(self):
         import saq
         import saq.modules.email
@@ -259,6 +261,7 @@ class TestCase(ACEModuleTestCase):
         email_analysis = email_file.get_analysis(saq.modules.email.EmailAnalysis)
         self.assertIsNotNone(email_analysis)
 
+    @unittest.skip("Missing test data.")
     def test_bro_smtp_stream_submission(self):
         from flask import url_for
         from saq.analysis import _JSONEncoder
@@ -495,6 +498,8 @@ class TestCase(ACEModuleTestCase):
 
     def test_archive_1(self):
 
+        set_encryption_password('test')
+
         self.reset_email_archive()
 
         root = create_root_analysis(alert_type='mailbox')
@@ -570,6 +575,8 @@ class TestCase(ACEModuleTestCase):
                     self.assertEquals(value, field_value)
 
     def test_archive_2(self):
+
+        set_encryption_password('test')
 
         self.reset_email_archive()
 

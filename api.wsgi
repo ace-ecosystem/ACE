@@ -34,7 +34,7 @@ import saq
 saq.initialize(saq_home=saq_home, config_paths=None, logging_config_path=logging_config_path, relative_dir=saq_home)
 
 # initialize flask
-import api
-application = api.create_app()
+import aceapi
+application = aceapi.create_app()
 # tell ACE to use the session scope provided by the sqlalchemy-flask extension
-saq.db = api.db.session
+saq.db = aceapi.db.session

@@ -20,6 +20,7 @@ saq.ini
 saq.unittest.ini
 brotex.whitelist
 saq_apache.conf
+falcon_collector_logging.ini
 
 carbon_black.auth
 mysql_defaults
@@ -42,3 +43,11 @@ crits-ssdeep/
 pcap_extract.ini
 amc_mda.ini
 amc_mda_logging.ini
+
+saq.integrations.ini
+saq.vxstream.ini
+saq.solera.ini
+saq.fireeye.ini
+saq.qradar.ini
+saq.falcon.ini
+saq.falcon_sandbox.ini

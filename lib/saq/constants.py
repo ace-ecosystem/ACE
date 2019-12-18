@@ -30,7 +30,7 @@ F_DISPOSITION = 'disposition'
 #
 # WARNING
 # XXX NOTE
-# when you add a new observable type you ALSO need to edit lib/saq/analysis.py
+# when you add a new observable type you ALSO need to edit lib/saq/observables/__init__.py
 # and add a matching entry to the _OBSERVABLE_TYPE_MAPPING dictionary
 
 F_CIDR = 'cidr'
@@ -61,6 +61,7 @@ F_SNORT_SIGNATURE = 'snort_sig'
 F_MESSAGE_ID = 'message_id'
 F_PROCESS_GUID = 'process_guid'
 F_TEST = 'test'
+F_FIREEYE_UUID = 'fireeye_uuid'
 
 OBSERVABLE_DESCRIPTIONS = {
     F_CIDR: 'IPv4 range in CIDR notation',
@@ -91,8 +92,10 @@ OBSERVABLE_DESCRIPTIONS = {
     F_MESSAGE_ID: 'email Message-ID',
     F_PROCESS_GUID: 'CarbonBlack global process identifier',
     F_TEST: 'unit testing observable',
+    F_FIREEYE_UUID: 'UUID used to identify a FireEye alert',
 }
 
+# DEPRECATED
 # this is used in vis.js in the GUI
 # see http://www.rapidtables.com/web/color/RGB_Color.htm
 OBSERVABLE_NODE_COLORS = {
@@ -123,6 +126,7 @@ OBSERVABLE_NODE_COLORS = {
     F_MESSAGE_ID : "#E6E6FA", # lavender
     F_PROCESS_GUID : "#E6E6FA", # lavender
     F_TEST : "#E6E6FA", # lavender
+    F_FIREEYE_UUID : "#E6E6FA", # lavender
 }
 
 VALID_OBSERVABLE_TYPES = sorted([
@@ -154,6 +158,7 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_MESSAGE_ID,
     F_PROCESS_GUID,
     F_TEST,
+    F_FIREEYE_UUID,
 ])
 
 DEPRECATED_OBSERVABLES = sorted([
@@ -311,37 +316,48 @@ DIRECTIVE_EXCLUDE_ALL = 'exclude_all'
 DIRECTIVE_WHITELISTED = 'whitelisted'
 # indicates this observable should be tracked across different analysis requests
 DIRECTIVE_TRACKED = 'tracked'
+# indicates that ACE should treat this IP address as an asset and try to figure out the details
+DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
+# download the pcap for the given observable and given time
+DIRECTIVE_EXTRACT_PCAP = 'extract_pcap'
+# ignores any automation limits when analyzing this observable (also see saq.modules.AnalysisModule.automation_limit)
+DIRECTIVE_IGNORE_AUTOMATION_LIMITS = 'ignore_automation_limits'
 
 DIRECTIVE_DESCRIPTIONS = {
-    DIRECTIVE_ARCHIVE: 'Archive the file',
+    DIRECTIVE_ARCHIVE: 'archive the file',
     DIRECTIVE_COLLECT_FILE: 'collect the file from the remote endpoint',
     DIRECTIVE_CRAWL: 'crawl the URL',
-    DIRECTIVE_FORCE_DOWNLOAD: 'download the content of the URL no matter what',
-    DIRECTIVE_EXTRACT_URLS: 'extract URLs from the given file',
-    DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
-    DIRECTIVE_ORIGINAL_EMAIL: 'treat this file as the original email file',
-    DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
-    DIRECTIVE_NO_SCAN: 'do not scan this file with yara',
     DIRECTIVE_DELAY: 'instructs various analysis modules to delay the analysis',
     DIRECTIVE_EXCLUDE_ALL: 'instructs ACE to NOT analyze this observable at all',
+    DIRECTIVE_EXTRACT_PCAP: 'extract PCAP for the given observable and given time',
+    DIRECTIVE_EXTRACT_URLS: 'extract URLs from the given file',
+    DIRECTIVE_FORCE_DOWNLOAD: 'download the content of the URL no matter what',
+    DIRECTIVE_IGNORE_AUTOMATION_LIMITS: 'ignores any automation limits when analyzing this observable',
+    DIRECTIVE_NO_SCAN: 'do not scan this file with yara',
+    DIRECTIVE_ORIGINAL_EMAIL: 'treat this file as the original email file',
+    DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
+    DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
+    DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
+    DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
-    DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests'
 }
 
 VALID_DIRECTIVES = [
     DIRECTIVE_ARCHIVE,
     DIRECTIVE_COLLECT_FILE,
     DIRECTIVE_CRAWL,
-    DIRECTIVE_FORCE_DOWNLOAD,
-    DIRECTIVE_EXTRACT_URLS,
-    DIRECTIVE_SANDBOX,
-    DIRECTIVE_ORIGINAL_EMAIL,
-    DIRECTIVE_ORIGINAL_SMTP,
-    DIRECTIVE_NO_SCAN,
     DIRECTIVE_DELAY,
     DIRECTIVE_EXCLUDE_ALL,
-    DIRECTIVE_WHITELISTED,
+    DIRECTIVE_EXTRACT_PCAP,
+    DIRECTIVE_EXTRACT_URLS,
+    DIRECTIVE_FORCE_DOWNLOAD,
+    DIRECTIVE_IGNORE_AUTOMATION_LIMITS,
+    DIRECTIVE_NO_SCAN,
+    DIRECTIVE_ORIGINAL_EMAIL,
+    DIRECTIVE_ORIGINAL_SMTP,
+    DIRECTIVE_SANDBOX,
     DIRECTIVE_TRACKED,
+    DIRECTIVE_WHITELISTED,
 ]
 
 def is_valid_directive(directive):
@@ -422,11 +438,13 @@ METRIC_THREAD_COUNT = 'thread_count'
 R_DOWNLOADED_FROM = 'downloaded_from'
 R_EXTRACTED_FROM = 'extracted_from'
 R_REDIRECTED_FROM = 'redirected_from'
+R_IS_HASH_OF = 'is_hash_of'
 
 VALID_RELATIONSHIP_TYPES = [
     R_DOWNLOADED_FROM,
     R_EXTRACTED_FROM,
     R_REDIRECTED_FROM,
+    R_IS_HASH_OF,
 ]
 
 TARGET_EMAIL_RECEIVED = 'email.received'
@@ -461,13 +479,15 @@ ANALYSIS_MODE_DISPOSITIONED = 'dispositioned'
 
 ANALYSIS_TYPE_GENERIC = 'generic'
 ANALYSIS_TYPE_MAILBOX = 'mailbox'
+ANALYSIS_TYPE_EWS = 'ews'
 ANALYSIS_TYPE_BRO_SMTP = 'bro - smtp'
 ANALYSIS_TYPE_BRO_HTTP = 'bro - http'
 ANALYSIS_TYPE_CLOUDPHISH = 'cloudphish'
 ANALYSIS_TYPE_MANUAL = 'manual'
 ANALYSIS_TYPE_FAQUEUE = 'faqueue'
+ANALYSIS_TYPE_FALCON = 'falcon'
+ANALYSIS_TYPE_FIREEYE = 'fireeye'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'
 INTEL_DB_CRITS = 'crits'
-

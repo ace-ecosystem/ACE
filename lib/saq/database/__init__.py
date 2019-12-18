@@ -182,7 +182,7 @@ def _get_cached_db_connection(name='ace'):
     try:
         db_identifier = _get_cached_db_identifier(name)
         with _global_db_cache_lock:
-            logging.debug("aquiring existing cached database connection {}".format(db_identifier))
+            #logging.debug("acquiring existing cached database connection {}".format(db_identifier))
             db = _global_db_cache[db_identifier]
 
         try:
@@ -209,7 +209,7 @@ def _get_cached_db_connection(name='ace'):
         pass
 
     try:
-        logging.info("opening new cached database connection to {}".format(name))
+        logging.debug("opening new cached database connection to {}".format(name))
 
         with _global_db_cache_lock:
             _global_db_cache[db_identifier] = _get_db_connection(name)
@@ -271,7 +271,7 @@ def _get_db_connection(name='ace'):
         'db': _section['database'],
         'user': _section['username'],
         'passwd': _section['password'],
-        'charset': 'utf8'
+        'charset': 'utf8mb4',
     }
 
     if 'hostname' in _section:
@@ -282,6 +282,8 @@ def _get_db_connection(name='ace'):
     
     if 'unix_socket' in _section:
         kwargs['unix_socket'] = _section['unix_socket']
+
+    kwargs['init_command'] = 'SET NAMES utf8mb4'
 
     if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
         kwargs['ssl'] = {}
@@ -458,8 +460,20 @@ class User(UserMixin, Base):
     password_hash = Column(String(128))
     omniscience = Column(Integer, nullable=False, default=0)
     timezone = Column(String(512))
+    display_name = Column(String(1024))
 
     def __str__(self):
+        return self.username
+
+    @property
+    def gui_display(self):
+        """Returns the textual representation of this user in the GUI.
+           If the user has a display_name value set then that is returned.
+           Otherwise, the username is returned."""
+
+        if self.display_name is not None:
+            return self.display_name
+
         return self.username
 
     @property
@@ -2043,8 +2057,8 @@ def add_workload(root, exclusive_uuid=None, db=None, c=None):
     # NOTE you should always specify an analysis mode
     if root.analysis_mode is None:
         logging.warning(f"missing analysis mode for call to add_workload({root}) - "
-                        f"using engine default {saq.CONFIG['engine']['default_analysis_mode']}")
-        root.analysis_mode = saq.CONFIG['engine']['default_analysis_mode']
+                        f"using engine default {saq.CONFIG['service_engine']['default_analysis_mode']}")
+        root.analysis_mode = saq.CONFIG['service_engine']['default_analysis_mode']
 
     # make sure we've initialized our node id
     if saq.SAQ_NODE_ID is None:

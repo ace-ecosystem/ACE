@@ -15,6 +15,8 @@ businesstime
 cbapi==1.4.4
 cbinterface
 dnspython
+exchangelib
+gglsbl-rest-client
 html2text
 iptools
 ldap3==2.5 
@@ -24,16 +26,19 @@ olefile
 oletools
 openpyxl
 pcodedmp
+phishfry
 pip
 ply
 psutil 
 pyasn1 
 pymongo==2.8
+pysip
 pysocks
 python-magic
 python-memcached
 pytz 
 requests
+sandboxapi
 setuptools_git 
 six
 sphinx
@@ -44,4 +49,5 @@ tzlocal
 urlfinderlib
 vxstreamlib
 yara_scanner
-sandboxapi
+python-whois
+gglsbl-rest-client

@@ -10,12 +10,15 @@ import saq
 from saq.constants import *
 from saq.database import use_db, get_db_connection
 from saq.engine import Engine
+from saq.service import *
 from saq.test import *
 from . import Collector, Submission, RemoteNode
 
 class TestCollector(Collector):
     def __init__(self, *args, **kwargs):
-        super().__init__(workload_type='test', *args, **kwargs)
+        super().__init__(workload_type='test', 
+                         service_config=saq.CONFIG['service_test_collector'],
+                         *args, **kwargs)
 
     def get_next_submission(self):
         return None
@@ -49,6 +52,13 @@ class CollectorBaseTestCase(ACEBasicTestCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
 
+        saq.CONFIG.add_section('service_test_collector')
+        s = saq.CONFIG['service_test_collector']
+        s['module'] = 'saq.collectors.test'
+        s['class'] = 'TestCollector'
+        s['description'] = 'Test Collector'
+        s['enabled'] = 'yes'
+
         with get_db_connection() as db:
             c = db.cursor()
             c.execute("DELETE FROM work_distribution_groups")
@@ -59,9 +69,9 @@ class CollectorBaseTestCase(ACEBasicTestCase):
 
 
         # default engines to support any analysis mode
-        saq.CONFIG['engine']['local_analysis_modes'] = ''
+        saq.CONFIG['service_engine']['local_analysis_modes'] = ''
 
-class CollectorTestCase(CollectorBaseTestCase):
+class TestCase(CollectorBaseTestCase):
     def create_submission(self):
         return Submission(
             description='test_description',
@@ -77,7 +87,7 @@ class CollectorTestCase(CollectorBaseTestCase):
 
     @use_db
     def test_add_group(self, db, c):
-        collector = TestCollector()
+        collector = get_service_class('test_collector')()
         collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace')
         
         c.execute("SELECT id, name FROM work_distribution_groups")
@@ -88,7 +98,7 @@ class CollectorTestCase(CollectorBaseTestCase):
         self.assertEquals(row[1], 'test')
 
         # when we do it a second time, we should get the name group ID since we used the same name
-        collector = TestCollector()
+        collector = get_service_class('test_collector')()
         collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace')
         
         c.execute("SELECT id, name FROM work_distribution_groups")
@@ -100,7 +110,7 @@ class CollectorTestCase(CollectorBaseTestCase):
 
     def test_load_groups(self):
 
-        collector = TestCollector()
+        collector = get_service_class('test_collector')()
         collector.load_groups()
         
         self.assertEquals(len(collector.remote_node_groups), 1)
@@ -111,13 +121,14 @@ class CollectorTestCase(CollectorBaseTestCase):
 
     def test_missing_groups(self):
         # a collector cannot be started without adding at least one group
-        collector = TestCollector()
+        del saq.CONFIG['collection_group_unittest']
+        collector = get_service_class('test_collector')()
         with self.assertRaises(RuntimeError):
-            collector.start()
+            collector.start_service(debug=True)
 
     def test_startup(self):
         # make sure we can start one up, see it collect nothing, and then shut down gracefully
-        collector = TestCollector()
+        collector = get_service_class('test_collector')()
         collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace')
         collector.start()
 
@@ -241,9 +252,9 @@ class CollectorTestCase(CollectorBaseTestCase):
         # we should see 10 of these
         wait_for_log_count('scheduled test_description mode analysis', 1, 5)
         # and then 16 of these
-        wait_for_log_count('got submission result', 16, 5)
+        wait_for_log_count('got submission result', 16, 15)
         # and 10 of these
-        wait_for_log_count('completed work item', 10, 5)
+        wait_for_log_count('completed work item', 10, 15)
 
         collector.stop()
         collector.wait()
@@ -655,7 +666,7 @@ class CollectorTestCase(CollectorBaseTestCase):
         collector.start()
 
         # with the API server running now we should see these go out
-        wait_for_log_count('completed work item', 10, 5)
+        wait_for_log_count('completed work item', 10, 15)
 
         collector.stop()
         collector.wait()

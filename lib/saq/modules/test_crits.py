@@ -6,12 +6,16 @@ import saq.database
 import saq.test
 
 from saq.analysis import RootAnalysis
-from saq.database import use_db, get_db_connection, ALERT, set_dispositions
 from saq.constants import *
+from saq.database import use_db, get_db_connection, ALERT, set_dispositions
+from saq.integration import *
 from saq.test import *
 
 class TestCase(ACEModuleTestCase):
     def test_faqueue_alert(self):
+
+        if not integration_enabled('crits'):
+            self.skipTest("crits integration not enabled")
         
         root = create_root_analysis(analysis_mode=ANALYSIS_MODE_CORRELATION, alert_type=ANALYSIS_TYPE_FAQUEUE)
         root.initialize_storage()

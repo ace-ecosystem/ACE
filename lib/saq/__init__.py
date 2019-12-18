@@ -12,10 +12,10 @@ import sys
 import time
 import traceback
 
-from configparser import ConfigParser
 from getpass import getpass
 
 import ace_api
+from saq.configuration import load_configuration
 from saq.constants import *
 from saq.messaging import initialize_message_system
 from saq.network_semaphore import initialize_fallback_semaphores
@@ -28,7 +28,7 @@ import requests
 import tzlocal
 
 # this is set to True when unit testing, False otherwise
-UNIT_TESTING = False
+UNIT_TESTING = 'SAQ_UNIT_TESTING' in os.environ
 
 # disable the verbose logging in the requests module
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -71,7 +71,10 @@ class CustomFileHandler(logging.StreamHandler):
         if self.current_filename != current_filename:
             # close the current stream
             if self.stream:
-                self.stream.close()
+                try:
+                    self.stream.close()
+                except OSError as e:
+                    logging.warning(f"Error closing stream: {e}")
             
             # and open a new one
             self.stream = open(os.path.join(self.log_dir, current_filename), 'a')
@@ -95,53 +98,6 @@ LOGGING_BASE_CONFIG = {
         },
     },
 }
-
-def load_configuration():
-
-    global CONFIG
-
-    try:
-        default_config = ConfigParser(allow_no_value=True)
-        default_config.read(os.path.join(SAQ_HOME, 'etc', 'saq.default.ini'))
-
-        for config_path in CONFIG_PATHS:
-            override = ConfigParser(allow_no_value=True)
-            #print("loading {}".format(config_path))
-            override.read(config_path)
-
-            # clobber defaults
-            for section_name in override:
-                if section_name in default_config:
-                    for value_name in override[section_name]:
-                        default_config[section_name][value_name] = override[section_name][value_name]
-                else:
-                    default_config[section_name] = override[section_name]
-
-        # make sure all OVERRIDE settings are actually overridden
-        errors = {}
-        for section_name in default_config:
-            for value_name in default_config[section_name]:
-                if default_config[section_name][value_name] == 'OVERRIDE':
-                    if section_name not in errors:
-                        errors[section_name] = []
-                    errors[section_name].append(value_name)
-
-        if errors:
-            for section_name in errors.keys():
-                sys.stderr.write("[{}]\n".format(section_name))
-                for value_name in errors[section_name]:
-                    sys.stderr.write("{} = \n".format(value_name))
-                sys.stderr.write("\n")
-                
-            sys.stderr.write("missing overrides detection in configuration settings\n")
-            sys.stderr.write("you can copy-paste the above into your config file if you do not need these settings\n\n")
-            sys.exit(1)
-
-        CONFIG = default_config
-
-    except Exception as e:
-        logging.error("unable to load configuration: {}".format(e))
-        traceback.print_exc()
 
 def initialize_logging(logging_config_path):
     try:
@@ -172,8 +128,7 @@ def initialize(saq_home=None,
                config_paths=None, 
                logging_config_path=None, 
                args=None, 
-               relative_dir=None, 
-               unittest=False):
+               relative_dir=None):
 
     from saq.database import initialize_database, initialize_node
 
@@ -183,11 +138,14 @@ def initialize(saq_home=None,
     global COMPANY_NAME
     global CONFIG
     global CONFIG_PATHS
+    global DAEMON_DIR
     global DAEMON_MODE
     global DATA_DIR
     global DEFAULT_ENCODING
     global DUMP_TRACEBACKS
+    global ECS_SOCKET_PATH
     global ENCRYPTION_PASSWORD
+    global ENCRYPTION_PASSWORD_PLAINTEXT
     global EXCLUDED_SLA_ALERT_TYPES
     global EXECUTION_THREAD_LONG_TIMEOUT
     global FORCED_ALERTS
@@ -207,11 +165,10 @@ def initialize(saq_home=None,
     global SAQ_NODE_ID
     global SAQ_RELATIVE_DIR
     global SEMAPHORES_ENABLED
+    global SERVICES_DIR
     global STATS_DIR
     global TEMP_DIR
     global TOR_PROXY
-    global YSS_BASE_DIR
-    global YSS_SOCKET_DIR
 
     SAQ_HOME = None
     SAQ_NODE = None
@@ -231,9 +188,12 @@ def initialize(saq_home=None,
     MANAGED_NETWORKS = None
     # set this to True to force all anlaysis to result in an alert being generated
     FORCED_ALERTS = False
-    # the gpg private key password for encrypting/decrypting archive files
-    # this can be provided on the command line so that these files can also be analyzed
+    # the private key password for encrypting/decrypting archive files
+    # NOTE this is the decrypted random string of bytes that is used to encrypt/decrypt using AES
+    # NOTE both of these can stay None if encryption is not being used
     ENCRYPTION_PASSWORD = None
+    # *this* is the password that is used to encrypt/decrypt the ENCRYPTION_PASSWORD at rest
+    ENCRYPTION_PASSWORD_PLAINTEXT = None
 
     # the global log level setting
     LOG_LEVEL = logging.INFO
@@ -247,6 +207,12 @@ def initialize(saq_home=None,
     # are we running as a daemon in the background?
     DAEMON_MODE = False
 
+    # directory where pid files are stored for daemons
+    DAEMON_DIR = None
+
+    # directory where files are stored for running services
+    SERVICES_DIR = None
+
     # path to the certifcate chain used by all SSL certs
     CA_CHAIN_PATH = None
 
@@ -257,10 +223,6 @@ def initialize(saq_home=None,
     GLOBAL_SLA_SETTINGS = None
     OTHER_SLA_SETTINGS = []
     EXCLUDED_SLA_ALERT_TYPES = []
-
-    # Yara Scanner Server base directory
-    YSS_BASE_DIR = None
-    YSS_SOCKET_DIR = None
 
     # set to True to cause tracebacks to be dumped to standard output
     # useful when debugging or testing
@@ -298,6 +260,9 @@ def initialize(saq_home=None,
         sys.stderr.write("invalid root SAQ directory {0}\n".format(SAQ_HOME)) 
         sys.exit(1)
 
+    # path to the unix socket for the encryption cache service
+    ECS_SOCKET_PATH = os.path.join(SAQ_HOME, '.ecs')
+
     # XXX not sure we need this SAQ_RELATIVE_DIR anymore -- check it out
     # this system was originally designed to run out of /opt/saq
     # later we modified to run out of anywhere for command line correlation
@@ -322,7 +287,6 @@ def initialize(saq_home=None,
     CONFIG_PATHS = [os.path.join(SAQ_HOME, p) if not os.path.isabs(p) else p for p in config_paths]
 
     # add any config files specified in SAQ_CONFIG_PATHS env var (command separated)
-    #sys.stderr.write("SAQ_CONFIG_PATHS = {}\n".format(os.environ['SAQ_CONFIG_PATHS']))
     if 'SAQ_CONFIG_PATHS' in os.environ:
         for config_path in os.environ['SAQ_CONFIG_PATHS'].split(','):
             config_path = config_path.strip()
@@ -334,16 +298,12 @@ def initialize(saq_home=None,
                 if config_path not in CONFIG_PATHS:
                     CONFIG_PATHS.append(config_path)
 
-    # if $SAQ_HOME/etc/saq.ini exists then we use that as the last config if it's not already specified
-    default_config_path = os.path.join(SAQ_HOME, 'etc', 'saq.ini')
-
-    # use unit test config if we are running a unit test
-    if unittest:
-        default_config_path = os.path.join(SAQ_HOME, 'etc', 'saq.unittest.ini')
-
-    if os.path.exists(default_config_path):
-        if default_config_path not in CONFIG_PATHS:
-            CONFIG_PATHS.append(default_config_path)
+    if UNIT_TESTING:
+        # unit testing loads different configurations
+        CONFIG_PATHS.append(os.path.join(SAQ_HOME, 'etc', 'saq.unittest.default.ini'))
+        CONFIG_PATHS.append(os.path.join(SAQ_HOME, 'etc', 'saq.unittest.ini'))
+    else:
+        CONFIG_PATHS.append(os.path.join(SAQ_HOME, 'etc', 'saq.ini'))
 
     try:
         load_configuration()
@@ -353,6 +313,8 @@ def initialize(saq_home=None,
 
     DATA_DIR = os.path.join(SAQ_HOME, CONFIG['global']['data_dir'])
     TEMP_DIR = os.path.join(DATA_DIR, CONFIG['global']['tmp_dir'])
+    DAEMON_DIR = os.path.join(DATA_DIR, 'var', 'daemon')
+    SERVICES_DIR = os.path.join(DATA_DIR, 'var', 'services')
     COMPANY_NAME = CONFIG['global']['company_name']
     COMPANY_ID = CONFIG['global'].getint('company_id')
 
@@ -472,14 +434,6 @@ def initialize(saq_home=None,
     CA_CHAIN_PATH = os.path.join(SAQ_HOME, CONFIG['SSL']['ca_chain_path'])
     ace_api.set_default_ssl_ca_path(CA_CHAIN_PATH)
 
-    # XXX this should probably move to the yara scanning module
-    # set the location we'll be running yss out of
-    YSS_BASE_DIR = os.path.join(SAQ_HOME, CONFIG['yara']['yss_base_dir'])
-    if not os.path.exists(YSS_BASE_DIR):
-        logging.critical("[yara][yss_base_dir] is set to {} but does not exist".format(YSS_BASE_DIR))
-
-    YSS_SOCKET_DIR = os.path.join(YSS_BASE_DIR, CONFIG['yara']['yss_socket_dir'])
-
     # initialize the database connection
     initialize_database()
 
@@ -497,9 +451,7 @@ def initialize(saq_home=None,
 
     # make sure some key directories exists
     for dir_path in [ 
-        # anaysis data
         os.path.join(DATA_DIR, CONFIG['global']['node']),
-        #os.path.join(SAQ_HOME, 'var', 'locks'), # XXX remove
         os.path.join(DATA_DIR, 'review', 'rfc822'),
         os.path.join(DATA_DIR, 'review', 'misc'),
         os.path.join(DATA_DIR, CONFIG['global']['error_reporting_dir']),
@@ -508,13 +460,13 @@ def initialize(saq_home=None,
         os.path.join(STATS_DIR, 'brocess'), # get rid of this
         os.path.join(STATS_DIR, 'metrics'),
         os.path.join(DATA_DIR, CONFIG['splunk_logging']['splunk_log_dir']),
-        os.path.join(DATA_DIR, DATA_DIR, CONFIG['elk_logging']['elk_log_dir']),
+        os.path.join(DATA_DIR, CONFIG['elk_logging']['elk_log_dir']),
         os.path.join(TEMP_DIR),
-        os.path.join(SAQ_HOME, CONFIG['yara']['yss_base_dir'], 'logs'), ]: # XXX this should be in YSS
+        SERVICES_DIR,
+        DAEMON_DIR, ]: 
         #os.path.join(SAQ_HOME, maliciousdir) ]: # XXX remove
         try:
-            if not os.path.isdir(dir_path):
-                os.makedirs(dir_path)
+            create_directory(dir_path)
         except Exception as e:
             logging.error("unable to create required directory {}: {}".format(dir_path, str(e)))
             sys.exit(1)
@@ -525,6 +477,7 @@ def initialize(saq_home=None,
             logging.debug("removing proxy environment variable for {}".format(proxy_key))
             del os.environ[proxy_key]
 
+
     # set up the PROXY global dict (to be used with the requests library)
     for proxy_key in [ 'http', 'https' ]:
         if CONFIG['proxy']['host'] and CONFIG['proxy']['port'] and CONFIG['proxy']['transport']:
@@ -533,6 +486,7 @@ def initialize(saq_home=None,
                 CONFIG['proxy']['password'], CONFIG['proxy']['host'], CONFIG['proxy']['port'])
             else:
                 PROXIES[proxy_key] = '{}://{}:{}'.format(CONFIG['proxy']['transport'], CONFIG['proxy']['host'], CONFIG['proxy']['port'])
+
             logging.debug("proxy for {} set to {}".format(proxy_key, PROXIES[proxy_key]))
 
     # load any additional proxies specified in the config sections proxy_*

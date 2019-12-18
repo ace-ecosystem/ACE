@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 source $(dirname "$0")/common.sh
 cd $SAQ_HOME
-
 echo "stopping smtp collection"
-python3 ace --stop bro-smtp-collector
+ace collector stop bro_smtp

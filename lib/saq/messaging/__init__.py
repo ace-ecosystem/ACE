@@ -142,7 +142,7 @@ class MessageSystem(object):
                 system = _class(config=saq.CONFIG[section_name])
                 self.systems[name] = system
             except Exception as e:
-                logging.error("unable to load messaging system {name}: {e}")
+                logging.error(f"unable to load messaging system {name}: {e}")
                 report_exception()
                 continue
 

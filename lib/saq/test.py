@@ -40,6 +40,7 @@ import logging
 import os, os.path
 import secrets
 import shutil
+import signal
 import sys
 import threading
 import time
@@ -192,6 +193,11 @@ class MemoryLogHandler(logging.Handler):
     def wait_for_log_entry(self, callback, timeout=5, count=1):
         """Waits for callback to return True count times before timeout seconds expire.
            callback takes a single LogRecord object as the parameter and returns a boolean."""
+        
+        # XXX this is a hack but on slower machines the tests are timing out because the system is slow
+        if timeout < 30:
+            timeout = 30
+
         time_limit = datetime.datetime.now() + datetime.timedelta(seconds=timeout)
 
         current_index = 0
@@ -281,13 +287,6 @@ def splunk_query(search_string, *args, **kwargs):
 
 def initialize_test_environment():
     global test_dir
-    #import saq
-
-    # indicate that we are unit testing
-    # this changes the behavior of ACE in various places
-    #code = compile('saq.UNIT_TESTING = True', '<string>', 'exec')
-    #import dis; import pdb; pdb.set_trace()
-    #saq.UNIT_TESTING = True
 
     # there is no reason to run anything as root
     if os.geteuid() == 0:
@@ -306,7 +305,7 @@ def initialize_test_environment():
     import saq
     saq.initialize(saq_home=saq_home, config_paths=[], 
                    logging_config_path=os.path.join(saq_home, 'etc', 'unittest_logging.ini'), 
-                   args=None, relative_dir=None, unittest=True)
+                   args=None, relative_dir=None)
 
     if saq.CONFIG['global']['instance_type'] not in [ 'PRODUCTION', 'QA', 'DEV' ]:
         sys.stderr.write('\n\n *** CRITICAL ERROR *** \n\ninvalid instance_type setting in configuration\n')
@@ -334,7 +333,7 @@ def initialize_test_environment():
         logging.error("unable to create temp dir {}: {}".format(test_dir, e))
 
     # in all our testing we use the password "password" for encryption/decryption
-    saq.ENCRYPTION_PASSWORD = get_aes_key('password')
+    #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
     #initialize_database()
     initialized = True
@@ -470,6 +469,7 @@ class ACEBasicTestCase(TestCase):
     def setUp(self):
         #saq.DUMP_TRACEBACKS = True
         logging.info("TEST: {}".format(self.id()))
+        self.save_signal_handlers()
         initialize_test_environment()
         self.reset()
         open_test_comms()
@@ -477,15 +477,15 @@ class ACEBasicTestCase(TestCase):
         self.initialize_test_client()
 
     def initialize_test_client(self):
-        from api import create_app
+        from aceapi import create_app
         self.app = create_app(testing=True)
         self.app_context = self.app.test_request_context()                      
         self.app_context.push()                           
         self.client = self.app.test_client()
 
         # Hopefully temporary hack to ensure session is cleared after each test
-        import api
-        api.db.session.close()
+        import aceapi
+        aceapi.db.session.close()
 
     def tearDown(self):
         close_test_comms()
@@ -493,6 +493,7 @@ class ACEBasicTestCase(TestCase):
         # anything logged at CRITICAL log level will cause the test the fail
         #self.assertFalse(memory_log_handler.search(lambda e: e.levelno == logging.CRITICAL))
 
+        import saq
         saq.DUMP_TRACEBACKS = False
 
         self.stop_api_server()
@@ -509,6 +510,11 @@ class ACEBasicTestCase(TestCase):
 
         # clear the database session this test used
         saq.db.remove()
+        self.restore_signal_handlers()
+        
+        # clear all the registered services
+        import saq.service
+        saq.service._registered_services = []
 
     def create_test_file(self, file_path='.unittest_test_data', file_content=None, root_analysis=None):
         """Creates a test file and returns the path to the newly created file.
@@ -567,7 +573,6 @@ class ACEBasicTestCase(TestCase):
     def reset(self):
         """Resets everything back to the default state."""
         self.reset_config()
-        self.reset_hal9000()
         self.reset_brocess()
         self.reset_cloudphish()
         self.reset_correlation()
@@ -577,13 +582,15 @@ class ACEBasicTestCase(TestCase):
         self.reset_var_dir()
 
         # re-enable encryption in case we disabled it
-        saq.ENCRYPTION_PASSWORD = get_aes_key('password')
+        #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
     def reset_var_dir(self):
         # clears out the var directory
         shutil.rmtree(os.path.join(saq.DATA_DIR, 'var'))
         os.mkdir(os.path.join(saq.DATA_DIR, 'var'))
         os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'tmp'))
+        os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'daemon'))
+        os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'services'))
 
     def reset_log_exports(self):
         # reset splunk export logs
@@ -672,8 +679,8 @@ class ACEBasicTestCase(TestCase):
         failed_alert_subdir = os.path.join(saq.SAQ_HOME, '.saq_alerts')
 
         subdirs = [ data_subdir, failed_alert_subdir ]
-        if saq.CONFIG['engine']['work_dir']:
-            subdirs.append(saq.CONFIG['engine']['work_dir'])
+        if saq.CONFIG['service_engine']['work_dir']:
+            subdirs.append(saq.CONFIG['service_engine']['work_dir'])
 
         for subdir in subdirs:
             if os.path.isdir(subdir):
@@ -763,10 +770,10 @@ class ACEBasicTestCase(TestCase):
         # this is a bit weird because I want the urls to be the same as they
         # are configured for apache, where they are all starting with /api
         
-        import api
+        import aceapi
         from saq.database import initialize_database
 
-        app = api.create_app(testing=True)
+        app = aceapi.create_app(testing=True)
         from werkzeug.serving import run_simple
         from werkzeug.wsgi import DispatcherMiddleware
         from flask import Flask
@@ -785,7 +792,7 @@ class ACEBasicTestCase(TestCase):
             saq.CONFIG.get('api', 'ssl_key') if ssl_key is None else ssl_key )
 
         initialize_database()
-        saq.db = api.db.session
+        saq.db = aceapi.db.session
 
         logging.info(f"starting api server on {listen_address} port {listen_port}")
         run_simple(listen_address, listen_port, application, ssl_context=ssl_context, use_reloader=False)
@@ -800,6 +807,16 @@ class ACEBasicTestCase(TestCase):
 
         self.api_server_process.join()
         self.api_server_process = None
+
+    def save_signal_handlers(self):
+        self.sigterm_handler = signal.getsignal(signal.SIGTERM)
+        self.sigint_handler = signal.getsignal(signal.SIGINT)
+        self.sighup_handler = signal.getsignal(signal.SIGHUP)
+
+    def restore_signal_handlers(self):
+        signal.signal(signal.SIGTERM, self.sigterm_handler)
+        signal.signal(signal.SIGINT, self.sigint_handler)
+        signal.signal(signal.SIGHUP, self.sighup_handler)
 
 class ACEEngineTestCase(ACEBasicTestCase):
 
