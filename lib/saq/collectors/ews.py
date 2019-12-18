@@ -78,6 +78,7 @@ class EWSCollectionBaseConfiguration(object):
         self.delete_emails = saq.CONFIG[section].getboolean('delete_emails', fallback=False)
         self.always_alert = saq.CONFIG[section].getboolean('always_alert', fallback=False)
         self.alert_prefix = saq.CONFIG[section]['alert_prefix']
+        self.section = section
 
     @property
     def tracking_db_path(self):
@@ -109,6 +110,11 @@ class EWSCollectionBaseConfiguration(object):
                 break
 
     def execute(self, *args, **kwargs):
+
+        if not self.password:
+            logging.error(f"no password given for {self.section}. authentication will not be attempted.")
+            return
+            
         if not self.delete_emails:
             if not os.path.exists(self.tracking_db_path):
                 with sqlite3.connect(self.tracking_db_path) as db:
@@ -123,7 +129,7 @@ CREATE INDEX IF NOT EXISTS idx_exchange_id ON ews_tracking(exchange_id)""")
                     c.execute("""
 CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
                     db.commit()
-
+        
         # get the next emails from this account
         credentials = Credentials(self.username, self.password)
         config = Configuration(server=self.server, credentials=credentials, auth_type=NTLM) # TODO auth_type should be configurable
@@ -139,7 +145,8 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         try:
             target_folder = getattr(_account, root)
         except AttributeError:
-            target_folder = _account.public_folders_root
+            public_folders_root = _account.public_folders_root
+            target_folder = public_folders_root / root
         #print(target_folder.tree())
 
         for path_part in path_parts:
