@@ -577,7 +577,7 @@ class Collector(ACEService):
         if self.service_is_debug:
             return self.debug()
         else:
-            return self.start()
+            self.start()
 
         if not self.service_is_debug:
             self.wait()

@@ -119,6 +119,7 @@ class ACEService(object):
         pass
 
     def start_service(self, threaded=False, daemon=False, debug=False):
+        assert threaded or daemon or debug
         # make sure the service is enable and not already running
         status = self.service_status
         if status == SERVICE_STATUS_DISABLED:

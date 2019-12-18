@@ -390,8 +390,8 @@ def status_service(args):
         service_config = get_service_config(service_name)
         print("{:<30}{:<15}{:<15}{}".format(service_name, 
                                       get_service_status(service_name),
-                                      service_config.get('enabled', fallback=None),
-                                      service_config.get('description', fallback=None)))
+                                      service_config.get('enabled', fallback='?'),
+                                      service_config.get('description', fallback='?')))
 
 status_service_parser = service_sp.add_parser('status',
     help="Lists the available services and their status.")

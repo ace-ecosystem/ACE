@@ -96,7 +96,7 @@ class TestCase(HunterBaseTestCase):
 
     def test_start_stop(self):
         collector = HunterCollector()
-        collector.start_service()
+        collector.start_service(threaded=True)
         wait_for_log_count('started Hunt Manager(test_query)', 1)
 
         # verify the rule was loaded

@@ -40,7 +40,7 @@ class EmailCollectorBaseTestCase(CollectorBaseTestCase):
 class EmailCollectorTestCase(EmailCollectorBaseTestCase):
     def test_startup(self):
         collector = EmailCollector()
-        collector.start_service()
+        collector.start_service(threaded=True)
 
         wait_for_log_count('no work available', 1, 5)
         collector.stop()
@@ -51,7 +51,7 @@ class EmailCollectorTestCase(EmailCollectorBaseTestCase):
 
         collector = EmailCollector()
         collector.load_groups()
-        collector.start_service()
+        collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('found email', 1, 5)
@@ -73,7 +73,7 @@ class EmailCollectorTestCase(EmailCollectorBaseTestCase):
 
         collector = EmailCollector()
         collector.load_groups()
-        collector.start_service()
+        collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('found email', email_count, 5)
@@ -99,7 +99,7 @@ rule blacklist : blacklist {
         saq.CONFIG['service_email_collector']['blacklist_yara_rule_path'] = blacklist_yara_rule_path
         collector = EmailCollector()
         collector.load_groups()
-        collector.start_service()
+        collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('matched blacklist rule', 1, 5)
@@ -172,7 +172,7 @@ class EmailCollectorEngineTestCase(EmailCollectorBaseTestCase, ACEEngineTestCase
 
         collector = EmailCollector()
         collector.load_groups()
-        collector.start_service()
+        collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('found email', 1, 5)
@@ -202,7 +202,7 @@ class EmailCollectorEngineTestCase(EmailCollectorBaseTestCase, ACEEngineTestCase
 
         collector = EmailCollector()
         collector.load_groups()
-        collector.start_service()
+        collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('found email', email_count, 5)
