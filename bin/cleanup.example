@@ -50,7 +50,7 @@ find -L "$SCAN_FAILURES_DIR" -maxdepth 1 -mindepth 1 -type f -mtime +1 -delete
 OFFICE_ARCHIVE_DIR="$DATA_DIR/$(ace config -v analysis_module_office_file_archiver.office_archive_dir)"
 if [ -d "$OFFICE_ARCHIVE_DIR" ]
 then
-    find -L "$OFFICE_ARCHIVE_DIR" -mindepth 2 -maxdepth 2 -type f -mtime +30 -delete
+    find -L "$OFFICE_ARCHIVE_DIR" -mindepth 2 -maxdepth 4 -type f -mtime +30 -delete
 fi
 
 # delete carbon black binaries older than 30 days
