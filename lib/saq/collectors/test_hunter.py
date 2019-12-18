@@ -54,7 +54,7 @@ class TestCase(HunterBaseTestCase):
 
     def test_start_stop(self):
         collector = HunterCollector()
-        collector.start_service()
+        collector.start_service(threaded=True)
         wait_for_log_count('started Hunt Manager(test)', 1)
         collector.stop_service()
         collector.wait_service()
@@ -116,7 +116,7 @@ class TestCase(HunterBaseTestCase):
 
     def test_hunt_execution(self):
         collector = HunterCollector()
-        collector.start_service()
+        collector.start_service(threaded=True)
         # testing that the execution order works
         wait_for_log_count('unit test execute marker: Hunt(unit_test_2[test])', 4)
         self.assertEquals(log_count('unit test execute marker: Hunt(unit_test_1[test])'), 1)
@@ -150,7 +150,7 @@ class TestCase(HunterBaseTestCase):
 
     def test_reload_hunts_on_sighup(self):
         collector = HunterCollector()
-        collector.start_service()
+        collector.start_service(threaded=True)
         wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 1)
         wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 1)
         os.kill(os.getpid(), signal.SIGHUP)
