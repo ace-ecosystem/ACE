@@ -17,6 +17,7 @@ from saq.util import local_time
 
 from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, OAuth2Credentials, \
     FaultTolerance, Configuration, NTLM, GSSAPI, SSPI, OAUTH2, Build, Version
+from exchangelib.errors import ResponseMessageError
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
 
@@ -155,6 +156,9 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         target_folder.refresh()
 
         for message in target_folder.all().order_by('-datetime_received'):
+            if isinstance(message, ResponseMessageError):
+                logging.warning(f"error when iterating mailbox {self.target_mailbox}: {e} ({type(e)})")
+                continue
 
             # XXX not sure why this is happening?
             if message.id is None:
