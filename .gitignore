@@ -118,6 +118,7 @@ ace.out/
 error_reports/
 load_proxy
 yss/.yss.pid
+yss/logs/
 backups/
 data/
 extra/
@@ -159,3 +160,6 @@ updates/**/*.stdout
 
 # proprietary libaries
 lib/SoleraConnector.py
+
+# any site directory
+**/site/
