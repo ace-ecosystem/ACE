@@ -9,7 +9,7 @@ Installation + Adding Data
 Super fast How-To
 -----------------
 
-#. Clean Ubuntu 18 install. Take a quick look at `these notes about Ubuntu 18 <https://github.com/IntegralDefense/ACE/wiki/Ubuntu-18-Installation-Notes>`_.
+#. Clean Ubuntu 18 install.
 #. Create username/group ace/ace.
 #. Add ace to sudo.
 #. Login as user ace.
@@ -48,10 +48,10 @@ The ace User
 Cloning ACE
 ~~~~~~~~~~~
 
-As the ace user you previously created, cd into /opt and git clone the IntegralDefense ACE master branch: https://github.com/IntegralDefense/ACE.git::
+As the ace user you previously created, cd into /opt and git clone the ace-ecosystem ACE master branch: https://github.com/ace-ecosystem/ACE.git::
 
   $ cd /opt
-  $ git clone https://github.com/IntegralDefense/ACE.git ace
+  $ git clone https://github.com/ace-ecosystem/ACE.git ace
 
 .. _source.list:
 
@@ -59,7 +59,7 @@ As the ace user you previously created, cd into /opt and git clone the IntegralD
 Run the Installer
 +++++++++++++++++
 
-With :ref:`everything ready <get-enviro-ready>`, you can now run the ACE installer. Run the installer as the ace user. This will take a little while to complete.
+With :ref:`everything ready <get-enviro-ready>`, you can now run the ACE installer. Run the installer as the ace user. You will be prompted for the password when certain things are run using sudo. This will take a little while to complete.
 
 ::
 
@@ -72,6 +72,8 @@ Set Up Environment
 Next, you will need to load the default environment variables ACE depends on. This load needs to be sourced from bash with the following command::
 
   $ source load_environment
+
+This should already be added to the ace account bashrc, so the next login should automatically load it.
 
 Create Users
 ++++++++++++
@@ -95,7 +97,7 @@ You should now be able to browse to https://your_ip/ace/ and log into ACE with t
 Troubleshooting & Help
 ----------------------
 
-There are a couple snags and gotchas that you can run into when installing ACE. This section will detail a few, but it's still a work in process. So, please send any issues or questions to ace-support@integraldefense.com. Please include as much detail as possible and we will get back to you as soon as we can. Thanks!
+There are a couple snags and gotchas that you can run into when installing ACE. This section will detail a few, but it's still a work in process.
 
 SSL Errors
 ++++++++++
@@ -145,21 +147,19 @@ Alerts staying in 'NEW' status?
 
 Make sure the ACE engine is running. You can do this by running the following::
 
-    cd /opt/ace && bin/start-correlation-engine 
+    cd /opt/ace && ace service start engine --daemon
 
 Start ACE
 +++++++++
 
-You should now have a working installation, but you need to start ACE's core (the correlation engine) this is accomplished with the ``bin/start-correlation-engine`` command. You can also use the ``bin/start-ace`` command, which start the correlation engine and attempt to start some other ACE collectors/services. You will get some errors if you don't have those other services configured (which you probably won't at this point). Those errors are nothing to be concerned about, however, if you do not want to see those errors you can explicitly start the correlation engine you need like so::
-
-    cd /opt/ace && bin/start-correlation-engine
+You should now have a working installation, but you need to start the correlation engine. This is accomplished with the ``ace service start engine --daemon`` command. 
 
 .. _get-data-in:
 
 Getting Data into ACE
 ---------------------
 
-A bare-bones ACE install is not going to be very effective by itself, much less without data. You can use the `Manual Analysis`_ section to submit observables to ACE. However, you're going to want to turn on some of the additional :ref:`Engines` and :ref:`Modules` that come with ACE by default. Firt, turning on the :ref:`Correlation Engine` is essential. Some other good engines to turn on first are the :ref:`Cloudphish` engine and the :ref:`Email Scanning <email-scanning>` engine and if you've got yara signatures, definitely turn on the :ref:`Yara Scanner` module. See the :ref:`Administration Guide` for more details on the various engines, modules, and how to turn them on.
+A bare-bones ACE install is not going to be very effective without data. You can use the `Manual Analysis`_ section to submit observables to ACE. However, you're going to want to turn on some of the additional :ref:`Integrations` and :ref:`Modules` that come with ACE by default. 
 
 Manual Analysis
 +++++++++++++++
