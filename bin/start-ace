@@ -6,12 +6,31 @@ source load_environment
 
 if [ ! -e etc/startup ]
 then
-    echo "missing $SAQ_HOME/etc/startup"
+    echo "[ERROR] missing $SAQ_HOME/etc/startup"
+    echo "You can copy the following into an $SAQ_HOME/etc/startup to get going:"
+    echo ""
+    echo "# the services will be started in the following order"
+    echo "# (and then stopped in reverse order)"
+    echo "# comment out the services you don't want to use"
+    echo ""
+    echo "ecs"
+    echo "network_semaphore"
+    echo "yara"
+    ace service status | awk '{print $1}' | grep -v SERVICE | grep -v engine | grep -v ecs | grep -v yara | grep -v network_semaphore
+    echo "engine"
     exit 1
 fi
 
 cat etc/startup | grep -v -e '^#' -e '^$' | while read service
 do
     echo "starting $service"
-    bin/start-$service
+    if [ "$service" == "ecs" ]; then
+        echo "Assuming we want to provide-decryption-password for ECS service."
+        ace -p service start ecs -d
+    else
+        ace service start $service -d
+    fi
 done
+
+# Show the status
+ace service status
