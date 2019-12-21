@@ -385,12 +385,11 @@ stop_service_parser.set_defaults(func=stop_service)
 
 def status_service(args):
     from saq.service import get_all_service_names, get_service_config, get_service_status
-    print("{:<30}{:<15}{:<15}{}".format('SERVICE', 'STATUS', 'ENABLED', 'DESCRIPTION'))
+    print("{:<30}{:<15}{}".format('SERVICE', 'STATUS', 'DESCRIPTION'))
     for service_name in get_all_service_names():
         service_config = get_service_config(service_name)
-        print("{:<30}{:<15}{:<15}{}".format(service_name, 
+        print("{:<30}{:<15}{}".format(service_name, 
                                       get_service_status(service_name),
-                                      service_config.get('enabled', fallback='?'),
                                       service_config.get('description', fallback='?')))
 
 status_service_parser = service_sp.add_parser('status',
