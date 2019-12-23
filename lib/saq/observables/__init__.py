@@ -347,6 +347,11 @@ class FileObservable(Observable):
         return True
 
     @property
+    def display_preview(self):
+        with open(self.path, 'rb') as fp:
+            return fp.read(saq.CONFIG['gui'].getint('file_preview_bytes')).decode('utf8', errors='replace')
+
+    @property
     def jinja_template_path(self):
         return "analysis/file_observable.html"
 
