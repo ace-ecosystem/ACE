@@ -210,7 +210,7 @@ class CarbonBlackBinaryCollector(Collector):
 
         for binary in json_result['results']:
 
-            if self.shutdown_event.is_set():
+            if self.service_shutdown_event.is_set():
                 return
 
             # move to the next set of items after processing these

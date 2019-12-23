@@ -100,6 +100,7 @@ When investigating an alert, there is a categorization model for analysts to fol
 |                     |                                                                                                              |
 |                     | + A signature was designed to detect something specific, and this wasn't it.                                 |
 |                     | + A signature was designed in a broad manner and, after analysis, what it detected turned out to be benign.  |
+|                     | + A response is not required.                                                                                |
 +---------------------+--------------------------------------------------------------------------------------------------------------+
 | IGNORE              | This alert should have never fired. A match was made on something a detection was looking for but it was     |
 |                     | expected or an error.                                                                                        |
