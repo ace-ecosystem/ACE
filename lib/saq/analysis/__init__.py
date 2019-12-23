@@ -1261,6 +1261,11 @@ class Observable(TaggableObject, DetectableObject):
         return self.value == value
 
     @property
+    def display_preview(self):
+        """Returns a value that can be used by a display to preview the observation."""
+        return None 
+
+    @property
     def display_value(self):
         if isinstance(self.value, str):
             try:

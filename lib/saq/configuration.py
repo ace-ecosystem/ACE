@@ -69,49 +69,49 @@ def _load_configuration():
     default_config = ExtendedConfigParser(allow_no_value=True, interpolation=EncryptedPasswordInterpolation())
     default_config.read(os.path.join(saq.SAQ_HOME, 'etc', 'saq.default.ini'))
 
-    if not saq.UNIT_TESTING:
-        # first we apply the default configuration for integrations
-        default_integration_config_path = os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.default.ini')
-        default_integration_config = ConfigParser(allow_no_value=True)
-        default_integration_config.read(default_integration_config_path)
-        apply_config(default_config, default_integration_config)
+    # first we apply the default configuration for integrations
+    default_integration_config_path = os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.default.ini')
+    default_integration_config = ConfigParser(allow_no_value=True)
+    default_integration_config.read(default_integration_config_path)
+    apply_config(default_config, default_integration_config)
 
-        # then if a local configuration exists for this integration, also load that
-        integration_config_path = os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.ini')
-        if os.path.exists(integration_config_path):
-            integration_config = ConfigParser(allow_no_value=True)
-            integration_config.read(integration_config_path)
-            apply_config(default_config, integration_config)
+    # then if a local configuration exists for this integration, also load that
+    integration_config_path = os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.ini')
+    if os.path.exists(integration_config_path):
+        integration_config = ConfigParser(allow_no_value=True)
+        integration_config.read(integration_config_path)
+        apply_config(default_config, integration_config)
 
-        # load individual integration configurations
-        if 'integrations' in default_config:
-            for integration in default_config['integrations'].keys():
-                if default_config['integrations'].getboolean(integration):
-                    # first load the default config for this integration
-                    target_config_path = os.path.join(saq.SAQ_HOME, 'etc', f'saq.{integration}.default.ini')
-                    if not os.path.exists(target_config_path):
-                        sys.stderr.write(f"integration {integration} default config {target_config_path} "
-                                          "does not exist\n")
-                        continue
+    # load individual integration configurations
+    if 'integrations' in default_config:
+        for integration in default_config['integrations'].keys():
+            if default_config['integrations'].getboolean(integration):
+                # first load the default config for this integration
+                target_config_path = os.path.join(saq.SAQ_HOME, 'etc', f'saq.{integration}.default.ini')
+                if not os.path.exists(target_config_path):
+                    sys.stderr.write(f"integration {integration} default config {target_config_path} "
+                                      "does not exist\n")
+                    continue
 
-                    default_integration_config = ConfigParser(allow_no_value=True)
-                    default_integration_config.read(target_config_path)
-                    apply_config(default_config, default_integration_config)
+                default_integration_config = ConfigParser(allow_no_value=True)
+                default_integration_config.read(target_config_path)
+                apply_config(default_config, default_integration_config)
 
-                    # and then load the local site config for this integration, if it exists
-                    target_config_path = os.path.join(saq.SAQ_HOME, 'etc', f'saq.{integration}.ini')
-                    if not os.path.exists(target_config_path):
-                        continue
+                # and then load the local site config for this integration, if it exists
+                target_config_path = os.path.join(saq.SAQ_HOME, 'etc', f'saq.{integration}.ini')
+                if not os.path.exists(target_config_path):
+                    continue
 
-                    integration_config = ConfigParser(allow_no_value=True)
-                    integration_config.read(target_config_path)
-                    apply_config(default_config, integration_config)
+                integration_config = ConfigParser(allow_no_value=True)
+                integration_config.read(target_config_path)
+                apply_config(default_config, integration_config)
 
     for config_path in saq.CONFIG_PATHS:
         override = ConfigParser(allow_no_value=True)
         override.read(config_path)
         apply_config(default_config, override)
 
+    # TODO move into a configuration check function
     # make sure all OVERRIDE settings are actually overridden
     errors = {}
     for section_name in default_config:

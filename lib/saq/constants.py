@@ -322,6 +322,8 @@ DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
 DIRECTIVE_EXTRACT_PCAP = 'extract_pcap'
 # ignores any automation limits when analyzing this observable (also see saq.modules.AnalysisModule.automation_limit)
 DIRECTIVE_IGNORE_AUTOMATION_LIMITS = 'ignore_automation_limits'
+# hints to whatever system is used to display that this should be previewable
+DIRECTIVE_PREVIEW = 'preview'
 
 DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'archive the file',
@@ -340,6 +342,7 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
     DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
+    DIRECTIVE_PREVIEW: 'show this content inline if possible',
 }
 
 VALID_DIRECTIVES = [
@@ -358,6 +361,7 @@ VALID_DIRECTIVES = [
     DIRECTIVE_SANDBOX,
     DIRECTIVE_TRACKED,
     DIRECTIVE_WHITELISTED,
+    DIRECTIVE_PREVIEW,
 ]
 
 def is_valid_directive(directive):
@@ -487,6 +491,7 @@ ANALYSIS_TYPE_MANUAL = 'manual'
 ANALYSIS_TYPE_FAQUEUE = 'faqueue'
 ANALYSIS_TYPE_FALCON = 'falcon'
 ANALYSIS_TYPE_FIREEYE = 'fireeye'
+ANALYSIS_TYPE_QRADAR_OFFENSE = 'qradar_offense'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'

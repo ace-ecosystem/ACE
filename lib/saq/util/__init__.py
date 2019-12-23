@@ -358,8 +358,13 @@ class RegexObservableParser:
         ex: delimeter of '_' might be used to join two email address
         like 'email1@email.com_email2@email2.com'.
     """
-    def __init__(self, regex, observable_type, capture_groups=None, delimiter='_', tags=None, directives=None):
-        self.regex = re.compile(regex)
+    def __init__(self, regex, observable_type, 
+                 capture_groups=None, 
+                 delimiter='_', 
+                 tags=None, 
+                 directives=None,
+                 re_compile_options=0):
+        self.regex = re.compile(regex, re_compile_options)
         self.observable_type = observable_type
         self.matches = None
         self.capture_groups = capture_groups
@@ -424,10 +429,8 @@ class RegexObservableParserGroup:
         self._observables = []
         self.tags = tags or []
 
-    def add(
-        self, regex, observable_type, capture_groups=None, delimiter='_',
-        override_class=None, tags=None, directives=None,
-    ):
+    def add(self, regex, observable_type, capture_groups=None, delimiter='_',
+            override_class=None, tags=None, directives=None, re_compile_options=0):
         """Add a parser to the list of parsers for this group.
             
             You may pass in a subclass if you want to customize
@@ -444,8 +447,9 @@ class RegexObservableParserGroup:
             delimiter=delimiter,
             tags=_tags,
             directives=directives,
+            re_compile_options=re_compile_options,
         )
-        
+
         self.parsers.append(parser)
 
     def parse_content(self, content):

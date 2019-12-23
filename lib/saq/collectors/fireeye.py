@@ -40,7 +40,7 @@ def _get_tags_for_url(url):
 
 class FireEyeCollector(Collector):
     def __init__(self, *args, **kwargs):
-        super().__init__(service_config=saq.CONIFG['service_fireeye_collector'],
+        super().__init__(service_config=saq.CONFIG['service_fireeye_collector'],
                          workload_type='fireeye', 
                          delete_files=True, 
                          *args, **kwargs)
@@ -109,6 +109,11 @@ CREATE INDEX artifact_status_index ON uuid_tracking(artifact_status)
         # primary collection threads
         self.alert_collection_thread = None
         self.artifact_collection_thread = None
+
+    @property
+    def generate_alerts(self):
+        """Are we creating alerts?"""
+        return self.service_config.getboolean('generate_alerts')
 
     def stop(self, *args, **kwargs):
         super().stop(*args, **kwargs)
@@ -230,7 +235,7 @@ CREATE INDEX artifact_status_index ON uuid_tracking(artifact_status)
 
     def collect_alerts(self):
         for alert in self.get_alerts():
-            if self.shutdown_event.is_set():
+            if self.service_shutdown_event.is_set():
                 break
     
             if self.is_alert_processed(alert['uuid']):
@@ -239,6 +244,10 @@ CREATE INDEX artifact_status_index ON uuid_tracking(artifact_status)
 
             self.mark_alert_processed(alert['uuid'])
             self.clear_old_records()
+
+            # are we generating ACE alerts for ths stuff we collect here?
+            if not self.generate_alerts:
+                continue
 
             description = f"FireEye {alert[KEY_PRODUCT]} ({alert[KEY_ACTION]}) "
             observables = []

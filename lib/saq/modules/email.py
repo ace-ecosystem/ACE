@@ -1553,6 +1553,9 @@ class EmailAnalyzer(AnalysisModule):
                 if extracted_file: 
                     extracted_file.add_directive(DIRECTIVE_EXTRACT_URLS)
 
+                    if target.get_content_type() == 'text/plain':
+                        extracted_file.add_directive(DIRECTIVE_PREVIEW)
+
                 # XXX I can't remember why we are still doing the attachment thing
                 attachments.append((len(payload), target.get_content_type(), 
                                     file_name, hashlib.sha256(payload).hexdigest()))

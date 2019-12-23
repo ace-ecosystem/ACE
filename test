@@ -39,6 +39,7 @@ then
         saq.analysis.test \
         saq.service.test \
         saq.util.test \
+        saq.util.test_filter \
         saq.collectors.test \
         saq.collectors.test_http \
         saq.collectors.test_email \
