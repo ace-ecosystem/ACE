@@ -269,6 +269,10 @@ def start_service(args):
         logging.error("you can only debug one service at a time")
         sys.exit(1)
 
+    # if no option is specified then the default is to execute in the background
+    if not args.daemon and not args.foreground and not args.debug:
+        args.daemon = True
+
     # check service depedencies and reorder startup
     # first iterate over all the dependencies
     # if any are listed that are not running yet AND are not in our list to start
@@ -323,7 +327,7 @@ def start_service(args):
                 continue
 
             service = saq.service.get_service_class(service_name)()
-            service.start_service(daemon=args.daemon, debug=args.debug, threaded=not args.daemon and not args.debug)
+            service.start_service(daemon=args.daemon, debug=args.debug, threaded=args.foreground)
             services.append(service)
         except Exception as e:
             logging.error(f"unable to load service {service_name}: {e}")
@@ -344,7 +348,10 @@ start_service_parser = service_sp.add_parser('start',
 start_service_parser.add_argument('--debug', action='store_true', default=False,
     help="Starts the service in debug mode.")
 start_service_parser.add_argument('-d', '--daemon', '--background', action='store_true', default=False,
-    help="Starts the service and then executes in the background, tracking the PID.")
+    help="Starts the service and then executes in the background, tracking the PID. "
+         "This is the default if no other option is specified." )
+start_service_parser.add_argument('--foreground', action='store_true', default=False,
+    help="Starts the service and then executes in the foreground, tracking the PID.")
 start_service_parser.add_argument('--all', action='store_true', default=False,
     help="Starts all enabled services.")
 start_service_parser.add_argument('--no-deps', action='store_true', default=False,
