@@ -487,6 +487,7 @@ ANALYSIS_TYPE_MANUAL = 'manual'
 ANALYSIS_TYPE_FAQUEUE = 'faqueue'
 ANALYSIS_TYPE_FALCON = 'falcon'
 ANALYSIS_TYPE_FIREEYE = 'fireeye'
+ANALYSIS_TYPE_QRADAR_OFFENSE = 'qradar_offense'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'

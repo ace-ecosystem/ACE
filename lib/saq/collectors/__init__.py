@@ -916,7 +916,7 @@ HAVING
 
     def debug_extended_collection(self):
         """Executes custom collection routines in debug mode. """
-        raise NotImplementedError()
+        return self.execute_extended_collection()
 
     def get_next_submission(self):
         """Returns the next Submission object to be submitted to the remote nodes."""
