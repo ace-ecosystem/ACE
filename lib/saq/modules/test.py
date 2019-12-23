@@ -190,7 +190,10 @@ class ConfigurableModuleTestAnalyzer(AnalysisModule):
 
 class GenericTestAnalysis(TestAnalysis):
     def initialize_details(self):
-        return { }
+        self.details = { 'Hello': 'world!' }
+
+    def generate_summary(self):
+        return str(self.observable.value)
 
 class GenericTestAnalyzer(AnalysisModule):
     @property
