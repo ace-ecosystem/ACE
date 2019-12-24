@@ -159,7 +159,7 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
 
         for message in target_folder.all().order_by('-datetime_received'):
             if isinstance(message, ResponseMessageError):
-                logging.warning(f"error when iterating mailbox {self.target_mailbox}: {e} ({type(e)})")
+                logging.warning(f"error when iterating mailbox {self.target_mailbox}: {message} ({type(message)})")
                 continue
 
             # XXX not sure why this is happening?
