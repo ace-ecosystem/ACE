@@ -17,7 +17,7 @@ from saq.util import local_time
 
 from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, OAuth2Credentials, \
     FaultTolerance, Configuration, NTLM, GSSAPI, SSPI, OAUTH2, Build, Version
-from exchangelib.errors import ResponseMessageError
+from exchangelib.errors import ResponseMessageError, ErrorTimeoutExpired
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
 
@@ -102,6 +102,8 @@ class EWSCollectionBaseConfiguration(object):
         while not self.collector.is_service_shutdown:
             try:
                 self.execute()
+            except ErrorTimeoutExpired as e:
+                logging.warning(f"attempt to pull emails from {self.target_mailbox} failed: {e}")
             except Exception as e:
                 logging.error(f"uncaught exception {e}")
                 report_exception()
