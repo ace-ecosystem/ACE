@@ -3352,14 +3352,12 @@ decrypt_file_parser.set_defaults(func=decrypt_file)
 
 def store_config_password(args):
     if saq.ENCRYPTION_PASSWORD is None:
-        logging.error("missing encryption password (use the -p) option\n")
+        logging.error("missing encryption password (use the -p option or start the ecs service)\n")
         sys.exit(1)
 
     # make sure the given configuration setting exists
     section, key = args.config_setting.split('.', 1)
     if section not in saq.CONFIG:
-        for key in saq.CONFIG.keys():
-            logging.error(f"{key}")
         logging.error(f"unknown config section {section}")
         sys.exit(1)
 
