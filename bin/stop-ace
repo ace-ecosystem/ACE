@@ -10,5 +10,7 @@ fi
 
 tac etc/startup | grep -v -e '^#' -e '^$' | while read service
 do
-    bin/stop-$service
+    ace service stop $service
 done
+
+ace service status
