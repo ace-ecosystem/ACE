@@ -166,6 +166,7 @@ class Hunt(object):
         """Loads the settings for the hunt from an ini formatted file. This function must return the 
            ConfigParser object used to load the settings."""
         config = configparser.ConfigParser()
+        config.optionxform = str # preserve case when reading option names
         config.read(path)
 
         section_rule = config['rule']

@@ -5,6 +5,9 @@
 
 import datetime
 import logging
+import re
+
+COMMENT_REGEX = re.compile(r'^\s*#.*?$', re.M)
 
 import saq
 from saq.constants import *
@@ -24,6 +27,7 @@ class QueryHunt(Hunt):
                        temporal_fields=None,
                        directives=None,
                        directive_options=None,
+                       strip_comments=False,
                        *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -50,6 +54,9 @@ class QueryHunt(Hunt):
         self.temporal_fields = temporal_fields # of fields
         self.directives = directives # key = field, value = [ directive ]
         self.directive_options = directive_options # key = field, value = { key = option_name value = option_value }
+
+        # if this is set to True then hash-style comments are stripped from the loaded query
+        self.strip_comments = strip_comments
 
     def execute_query(self, start_time, end_time, *args, **kwargs):
         """Called to execute the query over the time period given by the start_time and end_time parameters.
@@ -152,6 +159,9 @@ class QueryHunt(Hunt):
 
         with open(abs_path(self.search_query_path), 'r') as fp:
             self._query = fp.read()
+
+            if self.strip_comments:
+                self._query = COMMENT_REGEX.sub('', self._query)
 
         return self._query
     

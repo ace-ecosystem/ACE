@@ -18,6 +18,9 @@ class QRadarHunt(QueryHunt):
         # reference to the client used to make the request
         self.qradar_client = None
 
+        # supports hash-style comments
+        self.strip_comments = True
+
     def execute_query(self, start_time, end_time, unit_test_query_results=None):
         submissions = [] # of Submission objects
         self.qradar_client = QRadarAPIClient(saq.CONFIG['qradar']['url'], 
