@@ -114,7 +114,7 @@ class QRadarAPIClient(object):
 
             # should we keep checking?
             if continue_check_callback is not None and not continue_check_callback(self):
-                raise QueryError("continue_check_callback returned False")
+                raise QueryCanceledError("continue_check_callback returned False")
 
             # check the status of the query
             response = requests.get(f'{self.url}/ariel/searches/{search_id}', headers=self.headers, verify=False)
