@@ -1224,18 +1224,6 @@ create_alert_parser = subparsers.add_parser('create-alert',
 create_alert_parser.add_argument('dir', help="The directory to store the alert in.")
 create_alert_parser.set_defaults(func=create_alert)
 
-def test_condition_reporting(args):
-    from saq.error import report_condition
-
-    report_condition("SOMETHING ON FIIIRAAAHHH", "j/k")
-    time.sleep(5)
-    report_condition("SOMETHING ON FIIIRAAAHHH", "j/k")
-
-test_condition_reporting_parser = subparsers.add_parser('test-condition-reporting',
-    help="Test the condition reporting system.")
-#test_condition_reporting_parser.add_argument('dir', help="The directory to store the alert in.")
-test_condition_reporting_parser.set_defaults(func=test_condition_reporting)
-
 def test_error_reporting(args):
     from saq.error import report_exception
     try:
