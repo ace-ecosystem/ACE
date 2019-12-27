@@ -27,7 +27,7 @@ import traceback
 import unittest
 import uuid
 
-parser = argparse.ArgumentParser(description="Simple Alert Queue")
+parser = argparse.ArgumentParser(description="Analysis Correlation Engine")
 parser.add_argument('--saq-home', required=False, dest='saq_home', default=None,
     help="Sets the SAQ_HOME environment variable.")
 parser.add_argument('-L', '--logging-config-path', required=False, dest='logging_config_path', default=None,
@@ -65,7 +65,7 @@ subparsers = parser.add_subparsers(dest='cmd')
 def disable_proxy():
     for proxy_setting in [ 'http_proxy', 'https_proxy', 'ftp_proxy' ]:
         if proxy_setting in os.environ:
-            logging.warning("removing proxy setting {0}".format(proxy_setting))
+            logging.debug("removing proxy setting {}".format(proxy_setting))
             del os.environ[proxy_setting]
 
 def recurse_analysis(analysis, level=0, current_tree=[]):
@@ -107,12 +107,6 @@ def recurse_analysis(analysis, level=0, current_tree=[]):
 
 def display_analysis(root):
     recurse_analysis(root)
-
-    #observables = set(root.all_observables)
-    #if observables:
-        #print("{} OBSERVATIONS".format(len(observables)))
-        #for observable in observables:
-            #print("* {} - {}".format(observable.type, observable.value))
 
     tags = set(root.all_tags)
     if tags:
@@ -288,7 +282,8 @@ disable_integration_parser.set_defaults(func=disable_integration)
 # service control/start/stop
 #
 
-service_parser = subparsers.add_parser('service')
+service_parser = subparsers.add_parser('service',
+    help="Service management commands. See ace service --help for details.")
 service_sp = service_parser.add_subparsers(dest='service_cmd')
 
 def start_service(args):
@@ -1109,6 +1104,21 @@ def add_user(args):
 
     logging.info("added user {}".format(u.username))
 
+user_parser = subparsers.add_parser('user',
+    help="User management commands.")
+user_sp = user_parser.add_subparsers(dest='user_cmd')
+
+add_user_parser = user_sp.add_parser('add',
+    help="Add a new user to the system.")
+add_user_parser.add_argument('username', help="The username of the new user.")
+add_user_parser.add_argument('email', help="The email address of the new user.")
+add_user_parser.add_argument('-z', '--timezone', required=False, default=None,
+    help="The timezone the user is in. Defaults to UTC.")
+add_user_parser.add_argument('-d', '--display-name', required=False, default=None,
+    help="The (optional) display name for the user.")
+add_user_parser.set_defaults(func=add_user)
+
+# XXX DEPRECATED
 add_user_parser = subparsers.add_parser('add-user',
     help="Add a new user to the system.")
 add_user_parser.add_argument('username', help="The username of the new user.")
@@ -1176,6 +1186,15 @@ def modify_user(args):
 
     logging.info("modified user {0}".format(u.username))
 
+modify_user_parser = user_sp.add_parser('modify',
+    help="Modifies an existing user on the system.")
+modify_user_parser.add_argument('username', help="The username of the user to modify.")
+modify_user_parser.add_argument('-e', '--email', dest='email', default=None, help="The new email address of the user.")
+modify_user_parser.add_argument('-p', '--password', action='store_true', dest='password', default=False, help="Prompt for a new password.")
+modify_user_parser.add_argument('-z', '--timezone', required=False, default=None, help="The timezone the user is in. Defaults to UTC.")
+modify_user_parser.set_defaults(func=modify_user)
+
+# XXX DEPRECATED
 modify_user_parser = subparsers.add_parser('modify-user',
     help="Modifies an existing user on the system.")
 modify_user_parser.add_argument('username', help="The username of the user to modify.")
@@ -1199,30 +1218,14 @@ delete_user_parser = subparsers.add_parser('delete-user',
 delete_user_parser.add_argument('username', help="The username of the user to modify.")
 delete_user_parser.set_defaults(func=delete_user)
 
+delete_user_parser = user_sp.add_parser('delete',
+    help="Deletes an existing user from the system.")
+delete_user_parser.add_argument('username', help="The username of the user to modify.")
+delete_user_parser.set_defaults(func=delete_user)
+
 # ============================================================================
 # test utilities
 #
-
-def create_alert(args):
-    from saq.analysis import RootAnalysis
-
-    root = RootAnalysis()
-    root.tool = 'command line'
-    root.tool_instance = 'n/a'
-    root.root_type = 'debug'
-    root.description = 'Manual Alert'
-    root.event_time = datetime.datetime.now()
-    root.storage_dir = args.dir
-
-    root.initialize_storage()
-
-    root.details = { 'description': 'manually created root' }
-    root.save()
-
-create_alert_parser = subparsers.add_parser('create-alert',
-    help="Create a blank alert in the given directory.")
-create_alert_parser.add_argument('dir', help="The directory to store the alert in.")
-create_alert_parser.set_defaults(func=create_alert)
 
 def test_database_connections(args):
     import saq
@@ -1276,6 +1279,36 @@ network_semaphore_test.set_defaults(func=test_network_semaphore)
 # alert management
 #
 
+def create_alert(args):
+    from saq.analysis import RootAnalysis
+
+    root = RootAnalysis()
+    root.tool = 'command line'
+    root.tool_instance = 'n/a'
+    root.root_type = 'debug'
+    root.description = 'Manual Alert'
+    root.event_time = datetime.datetime.now()
+    root.storage_dir = args.dir
+
+    root.initialize_storage()
+
+    root.details = { 'description': 'manually created root' }
+    root.save()
+
+alert_parser = subparsers.add_parser('alert',
+    help="Alert management commands.")
+alert_sp = alert_parser.add_subparsers(dest='alert_cmd')
+
+create_alert_parser = subparsers.add_parser('create-alert',
+    help="Create a blank alert in the given directory.")
+create_alert_parser.add_argument('dir', help="The directory to store the alert in.")
+create_alert_parser.set_defaults(func=create_alert)
+
+create_alert_parser = alert_sp.add_parser('create', aliases=['new'],
+    help="Create a blank alert in the given directory.")
+create_alert_parser.add_argument('dir', help="The directory to store the alert in.")
+create_alert_parser.set_defaults(func=create_alert)
+
 def rebuild_index(args):
     """Rebuilds the indexes for the given alerts."""
     from saq.database import Alert, get_db_connection
@@ -1316,6 +1349,13 @@ def rebuild_index(args):
     sys.exit(0)
 
 rebuild_index_parser = subparsers.add_parser('rebuild-index',
+    help="Rebuilds the indexes for the given alerts.")
+rebuild_index_parser.add_argument('--all', default=False, action='store_true', dest='resync_all',
+    help="Resyncs all alerts that belong to this node. This can take a long time.")
+rebuild_index_parser.add_argument('dirs', nargs='*', default=[], help="One ore more alert directories to resync.")
+rebuild_index_parser.set_defaults(func=rebuild_index)
+
+rebuild_index_parser = alert_sp.add_parser('rebuild',
     help="Rebuilds the indexes for the given alerts.")
 rebuild_index_parser.add_argument('--all', default=False, action='store_true', dest='resync_all',
     help="Resyncs all alerts that belong to this node. This can take a long time.")
@@ -1390,6 +1430,13 @@ import_alert_parser.add_argument('-r', '--reset', action='store_true', default=F
 import_alert_parser.add_argument('dirs', nargs='+', default=[], help="One ore more alert directories to import.")
 import_alert_parser.set_defaults(func=import_alerts)
 
+import_alert_parser = alert_sp.add_parser('import',
+    help="Import one or more alert directories.")
+import_alert_parser.add_argument('-r', '--reset', action='store_true', default=False, dest='reset',
+    help="Reset imported alerts.")
+import_alert_parser.add_argument('dirs', nargs='+', default=[], help="One ore more alert directories to import.")
+import_alert_parser.set_defaults(func=import_alerts)
+
 def delete_alerts(args):
     """Completely deletes the given alerts from both the storage system and the database."""
     import saq
@@ -1419,6 +1466,11 @@ def delete_alerts(args):
     sys.exit(0)
 
 delete_alert_parser = subparsers.add_parser('delete-alerts',
+    help="Delete one or more alerts by UUID.")
+delete_alert_parser.add_argument('uuids', nargs='+', default=[], help="One ore more alert UUIDs to delete.")
+delete_alert_parser.set_defaults(func=delete_alerts)
+
+delete_alert_parser = alert_sp.add_parser('delete',
     help="Delete one or more alerts by UUID.")
 delete_alert_parser.add_argument('uuids', nargs='+', default=[], help="One ore more alert UUIDs to delete.")
 delete_alert_parser.set_defaults(func=delete_alerts)
@@ -1463,6 +1515,11 @@ reset_alert_parser = subparsers.add_parser('reset-alerts',
 reset_alert_parser.add_argument('dirs', nargs='+', help="One or more alert directories to reset.")
 reset_alert_parser.set_defaults(func=reset_alerts)
 
+reset_alert_parser = alert_sp.add_parser('reset',
+    help="Reset the given alerts allowing for re-analysis.")
+reset_alert_parser.add_argument('dirs', nargs='+', help="One or more alert directories to reset.")
+reset_alert_parser.set_defaults(func=reset_alerts)
+
 def archive_alerts(args):
     import saq
     from saq.analysis import RootAnalysis
@@ -1488,26 +1545,13 @@ def archive_alerts(args):
         alert.archive()
         alert.save()
 
-        # mark the alert as archived
-        #try:
-            #saq.db.session.execute(Alert.__table__.update().where(Alert.storage_dir==storage_dir).values(
-                #Alert.archived = True))
-            #saq.db.session.commit()
-
-            #session = DatabaseSession()
-            #root = saq.db.session.query(Alert).filter(Alert.storage_dir==storage_dir).one()
-            #root.archived = True
-            #saq.db.session.add(root)
-            #saq.db.session.commit()
-
-        #except Exception as e:
-            #logging.error("unable to mark alert {} as archived: {}".format(root, e))
-        #finally:
-            #if session:
-                #session.close()
-
 # reset-alerts
 reset_alert_parser = subparsers.add_parser('archive-alerts',
+    help="Archives a given alert by deleting analysis details and external files but keeping observations and tags.")
+reset_alert_parser.add_argument('dirs', nargs='+', help="One or more alert directories to archive.")
+reset_alert_parser.set_defaults(func=archive_alerts)
+
+reset_alert_parser = alert_sp.add_parser('archive',
     help="Archives a given alert by deleting analysis details and external files but keeping observations and tags.")
 reset_alert_parser.add_argument('dirs', nargs='+', help="One or more alert directories to archive.")
 reset_alert_parser.set_defaults(func=archive_alerts)
@@ -1563,6 +1607,15 @@ add_observable_parser.add_argument('-t', '--reference-time', required=False, des
     help="Specify a datetime in YYYY-MM-DD HH:MM:SS format the observable should be referenced from.")
 add_observable_parser.set_defaults(func=add_observable)
 
+add_observable_parser = alert_sp.add_parser('add-observable',
+    help="Add an observable to an existing alert and re-analyze.")
+add_observable_parser.add_argument('dir', help="The path to the alert to modify.")
+add_observable_parser.add_argument('observable_type', help="The type of the observable to add.")
+add_observable_parser.add_argument('observable_value', help="The value of the observable.")
+add_observable_parser.add_argument('-t', '--reference-time', required=False, dest='reference_time', default=None,
+    help="Specify a datetime in YYYY-MM-DD HH:MM:SS format the observable should be referenced from.")
+add_observable_parser.set_defaults(func=add_observable)
+
 def reload_alerts(args):
     from saq.constants import ANALYSIS_MODE_CORRELATION
     from saq.database import Alert, DatabaseSession
@@ -1580,6 +1633,71 @@ reload_alert_parser = subparsers.add_parser('reload-alerts',
 reload_alert_parser.add_argument('uuids', nargs='+',
     help="One or more alert UUIDs to analyze.")
 reload_alert_parser.set_defaults(func=reload_alerts)
+
+reload_alert_parser = alert_sp.add_parser('analyze', aliases=['reload'],
+    help="Force analysis (again) on one or more existing alert(s).")
+reload_alert_parser.add_argument('uuids', nargs='+',
+    help="One or more alert UUIDs to analyze.")
+reload_alert_parser.set_defaults(func=reload_alerts)
+
+def cleanup_alerts(args):
+    """Performs system maintenance.  This is meant to be called from a cron job."""
+    from saq.util.maintenance import cleanup_alerts
+    cleanup_alerts(fp_days_old=args.fp_days_old, 
+                   ignore_days_old=args.ignore_days_old,
+                   dry_run=args.dry_run)
+    sys.exit(0)
+
+cleanup_alerts_parsers = subparsers.add_parser('cleanup-alerts',
+    help="Removes alerts dispositioned as ignore or false positive and older than some amount of time.")
+cleanup_alerts_parsers.add_argument('--dry-run', required=False, dest='dry_run', default=False, action='store_true',
+    help="Just report how many would be deleted and archived.")
+cleanup_alerts_parsers.add_argument('--fp-days-old', type=int, required=False, dest='fp_days_old', default=None, action='store',
+    help='Specify how many days old an alert dispositioned as FALSE_POSITIVE should be for it to be archived.')
+cleanup_alerts_parsers.add_argument('--ignore-days-old', type=int, required=False, dest='ignore_days_old', default=None, action='store',
+    help='Specify how many days old an alert dispositioned as IGNORE should be for it to be deleted.')
+#cleanup_alerts_parsers.add_argument('--force-delete', required=False, dest='force_delete', default=None, action='store_true',
+    #help='force delete fp alerts instead of archiving them')
+cleanup_alerts_parsers.set_defaults(func=cleanup_alerts)
+
+cleanup_alerts_parsers = alert_sp.add_parser('cleanup',
+    help="Removes alerts dispositioned as ignore or false positive and older than some amount of time.")
+cleanup_alerts_parsers.add_argument('--dry-run', required=False, dest='dry_run', default=False, action='store_true',
+    help="Just report how many would be deleted and archived.")
+cleanup_alerts_parsers.add_argument('--fp-days-old', type=int, required=False, dest='fp_days_old', default=None, action='store',
+    help='Specify how many days old an alert dispositioned as FALSE_POSITIVE should be for it to be archived.')
+cleanup_alerts_parsers.add_argument('--ignore-days-old', type=int, required=False, dest='ignore_days_old', default=None, action='store',
+    help='Specify how many days old an alert dispositioned as IGNORE should be for it to be deleted.')
+#cleanup_alerts_parsers.add_argument('--force-delete', required=False, dest='force_delete', default=None, action='store_true',
+    #help='force delete fp alerts instead of archiving them')
+cleanup_alerts_parsers.set_defaults(func=cleanup_alerts)
+
+def display_alert(args):
+    from saq.analysis import RootAnalysis
+    
+    alert = RootAnalysis()
+    alert.storage_dir = args.dir
+    try:
+        alert.load()
+    except Exception as e:
+        logging.error("unable to load alert from {}: {}".format(args.dir, str(e)))
+        traceback.print_exc()
+        sys.exit(1)
+
+    display_analysis(alert)
+    sys.exit(0)
+
+display_alert_parser = subparsers.add_parser('display-alert',
+    help="Displays the results of the analysis for a given alert.")
+display_alert_parser.add_argument('dir', 
+    help="The directory of the alert to display")
+display_alert_parser.set_defaults(func=display_alert)
+
+display_alert_parser = alert_sp.add_parser('display',
+    help="Displays the results of the analysis for a given alert.")
+display_alert_parser.add_argument('dir', 
+    help="The directory of the alert to display")
+display_alert_parser.set_defaults(func=display_alert)
 
 # ============================================================================
 # general utility commands
@@ -2581,25 +2699,6 @@ export_crits_yara_rules_parser.add_argument('dir',
     help="The path to the directory to export the yara rules into.")
 export_crits_yara_rules_parser.set_defaults(func=export_crits_yara_rules)
 
-def cleanup_alerts(args):
-    """Performs system maintenance.  This is meant to be called from a cron job."""
-    from saq.util.maintenance import cleanup_alerts
-    cleanup_alerts(fp_days_old=args.fp_days_old, 
-                   ignore_days_old=args.ignore_days_old,
-                   dry_run=args.dry_run)
-    sys.exit(0)
-
-cleanup_alerts_parsers = subparsers.add_parser('cleanup-alerts',
-    help="Removes alerts dispositioned as ignore or false positive and older than some amount of time.")
-cleanup_alerts_parsers.add_argument('--dry-run', required=False, dest='dry_run', default=False, action='store_true',
-    help="Just report how many would be deleted and archived.")
-cleanup_alerts_parsers.add_argument('--fp-days-old', type=int, required=False, dest='fp_days_old', default=None, action='store',
-    help='Specify how many days old an alert dispositioned as FALSE_POSITIVE should be for it to be archived.')
-cleanup_alerts_parsers.add_argument('--ignore-days-old', type=int, required=False, dest='ignore_days_old', default=None, action='store',
-    help='Specify how many days old an alert dispositioned as IGNORE should be for it to be deleted.')
-#cleanup_alerts_parsers.add_argument('--force-delete', required=False, dest='force_delete', default=None, action='store_true',
-    #help='force delete fp alerts instead of archiving them')
-cleanup_alerts_parsers.set_defaults(func=cleanup_alerts)
 
 def cleanup_email_archive(args):
     from saq.email import maintain_archive
@@ -2684,26 +2783,6 @@ cleanup_cloudphish_parser.add_argument('--cleanup-days', type=int, default=7,
     help="Select URLs that have not been requested in X days (defaults to 7 days.)")
 cleanup_cloudphish_parser.set_defaults(func=cleanup_cloudphish)
 
-def display_alert(args):
-    from saq.analysis import RootAnalysis
-    
-    alert = RootAnalysis()
-    alert.storage_dir = args.dir
-    try:
-        alert.load()
-    except Exception as e:
-        logging.error("unable to load alert from {}: {}".format(args.dir, str(e)))
-        traceback.print_exc()
-        sys.exit(1)
-
-    display_analysis(alert)
-    sys.exit(0)
-
-display_alert_parser = subparsers.add_parser('display-alert',
-    help="Displays the results of the analysis for a given alert.")
-display_alert_parser.add_argument('dir', 
-    help="The directory of the alert to display")
-display_alert_parser.set_defaults(func=display_alert)
 
 # ============================================================================
 # company management
@@ -2832,6 +2911,7 @@ test_proxies_parser = subparsers.add_parser('test-proxies',
 test_proxies_parser.add_argument('url', help="A sample URL to attempt to download through each proxy.")
 test_proxies_parser.set_defaults(func=test_proxies)
 
+# TODO move this to unit testing!
 def test_process_server(args):
     from saq.process_server import initialize_process_server, Popen, PIPE, TimeoutExpired
     initialize_process_server()
@@ -2930,6 +3010,10 @@ verify_modules_parsers.set_defaults(func=verify_modules)
 # encryption/decryption utilities
 #
 
+encryption_parser = subparsers.add_parser('encryption', aliases=['enc'],
+    help="Encryption management commands.")
+encryption_sp = encryption_parser.add_subparsers(dest='enc_cmd')
+
 def set_encryption_password(args):
     from saq.service import get_service_status, SERVICE_STATUS_RUNNING
     if saq.service.get_service_status('ecs') == SERVICE_STATUS_RUNNING:
@@ -2987,6 +3071,14 @@ set_encryption_password_parser.add_argument('-k', '--key', default=False, action
     help="Use the sha256 hash of a string as the primary encryption key. The input is prompted for.")
 set_encryption_password_parser.set_defaults(func=set_encryption_password)
 
+set_encryption_password_parser = encryption_sp.add_parser('set',
+    help="Sets the password used to encrypt and decrypt archived emails.")
+set_encryption_password_parser.add_argument('-o', '--overwrite', default=False, action='store_true',
+    help="Overwrites an existing password without prompting.")
+set_encryption_password_parser.add_argument('-k', '--key', default=False, action='store_true',
+    help="Use the sha256 hash of a string as the primary encryption key. The input is prompted for.")
+set_encryption_password_parser.set_defaults(func=set_encryption_password)
+
 def test_encryption_password(args):
     import saq.crypto
     password = getpass.getpass("Enter the decryption password:")
@@ -3002,12 +3094,22 @@ test_encryption_password_parser = subparsers.add_parser('test-encryption-passwor
     help="Tests the given password to see if it matches what is currently set as the encryption password.")
 test_encryption_password_parser.set_defaults(func=test_encryption_password)
 
+test_encryption_password_parser = encryption_sp.add_parser('test',
+    help="Tests the given password to see if it matches what is currently set as the encryption password.")
+test_encryption_password_parser.set_defaults(func=test_encryption_password)
+
 def encrypt_file(args):
     from saq.crypto import encrypt
     encrypt(args.source_path, args.target_path)
     sys.exit(0)
 
 encrypt_file_parser = subparsers.add_parser('encrypt-file',
+    help="Encrypts the given file with the password set with set-encryption-password.")
+encrypt_file_parser.add_argument('source_path', help="The file to encrypt from.")
+encrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
+encrypt_file_parser.set_defaults(func=encrypt_file)
+
+encrypt_file_parser = encryption_sp.add_parser('encrypt',
     help="Encrypts the given file with the password set with set-encryption-password.")
 encrypt_file_parser.add_argument('source_path', help="The file to encrypt from.")
 encrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
@@ -3023,6 +3125,16 @@ decrypt_file_parser = subparsers.add_parser('decrypt-file',
 decrypt_file_parser.add_argument('source_path', help="The file to decrypt from.")
 decrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
 decrypt_file_parser.set_defaults(func=decrypt_file)
+
+decrypt_file_parser = encryption_sp.add_parser('decrypt',
+    help="Decrypts the given file with the password set with set-decryption-password.")
+decrypt_file_parser.add_argument('source_path', help="The file to decrypt from.")
+decrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
+decrypt_file_parser.set_defaults(func=decrypt_file)
+
+config_encryption_parser = encryption_sp.add_parser('config',
+    help="Configuration encryption management commands.")
+config_encryption_sp = config_encryption_parser.add_subparsers(dest='config_enc_cmd')
 
 def store_config_password(args):
     if saq.ENCRYPTION_PASSWORD is None:
@@ -3059,6 +3171,12 @@ store_config_password_parser.add_argument('config_setting',
     help="The configuration setting to set the password for.")
 store_config_password_parser.set_defaults(func=store_config_password)
 
+store_config_password_parser = config_encryption_sp.add_parser('store',
+    help="Encrypt and store a password as one of the configuration settings.")
+store_config_password_parser.add_argument('config_setting',
+    help="The configuration setting to set the password for.")
+store_config_password_parser.set_defaults(func=store_config_password)
+
 def list_config_passwords(args):
     from saq.configuration import get_encrypted_passwords
     encrypted_passwords = get_encrypted_passwords()
@@ -3076,6 +3194,10 @@ def list_config_passwords(args):
     sys.exit(0)
 
 list_config_passwords_parser = subparsers.add_parser('list-config-passwords',
+    help="List the config settings that have their password stored as an encrypted value.")
+list_config_passwords_parser.set_defaults(func=list_config_passwords)
+
+list_config_passwords_parser = config_encryption_sp.add_parser('list',
     help="List the config settings that have their password stored as an encrypted value.")
 list_config_passwords_parser.set_defaults(func=list_config_passwords)
 
@@ -3100,6 +3222,13 @@ delete_config_password_parser.add_argument('config_setting',
     help="The configuration setting to delete the password for.")
 delete_config_password_parser.set_defaults(func=delete_config_password)
 
+delete_config_password_parser = config_encryption_sp.add_parser('delete',
+    help="Deletes a given encrypted password.")
+delete_config_password_parser.add_argument('config_setting',
+    help="The configuration setting to delete the password for.")
+delete_config_password_parser.set_defaults(func=delete_config_password)
+
+# move to bro integration
 def add_bro_http_whitelist(args):
     import saq
 
