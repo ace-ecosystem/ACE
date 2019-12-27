@@ -903,72 +903,6 @@ correlate_parser.add_argument('targets', nargs="*",
 correlate_parser.set_defaults(func=correlate)
 
 # ============================================================================
-# correlation engine
-#
-
-engine_parser = subparsers.add_parser('engine')
-engine_sp = engine_parser.add_subparsers(dest='engine_cmd')
-
-def start_engine(args):
-
-    from saq.engine import Engine
-    from saq.error import report_exception
-    from saq.process_server import initialize_process_server
-    from saq.util import daemonize, kill_daemon
-
-    daemon_name = 'correlation-engine'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        initialize_process_server()
-
-        ace_engine = None
-
-        # add the capability for a graceful shutdown
-        def handle_signal(signum, frame):
-            ace_engine.stop()
-
-        signal.signal(signal.SIGTERM, handle_signal)
-        signal.signal(signal.SIGINT, handle_signal)
-
-        try:
-            ace_engine = Engine()
-            ace_engine.start()
-            ace_engine.wait()
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-engine_start_parser = engine_sp.add_parser('start',
-    help="Starts the Analysis Correlation Engine.")
-engine_start_parser.add_argument('-d', '--daemon', '--background', action='store_true', default=False,
-    help="Fork the process into the background and manage the PID.")
-engine_start_parser.set_defaults(func=start_engine)
-
-def stop_engine(args):
-    from saq.util import kill_daemon
-    daemon_name = 'correlation-engine'
-    sys.exit(0 if kill_daemon(daemon_name) else 1)
-
-engine_stop_parser = engine_sp.add_parser('stop',
-    help="Stops the Analysis Correlation Engine.")
-engine_stop_parser.set_defaults(func=stop_engine)
-
-# ============================================================================
 # Remediation System
 #
 
@@ -1132,57 +1066,6 @@ start_api_parser.add_argument('args', nargs=argparse.REMAINDER,
 start_api_parser.add_argument('--print-uri-paths', default=False, action='store_true',
     help="Print all of the availble URL paths and exit, without starting the API.")
 start_api_parser.set_defaults(func=start_api)
-
-
-# ============================================================================
-# start/stop the primary ACE engine
-#
-
-def ace(args):
-
-    from saq.engine import Engine
-    from saq.error import report_exception
-    from saq.process_server import initialize_process_server
-    from saq.util import daemonize, kill_daemon
-
-    daemon_name = 'ace'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        initialize_process_server()
-
-        try:
-            engine = Engine()
-            engine.start()
-            engine.wait()
-        except KeyboardInterrupt as e:
-            logging.info("caught user interrupt")
-            try:
-                engine.stop()
-                engine.wait()
-            except Exception as e:
-                logging.error("uncaught exception: {}".format(e))
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-# ace-engine
-ace_engine_parser = subparsers.add_parser('ace-engine',
-    help="Start/Stop the Analysis Correlation Engine")
-ace_engine_parser.set_defaults(func=ace)
 
 # ============================================================================
 # start/stop collectors
