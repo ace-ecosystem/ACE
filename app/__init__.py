@@ -1,5 +1,6 @@
 # vim: sw=4:ts=4:et
 
+import base64
 import logging
 import time
 
@@ -73,5 +74,7 @@ def create_app():
 
     from .vt_hash_cache import vt_hash_cache_bp as vt_hash_cache_blueprint
     app.register_blueprint(vt_hash_cache_blueprint)
+
+    app.jinja_env.filters['b64decode'] = base64.b64decode
 
     return app
