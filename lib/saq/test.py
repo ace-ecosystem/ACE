@@ -299,7 +299,8 @@ def initialize_test_environment():
         saq_home = os.environ['SAQ_HOME']
 
     # adjust search path
-    sys.path.append(os.path.join(saq_home, 'lib'))
+    if os.path.join(saq_home, 'lib') not in sys.path:
+        sys.path.append(os.path.join(saq_home, 'lib'))
 
     # initialize saq
     import saq
@@ -331,9 +332,6 @@ def initialize_test_environment():
         os.makedirs(test_dir)
     except Exception as e:
         logging.error("unable to create temp dir {}: {}".format(test_dir, e))
-
-    # in all our testing we use the password "password" for encryption/decryption
-    #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
     #initialize_database()
     initialized = True
@@ -580,6 +578,7 @@ class ACEBasicTestCase(TestCase):
         self.reset_crawlphish()
         self.reset_log_exports()
         self.reset_var_dir()
+        self.clear_error_reports()
 
         # re-enable encryption in case we disabled it
         #saq.ENCRYPTION_PASSWORD = get_aes_key('password')

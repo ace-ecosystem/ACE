@@ -47,6 +47,7 @@ then
         saq.collectors.test_hunter \
         saq.collectors.test_query_hunter \
         saq.database.test \
+        saq.error.test \
         saq.test_email \
         saq.test_crawlphish \
         saq.test_configuration \
