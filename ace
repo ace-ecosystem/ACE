@@ -1224,29 +1224,6 @@ create_alert_parser = subparsers.add_parser('create-alert',
 create_alert_parser.add_argument('dir', help="The directory to store the alert in.")
 create_alert_parser.set_defaults(func=create_alert)
 
-def test_database(args):
-    from saq.database import DatabaseSession, User, get_db_connection
-    session = DatabaseSession()
-
-    me = session.query(User).filter_by(username = 'jdavison').one()
-    logging.debug(str(me))
-
-    with get_db_connection() as db:
-        c = db.cursor()
-        c.execute("SELECT 1")
-
-    try:
-        with get_db_connection() as db:
-            raise ValueError("canary")
-    except ValueError as e:
-        pass
-
-    sys.exit(0)
-
-test_database_parser = subparsers.add_parser('test-database',
-    help="Run tests on the database.")
-test_database_parser.set_defaults(func=test_database)
-
 def test_database_connections(args):
     import saq
     from saq.database import get_db_connection
