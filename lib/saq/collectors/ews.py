@@ -20,6 +20,7 @@ from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, OAuth2Cre
 from exchangelib.errors import ResponseMessageError, ErrorTimeoutExpired
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
+from requests.exceptions import ConnectionError
 
 #
 # EWS Collector
@@ -102,7 +103,7 @@ class EWSCollectionBaseConfiguration(object):
         while not self.collector.is_service_shutdown:
             try:
                 self.execute()
-            except ErrorTimeoutExpired as e:
+            except ( ErrorTimeoutExpired, ConnectionError ) as e:
                 logging.warning(f"attempt to pull emails from {self.target_mailbox} failed: {e}")
             except Exception as e:
                 logging.error(f"uncaught exception {e}")
