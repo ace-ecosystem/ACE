@@ -3384,53 +3384,6 @@ class URLExtractionAnalyzer(AnalysisModule):
             extracted_urls = find_urls(fp.read(), base_url=base_url)
             logging.debug("extracted {} urls from {}".format(len(extracted_urls), local_file_path))
 
-            # use the strings command to extract any urls that parse out that way
-            #try:
-                #p = Popen(['/usr/bin/strings', local_file_path], stderr=PIPE, stdout=PIPE)
-                #_stdout, _stderr = p.communicate()
-                #extracted_urls.extend(_extract_urls_raw(_stdout.replace(b'\\', b'/')))
-
-                #p = Popen(['/usr/bin/strings', '-e', 'l', local_file_path], stderr=PIPE, stdout=PIPE)
-                #_stdout, _stderr = p.communicate()
-                #extracted_urls.extend(_extract_urls_raw(_stdout.replace(b'\\', b'/')))
-                        
-            #except Exception as e:
-                #logging.error("error running strings to extract urls on {}: {}".format(local_file_path, e))
-                #report_exception()
-
-            # and then remove any duplicates
-            #extracted_urls = _dedup_urls(extracted_urls)
-
-            # is this an HTML file?
-            #if file_type_analysis.mime_type and 'html' in file_type_analysis.mime_type.lower():
-                ## if this file was downloaded from some url then we want all the relative urls to be aboslute to the reference url
-                #downloaded_from = _file.get_relationship_by_type(R_DOWNLOADED_FROM)
-                #base_url = None
-                #if downloaded_from:
-                    #base_url = downloaded_from.target.value
-
-                    #for index, url in enumerate(extracted_urls):
-                        #try:
-                            #parsed_url = urlparse(url)
-                            #if not parsed_url.netloc:
-                                #extracted_urls[index] = urljoin(base_url, url)
-                                #logging.debug("fixed relative url {} to {}".format(url, extracted_urls[index]))
-                        #except Exception as e:
-                            #logging.debug("unable to parse {} as url".format(url))
-                    
-                #extracted_urls.extend(_extract_urls_html(mf, base_url=base_url))
-                #logging.debug("soup extracted {} urls from {}".format(len(extracted_urls), _file.value))
-
-            # is this a PDF file?
-            #if is_pdf_file(local_file_path) or local_file_path.endswith('.pdfparser'):
-                #urls = _PDF_URL_REGEX_B.findall(mf)
-                #urls = [re.sub(r'\s+', '', url.decode(errors='ignore')) for url in urls]
-                #urls = list(set(urls))
-                #extracted_urls.extend(urls)
-
-        # parse out any embedded urls inside thesed urls
-        #extracted_urls.extend(_extract_embedded_urls(extracted_urls))
-
         # filter out the stuff that is excluded via configuration
         fqdns = [_.strip() for _ in self.config['excluded_domains'].split(',')]
         def f(url):
