@@ -1390,48 +1390,6 @@ import_alert_parser.add_argument('-r', '--reset', action='store_true', default=F
 import_alert_parser.add_argument('dirs', nargs='+', default=[], help="One ore more alert directories to import.")
 import_alert_parser.set_defaults(func=import_alerts)
 
-# XXX fix me
-def forward_alerts(args):
-    """Imports one or more alerts from the given directories."""
-    import saq
-    from saq.network_client import submit_alerts
-
-    # just make sure each directory has the data.json file in it
-    for _dir in args.dirs:
-        json_path = os.path.join(_dir, 'data.json')
-        if not os.path.exists(json_path):
-            logging.error("{} does not exist".format(json_path))
-            continue
-
-    try:
-        # submit them all at once
-        submit_alerts(args.remote_host, args.remote_port,
-                      args.ssl_cert, args.ssl_hostname, args.ssl_key, args.ca_path, args.dirs)
-    except Exception as e:
-        logging.error("alert submission failed: {}".format(e))
-        traceback.print_exc()
-        sys.exit(1)
-
-    logging.info("submitted {} alerts".format(len(args.dirs)))
-    sys.exit(0)
-
-forward_alert_parser = subparsers.add_parser('forward-alerts',
-    help="Forward one or more alerts to another ACE system.")
-forward_alert_parser.add_argument('-r', '--remote-host', dest='remote_host', required=True,
-    help="Network location of remote ACE system.")
-forward_alert_parser.add_argument('-p', '--remote-port', dest='remote_port', type=int, required=True,
-    help="Network port of remote ACE system.")
-forward_alert_parser.add_argument('--ssl-cert', dest='ssl_cert', required=True,
-    help="Path to the SSL certificate to use when submitting (SSL parameter.)")
-forward_alert_parser.add_argument('--ssl-key', dest='ssl_key', required=True,
-    help="Path to the SSL key to use when submitting (SSL parameter.)")
-forward_alert_parser.add_argument('--ssl-hostname', dest='ssl_hostname', required=True,
-    help="The common name expected from the SSL server (SSL parameter).  This may be different than the hostname.")
-forward_alert_parser.add_argument('--ca-path', dest='ca_path', required=True,
-    help="Path to the root certificate chain to use when submitting (SSL parameter.)")
-forward_alert_parser.add_argument('dirs', nargs='+', default=[], help="One ore more alert directories to forward.")
-forward_alert_parser.set_defaults(func=forward_alerts)
-
 def delete_alerts(args):
     """Completely deletes the given alerts from both the storage system and the database."""
     import saq
@@ -2247,6 +2205,7 @@ update_organization_parsers = subparsers.add_parser('update-organization',
     help="Updates the files used by the UserTaggingAnalyzer module.")
 update_organization_parsers.set_defaults(func=update_organization)
 
+# TODO move this into integration
 def update_crits_cache(args):
     from saq.crits import update_local_cache
     if update_local_cache():
@@ -2622,58 +2581,6 @@ export_crits_yara_rules_parser.add_argument('dir',
     help="The path to the directory to export the yara rules into.")
 export_crits_yara_rules_parser.set_defaults(func=export_crits_yara_rules)
 
-def list_observables(args):
-    from saq.constants import VALID_OBSERVABLE_TYPES, OBSERVABLE_DESCRIPTIONS
-    print() 
-    print("SAQ Valid Observable Types")
-    print()
-    for o_type in VALID_OBSERVABLE_TYPES:
-        print('{0}{1}'.format(o_type.ljust(20), OBSERVABLE_DESCRIPTIONS[o_type]))
-    print()
-
-list_observables_parsers = subparsers.add_parser('list-observables',
-    help="List available observable types and their descriptions.")
-list_observables_parsers.set_defaults(func=list_observables)
-
-# XXX get rid of this
-def crits_activity_sync(args):
-    import saq
-    from saq.constants import DISPOSITION_IGNORE
-    from saq.crits import sync_crits_activity
-    from saq.database import Alert, DatabaseSession
-    session = DatabaseSession()
-    alerts = session.query(Alert).filter(
-        Alert.location == saq.CONFIG['global']['node'],
-        Alert.disposition != DISPOSITION_IGNORE,
-        Alert.disposition_time >= datetime.datetime.now() + datetime.timedelta(days=-args.numdays))
-
-    session.commit()
-
-    for alert in alerts:
-        try:
-            alert.load()
-        except Exception as e:
-            logging.error("unable to load alert {}: {}".format(alert, e))
-            continue
-
-        if "indicator" in alert.observable_types:
-            sync_crits_activity(alert)
-
-crits_activity_sync_parsers = subparsers.add_parser('crits-activity-sync',
-    help="Sync activity from this alert to CRITS alert activity")
-crits_activity_sync_parsers.add_argument('-d','--number-days-to-sync',dest='numdays',default=1,type=int,
-    help="Number of days in the past to sync activity to CRITS, default is previous day")
-crits_activity_sync_parsers.set_defaults(func=crits_activity_sync)
-
-def interactive_console(args):
-    import pdb
-    pdb.set_trace()
-    sys.exit(0)
-
-interactive_console_parser = subparsers.add_parser('interactive-console',
-    help="Drop into the REPL after initialization of ACE.")
-interactive_console_parser.set_defaults(func=interactive_console)
-
 def cleanup_alerts(args):
     """Performs system maintenance.  This is meant to be called from a cron job."""
     from saq.util.maintenance import cleanup_alerts
@@ -2703,6 +2610,7 @@ cleanup_email_archive_parser = subparsers.add_parser('cleanup-email-archive',
     help="Removes emails from the archive that have expired.")
 cleanup_email_archive_parser.set_defaults(func=cleanup_email_archive)
 
+# TODO move to integration
 def cleanup_cloudphish(args):
     from saq.database import get_db_connection
 
@@ -2899,23 +2807,6 @@ check_url_parser = subparsers.add_parser('check-url',
     help="Check the given URL against crawlphish URL selection logic.")
 check_url_parser.add_argument('url', help="The URL to check.")
 check_url_parser.set_defaults(func=check_url)
-
-def test_daemonize(args):
-    from saq.util import daemonize, kill_daemon
-
-    if args.kill_daemon:
-        kill_daemon('test-daemon')
-
-    if args.daemon:
-        daemonize('test-daemon')
-
-    while True:
-        logging.info('running')
-        time.sleep(1)
-
-test_daemonize_parsers = subparsers.add_parser('test-daemonize',
-    help="Test daemonization.")
-test_daemonize_parsers.set_defaults(func=test_daemonize)
 
 def test_proxies(args):
     import requests
