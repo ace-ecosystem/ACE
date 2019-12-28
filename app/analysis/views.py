@@ -166,7 +166,6 @@ def download_json():
         node = {
             'id': analysis.node_id,
             # yellow if it's the alert otherwise white for analysis nodes
-            'color': '#FFFF00' if analysis is alert else '#FFFFFF',
             # there is a bug in the library preventing this from working
             # 'fixed': True if analysis is alert else False,
             # 'physics': False if analysis is alert else True,
@@ -187,7 +186,6 @@ def download_json():
         next_node_id += 1
         nodes.append({
             'id': observable.node_id,
-            'color': OBSERVABLE_NODE_COLORS[observable.type],
             'label': observable.type,
             'details': str(observable)})
 
@@ -216,7 +214,6 @@ def download_json():
                 next_node_id += 1
                 tag_node = {
                     'id': next_node_id,
-                    'color': '#FFFFFF',
                     'shape': 'star',
                     'label': str(tag)}
 
