@@ -1,8 +1,10 @@
 # vim: sw=4:ts=4:et
 
 #
-# remediation routines
+# remediation services and base classes
+#
 
+import configparser
 import datetime
 import importlib
 import json
@@ -19,11 +21,12 @@ import uuid
 from configparser import ConfigParser
 
 import saq
-from saq.database import Alert, get_db_connection, Remediation
 from saq.constants import *
-from .constants import *
+from saq.database import Alert, get_db_connection, Remediation
 from saq.error import report_exception
 from saq.messaging import send_message
+from saq.remediation.constants import *
+from saq.service import *
 from saq.util import *
 
 import requests
@@ -354,8 +357,6 @@ def unremediate_emails(*args, user_id=None, comment=None, **kwargs):
     return results
 
 def execute_remediation(remediation):
-    from saq.database import Remediation
-
     message_id, recipient = remediation.key.split(':', 2)
     results = remediate_emails((message_id, recipient), user_id=remediation.user_id, comment=remediation.comment)
     for result in results:
@@ -368,7 +369,6 @@ def execute_remediation(remediation):
         saq.db.commit()
 
 def _insert_email_remediation_object(action, message_id, recipient, user_id, company_id, comment=None):
-    from saq.database import Remediation
     remediation = Remediation(
         type=REMEDIATION_TYPE_EMAIL,
         action=action,
@@ -576,32 +576,33 @@ def unremediate_phish(alerts):
     messages.insert(0, 'restored {} out of {} emails from office365'.format(success_count, len(alerts)))
     return messages
 
-#
-# the global remediation system
-# this is created using the initialize_remediation_system_manager() function
-# 
+class RemediationSystemManager(ACEService):
+    def __init__(self, *args, **kwargs):
+        super().__init__(service_config=saq.CONFIG['service_remediation'], *args, **kwargs)
 
-REMEDIATION_SYSTEM_MANAGER = None
-
-def request_remediation(remediation_type, *args, **kwargs):
-    if REMEDIATION_SYSTEM_MANAGER is None:
-        logging.error("request_remediation called before initialize_remediation_system_manager is called")
-        return None
-
-    return REMEDIATION_SYSTEM_MANAGER.request_remediation(remediation_type, *args, **kwargs)
-
-def request_restoration(remediation_type, *args, **kwargs):
-    if REMEDIATION_SYSTEM_MANAGER is None:
-        logging.error("request_restoration called before initialize_remediation_system_manager is called")
-        return None
-
-    return REMEDIATION_SYSTEM_MANAGER.request_restoration(remediation_type, *args, **kwargs)
-
-class RemediationSystemManager(object):
-    def __init__(self):
         # the list of remediation systems this is managing
         self.systems = {} # key = remediation_type, value = RemediationSystem
+
+    def initialize_service_environment(self):
         self.load_remediation_systems()
+
+    def execute_service(self):
+        # are we executing in debug mode?
+        if self.service_is_debug:
+            for _type, system in self.systems.items():
+                system.start(debug=True)
+
+            return
+
+        # start the individual remediation services
+        self.start()
+
+        # wait for the ace service to end
+        self.service_shutdown_event.wait()
+
+        # stop the individual remediation services
+        self.stop()
+        self.wait()
 
     def start(self, *args, **kwargs):
         for type, system in self.systems.items():
@@ -614,20 +615,6 @@ class RemediationSystemManager(object):
     def wait(self, *args, **kwargs):
         for type, system in self.systems.items():
             system.wait(*args, **kwargs)
-
-    def request_remediation(self, remediation_type, *args, **kwargs):
-        try:
-            return self.systems[remediation_type].request_remediation(*args, **kwargs)
-        except KeyError as e:
-            logging.error(f"requested unknown remediation type {remediation_type}")
-            raise e
-
-    def request_restoration(self, remediation_type, *args, **kwargs):
-        try:
-            return self.systems[remediation_type].request_restoration(*args, **kwargs)
-        except KeyError as e:
-            logging.error(f"requested unknown remediation type {remediation_type}")
-            raise e
 
     def load_remediation_systems(self):
         for section_name in saq.CONFIG.keys():
@@ -658,9 +645,7 @@ class RemediationSystemManager(object):
 
             try:
                 logging.debug(f"loading remediation system {name}")
-                remediation_system = _class(batch_size=saq.CONFIG[section_name].getint('batch_size', fallback=None),
-                                            message_on_success=saq.CONFIG[section_name].getboolean('message_on_success', fallback=False),
-                                            message_on_error=saq.CONFIG[section_name].getboolean('message_on_error', fallback=False))
+                remediation_system = _class(config=saq.CONFIG[section_name])
 
                 if remediation_system.remediation_type in self.systems:
                     logging.error(f"multiple remediations systems are defined for the type {remediation_system.remediation_type}")
@@ -675,7 +660,14 @@ class RemediationSystemManager(object):
                 continue
 
 class RemediationSystem(object):
-    def __init__(self, batch_size=10, message_on_success=None, message_on_error=None):
+    def __init__(self, config=None):
+        assert isinstance(config, configparser.SectionProxy)
+
+        # configuration settings for this remediation system
+        self.config = config
+
+        # the type of remediations this system performs
+        self.remediation_type = config['type']
 
         # the queue that contains the current Remediation object to work on
         self.queue = None
@@ -686,6 +678,12 @@ class RemediationSystem(object):
         # the list of worker threads that perform the work added to the queue
         self.worker_threads = []
 
+        # controls how many worker threads we run at once
+        self.max_concurrent_remediation_count = self.config.getint('max_concurrent_remediation_count', fallback=None)
+        if self.max_concurrent_remediation_count is None:
+            # if we don't specify for this particular type of remediation system then we take the default defined for all remediation systems
+            self.max_concurrent_remediation_count = saq.CONFIG['service_remediation'].getint('max_concurrent_remediation_count', fallback=10)
+
         # control event to shut the remediation system down (gracefully)
         self.control_event = None
 
@@ -693,76 +691,26 @@ class RemediationSystem(object):
         self.lock = None
 
         # the total number of remediation items this system will lock at once
-        self.batch_size = batch_size
+        # defaults to the size of the worker queue
+        self.batch_size = self.config.getint('batch_size', fallback=self.max_concurrent_remediation_count)
 
         # defines message targets 
-        self.message_on_success = message_on_success
-        self.message_on_error = message_on_error
+        self.message_on_success = self.config.getboolean('message_on_success', fallback=False)
+        self.message_on_error = self.config.getboolean('message_on_error', fallback=False)
 
-    @property
-    def remediation_type(self):
-        """The type of remediations this system provides."""
-        raise NotImplementedError()
+        # if this is set to True then we run everything in a single thread
+        self.debug = False
 
     def execute_request(self, remediation):
         raise NotImplementedError()
 
-    def request_remediation(self, *args, **kwargs):
-        return self._insert(*args, action=REMEDIATION_ACTION_REMOVE, type=self.remediation_type, **kwargs)
+    def start(self, debug=False):
+        # set debug mode
+        self.debug = debug
 
-    def request_restoration(self, *args, **kwargs):
-        return self._insert(*args, action=REMEDIATION_ACTION_RESTORE, type=self.remediation_type, **kwargs)
-
-    def execute_remediation(self, *args, **kwargs):
-        from saq.database import Remediation
-
-        # create a locked remediation entry so any currently running remediation systems don't grab it
-        remediation_id = self.request_remediation(*args, 
-                                                  lock=str(uuid.uuid4()), 
-                                                  lock_time=datetime.datetime.now(), 
-                                                  **kwargs)
-        self.execute_request(saq.db.query(Remediation).filter(Remediation.id == remediation_id).one())
-        return saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
-
-    def execute_restoration(self, *args, **kwargs):
-        from saq.databased import Remediation
-
-        # create a locked remediation entry so any currently running remediation systems don't grab it
-        remediation_id = self.request_restoration(*args, 
-                                                  lock=str(uuid.uuid4()), 
-                                                  lock_time=datetime.datetime.now(), 
-                                                  **kwargs)
-        self.execute_request(saq.db.query(Remediation).filter(Remediation.id == remediation_id).one())
-        return saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
-
-    def _insert(self, type, action, user_id, key, company_id, 
-                comment=None, lock=None, lock_time=None, status=REMEDIATION_STATUS_NEW):
-
-        from saq.database import Remediation
-
-        remediation = Remediation(
-            type=type,
-            action=action,
-            user_id=user_id,
-            key=key,
-            comment=comment,
-            company_id=company_id,
-            lock=lock,
-            lock_time=lock_time,
-            status=status)
-
-        saq.db.add(remediation)
-        saq.db.commit()
-        logging.info(f"added remediation request {remediation}")
-        return remediation.id
-
-    #
-    # automation routines
-
-    def start(self):
-        logging.info("starting remediation system")
+        logging.info(f"starting remediation system (debug={debug})")
         # grab the lock uuid used last time, or, create a new one
-        lock_uuid_path = os.path.join(saq.DATA_DIR, 'var', 'remediation.uuid')
+        lock_uuid_path = os.path.join(saq.DATA_DIR, 'var', f'remediation.{self.remediation_type}.uuid')
         if os.path.exists(lock_uuid_path):
             try:
                 with open(lock_uuid_path) as fp:
@@ -776,8 +724,6 @@ class RemediationSystem(object):
             with open(lock_uuid_path, 'w') as fp:
                 self.lock = str(uuid.uuid4())
                 fp.write(self.lock)
-
-        from saq.database import Remediation
 
         # reset any outstanding work set to this uuid
         # this would be stuff left over from the last time it shut down
@@ -795,8 +741,14 @@ class RemediationSystem(object):
         self.queue = queue.Queue(maxsize=1)
         self.control_event = threading.Event()
 
+        if self.debug:
+            self.manager_execute()
+            self.manager_execute() # due to the way the logic works, this needs to be called twice
+            self.worker_execute()
+            return
+
         # start the workers first so they can start reading the the queue
-        for index in range(saq.CONFIG['service_engine'].getint('max_concurrent_remediation_count')):
+        for index in range(self.max_concurrent_remediation_count):
             worker_thread = threading.Thread(target=self.worker_loop, name=f"Remediation Worker #{index}")
             worker_thread.start()
             self.worker_threads.append(worker_thread)
@@ -836,8 +788,6 @@ class RemediationSystem(object):
         logging.debug("remediation manager loop exiting")
 
     def manager_execute(self):
-        from saq.database import Remediation
-
         # start putting whatever is available
         locked_workload = saq.db.query(Remediation).filter(and_(
             Remediation.lock == self.lock,
@@ -849,7 +799,7 @@ class RemediationSystem(object):
 
         for remediation in locked_workload:
             try:
-                # mark the work item as currently be processed
+                # mark the work item as in progress
                 saq.db.execute(Remediation.__table__.update().values(status=REMEDIATION_STATUS_IN_PROGRESS).where(Remediation.id == remediation.id))
                 saq.db.commit()
             except Exception as e:
@@ -864,6 +814,9 @@ class RemediationSystem(object):
                     logging.info(f"added {remediation} to the queue @ {id(self.queue)}")
                     break
                 except queue.Full:
+                    if self.debug:
+                        break
+
                     continue
 
         # lock more work to do
@@ -936,18 +889,6 @@ class RemediationSystem(object):
 
             logging.info(f"completed remediation item {remediation}")
 
-            alert_references = []
-            for alert_uuid in remediation_result.alert_uuids:
-                alert_references.append("referencing alert: {}analysis?direct={}".format(saq.CONFIG['gui']['base_uri'], alert_uuid))
-
-            if alert_references:
-                alert_references = '\n' + '\n'.join(alert_references)
-            else:
-                alert_references = ""
-
-            # XXX quick hack to remove this -- not useful
-            alert_references = ""
-
             if remediation_result.successful and self.message_on_success:
                 try:
                     send_message(f"remediation for {remediation_result.key} completed: {remediation_result.result}{alert_references}", MESSAGE_TYPE_REMEDIATION_SUCCESS)
@@ -986,67 +927,56 @@ class RemediationSystem(object):
                 logging.error(f"unable to record error for remediation item {remediation.id}: {e}")
                 report_exception()
 
-class EmailRemediationSystem(RemediationSystem):
-    @property
-    def remediation_type(self):
-        return REMEDIATION_TYPE_EMAIL
-
-    def request_remediation(self, message_id, recipient, *args, **kwargs):
-        return RemediationSystem.request_remediation(
-            self,
-            *args, 
-            key=f'{message_id}:{recipient}', 
-            **kwargs)
-
-    def request_restoration(self, message_id, recipient, *args, **kwargs):
-        return RemediationSystem.request_restoration(
-            self,
-            *args, 
-            key=f'{message_id}:{recipient}', 
-            **kwargs)
-
-class LogOnlyRemdiationSystem(EmailRemediationSystem):
-    """Dummy class that simply logs the request and marks it as completed."""
-    def execute_request(self, remediation):
-        logging.info(f"execution remediation {remediation}")
-        message_id, recipient = remediation.key.split(':', 1)
-
-        if 'fail' in message_id:
-            raise 
-
-        remediation.status = REMEDIATION_STATUS_COMPLETED
-        remediation.successful = True
-        remediation.result = 'executed by LogOnlyRemediationSystem'
-
-        logging.info(f"completed remediation request {remediation}")
-        return remediation
-
-def initialize_remediation_system_manager(*args, **kwargs):
-    global REMEDIATION_SYSTEM_MANAGER
-
-    from saq.messaging import initialize_message_system
-    initialize_message_system()
-
-    REMEDIATION_SYSTEM_MANAGER = RemediationSystemManager(*args, **kwargs)
-    return REMEDIATION_SYSTEM_MANAGER
-
-def start_remediation_system_manager(*args, **kwargs):
-    if REMEDIATION_SYSTEM_MANAGER is None:
-        logging.error("called start_remediation_system_manager before initialize_remediation_system_manager")
+def execute(action, type, key, user_id, company_id, comment=None):
+    manager = RemediationSystemManager()
+    manager.load_remediation_systems()
+    if type not in manager.systems:
+        logging.error(f"remediation type {type} is missing")
         return None
 
-    REMEDIATION_SYSTEM_MANAGER.start(*args, **kwargs)
+    system = manager.systems[type]
 
-def stop_remediation_system_manager(*args, **kwargs):
-    if REMEDIATION_SYSTEM_MANAGER is None:
-        logging.error("called stop_remediation_system_manager before initialize_remediation_system_manager")
-        return None
+    # create a locked remediation entry so any currently running remediation systems don't grab it
+    remediation_id = request(action, type, key, user_id, company_id, comment,
+                             str(uuid.uuid4()), # lock
+                             datetime.datetime.now()) # lock_time
+    system.execute_request(saq.db.query(Remediation).filter(Remediation.id == remediation_id).one())
+    return saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
 
-    REMEDIATION_SYSTEM_MANAGER.stop(*args, **kwargs)
+def execute_remediation(*args, **kwargs):
+    return execute(REMEDIATION_ACTION_REMOVE, *args, **kwargs)
 
-def wait_remediation_system_manager(*args, **kwargs):
-    if REMEDIATION_SYSTEM_MANAGER is None:
-        logging.error("called wait_remediation_system_manager before initialize_remediation_system_manager")
-        return None
+def execute_restoration(*args, **kwargs):
+    return execute(REMEDIATION_ACTION_RESTORE, *args, **kwargs)
 
-    REMEDIATION_SYSTEM_MANAGER.wait(*args, **kwargs)
+def request(action,
+            type,
+            key,
+            user_id,
+            company_id,
+            comment=None,
+            lock=None,
+            lock_time=None,
+            status=REMEDIATION_STATUS_NEW):
+
+    remediation = Remediation(
+        action=action,
+        type=type,
+        key=key,
+        user_id=user_id,
+        comment=comment,
+        company_id=company_id,
+        lock=lock,
+        lock_time=lock_time,
+        status=status,)
+
+    saq.db.add(remediation)
+    saq.db.commit()
+    logging.info(f"added remediation request {remediation}")
+    return remediation.id
+
+def request_remediation(*args, **kwargs):
+    return request(REMEDIATION_ACTION_REMOVE, *args, **kwargs)
+
+def request_restoration(*args, **kwargs):
+    return request(REMEDIATION_ACTION_RESTORE, *args, **kwargs)

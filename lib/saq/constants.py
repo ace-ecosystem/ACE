@@ -324,6 +324,8 @@ DIRECTIVE_EXTRACT_PCAP = 'extract_pcap'
 DIRECTIVE_IGNORE_AUTOMATION_LIMITS = 'ignore_automation_limits'
 # hints to whatever system is used to display that this should be previewable
 DIRECTIVE_PREVIEW = 'preview'
+# destroy that which is contained within
+DIRECTIVE_REMEDIATE = 'remediate'
 
 DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'archive the file',
@@ -338,11 +340,12 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_NO_SCAN: 'do not scan this file with yara',
     DIRECTIVE_ORIGINAL_EMAIL: 'treat this file as the original email file',
     DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
+    DIRECTIVE_PREVIEW: 'show this content inline if possible',
+    DIRECTIVE_REMEDIATE: 'remediate the target',
     DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
     DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
     DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
-    DIRECTIVE_PREVIEW: 'show this content inline if possible',
 }
 
 VALID_DIRECTIVES = [
@@ -358,10 +361,11 @@ VALID_DIRECTIVES = [
     DIRECTIVE_NO_SCAN,
     DIRECTIVE_ORIGINAL_EMAIL,
     DIRECTIVE_ORIGINAL_SMTP,
+    DIRECTIVE_PREVIEW,
+    DIRECTIVE_REMEDIATE,
     DIRECTIVE_SANDBOX,
     DIRECTIVE_TRACKED,
     DIRECTIVE_WHITELISTED,
-    DIRECTIVE_PREVIEW,
 ]
 
 def is_valid_directive(directive):
