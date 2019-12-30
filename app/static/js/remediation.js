@@ -2,20 +2,20 @@ function remediation_selection(alert_uuids=null, targets=null) {
     // displays the remediation selection dialog that allows the analyst to select which targets to remove/restore
     data = { };
 
-    // are we currently viewing a single alert?
-    if (current_alert_uuid != null) {
+    if (alert_uuids !== null) {
+        data['alert_uuids'] = JSON.stringify(alert_uuids);
+    } else {
         // are we specifying specific targets?
-        if (targets != null) {
+        if (targets !== null) {
             data['targets'] = JSON.stringify(targets);
         } else {
             // otherwise we load all the possible targets for this alert
             data['alert_uuids'] = JSON.stringify([ current_alert_uuid ]);
         }
-    } else {
-        data['alert_uuids'] = JSON.stringify(alert_uuids);
     }
     
     $('#remediation-selection-modal').modal('show');
+    $('#remediation-selection-body').html('loading data...');
 
     $.ajax({
         'url': query_remediation_targets_url, // <-- set in app/templates/base.html
