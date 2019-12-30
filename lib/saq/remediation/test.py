@@ -14,22 +14,6 @@ from saq.test import *
 
 from sqlalchemy import func, and_
 
-#class LogOnlyRemdiationSystem(EmailRemediationSystem):
-    #"""Dummy class that simply logs the request and marks it as completed."""
-    #def execute_request(self, remediation):
-        #logging.info(f"execution remediation {remediation}")
-        #message_id, recipient = remediation.key.split(':', 1)
-
-        #if 'fail' in message_id:
-            #raise 
-
-        #remediation.status = REMEDIATION_STATUS_COMPLETED
-        #remediation.successful = True
-        #remediation.result = 'executed by LogOnlyRemediationSystem'
-
-        #logging.info(f"completed remediation request {remediation}")
-        #return remediation
-
 class TestRemediationSystem(RemediationSystem):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

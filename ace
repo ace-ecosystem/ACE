@@ -658,6 +658,13 @@ def correlate(args):
         root.tool_instance = socket.gethostname()
         root.alert_type = args.alert_type
         root.analysis_mode = ANALYSIS_MODE_CLI if args.analysis_mode is None else args.analysis_mode
+        if f'analysis_mode_{root.analysis_mode}' not in saq.CONFIG:
+            logging.error(f"invalid analysis mode {root.analysis_mode}")
+            sys.exit(1)
+
+        # disable cleanup in whatever mode we use
+        saq.CONFIG[f'analysis_mode_{root.analysis_mode}']['cleanup'] = 'no'
+
         root.description = args.description if args.description else 'Command Line Correlation'
         root.event_time = datetime.datetime.now() if reference_time is None else reference_time
         if args.load_details:

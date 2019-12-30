@@ -1,3 +1,4 @@
+import base64
 import collections.abc
 import calendar
 import datetime
@@ -42,6 +43,7 @@ import saq
 import saq.analysis
 import saq.intel
 import saq.remediation
+import saq.remediation.email
 import virustotal
 import splunklib
 
@@ -55,12 +57,20 @@ from saq.database import User, UserAlertMetrics, Comment, get_db_connection, Eve
                          Workload, DelayedAnalysis, \
                          acquire_lock, release_lock, \
                          get_available_nodes, use_db, set_dispositions, add_workload, \
-                         add_observable_tag_mapping, remove_observable_tag_mapping
+                         add_observable_tag_mapping, remove_observable_tag_mapping, \
+                         Remediation
 from saq.email import search_archive, get_email_archive_sections
 from saq.error import report_exception
 from saq.gui import GUIAlert
 from saq.performance import record_execution_time
 from saq.util import abs_path
+from saq.remediation import execute_remediation, execute_restoration, request_remediation, request_restoration
+import saq.remediation
+from saq.remediation.email import request_email_remediation, \
+                                  request_email_restoration, \
+                                  remediate_emails, \
+                                  unremediate_emails
+from saq.remediation.constants import REMEDIATION_TYPE_EMAIL
 
 import ace_api
 
@@ -3655,6 +3665,18 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
             email_remediations.extend(search_archive(source, message_ids,
                                       excluded_emails=saq.CONFIG['remediation']['excluded_emails'].split(',')).values())
 
+    # get the remediation history for all RemediationTarget in this alert
+    remediation_history = []
+    query_keys = []
+    for remediation_target in alert.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
+        logging.info(f"MARKER: looking up {remediation_target}")
+        query_keys.append(remediation_target.remediation_key)
+
+    if len(query_keys) > 0:
+        remediation_history = saq.db.query(Remediation).filter(Remediation.key.in_(query_keys))\
+                                                       .order_by(Remediation.key, Remediation.insert_date.desc())\
+                                                       .all()
+
     # get list of domains that appear in the alert
     domains = find_all_url_domains(analysis)
     #domain_list = list(domains)
@@ -3714,7 +3736,8 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
                            domains=domains,
                            domain_list=domain_list,
                            domain_summary_str=domain_summary_str,
-                           email_remediations=email_remediations)
+                           email_remediations=email_remediations,
+                           remediation_history=remediation_history)
 
 @analysis.route('/file', methods=['GET'])
 @login_required
@@ -4206,12 +4229,11 @@ def remediate_emails():
             if not do_it_now:
                 for target in targets.values():
                     try:
-                        r_id = saq.remediation.request_remediation(saq.remediation.constants.REMEDIATION_TYPE_EMAIL,
-                                                                   target.message_id,
-                                                                   target.recipient,
-                                                                   user_id=current_user.id,
-                                                                   company_id=target.company_id,
-                                                                   comment=','.join(alert_uuids))
+                        r_id = request_email_remediation(target.message_id,
+                                                         target.recipient,
+                                                         current_user.id,
+                                                         target.company_id,
+                                                         ','.join(alert_uuids))
 
                         target.result_text = f"request remediation (id {r_id})"
                         target.result_success = True
@@ -4221,18 +4243,17 @@ def remediate_emails():
                         target.result_success = False
             else:
                 # TODO refactor this to use the classes of the new system
-                results = saq.remediation.remediate_emails(params, user_id=current_user.id)
+                results = saq.remediation.email.remediate_emails(current_user.id, None, params)
 
         elif action == 'restore':
             if not do_it_now:
                 for target in targets.values():
                     try:
-                        r_id = saq.remediation.request_restoration(saq.remediation.constants.REMEDIATION_TYPE_EMAIL,
-                                                                   target.message_id,
-                                                                   target.recipient,
-                                                                   user_id=current_user.id,
-                                                                   company_id=target.company_id,
-                                                                   comment=','.join(alert_uuids))
+                        r_id = request_email_restoration(target.message_id,
+                                                         target.recipient,
+                                                         current_user.id,
+                                                         target.company_id,
+                                                         ','.join(alert_uuids))
 
                         target.result_text = f"request restoration (id {r_id})"
                         target.result_success = True
@@ -4242,7 +4263,7 @@ def remediate_emails():
                         target.result_success = False
             else:
                 # TODO refactor this to use the classes of the new system
-                results = saq.remediation.unremediate_emails(params, user_id=current_user.id)
+                results = saq.remediation.email.unremediate_emails(current_user.id, None, params)
 
     except Exception as e:
         logging.error("unable to perform email remediation action {}: {}".format(action, e))
@@ -4264,5 +4285,64 @@ def remediate_emails():
     
     from saq.analysis import _JSONEncoder
     response = make_response(json.dumps(targets, cls=_JSONEncoder))
+    response.mimetype = 'application/json'
+    return response
+
+@analysis.route('/query_remediation_targets', methods=['POST'])
+@login_required
+def query_remediation_targets():
+    """Obtains a list of all the remediation targets for the given list of alert uuids."""
+    result = {} # key = remediation_key, value = dict (see below)
+    for alert in saq.db.query(Alert).filter(Alert.uuid.in_(json.loads(request.values['alert_uuids']))):
+        try:
+            alert.load()
+            for observable in alert.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
+                result[observable.remediation_key] = {'type': observable.type,
+                                                      'remediation_type': observable.remediation_type,
+                                                      'value': observable.value,
+                                                      'remediation_key': observable.remediation_key,
+                                                      'history': []}
+        except Exception as e:
+            logging.error(f"unable to load remediation targets: {e}")
+
+    for history in saq.db.query(Remediation).filter(Remediation.key.in_([key for key, _ in result.items()]))\
+                                            .order_by(Remediation.insert_date.desc()):
+        result[history.key]['history'].append(history.json)
+        
+    from saq.analysis import _JSONEncoder
+    response = make_response(json.dumps(result, cls=_JSONEncoder))
+    response.mimetype = 'application/json'
+    return response
+
+@analysis.route('/remediate_targets', methods=['POST'])
+@login_required
+def remediate_targets():
+    json_request = json.loads(request.values['json_request'])
+
+    action = json_request['action']
+    targets = json_request['targets']
+    blocking = json_request['blocking']
+
+    result = []
+    for target in targets:
+        remediation_type = target['remediation_type']
+        remediation_key_b64 = target['remediation_key_b64']
+        remediation_key = base64.b64decode(remediation_key_b64).decode('utf8', errors='replace')
+        observable_type = target['observable_type']
+        observable_value_b64 = target['observable_value_b64']
+        observable_value = base64.b64decode(observable_value_b64).decode('utf8', errors='replace')
+
+        logging.info(f"got request from {current_user.username} to remediate action {action} type {observable_type} value {observable_value} key {remediation_key}")
+        
+        if blocking:
+            remediation_result = saq.remediation.execute(action, remediation_type, remediation_key, current_user.id, saq.COMPANY_ID)
+        else:
+            remediation_result = saq.remediation.request(action, remediation_type, remediation_key, current_user.id, saq.COMPANY_ID)
+
+        if remediation_result is not None:
+            result.append(remediation_result.json)
+
+    from saq.analysis import _JSONEncoder
+    response = make_response(json.dumps(result, cls=_JSONEncoder))
     response.mimetype = 'application/json'
     return response

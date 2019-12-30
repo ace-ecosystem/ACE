@@ -50,7 +50,9 @@
 {# we have to set these here because the javascript is stored in static #}
 <script>
     var query_message_ids_url = '{{ url_for('analysis.query_message_ids') }}';
+    var query_remediation_targets_url = '{{ url_for('analysis.query_remediation_targets') }}';
     var remediate_emails_url = '{{ url_for('analysis.remediate_emails') }}';
+    var remediate_targets_url = '{{ url_for('analysis.remediate_targets') }}';
 </script>
 
 <!-- core css -->
@@ -405,6 +407,45 @@
         </div>
     </div>
     </form>
+</div>
+
+<!-- remediation activity dialog -->
+<div class="modal" id="remediation_activity_modal" tabindex="-1" role="dialog" aria-labelledby="remediation_activity_label" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                <h4 class="modal-title" id="remediation_activity_label">Remediation Execution</h4>
+            </div>
+            <div class="modal-body" id="remediation-activity-body">
+                executing...
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-success" id="btn-remediation-activity-dismiss" data-dismiss="modal">OK</button>
+                <button type="submit" class="btn btn-danger" id="btn-remediation-activity-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- remediation selection dialog -->
+<div class="modal fade" id="remediation-selection-modal" tabindex="-1" role="dialog" aria-labelledby="remediation-selection-label" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                <h4 class="modal-title" id="remediation-selection-label">Remediation Selection</h4>
+            </div>
+            <div class="modal-body" id="remediation-selection-body">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" id="btn-remediation-selection-dismiss" data-dismiss="modal">Nevermind</button>
+                <button type="submit" class="btn btn-primary" id="btn-remediation-selection-restore">Restore</button>
+                <button type="submit" class="btn btn-primary" id="btn-remediation-selection-remove">Remove</button>
+                <div class="checkbox" id="div-cb-do-it-now"><label><input type="checkbox" id="cb-do-it-now" checked>Do It Now!</label></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- email remediation dialog -->

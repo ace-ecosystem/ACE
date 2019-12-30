@@ -837,7 +837,7 @@ class Alert(RootAnalysis, Base):
 
             # if nothing matched then just use global sla
             if target_sla is None:
-                logging.debug("alert {} uses global SLA settings".format(self))
+                #logging.debug("alert {} uses global SLA settings".format(self))
                 target_sla = saq.GLOBAL_SLA_SETTINGS
 
         except Exception as e:
@@ -1909,6 +1909,8 @@ class Remediation(Base):
         ForeignKey('users.id'),
         nullable=False)
 
+    user = relationship('saq.database.User', backref='remediations')
+
     key = Column(
         String,
         nullable=False)
@@ -1960,6 +1962,22 @@ class Remediation(Base):
         Enum('NEW', 'IN_PROGRESS', 'COMPLETED'),
         nullable=False,
         default='NEW')
+
+    @property
+    def json(self):
+        return {
+            'id': self.id,
+            'type': self.type,
+            'action': self.action,
+            'insert_date': self.insert_date,
+            'user_id': self.user_id,
+            'key': self.key,
+            'result': self.result,
+            'comment': self.comment,
+            'successful': self.successful,
+            'company_id': self.company_id,
+            'status': self.status,
+        }
 
 class Message(Base):
 

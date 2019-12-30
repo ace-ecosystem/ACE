@@ -27,6 +27,7 @@ from saq.database import get_db_connection, execute_with_retry, Alert, use_db
 from saq.email import normalize_email_address, search_archive, get_email_archive_sections, decode_rfc2822
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule, AnalysisModule
+from saq.modules.remediation import *
 from saq.modules.util import get_email
 from saq.process_server import Popen, PIPE
 from saq.whitelist import BrotexWhitelist, WHITELIST_TYPE_SMTP_FROM, WHITELIST_TYPE_SMTP_TO
@@ -3715,3 +3716,22 @@ class MSOfficeEncryptionAnalyzer(AnalysisModule):
             logging.debug("decryption for {} failed: {}".format(_file.value, e))
             #report_exception()
             return False
+
+class EmailRemediationAction(RemediationAction):
+    def initialize_details(self):
+        self.details = {
+
+        }
+
+    def generate_summary(self):
+        if not self.details:
+            return None
+
+class EmailRemediationAnalyzer(RemediationAnalyzer):
+    @property
+    def generated_analysis_type(self):
+        return MailboxEmailAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_MESSAGE_ID
