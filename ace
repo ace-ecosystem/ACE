@@ -905,6 +905,166 @@ correlate_parser.add_argument('targets', nargs="*",
 correlate_parser.set_defaults(func=correlate)
 
 # ============================================================================
+# Remediation Utilities
+#
+
+remediation_parser = subparsers.add_parser('remediation')
+remediation_sp = remediation_parser.add_subparsers(dest='remediation_cmd')
+
+def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None):
+    from saq.database import Remediation, User
+    from sqlalchemy import or_
+
+    query = saq.db.query(Remediation).join(User)
+
+    if id:
+        query = query.filter(Remediation.id == id)
+
+    if type:
+        query = query.filter(Remediation.type == type)
+
+    if status:
+        query = query.filter(Remediation.status == status)
+
+    if key:
+        query = query.filter(Remediation.key.ilike(f'%{key}%'))
+
+    if user_id:
+        query = query.filter(Remediation.user_id == user_id)
+
+    if user:
+        query = query.filter(or_(User.username.ilike(f'%{user}%'), 
+                                 User.display_name.ilike(f'%{user}%')))
+
+    for r in query.order_by(Remediation.insert_date.desc()):
+        print(f"insert_date: {r.insert_date} id:{r.id} type:{r.type} action:{r.action} "
+              f'user_id: {r.user_id} key: "{r.key}" result: "{r.result}" comment: "{r.comment}" '
+              f'successful: {r.successful} company_id: {r.company_id} lock: {r.lock} lock_time: {r.lock_time} '
+              f'status: {r.status}')
+
+def remediation_status(args):
+    print_remediation_status(status=args.status,
+                             type=args.type,
+                             key=args.key,
+                             user=args.user,
+                             user_id=args.user_id)
+    sys.exit(0)
+
+remediation_status_parser = remediation_sp.add_parser('status',
+    help="Shows the status of remediation requests.")
+remediation_status_parser.add_argument('-s', '--status',
+    help="Return results matching the given status.")
+remediation_status_parser.add_argument('-t', '--type',
+    help="Return results matching the given remediation type.")
+remediation_status_parser.add_argument('-k', '--key', 
+    help="Return results matching the given remediation target (key).")
+remediation_status_parser.add_argument('-u', '--user', 
+    help="Return results matching the given username or display name.")
+remediation_status_parser.add_argument('--user-id', type=int,
+    help="Return results matching the given user_id.")
+remediation_status_parser.set_defaults(func=remediation_status)
+
+def execute_remediation(args):
+    import saq
+    import saq.remediation
+    import saq.remediation.constants
+
+    target_function = saq.remediation.execute
+    if args.background:
+        target_function = saq.remediation.request
+
+    if args.remediation_action == 'remove':
+        action = saq.remediation.constants.REMEDIATION_ACTION_REMOVE
+    elif args.remediation_action == 'restore':
+        action = saq.remediation.constants.REMEDIATION_ACTION_RESTORE
+    else:
+        raise RuntimeError("invalid args.remediation_action ?? programming error dude")
+
+    if not hasattr(args, 'targets'):
+        args.targets = []
+
+    # are we reading a list of targets from a file?
+    if args.from_file:
+        with open(args.from_file, 'r') as fp:
+            for line in fp:
+                line = line.strip()
+                args.targets.append(line)
+
+    # are we reading a list of targets from stdin?
+    if args.from_stdin:
+        for line in sys.stdin:
+            line = line.strip()
+            args.targets.append(line)
+
+    for target in args.targets:
+        result = target_function(action,
+                                 args.type,
+                                 target,
+                                 saq.AUTOMATION_USER_ID,
+                                 saq.COMPANY_ID,
+                                 args.comment)
+
+        if args.background:
+            print(f"requested remediation (id {result.id})")
+        else:
+            print_remediation_status(id=result.id)
+
+    sys.exit(0)
+
+def execute_email_remediation(args):
+    import saq.remediation
+    setattr(args, 'type', 'email')
+    setattr(args, 'targets', [saq.remediation.email.create_email_remediation_key(args.message_id, args.email_address)])
+    execute_remediation(args)
+
+# most of the arguments are shared between the remove and restore action
+def _add_remediation_common_arguments(_parser):
+    _parser.add_argument('-b', '--background', action='store_true', default=False,
+        help="Executes the action in the background.")
+    _parser.add_argument('-c', '--comment', default="command line manual request",
+        help="Adds the given comment to the remediation as useful note.")
+    _parser.add_argument('--from-file', required=False, default=None,
+        help="Read the list of targets, one per line, from the given file.")
+    _parser.add_argument('--from-stdin', required=False, default=False, action='store_true',
+        help="Read the list of targets, one per line, from the standard input.")
+
+def _add_remediation_type_value_arguments(_parser):
+    _parser.add_argument('type',
+        help="The type of thing you want to target.")
+    _parser.add_argument('target', nargs='*',
+        help="The thing or things you want to target.")
+
+remediation_remove_parser = remediation_sp.add_parser('remove',
+    help="Executes a remediation action to remove something.")
+_add_remediation_common_arguments(remediation_remove_parser)
+_add_remediation_type_value_arguments(remediation_remove_parser)
+remediation_remove_parser.set_defaults(remediation_action='remove', func=execute_remediation)
+
+remediation_restore_parser = remediation_sp.add_parser('restore',
+    help="Executes a remediation action to restore something previously removed.")
+_add_remediation_common_arguments(remediation_restore_parser)
+_add_remediation_type_value_arguments(remediation_restore_parser)
+remediation_restore_parser.set_defaults(remediation_action='restore', func=execute_remediation)
+
+# utility functions to make it easier to use
+def _add_email_remediation_target_arguments(_parser):
+    _parser.add_argument('message_id', help="The message_id of the email to remove.")
+    _parser.add_argument('email_address', help="The email address (mailbox) to remove the email from.")
+
+remediation_remove_email_parser = remediation_sp.add_parser('remove-email',
+    help="Executes a remediation action to remove an email.")
+_add_remediation_common_arguments(remediation_remove_email_parser)
+_add_email_remediation_target_arguments(remediation_remove_email_parser)
+remediation_remove_email_parser.set_defaults(remediation_action='remove', func=execute_email_remediation)
+
+remediation_restore_email_parser = remediation_sp.add_parser('restore-email',
+    help="Executes a remediation action to restore an email.")
+_add_remediation_common_arguments(remediation_restore_email_parser)
+_add_email_remediation_target_arguments(remediation_restore_email_parser)
+remediation_restore_email_parser.set_defaults(remediation_action='restore', func=execute_email_remediation)
+
+
+# ============================================================================
 # Message Dispatch System
 #
 

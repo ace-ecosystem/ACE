@@ -132,6 +132,7 @@ def initialize(saq_home=None,
     from saq.database import initialize_database, initialize_node
 
     global API_PREFIX
+    global AUTOMATION_USER_ID
     global CA_CHAIN_PATH
     global COMPANY_ID
     global COMPANY_NAME
@@ -518,6 +519,27 @@ def initialize(saq_home=None,
     # are we running as a daemon?
     if args:
         DAEMON_MODE = args.daemon
+
+    # get the id of the ace automation account
+    try:
+        import saq
+        from saq.database import User
+        AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
+        saq.db.close()
+    except Exception as e:
+        # if the account is missing go ahead and create it
+        user = User(username='ace', email='ace@localhost', display_name='automation')
+        saq.db.add(user)
+        saq.db.commit()
+        saq.db.close()
+
+        try:
+            AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
+        except Exception as e:
+            logging.critical(f"missing automation account and unable to create it: {e}")
+            sys.exit(1)
+
+    logging.debug(f"got id {AUTOMATION_USER_ID} for automation user account")
 
     # initialize other systems
     initialize_message_system()
