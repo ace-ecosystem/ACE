@@ -3,6 +3,7 @@
 # various utility functions
 #
 
+import collections
 import datetime
 import functools
 import json
@@ -11,12 +12,14 @@ import os, os.path
 import re
 import signal
 import tempfile
+import urllib
 
 import saq
 from saq.constants import *
 
 import psutil
 import pytz
+import requests
 
 CIDR_REGEX = re.compile(r'^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$')
 CIDR_WITH_NETMASK_REGEX = re.compile(r'^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$')
@@ -529,8 +532,9 @@ class CustomSSLAdapter(requests.adapters.HTTPAdapter):
         self.cert_file_map[fqdn] = cert
 
     def cert_verify(self, conn, url, verify, cert):
-       """Override the HTTPAdapter 'cert_verify' to include specific certificates
-       for the FQDN/Cert pairs added by 'add_cert()'."""
+        """Override the HTTPAdapter 'cert_verify' to include specific certificates
+        for the FQDN/Cert pairs added by 'add_cert()'.
+        """
 
         if self.cert_file_map is None:
             raise ValueError("missing certificate file map")
