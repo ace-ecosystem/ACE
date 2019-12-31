@@ -905,54 +905,6 @@ correlate_parser.add_argument('targets', nargs="*",
 correlate_parser.set_defaults(func=correlate)
 
 # ============================================================================
-# Remediation System
-#
-
-def remediation_system(args):
-    from saq.remediation import initialize_remediation_system_manager, start_remediation_system_manager, stop_remediation_system_manager, wait_remediation_system_manager
-    from saq.util import daemonize, kill_daemon
-
-    daemon_name = 'remediation-system'
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info(f"starting daemon {daemon_name}")
-            daemonize(daemon_name)
-        
-        try:
-            initialize_remediation_system_manager()
-
-            def handle_signal(signum, frame):
-                stop_remediation_system_manager(wait=False)
-
-            signal.signal(signal.SIGTERM, handle_signal)
-            signal.signal(signal.SIGINT, handle_signal)
-
-            start_remediation_system_manager()
-            wait_remediation_system_manager()
-
-        except KeyboardInterrupt:
-            stop_remediation_system_manager()
-
-        except Exception as e:
-            logging.error(f"uncaught exception {e}")
-            sys.exit(1)
-
-        sys.exit(0)
-
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-remediation_system_parser = subparsers.add_parser('remediation-system',
-    help="Starts/stops the remediation system, responsible for implementing remediation requests in the background.")
-remediation_system_parser.set_defaults(func=remediation_system)
-
-# ============================================================================
 # Message Dispatch System
 #
 
