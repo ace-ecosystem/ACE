@@ -8,3 +8,4 @@ service_ews_collector.ini
 service_fireeye_collector.ini
 service_network_semaphore.ini
 service_yara.ini
+service_qradar_offense_collector.ini
