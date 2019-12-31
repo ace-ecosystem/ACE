@@ -405,7 +405,9 @@ def execute(action, type, key, user_id, company_id, comment=None):
                           str(uuid.uuid4()), # lock
                           datetime.datetime.now()) # lock_time
     system.execute(saq.db.query(Remediation).filter(Remediation.id == remediation.id).one())
-    return saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
+    result = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
+    saq.db.expunge_all()
+    return result
 
 def execute_remediation(*args, **kwargs):
     return execute(REMEDIATION_ACTION_REMOVE, *args, **kwargs)
@@ -436,7 +438,8 @@ def request(action,
 
     saq.db.add(remediation)
     saq.db.commit()
-    logging.info(f"added remediation request {remediation}")
+    saq.db.refresh(remediation)
+    saq.db.expunge_all()
     return remediation
 
 def request_remediation(*args, **kwargs):
