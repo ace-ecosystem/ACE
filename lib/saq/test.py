@@ -466,10 +466,15 @@ class ACEBasicTestCase(TestCase):
 
     def setUp(self):
         #saq.DUMP_TRACEBACKS = True
+        self.starting_thread_count = threading.active_count()
         logging.info("TEST: {}".format(self.id()))
         self.save_signal_handlers()
         initialize_test_environment()
+
         self.reset()
+        import saq
+        saq.db.remove()
+
         open_test_comms()
         memory_log_handler.clear()
         self.initialize_test_client()
@@ -513,6 +518,10 @@ class ACEBasicTestCase(TestCase):
         # clear all the registered services
         import saq.service
         saq.service._registered_services = []
+
+        thread_count_difference = threading.active_count() - self.starting_thread_count
+        if thread_count_difference != 0:
+            logging.warning(f"thread count difference after {self.id()} is {thread_count_difference}")
 
     def create_test_file(self, file_path='.unittest_test_data', file_content=None, root_analysis=None):
         """Creates a test file and returns the path to the newly created file.
