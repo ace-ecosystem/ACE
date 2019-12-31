@@ -21,7 +21,10 @@ saq.unittest.ini
 brotex.whitelist
 saq_apache.conf
 falcon_collector_logging.ini
+memcached.conf
+saq.ews.ini
 
+saq.carbon_black.ini
 carbon_black.auth
 mysql_defaults
 organization.json
