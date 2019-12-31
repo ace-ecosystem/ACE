@@ -13,8 +13,11 @@ from saq.database import Remediation
 
 from saq.remediation import EmailRemediationSystem
 from saq.remediation.constants import *
+from saq.util import CustomSSLAdapter
 
+import requests
 import phishfry
+from phishfry.account import BASIC
 
 class PhishfryRemediationSystem(EmailRemediationSystem):
     def __init__(self, *args, **kwargs):
@@ -31,11 +34,31 @@ class PhishfryRemediationSystem(EmailRemediationSystem):
         for section in config.sections():
             server = config[section].get("server", "outlook.office365.com")
             version = config[section].get("version", "Exchange2016")
+            certificate = config[section].get("certificate", None)
             user = config[section]["user"]
             password = config[section]["pass"]
-            self.accounts.append(phishfry.Account(user, password, server=server, version=version, 
-                                             timezone=timezone, proxies=saq.PROXIES))
-            logging.debug(f"loaded phishfry EWS account user {user} server {server} version {version}")
+            auth_type = config[section].get("auth_type", BASIC)
+
+            adapter = requests.adapters.HTTPAdapter()
+
+            if certificate:
+                adapter = CustomSSLAdapter()
+                adapter.add_cert(server, certificate)
+
+            account = phishfry.Account(
+                user,
+                password,
+                auth_type=auth_type,
+                server=server,
+                version=version,
+                timezone=timezone,
+                proxies=saq.PROXIES,
+                adapter=adapter,
+            )
+
+            self.accounts.append(account)
+
+            logging.debug(f"loaded phishfry EWS account user {user} server {server} version {version} auth_type {auth_type} certificate {certificate}")
 
     def enable_testing_mode(self):
         self.testing_mode = True
