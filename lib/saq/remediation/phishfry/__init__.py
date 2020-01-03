@@ -40,7 +40,7 @@ class PhishfryRemediationSystem(RemediationSystem):
             user = section["user"]
             password = section["pass"]
             auth_type = section.get("auth_type", BASIC)
-            use_saq_proxy = section.getboolean("use_saq_proxy", True)
+            use_proxy = section.getboolean("use_proxy", True)
 
             adapter = requests.adapters.HTTPAdapter()
 
@@ -48,7 +48,7 @@ class PhishfryRemediationSystem(RemediationSystem):
                 adapter = CustomSSLAdapter()
                 adapter.add_cert(server, certificate)
 
-            proxies = saq.PROXIES if use_saq_proxy else {}
+            proxies = saq.PROXIES if use_proxy else {}
 
             account = phishfry.Account(
                 user,
