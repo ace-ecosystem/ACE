@@ -158,6 +158,10 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
 
         target_folder.refresh()
 
+        logging.info(f"checking for emails in {self.target_mailbox} target {self.folder}")
+        total_count = 0
+        already_processed_count = 0
+        error_count = 0
         for message in target_folder.all().order_by('-datetime_received'):
             if isinstance(message, ResponseMessageError):
                 logging.warning(f"error when iterating mailbox {self.target_mailbox}: {message} ({type(message)})")
@@ -167,6 +171,8 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
             if message.id is None:
                 continue
 
+            total_count += 1
+
             try:
                 # if we're not deleting emails then we need to make sure we keep track of which ones we've already processed
                 if not self.delete_emails:
@@ -175,8 +181,9 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
                         c.execute("SELECT message_id FROM ews_tracking WHERE exchange_id = ?", (message.id,))
                         result = c.fetchone()
                         if result is not None:
-                            logging.debug("already processed exchange message {} message id {} from {}@{}".format(
-                                          message.id, message.message_id, self.target_mailbox, self.server))
+                            #logging.debug("already processed exchange message {} message id {} from {}@{}".format(
+                                          #message.id, message.message_id, self.target_mailbox, self.server))
+                            already_processed_count += 1
                             continue
                     
                 # otherwise process the email message (subclasses deal with the site logic)
@@ -185,6 +192,7 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
             except Exception as e:
                 logging.error(f"unable to process email: {e}")
                 report_exception()
+                error_count += 1
 
             if self.delete_emails:
                 try:
@@ -205,6 +213,9 @@ INSERT INTO ews_tracking (
                     (message.id, message.message_id, local_time().timestamp()))
                     # TODO delete anything older than X days
                     db.commit()
+
+        logging.info(f"finished checking for emails in {self.target_mailbox} target {self.folder}"
+                     f" total {total_count} already_processed {already_processed_count} error {error_count}")
 
     def email_received(self, email):
         raise NotImplementedError()
