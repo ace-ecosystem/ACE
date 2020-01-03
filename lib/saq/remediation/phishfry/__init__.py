@@ -11,12 +11,15 @@ from configparser import ConfigParser
 import saq
 from saq.database import Remediation
 
-from saq.remediation import EmailRemediationSystem
+from saq.remediation import RemediationSystem
 from saq.remediation.constants import *
+from saq.util import CustomSSLAdapter
 
+import requests
 import phishfry
+from phishfry.account import BASIC
 
-class PhishfryRemediationSystem(EmailRemediationSystem):
+class PhishfryRemediationSystem(RemediationSystem):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -25,17 +28,42 @@ class PhishfryRemediationSystem(EmailRemediationSystem):
         
         # load the Exchange Web Services accounts
         self.accounts = []
-        config = ConfigParser()
-        config.read(os.path.join(saq.SAQ_HOME, saq.CONFIG['phishfry']['config_path']))
-        timezone = config["DEFAULT"].get("timezone", "UTC")
-        for section in config.sections():
-            server = config[section].get("server", "outlook.office365.com")
-            version = config[section].get("version", "Exchange2016")
-            user = config[section]["user"]
-            password = config[section]["pass"]
-            self.accounts.append(phishfry.Account(user, password, server=server, version=version, 
-                                             timezone=timezone, proxies=saq.PROXIES))
-            logging.debug(f"loaded phishfry EWS account user {user} server {server} version {version}")
+
+        sections = [saq.CONFIG[section] for section in saq.CONFIG.sections() if section.startswith('phishfry_account_')]
+
+        timezone = saq.CONFIG["DEFAULT"].get("timezone", "UTC")
+
+        for section in sections:
+            server = section.get("server", "outlook.office365.com")
+            version = section.get("version", "Exchange2016")
+            certificate = section.get("certificate", None)
+            user = section["user"]
+            password = section["pass"]
+            auth_type = section.get("auth_type", BASIC)
+            use_saq_proxy = section.getboolean("use_saq_proxy", True)
+
+            adapter = requests.adapters.HTTPAdapter()
+
+            if certificate:
+                adapter = CustomSSLAdapter()
+                adapter.add_cert(server, certificate)
+
+            proxies = saq.PROXIES if use_saq_proxy else {}
+
+            account = phishfry.Account(
+                user,
+                password,
+                auth_type=auth_type,
+                server=server,
+                version=version,
+                timezone=timezone,
+                proxies=proxies,
+                adapter=adapter,
+            )
+
+            self.accounts.append(account)
+
+            logging.debug(f"loaded phishfry EWS account user {user} server {server} version {version} auth_type {auth_type} certificate {certificate}")
 
     def enable_testing_mode(self):
         self.testing_mode = True
@@ -58,7 +86,9 @@ class PhishfryRemediationSystem(EmailRemediationSystem):
                 pf_result = {}
                 pf_result[recipient] = phishfry.remediation_result.RemediationResult(recipient, message_id, 'mailbox', remediation.action, success=True, message='removed')
             else:
-                pf_result = account.Remediate(remediation.action, recipient, message_id)
+                # This needs to be changed in phishfry so that this is false by default
+                spider = False
+                pf_result = account.Remediate(remediation.action, recipient, message_id, spider)
 
             logging.info(f"got result {pf_result} for message-id {message_id} for {recipient}")
 

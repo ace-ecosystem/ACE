@@ -3,6 +3,7 @@
 # various utility functions
 #
 
+import collections
 import datetime
 import functools
 import json
@@ -11,12 +12,14 @@ import os, os.path
 import re
 import signal
 import tempfile
+import urllib
 
 import saq
 from saq.constants import *
 
 import psutil
 import pytz
+import requests
 
 CIDR_REGEX = re.compile(r'^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$')
 CIDR_WITH_NETMASK_REGEX = re.compile(r'^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$')
@@ -500,4 +503,41 @@ class RegexObservableParserGroup:
                 self._observables.append(observable_details)
 
         return self._observables
+
+
+class CustomSSLAdapter(requests.adapters.HTTPAdapter):
+    """Adapter to override certificate verifications.
+
+    >>> import requests
+    >>>
+    >>> from saq.util import SSLDecryptAdapter
+    >>>
+    >>> adapter = SSLDecryptAdapter()
+    >>> adapter.add_cert('hello.world.com', '/home/certguy/my/cert.crt')
+    >>>
+    >>> session = reqeusts.Session()
+    >>>
+    >>> session.mount('https://', adapter)
+    >>> session.post('https://hello.world.com', etc.)
+
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # If the FQDN is not found in the mapping, then we want
+        #   to verify the SSL cert as normal.
+        self.cert_file_map = collections.defaultdict(lambda: True)
+
+    def add_cert(self, fqdn, cert):
+        """Add an FQDN and Cert pair to the cert file map."""
+        self.cert_file_map[fqdn] = cert
+
+    def cert_verify(self, conn, url, verify, cert):
+        """Override the HTTPAdapter 'cert_verify' to include specific certificates
+        for the FQDN/Cert pairs added by 'add_cert()'.
+        """
+
+        if self.cert_file_map is None:
+            raise ValueError("missing certificate file map")
+        hostname = urllib.parse.urlparse(url).hostname
+        super().cert_verify(conn=conn, url=url, verify=self.cert_file_map[hostname], cert=cert)
 
