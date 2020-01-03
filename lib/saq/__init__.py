@@ -29,6 +29,9 @@ import tzlocal
 # this is set to True when unit testing, False otherwise
 UNIT_TESTING = 'SAQ_UNIT_TESTING' in os.environ
 
+# global user ID for the "automation" user
+AUTOMATION_USER_ID = None # (initialized in saq.database.initialize_database())
+
 # disable the verbose logging in the requests module
 logging.getLogger("requests").setLevel(logging.WARNING)
 
@@ -129,7 +132,7 @@ def initialize(saq_home=None,
                args=None, 
                relative_dir=None):
 
-    from saq.database import initialize_database, initialize_node
+    from saq.database import initialize_database, initialize_node, initialize_automation_user
 
     global API_PREFIX
     global AUTOMATION_USER_ID
@@ -520,26 +523,8 @@ def initialize(saq_home=None,
     if args:
         DAEMON_MODE = args.daemon
 
-    # get the id of the ace automation account
-    try:
-        import saq
-        from saq.database import User
-        AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
-        saq.db.close()
-    except Exception as e:
-        # if the account is missing go ahead and create it
-        user = User(username='ace', email='ace@localhost', display_name='automation')
-        saq.db.add(user)
-        saq.db.commit()
-        saq.db.close()
-
-        try:
-            AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
-        except Exception as e:
-            logging.critical(f"missing automation account and unable to create it: {e}")
-            sys.exit(1)
-
-    logging.debug(f"got id {AUTOMATION_USER_ID} for automation user account")
+    # make sure we've got the automation user set up
+    initialize_automation_user()
 
     # initialize other systems
     initialize_message_system()

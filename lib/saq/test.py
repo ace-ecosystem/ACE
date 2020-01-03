@@ -682,6 +682,7 @@ class ACEBasicTestCase(TestCase):
     @use_db
     def reset_correlation(self, db, c):
         global UNITTEST_USER_ID
+        import saq
 
         data_subdir = os.path.join(saq.CONFIG['global']['data_dir'], saq.SAQ_NODE)
         failed_alert_subdir = os.path.join(saq.SAQ_HOME, '.saq_alerts')
@@ -726,6 +727,9 @@ class ACEBasicTestCase(TestCase):
         UNITTEST_USER_ID = c.lastrowid
         logging.debug(f"got user id {UNITTEST_USER_ID} for unittest user")
         db.commit()
+
+        import saq.database
+        saq.database.initialize_automation_user()
 
     def reset_email_archive(self):
         import socket

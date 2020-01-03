@@ -2325,6 +2325,7 @@ def initialize_database():
 
     global DatabaseSession
     from config import config
+    import saq
 
     engine = create_engine(
         config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
@@ -2332,6 +2333,27 @@ def initialize_database():
 
     DatabaseSession = sessionmaker(bind=engine)
     saq.db = scoped_session(DatabaseSession)
+
+def initialize_automation_user():
+    # get the id of the ace automation account
+    try:
+        saq.AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
+        saq.db.remove()
+    except Exception as e:
+        # if the account is missing go ahead and create it
+        user = User(username='ace', email='ace@localhost', display_name='automation')
+        saq.db.add(user)
+        saq.db.commit()
+
+        try:
+            saq.AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
+        except Exception as e:
+            logging.critical(f"missing automation account and unable to create it: {e}")
+            sys.exit(1)
+        finally:
+            saq.db.remove()
+
+    logging.debug(f"got id {saq.AUTOMATION_USER_ID} for automation user account")
 
 @use_db
 def initialize_node(db, c):

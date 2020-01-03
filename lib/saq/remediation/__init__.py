@@ -28,8 +28,6 @@ from saq.remediation.constants import *
 from saq.service import *
 from saq.util import *
 
-from . import email
-
 import requests
 from sqlalchemy import asc, func, and_, or_
 

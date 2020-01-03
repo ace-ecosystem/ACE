@@ -66,8 +66,8 @@ from saq.performance import record_execution_time
 from saq.util import abs_path
 from saq.remediation import execute_remediation, execute_restoration, request_remediation, request_restoration
 import saq.remediation
-from saq.remediation.email import request_email_remediation, \
-                                  request_email_restoration, \
+from saq.remediation.email import old_request_email_remediation, \
+                                  old_request_email_restoration, \
                                   remediate_emails, \
                                   unremediate_emails
 from saq.remediation.constants import REMEDIATION_TYPE_EMAIL
@@ -4229,11 +4229,11 @@ def remediate_emails():
             if not do_it_now:
                 for target in targets.values():
                     try:
-                        r_id = request_email_remediation(target.message_id,
-                                                         target.recipient,
-                                                         current_user.id,
-                                                         target.company_id,
-                                                         ','.join(alert_uuids))
+                        r_id = old_request_email_remediation(target.message_id,
+                                                             target.recipient,
+                                                             current_user.id,
+                                                             target.company_id,
+                                                             ','.join(alert_uuids))
 
                         target.result_text = f"request remediation (id {r_id})"
                         target.result_success = True
@@ -4249,11 +4249,11 @@ def remediate_emails():
             if not do_it_now:
                 for target in targets.values():
                     try:
-                        r_id = request_email_restoration(target.message_id,
-                                                         target.recipient,
-                                                         current_user.id,
-                                                         target.company_id,
-                                                         ','.join(alert_uuids))
+                        r_id = old_request_email_restoration(target.message_id,
+                                                             target.recipient,
+                                                             current_user.id,
+                                                             target.company_id,
+                                                             ','.join(alert_uuids))
 
                         target.result_text = f"request restoration (id {r_id})"
                         target.result_success = True
@@ -4267,6 +4267,7 @@ def remediate_emails():
 
     except Exception as e:
         logging.error("unable to perform email remediation action {}: {}".format(action, e))
+        report_exception()
         for target in targets.values():
             target.result_text = str(e)
             target.result_success = False

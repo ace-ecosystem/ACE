@@ -3,7 +3,10 @@
 #
 # remediation routines for emails
 
-from saq.remediation import *
+import saq
+
+from saq.database import get_db_connection, Remediation
+from saq.remediation import request_remediation, request_restoration
 from saq.remediation.constants import *
 
 def create_email_remediation_key(message_id, recipient):
@@ -118,18 +121,16 @@ def _insert_email_remediation_object(action, message_id, recipient, user_id, com
     logging.info(f"user {user_id} added remediation request for message_id {message_id} recipient {recipient}")
     return True
 
-def request_email_remediation(*args, **kwargs):
+def old_request_email_remediation(*args, **kwargs):
     return _insert_email_remediation_object(REMEDIATION_ACTION_REMOVE, *args, **kwargs)
 
-def request_email_restoration(*args, **kwargs):
+def old_request_email_restoration(*args, **kwargs):
     return _insert_email_remediation_object(REMEDIATION_ACTION_RESTORE, *args, **kwargs)
 
 def get_restoration_targets(message_ids):
     """Given a list of message-ids, return a list of tuples of (message_id, recipient)
        suitable for the unremediate_emails command. The values are discovered by 
        querying the remediation table in the database."""
-
-    from saq.database import get_db_connection
 
     if not message_ids:
         return []
