@@ -16,8 +16,8 @@ then
     echo "ecs"
     echo "network_semaphore"
     echo "yara"
-    ace service status | grep -v disabled | awk '{print $1}' | sed -ne '2,$p' | grep -v -e engine -e ecs -e yara -e network_semaphore 
     echo "engine"
+    ace service status | grep -v disabled | awk '{print $1}' | sed -ne '2,$p' | grep -v -e engine -e ecs -e yara -e network_semaphore 
     exit 1
 fi
 

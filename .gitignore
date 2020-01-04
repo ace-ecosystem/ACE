@@ -163,3 +163,7 @@ lib/SoleraConnector.py
 
 # any site directory
 **/site/
+hunts/site
+
+# symlinks
+logs

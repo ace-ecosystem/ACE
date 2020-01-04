@@ -215,3 +215,19 @@ class ObservableActionUnWhitelist(ObservableAction):
         self.description = "Un-Whitelist"
         self.jinja_action_path = 'analysis/observable_actions/un_whitelist.html'
         self.icon = 'remove'
+
+class ObservableActionRemediate(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_REMEDIATE
+        self.description = "Remediate"
+        self.jinja_action_path = 'analysis/observable_actions/remediate.html'
+        self.icon = 'remove-circle'
+
+class ObservableActionRestore(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_RESTORE
+        self.description = "Undo Remediation"
+        self.jinja_action_path = 'analysis/observable_actions/restore.html'
+        self.icon = 'ok-circle'

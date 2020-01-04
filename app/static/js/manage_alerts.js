@@ -206,6 +206,18 @@ $(document).ready(function() {
         remediate_emails(all_alert_uuids, message_ids);
     });
 
+    $('#btn-mass-remediation').click(function(e) {
+        var all_alert_uuids = get_all_checked_alerts();
+        var message_ids = null;
+
+        if (all_alert_uuids.length == 0 ) {
+            alert("You need to select some alerts first. And THEN click this button. lol.")
+            return;
+        } else {
+            remediation_selection(all_alert_uuids, null);
+        }
+    });
+
     $('#btn-limit').click(function(e) {
         result = prompt("How many alerts should be displayed at once?", 50);
     });

@@ -27,7 +27,7 @@ import traceback
 import unittest
 import uuid
 
-parser = argparse.ArgumentParser(description="Simple Alert Queue")
+parser = argparse.ArgumentParser(description="Analysis Correlation Engine")
 parser.add_argument('--saq-home', required=False, dest='saq_home', default=None,
     help="Sets the SAQ_HOME environment variable.")
 parser.add_argument('-L', '--logging-config-path', required=False, dest='logging_config_path', default=None,
@@ -65,7 +65,7 @@ subparsers = parser.add_subparsers(dest='cmd')
 def disable_proxy():
     for proxy_setting in [ 'http_proxy', 'https_proxy', 'ftp_proxy' ]:
         if proxy_setting in os.environ:
-            logging.warning("removing proxy setting {0}".format(proxy_setting))
+            logging.debug("removing proxy setting {}".format(proxy_setting))
             del os.environ[proxy_setting]
 
 def recurse_analysis(analysis, level=0, current_tree=[]):
@@ -107,12 +107,6 @@ def recurse_analysis(analysis, level=0, current_tree=[]):
 
 def display_analysis(root):
     recurse_analysis(root)
-
-    #observables = set(root.all_observables)
-    #if observables:
-        #print("{} OBSERVATIONS".format(len(observables)))
-        #for observable in observables:
-            #print("* {} - {}".format(observable.type, observable.value))
 
     tags = set(root.all_tags)
     if tags:
@@ -288,7 +282,8 @@ disable_integration_parser.set_defaults(func=disable_integration)
 # service control/start/stop
 #
 
-service_parser = subparsers.add_parser('service')
+service_parser = subparsers.add_parser('service',
+    help="Service management commands. See ace service --help for details.")
 service_sp = service_parser.add_subparsers(dest='service_cmd')
 
 def start_service(args):
@@ -663,6 +658,13 @@ def correlate(args):
         root.tool_instance = socket.gethostname()
         root.alert_type = args.alert_type
         root.analysis_mode = ANALYSIS_MODE_CLI if args.analysis_mode is None else args.analysis_mode
+        if f'analysis_mode_{root.analysis_mode}' not in saq.CONFIG:
+            logging.error(f"invalid analysis mode {root.analysis_mode}")
+            sys.exit(1)
+
+        # disable cleanup in whatever mode we use
+        saq.CONFIG[f'analysis_mode_{root.analysis_mode}']['cleanup'] = 'no'
+
         root.description = args.description if args.description else 'Command Line Correlation'
         root.event_time = datetime.datetime.now() if reference_time is None else reference_time
         if args.load_details:
@@ -903,118 +905,164 @@ correlate_parser.add_argument('targets', nargs="*",
 correlate_parser.set_defaults(func=correlate)
 
 # ============================================================================
-# correlation engine
+# Remediation Utilities
 #
 
-engine_parser = subparsers.add_parser('engine')
-engine_sp = engine_parser.add_subparsers(dest='engine_cmd')
+remediation_parser = subparsers.add_parser('remediation')
+remediation_sp = remediation_parser.add_subparsers(dest='remediation_cmd')
 
-def start_engine(args):
+def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None):
+    from saq.database import Remediation, User
+    from sqlalchemy import or_
 
-    from saq.engine import Engine
-    from saq.error import report_exception
-    from saq.process_server import initialize_process_server
-    from saq.util import daemonize, kill_daemon
+    query = saq.db.query(Remediation).join(User)
 
-    daemon_name = 'correlation-engine'
-    disable_proxy()
+    if id:
+        query = query.filter(Remediation.id == id)
 
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
+    if type:
+        query = query.filter(Remediation.type == type)
 
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
+    if status:
+        query = query.filter(Remediation.status == status)
 
-        initialize_process_server()
+    if key:
+        query = query.filter(Remediation.key.ilike(f'%{key}%'))
 
-        ace_engine = None
+    if user_id:
+        query = query.filter(Remediation.user_id == user_id)
 
-        # add the capability for a graceful shutdown
-        def handle_signal(signum, frame):
-            ace_engine.stop()
+    if user:
+        query = query.filter(or_(User.username.ilike(f'%{user}%'), 
+                                 User.display_name.ilike(f'%{user}%')))
 
-        signal.signal(signal.SIGTERM, handle_signal)
-        signal.signal(signal.SIGINT, handle_signal)
+    for r in query.order_by(Remediation.insert_date.desc()):
+        print(f"insert_date: {r.insert_date} id:{r.id} type:{r.type} action:{r.action} "
+              f'user_id: {r.user_id} key: "{r.key}" result: "{r.result}" comment: "{r.comment}" '
+              f'successful: {r.successful} company_id: {r.company_id} lock: {r.lock} lock_time: {r.lock_time} '
+              f'status: {r.status}')
 
-        try:
-            ace_engine = Engine()
-            ace_engine.start()
-            ace_engine.wait()
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    
+def remediation_status(args):
+    print_remediation_status(status=args.status,
+                             type=args.type,
+                             key=args.key,
+                             user=args.user,
+                             user_id=args.user_id)
+    sys.exit(0)
+
+remediation_status_parser = remediation_sp.add_parser('status',
+    help="Shows the status of remediation requests.")
+remediation_status_parser.add_argument('-s', '--status',
+    help="Return results matching the given status.")
+remediation_status_parser.add_argument('-t', '--type',
+    help="Return results matching the given remediation type.")
+remediation_status_parser.add_argument('-k', '--key', 
+    help="Return results matching the given remediation target (key).")
+remediation_status_parser.add_argument('-u', '--user', 
+    help="Return results matching the given username or display name.")
+remediation_status_parser.add_argument('--user-id', type=int,
+    help="Return results matching the given user_id.")
+remediation_status_parser.set_defaults(func=remediation_status)
+
+def execute_remediation(args):
+    import saq
+    import saq.remediation
+    import saq.remediation.constants
+
+    target_function = saq.remediation.execute
+    if args.background:
+        target_function = saq.remediation.request
+
+    if args.remediation_action == 'remove':
+        action = saq.remediation.constants.REMEDIATION_ACTION_REMOVE
+    elif args.remediation_action == 'restore':
+        action = saq.remediation.constants.REMEDIATION_ACTION_RESTORE
     else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
+        raise RuntimeError("invalid args.remediation_action ?? programming error dude")
+
+    if not hasattr(args, 'targets'):
+        args.targets = []
+
+    # are we reading a list of targets from a file?
+    if args.from_file:
+        with open(args.from_file, 'r') as fp:
+            for line in fp:
+                line = line.strip()
+                args.targets.append(line)
+
+    # are we reading a list of targets from stdin?
+    if args.from_stdin:
+        for line in sys.stdin:
+            line = line.strip()
+            args.targets.append(line)
+
+    for target in args.targets:
+        result = target_function(action,
+                                 args.type,
+                                 target,
+                                 saq.AUTOMATION_USER_ID,
+                                 saq.COMPANY_ID,
+                                 args.comment)
+
+        if args.background:
+            print(f"requested remediation (id {result.id})")
+        else:
+            print_remediation_status(id=result.id)
 
     sys.exit(0)
 
-engine_start_parser = engine_sp.add_parser('start',
-    help="Starts the Analysis Correlation Engine.")
-engine_start_parser.add_argument('-d', '--daemon', '--background', action='store_true', default=False,
-    help="Fork the process into the background and manage the PID.")
-engine_start_parser.set_defaults(func=start_engine)
+def execute_email_remediation(args):
+    import saq.remediation
+    setattr(args, 'type', 'email')
+    setattr(args, 'targets', [saq.remediation.email.create_email_remediation_key(args.message_id, args.email_address)])
+    execute_remediation(args)
 
-def stop_engine(args):
-    from saq.util import kill_daemon
-    daemon_name = 'correlation-engine'
-    sys.exit(0 if kill_daemon(daemon_name) else 1)
+# most of the arguments are shared between the remove and restore action
+def _add_remediation_common_arguments(_parser):
+    _parser.add_argument('-b', '--background', action='store_true', default=False,
+        help="Executes the action in the background.")
+    _parser.add_argument('-c', '--comment', default="command line manual request",
+        help="Adds the given comment to the remediation as useful note.")
+    _parser.add_argument('--from-file', required=False, default=None,
+        help="Read the list of targets, one per line, from the given file.")
+    _parser.add_argument('--from-stdin', required=False, default=False, action='store_true',
+        help="Read the list of targets, one per line, from the standard input.")
 
-engine_stop_parser = engine_sp.add_parser('stop',
-    help="Stops the Analysis Correlation Engine.")
-engine_stop_parser.set_defaults(func=stop_engine)
+def _add_remediation_type_value_arguments(_parser):
+    _parser.add_argument('type',
+        help="The type of thing you want to target.")
+    _parser.add_argument('target', nargs='*',
+        help="The thing or things you want to target.")
 
-# ============================================================================
-# Remediation System
-#
+remediation_remove_parser = remediation_sp.add_parser('remove',
+    help="Executes a remediation action to remove something.")
+_add_remediation_common_arguments(remediation_remove_parser)
+_add_remediation_type_value_arguments(remediation_remove_parser)
+remediation_remove_parser.set_defaults(remediation_action='remove', func=execute_remediation)
 
-def remediation_system(args):
-    from saq.remediation import initialize_remediation_system_manager, start_remediation_system_manager, stop_remediation_system_manager, wait_remediation_system_manager
-    from saq.util import daemonize, kill_daemon
+remediation_restore_parser = remediation_sp.add_parser('restore',
+    help="Executes a remediation action to restore something previously removed.")
+_add_remediation_common_arguments(remediation_restore_parser)
+_add_remediation_type_value_arguments(remediation_restore_parser)
+remediation_restore_parser.set_defaults(remediation_action='restore', func=execute_remediation)
 
-    daemon_name = 'remediation-system'
+# utility functions to make it easier to use
+def _add_email_remediation_target_arguments(_parser):
+    _parser.add_argument('message_id', help="The message_id of the email to remove.")
+    _parser.add_argument('email_address', help="The email address (mailbox) to remove the email from.")
 
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
+remediation_remove_email_parser = remediation_sp.add_parser('remove-email',
+    help="Executes a remediation action to remove an email.")
+_add_remediation_common_arguments(remediation_remove_email_parser)
+_add_email_remediation_target_arguments(remediation_remove_email_parser)
+remediation_remove_email_parser.set_defaults(remediation_action='remove', func=execute_email_remediation)
 
-    elif args.start:
-        if args.daemon:
-            logging.info(f"starting daemon {daemon_name}")
-            daemonize(daemon_name)
-        
-        try:
-            initialize_remediation_system_manager()
+remediation_restore_email_parser = remediation_sp.add_parser('restore-email',
+    help="Executes a remediation action to restore an email.")
+_add_remediation_common_arguments(remediation_restore_email_parser)
+_add_email_remediation_target_arguments(remediation_restore_email_parser)
+remediation_restore_email_parser.set_defaults(remediation_action='restore', func=execute_email_remediation)
 
-            def handle_signal(signum, frame):
-                stop_remediation_system_manager(wait=False)
-
-            signal.signal(signal.SIGTERM, handle_signal)
-            signal.signal(signal.SIGINT, handle_signal)
-
-            start_remediation_system_manager()
-            wait_remediation_system_manager()
-
-        except KeyboardInterrupt:
-            stop_remediation_system_manager()
-
-        except Exception as e:
-            logging.error(f"uncaught exception {e}")
-            sys.exit(1)
-
-        sys.exit(0)
-
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-remediation_system_parser = subparsers.add_parser('remediation-system',
-    help="Starts/stops the remediation system, responsible for implementing remediation requests in the background.")
-remediation_system_parser.set_defaults(func=remediation_system)
 
 # ============================================================================
 # Message Dispatch System
@@ -1133,150 +1181,6 @@ start_api_parser.add_argument('--print-uri-paths', default=False, action='store_
     help="Print all of the availble URL paths and exit, without starting the API.")
 start_api_parser.set_defaults(func=start_api)
 
-
-# ============================================================================
-# start/stop the primary ACE engine
-#
-
-def ace(args):
-
-    from saq.engine import Engine
-    from saq.error import report_exception
-    from saq.process_server import initialize_process_server
-    from saq.util import daemonize, kill_daemon
-
-    daemon_name = 'ace'
-    disable_proxy()
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        initialize_process_server()
-
-        try:
-            engine = Engine()
-            engine.start()
-            engine.wait()
-        except KeyboardInterrupt as e:
-            logging.info("caught user interrupt")
-            try:
-                engine.stop()
-                engine.wait()
-            except Exception as e:
-                logging.error("uncaught exception: {}".format(e))
-        except Exception as e:
-            logging.error("uncaught exception: {}".format(e))
-            report_exception()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-# ace-engine
-ace_engine_parser = subparsers.add_parser('ace-engine',
-    help="Start/Stop the Analysis Correlation Engine")
-ace_engine_parser.set_defaults(func=ace)
-
-# ============================================================================
-# start/stop collectors
-#
-
-def list_collectors(args):
-    import saq.collectors
-    import saq.service
-    saq.collectors.initialize_collectors()
-
-    print("{:<15}{:<15}{}".format('COLLECTOR', 'STATUS', 'DESCRIPTION'))
-    for name, (cls, config) in sorted(saq.collectors.COLLECTOR_REGISTRATION.items()):
-        # determine the status of the collector
-        print("{:<15}{:<15}{}".format(name, saq.service.get_daemon_status(name), config['description']))
-
-    sys.exit(0)
-
-def start_collector(args):
-    import saq.collectors
-    saq.collectors.initialize_collectors()
-    sys.exit(0 if saq.collectors.start_collector(args.name, daemon=args.daemon, debug=args.debug) else 1)
-
-def stop_collector(args):
-    import saq.collectors
-    saq.collectors.initialize_collectors()
-    sys.exit(0 if saq.collectors.stop_collector(args.name) else 1)
-
-collector_parser = subparsers.add_parser('collector')
-collector_sp = collector_parser.add_subparsers(dest='collector_cmd')
-
-list_collectors_parser = collector_sp.add_parser('list',
-    help="Lists the available collectors and their descriptions.")
-list_collectors_parser.set_defaults(func=list_collectors)
-
-start_collector_parser = collector_sp.add_parser('start',
-    help="Starts the given collector.")
-start_collector_parser.add_argument('--debug', action='store_true', default=False,
-    help="Starts the collector in debug mode.")
-start_collector_parser.add_argument('-d', '--daemon', '--background', action='store_true', default=False,
-    help="Starts the collector and then executes in the background, tracking the PID.")
-start_collector_parser.add_argument('name',
-    help="The name of the collector to start. See ace collector list.")
-start_collector_parser.set_defaults(func=start_collector)
-
-stop_collector_parser = collector_sp.add_parser('stop',
-    help="Stops the given collector.")
-stop_collector_parser.add_argument('name',
-    help="The name of the collector to stop. See ace collector list.")
-stop_collector_parser.set_defaults(func=stop_collector)
-
-# ============================================================================
-# start Network Semaphore
-#
-
-def network_semaphore(args):
-    import saq
-    from saq.network_semaphore import NetworkSemaphoreServer
-    from saq.util import daemonize
-    daemon_name = 'network-semaphore'
-
-    if args.stop:
-        kill_daemon(daemon_name)
-        sys.exit(0)
-
-    elif args.start:
-        if args.daemon:
-            logging.info("starting daemon {}".format(daemon_name))
-            daemonize(daemon_name)
-
-        server = NetworkSemaphoreServer()
-        server.start()
-
-        # add the capability for a graceful shutdown
-        def handle_sigterm(signum, frame):
-            logging.warning("received SIGTERM")
-            server.stop()
-
-        try:
-            while True:
-                #logging.debug("process {} sleeping".format(os.getpid()))
-                time.sleep(1)
-        except KeyboardInterrupt:
-            server.stop()
-    else:
-        logging.error("You must specify either --start or --stop for this service.")
-        sys.exit(1)
-
-    sys.exit(0)
-
-# network semaphore
-network_semaphore_parser = subparsers.add_parser('network-semaphore',
-    help="Start/Stop the Network Semaphore Server on this server.")
-network_semaphore_parser.set_defaults(func=network_semaphore)
-
 # ============================================================================
 # user management
 #
@@ -1319,6 +1223,21 @@ def add_user(args):
 
     logging.info("added user {}".format(u.username))
 
+user_parser = subparsers.add_parser('user',
+    help="User management commands.")
+user_sp = user_parser.add_subparsers(dest='user_cmd')
+
+add_user_parser = user_sp.add_parser('add',
+    help="Add a new user to the system.")
+add_user_parser.add_argument('username', help="The username of the new user.")
+add_user_parser.add_argument('email', help="The email address of the new user.")
+add_user_parser.add_argument('-z', '--timezone', required=False, default=None,
+    help="The timezone the user is in. Defaults to UTC.")
+add_user_parser.add_argument('-d', '--display-name', required=False, default=None,
+    help="The (optional) display name for the user.")
+add_user_parser.set_defaults(func=add_user)
+
+# XXX DEPRECATED
 add_user_parser = subparsers.add_parser('add-user',
     help="Add a new user to the system.")
 add_user_parser.add_argument('username', help="The username of the new user.")
@@ -1386,6 +1305,15 @@ def modify_user(args):
 
     logging.info("modified user {0}".format(u.username))
 
+modify_user_parser = user_sp.add_parser('modify',
+    help="Modifies an existing user on the system.")
+modify_user_parser.add_argument('username', help="The username of the user to modify.")
+modify_user_parser.add_argument('-e', '--email', dest='email', default=None, help="The new email address of the user.")
+modify_user_parser.add_argument('-p', '--password', action='store_true', dest='password', default=False, help="Prompt for a new password.")
+modify_user_parser.add_argument('-z', '--timezone', required=False, default=None, help="The timezone the user is in. Defaults to UTC.")
+modify_user_parser.set_defaults(func=modify_user)
+
+# XXX DEPRECATED
 modify_user_parser = subparsers.add_parser('modify-user',
     help="Modifies an existing user on the system.")
 modify_user_parser.add_argument('username', help="The username of the user to modify.")
@@ -1409,76 +1337,14 @@ delete_user_parser = subparsers.add_parser('delete-user',
 delete_user_parser.add_argument('username', help="The username of the user to modify.")
 delete_user_parser.set_defaults(func=delete_user)
 
+delete_user_parser = user_sp.add_parser('delete',
+    help="Deletes an existing user from the system.")
+delete_user_parser.add_argument('username', help="The username of the user to modify.")
+delete_user_parser.set_defaults(func=delete_user)
+
 # ============================================================================
 # test utilities
 #
-
-def create_alert(args):
-    from saq.analysis import RootAnalysis
-
-    root = RootAnalysis()
-    root.tool = 'command line'
-    root.tool_instance = 'n/a'
-    root.root_type = 'debug'
-    root.description = 'Manual Alert'
-    root.event_time = datetime.datetime.now()
-    root.storage_dir = args.dir
-
-    root.initialize_storage()
-
-    root.details = { 'description': 'manually created root' }
-    root.save()
-
-create_alert_parser = subparsers.add_parser('create-alert',
-    help="Create a blank alert in the given directory.")
-create_alert_parser.add_argument('dir', help="The directory to store the alert in.")
-create_alert_parser.set_defaults(func=create_alert)
-
-def test_condition_reporting(args):
-    from saq.error import report_condition
-
-    report_condition("SOMETHING ON FIIIRAAAHHH", "j/k")
-    time.sleep(5)
-    report_condition("SOMETHING ON FIIIRAAAHHH", "j/k")
-
-test_condition_reporting_parser = subparsers.add_parser('test-condition-reporting',
-    help="Test the condition reporting system.")
-#test_condition_reporting_parser.add_argument('dir', help="The directory to store the alert in.")
-test_condition_reporting_parser.set_defaults(func=test_condition_reporting)
-
-def test_error_reporting(args):
-    from saq.error import report_exception
-    try:
-        1 / 0
-    except Exception as e:
-        report_exception()
-
-test_error_reporting_parser = subparsers.add_parser('test-error-reporting',
-    help="Throw an exception and report it.")
-test_error_reporting_parser.set_defaults(func=test_error_reporting)
-
-def test_database(args):
-    from saq.database import DatabaseSession, User, get_db_connection
-    session = DatabaseSession()
-
-    me = session.query(User).filter_by(username = 'jdavison').one()
-    logging.debug(str(me))
-
-    with get_db_connection() as db:
-        c = db.cursor()
-        c.execute("SELECT 1")
-
-    try:
-        with get_db_connection() as db:
-            raise ValueError("canary")
-    except ValueError as e:
-        pass
-
-    sys.exit(0)
-
-test_database_parser = subparsers.add_parser('test-database',
-    help="Run tests on the database.")
-test_database_parser.set_defaults(func=test_database)
 
 def test_database_connections(args):
     import saq
@@ -1532,6 +1398,36 @@ network_semaphore_test.set_defaults(func=test_network_semaphore)
 # alert management
 #
 
+def create_alert(args):
+    from saq.analysis import RootAnalysis
+
+    root = RootAnalysis()
+    root.tool = 'command line'
+    root.tool_instance = 'n/a'
+    root.root_type = 'debug'
+    root.description = 'Manual Alert'
+    root.event_time = datetime.datetime.now()
+    root.storage_dir = args.dir
+
+    root.initialize_storage()
+
+    root.details = { 'description': 'manually created root' }
+    root.save()
+
+alert_parser = subparsers.add_parser('alert',
+    help="Alert management commands.")
+alert_sp = alert_parser.add_subparsers(dest='alert_cmd')
+
+create_alert_parser = subparsers.add_parser('create-alert',
+    help="Create a blank alert in the given directory.")
+create_alert_parser.add_argument('dir', help="The directory to store the alert in.")
+create_alert_parser.set_defaults(func=create_alert)
+
+create_alert_parser = alert_sp.add_parser('create', aliases=['new'],
+    help="Create a blank alert in the given directory.")
+create_alert_parser.add_argument('dir', help="The directory to store the alert in.")
+create_alert_parser.set_defaults(func=create_alert)
+
 def rebuild_index(args):
     """Rebuilds the indexes for the given alerts."""
     from saq.database import Alert, get_db_connection
@@ -1572,6 +1468,13 @@ def rebuild_index(args):
     sys.exit(0)
 
 rebuild_index_parser = subparsers.add_parser('rebuild-index',
+    help="Rebuilds the indexes for the given alerts.")
+rebuild_index_parser.add_argument('--all', default=False, action='store_true', dest='resync_all',
+    help="Resyncs all alerts that belong to this node. This can take a long time.")
+rebuild_index_parser.add_argument('dirs', nargs='*', default=[], help="One ore more alert directories to resync.")
+rebuild_index_parser.set_defaults(func=rebuild_index)
+
+rebuild_index_parser = alert_sp.add_parser('rebuild',
     help="Rebuilds the indexes for the given alerts.")
 rebuild_index_parser.add_argument('--all', default=False, action='store_true', dest='resync_all',
     help="Resyncs all alerts that belong to this node. This can take a long time.")
@@ -1646,47 +1549,12 @@ import_alert_parser.add_argument('-r', '--reset', action='store_true', default=F
 import_alert_parser.add_argument('dirs', nargs='+', default=[], help="One ore more alert directories to import.")
 import_alert_parser.set_defaults(func=import_alerts)
 
-# XXX fix me
-def forward_alerts(args):
-    """Imports one or more alerts from the given directories."""
-    import saq
-    from saq.network_client import submit_alerts
-
-    # just make sure each directory has the data.json file in it
-    for _dir in args.dirs:
-        json_path = os.path.join(_dir, 'data.json')
-        if not os.path.exists(json_path):
-            logging.error("{} does not exist".format(json_path))
-            continue
-
-    try:
-        # submit them all at once
-        submit_alerts(args.remote_host, args.remote_port,
-                      args.ssl_cert, args.ssl_hostname, args.ssl_key, args.ca_path, args.dirs)
-    except Exception as e:
-        logging.error("alert submission failed: {}".format(e))
-        traceback.print_exc()
-        sys.exit(1)
-
-    logging.info("submitted {} alerts".format(len(args.dirs)))
-    sys.exit(0)
-
-forward_alert_parser = subparsers.add_parser('forward-alerts',
-    help="Forward one or more alerts to another ACE system.")
-forward_alert_parser.add_argument('-r', '--remote-host', dest='remote_host', required=True,
-    help="Network location of remote ACE system.")
-forward_alert_parser.add_argument('-p', '--remote-port', dest='remote_port', type=int, required=True,
-    help="Network port of remote ACE system.")
-forward_alert_parser.add_argument('--ssl-cert', dest='ssl_cert', required=True,
-    help="Path to the SSL certificate to use when submitting (SSL parameter.)")
-forward_alert_parser.add_argument('--ssl-key', dest='ssl_key', required=True,
-    help="Path to the SSL key to use when submitting (SSL parameter.)")
-forward_alert_parser.add_argument('--ssl-hostname', dest='ssl_hostname', required=True,
-    help="The common name expected from the SSL server (SSL parameter).  This may be different than the hostname.")
-forward_alert_parser.add_argument('--ca-path', dest='ca_path', required=True,
-    help="Path to the root certificate chain to use when submitting (SSL parameter.)")
-forward_alert_parser.add_argument('dirs', nargs='+', default=[], help="One ore more alert directories to forward.")
-forward_alert_parser.set_defaults(func=forward_alerts)
+import_alert_parser = alert_sp.add_parser('import',
+    help="Import one or more alert directories.")
+import_alert_parser.add_argument('-r', '--reset', action='store_true', default=False, dest='reset',
+    help="Reset imported alerts.")
+import_alert_parser.add_argument('dirs', nargs='+', default=[], help="One ore more alert directories to import.")
+import_alert_parser.set_defaults(func=import_alerts)
 
 def delete_alerts(args):
     """Completely deletes the given alerts from both the storage system and the database."""
@@ -1717,6 +1585,11 @@ def delete_alerts(args):
     sys.exit(0)
 
 delete_alert_parser = subparsers.add_parser('delete-alerts',
+    help="Delete one or more alerts by UUID.")
+delete_alert_parser.add_argument('uuids', nargs='+', default=[], help="One ore more alert UUIDs to delete.")
+delete_alert_parser.set_defaults(func=delete_alerts)
+
+delete_alert_parser = alert_sp.add_parser('delete',
     help="Delete one or more alerts by UUID.")
 delete_alert_parser.add_argument('uuids', nargs='+', default=[], help="One ore more alert UUIDs to delete.")
 delete_alert_parser.set_defaults(func=delete_alerts)
@@ -1761,6 +1634,11 @@ reset_alert_parser = subparsers.add_parser('reset-alerts',
 reset_alert_parser.add_argument('dirs', nargs='+', help="One or more alert directories to reset.")
 reset_alert_parser.set_defaults(func=reset_alerts)
 
+reset_alert_parser = alert_sp.add_parser('reset',
+    help="Reset the given alerts allowing for re-analysis.")
+reset_alert_parser.add_argument('dirs', nargs='+', help="One or more alert directories to reset.")
+reset_alert_parser.set_defaults(func=reset_alerts)
+
 def archive_alerts(args):
     import saq
     from saq.analysis import RootAnalysis
@@ -1786,26 +1664,13 @@ def archive_alerts(args):
         alert.archive()
         alert.save()
 
-        # mark the alert as archived
-        #try:
-            #saq.db.session.execute(Alert.__table__.update().where(Alert.storage_dir==storage_dir).values(
-                #Alert.archived = True))
-            #saq.db.session.commit()
-
-            #session = DatabaseSession()
-            #root = saq.db.session.query(Alert).filter(Alert.storage_dir==storage_dir).one()
-            #root.archived = True
-            #saq.db.session.add(root)
-            #saq.db.session.commit()
-
-        #except Exception as e:
-            #logging.error("unable to mark alert {} as archived: {}".format(root, e))
-        #finally:
-            #if session:
-                #session.close()
-
 # reset-alerts
 reset_alert_parser = subparsers.add_parser('archive-alerts',
+    help="Archives a given alert by deleting analysis details and external files but keeping observations and tags.")
+reset_alert_parser.add_argument('dirs', nargs='+', help="One or more alert directories to archive.")
+reset_alert_parser.set_defaults(func=archive_alerts)
+
+reset_alert_parser = alert_sp.add_parser('archive',
     help="Archives a given alert by deleting analysis details and external files but keeping observations and tags.")
 reset_alert_parser.add_argument('dirs', nargs='+', help="One or more alert directories to archive.")
 reset_alert_parser.set_defaults(func=archive_alerts)
@@ -1861,6 +1726,15 @@ add_observable_parser.add_argument('-t', '--reference-time', required=False, des
     help="Specify a datetime in YYYY-MM-DD HH:MM:SS format the observable should be referenced from.")
 add_observable_parser.set_defaults(func=add_observable)
 
+add_observable_parser = alert_sp.add_parser('add-observable',
+    help="Add an observable to an existing alert and re-analyze.")
+add_observable_parser.add_argument('dir', help="The path to the alert to modify.")
+add_observable_parser.add_argument('observable_type', help="The type of the observable to add.")
+add_observable_parser.add_argument('observable_value', help="The value of the observable.")
+add_observable_parser.add_argument('-t', '--reference-time', required=False, dest='reference_time', default=None,
+    help="Specify a datetime in YYYY-MM-DD HH:MM:SS format the observable should be referenced from.")
+add_observable_parser.set_defaults(func=add_observable)
+
 def reload_alerts(args):
     from saq.constants import ANALYSIS_MODE_CORRELATION
     from saq.database import Alert, DatabaseSession
@@ -1878,6 +1752,71 @@ reload_alert_parser = subparsers.add_parser('reload-alerts',
 reload_alert_parser.add_argument('uuids', nargs='+',
     help="One or more alert UUIDs to analyze.")
 reload_alert_parser.set_defaults(func=reload_alerts)
+
+reload_alert_parser = alert_sp.add_parser('analyze', aliases=['reload'],
+    help="Force analysis (again) on one or more existing alert(s).")
+reload_alert_parser.add_argument('uuids', nargs='+',
+    help="One or more alert UUIDs to analyze.")
+reload_alert_parser.set_defaults(func=reload_alerts)
+
+def cleanup_alerts(args):
+    """Performs system maintenance.  This is meant to be called from a cron job."""
+    from saq.util.maintenance import cleanup_alerts
+    cleanup_alerts(fp_days_old=args.fp_days_old, 
+                   ignore_days_old=args.ignore_days_old,
+                   dry_run=args.dry_run)
+    sys.exit(0)
+
+cleanup_alerts_parsers = subparsers.add_parser('cleanup-alerts',
+    help="Removes alerts dispositioned as ignore or false positive and older than some amount of time.")
+cleanup_alerts_parsers.add_argument('--dry-run', required=False, dest='dry_run', default=False, action='store_true',
+    help="Just report how many would be deleted and archived.")
+cleanup_alerts_parsers.add_argument('--fp-days-old', type=int, required=False, dest='fp_days_old', default=None, action='store',
+    help='Specify how many days old an alert dispositioned as FALSE_POSITIVE should be for it to be archived.')
+cleanup_alerts_parsers.add_argument('--ignore-days-old', type=int, required=False, dest='ignore_days_old', default=None, action='store',
+    help='Specify how many days old an alert dispositioned as IGNORE should be for it to be deleted.')
+#cleanup_alerts_parsers.add_argument('--force-delete', required=False, dest='force_delete', default=None, action='store_true',
+    #help='force delete fp alerts instead of archiving them')
+cleanup_alerts_parsers.set_defaults(func=cleanup_alerts)
+
+cleanup_alerts_parsers = alert_sp.add_parser('cleanup',
+    help="Removes alerts dispositioned as ignore or false positive and older than some amount of time.")
+cleanup_alerts_parsers.add_argument('--dry-run', required=False, dest='dry_run', default=False, action='store_true',
+    help="Just report how many would be deleted and archived.")
+cleanup_alerts_parsers.add_argument('--fp-days-old', type=int, required=False, dest='fp_days_old', default=None, action='store',
+    help='Specify how many days old an alert dispositioned as FALSE_POSITIVE should be for it to be archived.')
+cleanup_alerts_parsers.add_argument('--ignore-days-old', type=int, required=False, dest='ignore_days_old', default=None, action='store',
+    help='Specify how many days old an alert dispositioned as IGNORE should be for it to be deleted.')
+#cleanup_alerts_parsers.add_argument('--force-delete', required=False, dest='force_delete', default=None, action='store_true',
+    #help='force delete fp alerts instead of archiving them')
+cleanup_alerts_parsers.set_defaults(func=cleanup_alerts)
+
+def display_alert(args):
+    from saq.analysis import RootAnalysis
+    
+    alert = RootAnalysis()
+    alert.storage_dir = args.dir
+    try:
+        alert.load()
+    except Exception as e:
+        logging.error("unable to load alert from {}: {}".format(args.dir, str(e)))
+        traceback.print_exc()
+        sys.exit(1)
+
+    display_analysis(alert)
+    sys.exit(0)
+
+display_alert_parser = subparsers.add_parser('display-alert',
+    help="Displays the results of the analysis for a given alert.")
+display_alert_parser.add_argument('dir', 
+    help="The directory of the alert to display")
+display_alert_parser.set_defaults(func=display_alert)
+
+display_alert_parser = alert_sp.add_parser('display',
+    help="Displays the results of the analysis for a given alert.")
+display_alert_parser.add_argument('dir', 
+    help="The directory of the alert to display")
+display_alert_parser.set_defaults(func=display_alert)
 
 # ============================================================================
 # general utility commands
@@ -2503,6 +2442,7 @@ update_organization_parsers = subparsers.add_parser('update-organization',
     help="Updates the files used by the UserTaggingAnalyzer module.")
 update_organization_parsers.set_defaults(func=update_organization)
 
+# TODO move this into integration
 def update_crits_cache(args):
     from saq.crits import update_local_cache
     if update_local_cache():
@@ -2878,77 +2818,6 @@ export_crits_yara_rules_parser.add_argument('dir',
     help="The path to the directory to export the yara rules into.")
 export_crits_yara_rules_parser.set_defaults(func=export_crits_yara_rules)
 
-def list_observables(args):
-    from saq.constants import VALID_OBSERVABLE_TYPES, OBSERVABLE_DESCRIPTIONS
-    print() 
-    print("SAQ Valid Observable Types")
-    print()
-    for o_type in VALID_OBSERVABLE_TYPES:
-        print('{0}{1}'.format(o_type.ljust(20), OBSERVABLE_DESCRIPTIONS[o_type]))
-    print()
-
-list_observables_parsers = subparsers.add_parser('list-observables',
-    help="List available observable types and their descriptions.")
-list_observables_parsers.set_defaults(func=list_observables)
-
-# XXX get rid of this
-def crits_activity_sync(args):
-    import saq
-    from saq.constants import DISPOSITION_IGNORE
-    from saq.crits import sync_crits_activity
-    from saq.database import Alert, DatabaseSession
-    session = DatabaseSession()
-    alerts = session.query(Alert).filter(
-        Alert.location == saq.CONFIG['global']['node'],
-        Alert.disposition != DISPOSITION_IGNORE,
-        Alert.disposition_time >= datetime.datetime.now() + datetime.timedelta(days=-args.numdays))
-
-    session.commit()
-
-    for alert in alerts:
-        try:
-            alert.load()
-        except Exception as e:
-            logging.error("unable to load alert {}: {}".format(alert, e))
-            continue
-
-        if "indicator" in alert.observable_types:
-            sync_crits_activity(alert)
-
-crits_activity_sync_parsers = subparsers.add_parser('crits-activity-sync',
-    help="Sync activity from this alert to CRITS alert activity")
-crits_activity_sync_parsers.add_argument('-d','--number-days-to-sync',dest='numdays',default=1,type=int,
-    help="Number of days in the past to sync activity to CRITS, default is previous day")
-crits_activity_sync_parsers.set_defaults(func=crits_activity_sync)
-
-def interactive_console(args):
-    import pdb
-    pdb.set_trace()
-    sys.exit(0)
-
-interactive_console_parser = subparsers.add_parser('interactive-console',
-    help="Drop into the REPL after initialization of ACE.")
-interactive_console_parser.set_defaults(func=interactive_console)
-
-def cleanup_alerts(args):
-    """Performs system maintenance.  This is meant to be called from a cron job."""
-    from saq.util.maintenance import cleanup_alerts
-    cleanup_alerts(fp_days_old=args.fp_days_old, 
-                   ignore_days_old=args.ignore_days_old,
-                   dry_run=args.dry_run)
-    sys.exit(0)
-
-cleanup_alerts_parsers = subparsers.add_parser('cleanup-alerts',
-    help="Removes alerts dispositioned as ignore or false positive and older than some amount of time.")
-cleanup_alerts_parsers.add_argument('--dry-run', required=False, dest='dry_run', default=False, action='store_true',
-    help="Just report how many would be deleted and archived.")
-cleanup_alerts_parsers.add_argument('--fp-days-old', type=int, required=False, dest='fp_days_old', default=None, action='store',
-    help='Specify how many days old an alert dispositioned as FALSE_POSITIVE should be for it to be archived.')
-cleanup_alerts_parsers.add_argument('--ignore-days-old', type=int, required=False, dest='ignore_days_old', default=None, action='store',
-    help='Specify how many days old an alert dispositioned as IGNORE should be for it to be deleted.')
-#cleanup_alerts_parsers.add_argument('--force-delete', required=False, dest='force_delete', default=None, action='store_true',
-    #help='force delete fp alerts instead of archiving them')
-cleanup_alerts_parsers.set_defaults(func=cleanup_alerts)
 
 def cleanup_email_archive(args):
     from saq.email import maintain_archive
@@ -2959,6 +2828,7 @@ cleanup_email_archive_parser = subparsers.add_parser('cleanup-email-archive',
     help="Removes emails from the archive that have expired.")
 cleanup_email_archive_parser.set_defaults(func=cleanup_email_archive)
 
+# TODO move to integration
 def cleanup_cloudphish(args):
     from saq.database import get_db_connection
 
@@ -3032,26 +2902,6 @@ cleanup_cloudphish_parser.add_argument('--cleanup-days', type=int, default=7,
     help="Select URLs that have not been requested in X days (defaults to 7 days.)")
 cleanup_cloudphish_parser.set_defaults(func=cleanup_cloudphish)
 
-def display_alert(args):
-    from saq.analysis import RootAnalysis
-    
-    alert = RootAnalysis()
-    alert.storage_dir = args.dir
-    try:
-        alert.load()
-    except Exception as e:
-        logging.error("unable to load alert from {}: {}".format(args.dir, str(e)))
-        traceback.print_exc()
-        sys.exit(1)
-
-    display_analysis(alert)
-    sys.exit(0)
-
-display_alert_parser = subparsers.add_parser('display-alert',
-    help="Displays the results of the analysis for a given alert.")
-display_alert_parser.add_argument('dir', 
-    help="The directory of the alert to display")
-display_alert_parser.set_defaults(func=display_alert)
 
 # ============================================================================
 # company management
@@ -3156,23 +3006,6 @@ check_url_parser = subparsers.add_parser('check-url',
 check_url_parser.add_argument('url', help="The URL to check.")
 check_url_parser.set_defaults(func=check_url)
 
-def test_daemonize(args):
-    from saq.util import daemonize, kill_daemon
-
-    if args.kill_daemon:
-        kill_daemon('test-daemon')
-
-    if args.daemon:
-        daemonize('test-daemon')
-
-    while True:
-        logging.info('running')
-        time.sleep(1)
-
-test_daemonize_parsers = subparsers.add_parser('test-daemonize',
-    help="Test daemonization.")
-test_daemonize_parsers.set_defaults(func=test_daemonize)
-
 def test_proxies(args):
     import requests
     import saq
@@ -3197,6 +3030,7 @@ test_proxies_parser = subparsers.add_parser('test-proxies',
 test_proxies_parser.add_argument('url', help="A sample URL to attempt to download through each proxy.")
 test_proxies_parser.set_defaults(func=test_proxies)
 
+# TODO move this to unit testing!
 def test_process_server(args):
     from saq.process_server import initialize_process_server, Popen, PIPE, TimeoutExpired
     initialize_process_server()
@@ -3295,6 +3129,10 @@ verify_modules_parsers.set_defaults(func=verify_modules)
 # encryption/decryption utilities
 #
 
+encryption_parser = subparsers.add_parser('encryption', aliases=['enc'],
+    help="Encryption management commands.")
+encryption_sp = encryption_parser.add_subparsers(dest='enc_cmd')
+
 def set_encryption_password(args):
     from saq.service import get_service_status, SERVICE_STATUS_RUNNING
     if saq.service.get_service_status('ecs') == SERVICE_STATUS_RUNNING:
@@ -3352,6 +3190,14 @@ set_encryption_password_parser.add_argument('-k', '--key', default=False, action
     help="Use the sha256 hash of a string as the primary encryption key. The input is prompted for.")
 set_encryption_password_parser.set_defaults(func=set_encryption_password)
 
+set_encryption_password_parser = encryption_sp.add_parser('set',
+    help="Sets the password used to encrypt and decrypt archived emails.")
+set_encryption_password_parser.add_argument('-o', '--overwrite', default=False, action='store_true',
+    help="Overwrites an existing password without prompting.")
+set_encryption_password_parser.add_argument('-k', '--key', default=False, action='store_true',
+    help="Use the sha256 hash of a string as the primary encryption key. The input is prompted for.")
+set_encryption_password_parser.set_defaults(func=set_encryption_password)
+
 def test_encryption_password(args):
     import saq.crypto
     password = getpass.getpass("Enter the decryption password:")
@@ -3367,12 +3213,22 @@ test_encryption_password_parser = subparsers.add_parser('test-encryption-passwor
     help="Tests the given password to see if it matches what is currently set as the encryption password.")
 test_encryption_password_parser.set_defaults(func=test_encryption_password)
 
+test_encryption_password_parser = encryption_sp.add_parser('test',
+    help="Tests the given password to see if it matches what is currently set as the encryption password.")
+test_encryption_password_parser.set_defaults(func=test_encryption_password)
+
 def encrypt_file(args):
     from saq.crypto import encrypt
     encrypt(args.source_path, args.target_path)
     sys.exit(0)
 
 encrypt_file_parser = subparsers.add_parser('encrypt-file',
+    help="Encrypts the given file with the password set with set-encryption-password.")
+encrypt_file_parser.add_argument('source_path', help="The file to encrypt from.")
+encrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
+encrypt_file_parser.set_defaults(func=encrypt_file)
+
+encrypt_file_parser = encryption_sp.add_parser('encrypt',
     help="Encrypts the given file with the password set with set-encryption-password.")
 encrypt_file_parser.add_argument('source_path', help="The file to encrypt from.")
 encrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
@@ -3388,6 +3244,16 @@ decrypt_file_parser = subparsers.add_parser('decrypt-file',
 decrypt_file_parser.add_argument('source_path', help="The file to decrypt from.")
 decrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
 decrypt_file_parser.set_defaults(func=decrypt_file)
+
+decrypt_file_parser = encryption_sp.add_parser('decrypt',
+    help="Decrypts the given file with the password set with set-decryption-password.")
+decrypt_file_parser.add_argument('source_path', help="The file to decrypt from.")
+decrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
+decrypt_file_parser.set_defaults(func=decrypt_file)
+
+config_encryption_parser = encryption_sp.add_parser('config',
+    help="Configuration encryption management commands.")
+config_encryption_sp = config_encryption_parser.add_subparsers(dest='config_enc_cmd')
 
 def store_config_password(args):
     if saq.ENCRYPTION_PASSWORD is None:
@@ -3424,6 +3290,12 @@ store_config_password_parser.add_argument('config_setting',
     help="The configuration setting to set the password for.")
 store_config_password_parser.set_defaults(func=store_config_password)
 
+store_config_password_parser = config_encryption_sp.add_parser('store',
+    help="Encrypt and store a password as one of the configuration settings.")
+store_config_password_parser.add_argument('config_setting',
+    help="The configuration setting to set the password for.")
+store_config_password_parser.set_defaults(func=store_config_password)
+
 def list_config_passwords(args):
     from saq.configuration import get_encrypted_passwords
     encrypted_passwords = get_encrypted_passwords()
@@ -3441,6 +3313,10 @@ def list_config_passwords(args):
     sys.exit(0)
 
 list_config_passwords_parser = subparsers.add_parser('list-config-passwords',
+    help="List the config settings that have their password stored as an encrypted value.")
+list_config_passwords_parser.set_defaults(func=list_config_passwords)
+
+list_config_passwords_parser = config_encryption_sp.add_parser('list',
     help="List the config settings that have their password stored as an encrypted value.")
 list_config_passwords_parser.set_defaults(func=list_config_passwords)
 
@@ -3465,6 +3341,13 @@ delete_config_password_parser.add_argument('config_setting',
     help="The configuration setting to delete the password for.")
 delete_config_password_parser.set_defaults(func=delete_config_password)
 
+delete_config_password_parser = config_encryption_sp.add_parser('delete',
+    help="Deletes a given encrypted password.")
+delete_config_password_parser.add_argument('config_setting',
+    help="The configuration setting to delete the password for.")
+delete_config_password_parser.set_defaults(func=delete_config_password)
+
+# move to bro integration
 def add_bro_http_whitelist(args):
     import saq
 

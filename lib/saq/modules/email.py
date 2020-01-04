@@ -27,8 +27,11 @@ from saq.database import get_db_connection, execute_with_retry, Alert, use_db
 from saq.email import normalize_email_address, search_archive, get_email_archive_sections, decode_rfc2822
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule, AnalysisModule
+from saq.modules.remediation import *
 from saq.modules.util import get_email
 from saq.process_server import Popen, PIPE
+from saq.remediation.constants import *
+from saq.remediation.email import request_email_remediation
 from saq.whitelist import BrotexWhitelist, WHITELIST_TYPE_SMTP_FROM, WHITELIST_TYPE_SMTP_TO
 
 from msoffice_decrypt import MSOfficeDecryptor, UnsupportedAlgorithm
@@ -1392,6 +1395,10 @@ class EmailAnalyzer(AnalysisModule):
                 # this module will extract an email from the archives based on the message-id
                 # we don't want to do that here so we exclude that analysis
                 message_id_observable.exclude_analysis(MessageIDAnalyzer)
+
+            if mail_to:
+                email_delivery_observable = analysis.add_observable(F_EMAIL_DELIVERY,
+                                            create_email_delivery(email_details[KEY_MESSAGE_ID], mail_to))
 
         # the rest of these details are for the generate logging output
 
@@ -3715,3 +3722,25 @@ class MSOfficeEncryptionAnalyzer(AnalysisModule):
             logging.debug("decryption for {} failed: {}".format(_file.value, e))
             #report_exception()
             return False
+
+class AutomatedEmailRemediationAction(RemediationAction):
+    """This email was marked for automated remediation."""
+    pass
+
+class AutomatedEmailRemediationAnalyzer(RemediationAnalyzer):
+    @property
+    def generated_analysis_type(self):
+        return AutomatedEmailRemediationAction
+
+    @property
+    def valid_observable_types(self):
+        return F_EMAIL_DELIVERY
+
+    # base class requires DIRECTIVE_REMEDIATE directive
+
+    def request_remediation(self, email_delivery):
+        return request_email_remediation(email_delivery.message_id,
+                                         email_delivery.email_address,
+                                         saq.AUTOMATION_USER_ID,
+                                         saq.COMPANY_ID,
+                                         f"auto-remediated for {self.root.uuid}")

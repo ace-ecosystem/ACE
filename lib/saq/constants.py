@@ -33,132 +33,101 @@ F_DISPOSITION = 'disposition'
 # when you add a new observable type you ALSO need to edit lib/saq/observables/__init__.py
 # and add a matching entry to the _OBSERVABLE_TYPE_MAPPING dictionary
 
+F_ASSET = 'asset'
 F_CIDR = 'cidr'
-F_IPV4 = 'ipv4'
-F_IPV4_CONVERSATION = 'ipv4_conversation'
-F_IPV4_FULL_CONVERSATION = 'ipv4_full_conversation'
+F_EMAIL_ADDRESS = 'email_address'
+F_EMAIL_CONVERSATION = 'email_conversation'
+F_EMAIL_DELIVERY = 'email_delivery'
+F_FILE = 'file'
+F_FILE_LOCATION = 'file_location'
+F_FILE_NAME = 'file_name'
+F_FILE_PATH = 'file_path'
+F_FIREEYE_UUID = 'fireeye_uuid'
 F_FQDN = 'fqdn'
 F_HOSTNAME = 'hostname'
 F_HTTP_REQUEST = 'http_request'
-F_ASSET = 'asset'
-F_USER = 'user'
-F_URL = 'url'
-F_PCAP = 'pcap'
-F_FILE = 'file'
-F_SUSPECT_FILE = 'suspect_file' # DEPRECATED
-F_FILE_PATH = 'file_path'
-F_FILE_NAME = 'file_name'
-F_FILE_LOCATION = 'file_location'
-F_EMAIL_ADDRESS = 'email_address'
-F_EMAIL_CONVERSATION = 'email_conversation'
-F_YARA = 'yara'
-F_YARA_RULE = 'yara_rule'
 F_INDICATOR = 'indicator'
+F_IPV4 = 'ipv4'
+F_IPV4_CONVERSATION = 'ipv4_conversation'
+F_IPV4_FULL_CONVERSATION = 'ipv4_full_conversation'
 F_MD5 = 'md5'
+F_MESSAGE_ID = 'message_id'
+F_PCAP = 'pcap'
+F_PROCESS_GUID = 'process_guid'
 F_SHA1 = 'sha1'
 F_SHA256 = 'sha256'
 F_SNORT_SIGNATURE = 'snort_sig'
-F_MESSAGE_ID = 'message_id'
-F_PROCESS_GUID = 'process_guid'
+F_SUSPECT_FILE = 'suspect_file' # DEPRECATED
 F_TEST = 'test'
-F_FIREEYE_UUID = 'fireeye_uuid'
+F_URL = 'url'
+F_USER = 'user'
+F_YARA = 'yara'
+F_YARA_RULE = 'yara_rule'
 
 OBSERVABLE_DESCRIPTIONS = {
+    F_ASSET: 'a F_IPV4 identified to be a managed asset',
     F_CIDR: 'IPv4 range in CIDR notation',
-    F_IPV4: 'IP address (version 4)',
-    F_IPV4_CONVERSATION: 'two F_IPV4 that were communicating formatted as aaa.bbb.ccc.ddd_aaa.bbb.ccc.ddd',
-    F_IPV4_FULL_CONVERSATION: 'two F_IPV4 that were communicating formatted as src_ipv4:src_port:dest_ipv4:dest_port',
+    F_EMAIL_ADDRESS: 'email address',
+    F_EMAIL_CONVERSATION: 'a conversation between a source email address (MAIL FROM) and a destination email address (RCPT TO)',
+    F_EMAIL_DELIVERY: 'a delivery of a an email to a target mailbox',
+    F_FILE: 'path to an attached file',
+    F_FILE_LOCATION: 'the location of file with format hostname@full_path',
+    F_FILE_NAME: 'a file name (no directory path)',
+    F_FILE_PATH: 'a file path',
+    F_FIREEYE_UUID: 'UUID used to identify a FireEye alert',
     F_FQDN: 'fully qualified domain name',
     F_HOSTNAME: 'host or workstation name',
     F_HTTP_REQUEST: 'a single HTTP request',
-    F_ASSET: 'a F_IPV4 identified to be a managed asset',
-    F_USER: 'an NT user ID identified to have used a given asset in the given period of time',
-    F_URL: 'a URL',
-    F_PCAP: 'path to a pcap formatted file *** DEPRECATED (use F_FILE instead)',
-    F_FILE: 'path to an attached file',
-    F_SUSPECT_FILE: 'path to an attached file that might be malicious *** DEPRECATED (use directives instead)',
-    F_FILE_PATH: 'a file path',
-    F_FILE_NAME: 'a file name (no directory path)',
-    F_FILE_LOCATION: 'the location of file with format hostname@full_path',
-    F_EMAIL_ADDRESS: 'email address',
-    F_EMAIL_CONVERSATION: 'a conversation between a source email address (MAIL FROM) and a destination email address (RCPT TO)',
-    F_YARA: 'yara scan result *** DEPRECATED (use F_YARA_RULE instead)',
-    F_YARA_RULE: 'yara rule name',
     F_INDICATOR: 'indicator id',
+    F_IPV4: 'IP address (version 4)',
+    F_IPV4_CONVERSATION: 'two F_IPV4 that were communicating formatted as aaa.bbb.ccc.ddd_aaa.bbb.ccc.ddd',
+    F_IPV4_FULL_CONVERSATION: 'two F_IPV4 that were communicating formatted as src_ipv4:src_port:dest_ipv4:dest_port',
     F_MD5: 'MD5 hash',
+    F_MESSAGE_ID: 'email Message-ID',
+    F_PCAP: 'path to a pcap formatted file *** DEPRECATED (use F_FILE instead)',
+    F_PROCESS_GUID: 'CarbonBlack global process identifier',
     F_SHA1: 'SHA1 hash',
     F_SHA256: 'SHA256 hash',
     F_SNORT_SIGNATURE: 'snort signature ID',
-    F_MESSAGE_ID: 'email Message-ID',
-    F_PROCESS_GUID: 'CarbonBlack global process identifier',
+    F_SUSPECT_FILE: 'path to an attached file that might be malicious *** DEPRECATED (use directives instead)',
     F_TEST: 'unit testing observable',
-    F_FIREEYE_UUID: 'UUID used to identify a FireEye alert',
-}
-
-# DEPRECATED
-# this is used in vis.js in the GUI
-# see http://www.rapidtables.com/web/color/RGB_Color.htm
-OBSERVABLE_NODE_COLORS = {
-    F_CIDR: "#0000FF", # blue
-    F_IPV4 : "#0000FF", # blue
-    F_IPV4_CONVERSATION : "#0000FF", # blue
-    F_IPV4_FULL_CONVERSATION : "#0000FF", # blue
-    F_FQDN : "#D2691E", # chocolate
-    F_HOSTNAME : "#87CEFA", # light sky blue
-    F_HTTP_REQUEST : "#87CEFA", # light sky blue
-    F_ASSET : "#FDF5E6", # old lace
-    F_USER : "#DDA0DD", # plum
-    F_URL : "#F5F5DC", # beige
-    F_PCAP : "#B0C4DE", # light steel blue
-    F_FILE : "#9ACD32", # yellow green
-    F_SUSPECT_FILE : "#9ACD32", # yellow green
-    F_FILE_PATH : "#A9DC23", # ???
-    F_FILE_NAME : "#A9DC23", # ???
-    F_FILE_LOCATION : "#A9DC23", # ???
-    F_EMAIL_ADDRESS : "#00CED1", # dark turquoise
-    F_EMAIL_CONVERSATION : "#00CED1", # dark turquoise
-    F_YARA : '#B22222', # firebrick 
-    F_YARA_RULE : '#B22222', # firebrick 
-    F_INDICATOR : "#F5F5F5", # white smoke
-    F_MD5 : "#E6E6FA", # lavender
-    F_SHA1 : "#E6E6FA", # lavender
-    F_SHA256 : "#E6E6FA", # lavender
-    F_MESSAGE_ID : "#E6E6FA", # lavender
-    F_PROCESS_GUID : "#E6E6FA", # lavender
-    F_TEST : "#E6E6FA", # lavender
-    F_FIREEYE_UUID : "#E6E6FA", # lavender
+    F_URL: 'a URL',
+    F_USER: 'an NT user ID identified to have used a given asset in the given period of time',
+    F_YARA: 'yara scan result *** DEPRECATED (use F_YARA_RULE instead)',
+    F_YARA_RULE: 'yara rule name',
 }
 
 VALID_OBSERVABLE_TYPES = sorted([
+    F_ASSET,
     F_CIDR,
-    F_IPV4,
-    F_IPV4_CONVERSATION,
-    F_IPV4_FULL_CONVERSATION,
+    F_EMAIL_ADDRESS,
+    F_EMAIL_CONVERSATION,
+    F_EMAIL_DELIVERY,
+    F_FILE,
+    F_FILE_LOCATION,
+    F_FILE_NAME,
+    F_FILE_PATH,
+    F_FIREEYE_UUID,
     F_FQDN,
     F_HOSTNAME,
     F_HTTP_REQUEST,
-    F_ASSET,
-    F_USER,
-    F_URL,
-    F_PCAP,
-    F_FILE,
-    F_SUSPECT_FILE,
-    F_FILE_PATH,
-    F_FILE_NAME,
-    F_FILE_LOCATION,
-    F_EMAIL_ADDRESS,
-    F_EMAIL_CONVERSATION,
-    F_YARA,
-    F_YARA_RULE,
     F_INDICATOR,
+    F_IPV4,
+    F_IPV4_CONVERSATION,
+    F_IPV4_FULL_CONVERSATION,
     F_MD5,
+    F_MESSAGE_ID,
+    F_PCAP,
+    F_PROCESS_GUID,
     F_SHA1,
     F_SHA256,
     F_SNORT_SIGNATURE,
-    F_MESSAGE_ID,
-    F_PROCESS_GUID,
+    F_SUSPECT_FILE,
     F_TEST,
-    F_FIREEYE_UUID,
+    F_URL,
+    F_USER,
+    F_YARA,
+    F_YARA_RULE,
 ])
 
 DEPRECATED_OBSERVABLES = sorted([
@@ -181,7 +150,7 @@ def parse_ipv4_conversation(f_ipv4_c):
     return f_ipv4_c.split('_', 2)
 
 def create_ipv4_conversation(src, dst):
-    return '{0}_{1}'.format(src, dst)
+    return '{}_{}'.format(src, dst)
 
 # utility functions to work with F_EMAIL_CONVERSATION types
 def parse_email_conversation(f_ipv4_c):
@@ -194,13 +163,19 @@ def parse_email_conversation(f_ipv4_c):
     return result
 
 def create_email_conversation(mail_from, rcpt_to):
-    return '{0}|{1}'.format(mail_from, rcpt_to)
+    return '{}|{}'.format(mail_from, rcpt_to)
 
 def parse_file_location(file_location):
     return file_location.split('@', 1)
 
 def create_file_location(hostname, full_path):
     return '{}@{}'.format(hostname, full_path)
+
+def parse_email_delivery(email_delivery):
+    return email_delivery.split('|', 1)
+
+def create_email_delivery(message_id, mailbox):
+    return '{}|{}'.format(message_id, mailbox)
 
 # the expected format of the event_time of an alert
 event_time_format_tz = '%Y-%m-%d %H:%M:%S %z'
@@ -324,6 +299,8 @@ DIRECTIVE_EXTRACT_PCAP = 'extract_pcap'
 DIRECTIVE_IGNORE_AUTOMATION_LIMITS = 'ignore_automation_limits'
 # hints to whatever system is used to display that this should be previewable
 DIRECTIVE_PREVIEW = 'preview'
+# destroy that which is contained within
+DIRECTIVE_REMEDIATE = 'remediate'
 
 DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'archive the file',
@@ -338,11 +315,12 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_NO_SCAN: 'do not scan this file with yara',
     DIRECTIVE_ORIGINAL_EMAIL: 'treat this file as the original email file',
     DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
+    DIRECTIVE_PREVIEW: 'show this content inline if possible',
+    DIRECTIVE_REMEDIATE: 'remediate the target',
     DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
     DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
     DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
-    DIRECTIVE_PREVIEW: 'show this content inline if possible',
 }
 
 VALID_DIRECTIVES = [
@@ -358,10 +336,11 @@ VALID_DIRECTIVES = [
     DIRECTIVE_NO_SCAN,
     DIRECTIVE_ORIGINAL_EMAIL,
     DIRECTIVE_ORIGINAL_SMTP,
+    DIRECTIVE_PREVIEW,
+    DIRECTIVE_REMEDIATE,
     DIRECTIVE_SANDBOX,
     DIRECTIVE_TRACKED,
     DIRECTIVE_WHITELISTED,
-    DIRECTIVE_PREVIEW,
 ]
 
 def is_valid_directive(directive):
@@ -416,24 +395,26 @@ VALID_EVENTS = [
     EVENT_GLOBAL_ANALYSIS_ADDED ]
 
 # available actions for observables
-ACTION_TAG_OBSERVABLE = 'tag_observable'
-ACTION_UPLOAD_TO_CRITS = 'upload_crits'
+ACTION_CLEAR_CLOUDPHISH_ALERT = 'clear_cloudphish_alert'
+ACTION_COLLECT_FILE = 'collect_file'
 ACTION_FILE_DOWNLOAD = 'file_download'
 ACTION_FILE_DOWNLOAD_AS_ZIP = 'file_download_as_zip'
-ACTION_FILE_VIEW_AS_HEX = 'file_view_as_hex'
-ACTION_FILE_VIEW_AS_TEXT = 'file_view_as_text'
 ACTION_FILE_UPLOAD_VT = 'file_upload_vt'
 ACTION_FILE_UPLOAD_VX = 'file_upload_vx'
+ACTION_FILE_VIEW_AS_HEX = 'file_view_as_hex'
+ACTION_FILE_VIEW_AS_TEXT = 'file_view_as_text'
 ACTION_FILE_VIEW_VT = 'file_view_vt'
 ACTION_FILE_VIEW_VX = 'file_view_vx'
-ACTION_COLLECT_FILE = 'collect_file'
-ACTION_CLEAR_CLOUDPHISH_ALERT = 'clear_cloudphish_alert'
+ACTION_REMEDIATE = 'remediate'
 ACTION_REMEDIATE_EMAIL = 'remediate_email'
-ACTION_WHITELIST = 'whitelist'
-ACTION_UN_WHITELIST = 'un_whitelist'
-ACTION_SET_SIP_INDICATOR_STATUS_INFORMATIONAL = 'sip_status_informational'
+ACTION_RESTORE = 'restore'
 ACTION_SET_SIP_INDICATOR_STATUS_ANALYZED = 'sip_status_analyzed'
+ACTION_SET_SIP_INDICATOR_STATUS_INFORMATIONAL = 'sip_status_informational'
 ACTION_SET_SIP_INDICATOR_STATUS_NEW = 'sip_status_new'
+ACTION_TAG_OBSERVABLE = 'tag_observable'
+ACTION_UN_WHITELIST = 'un_whitelist'
+ACTION_UPLOAD_TO_CRITS = 'upload_crits'
+ACTION_WHITELIST = 'whitelist'
 
 # recorded metrics
 METRIC_THREAD_COUNT = 'thread_count'

@@ -19,7 +19,6 @@ from saq.configuration import load_configuration
 from saq.constants import *
 from saq.messaging import initialize_message_system
 from saq.network_semaphore import initialize_fallback_semaphores
-from saq.remediation import initialize_remediation_system_manager
 from saq.sla import SLA
 from saq.util import create_directory
 
@@ -29,6 +28,9 @@ import tzlocal
 
 # this is set to True when unit testing, False otherwise
 UNIT_TESTING = 'SAQ_UNIT_TESTING' in os.environ
+
+# global user ID for the "automation" user
+AUTOMATION_USER_ID = None # (initialized in saq.database.initialize_database())
 
 # disable the verbose logging in the requests module
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -130,9 +132,10 @@ def initialize(saq_home=None,
                args=None, 
                relative_dir=None):
 
-    from saq.database import initialize_database, initialize_node
+    from saq.database import initialize_database, initialize_node, initialize_automation_user
 
     global API_PREFIX
+    global AUTOMATION_USER_ID
     global CA_CHAIN_PATH
     global COMPANY_ID
     global COMPANY_NAME
@@ -520,8 +523,10 @@ def initialize(saq_home=None,
     if args:
         DAEMON_MODE = args.daemon
 
+    # make sure we've got the automation user set up
+    initialize_automation_user()
+
     # initialize other systems
-    initialize_remediation_system_manager()
     initialize_message_system()
 
     logging.debug("SAQ initialized")

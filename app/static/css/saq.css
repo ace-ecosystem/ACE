@@ -191,3 +191,8 @@ html, body {
   border-color: #ef1c1c;
   color: #ef1c1c
 }
+
+.raw-log {
+  font-family : monospace;
+  font-size : smaller;
+}

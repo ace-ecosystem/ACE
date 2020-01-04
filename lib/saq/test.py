@@ -299,7 +299,8 @@ def initialize_test_environment():
         saq_home = os.environ['SAQ_HOME']
 
     # adjust search path
-    sys.path.append(os.path.join(saq_home, 'lib'))
+    if os.path.join(saq_home, 'lib') not in sys.path:
+        sys.path.append(os.path.join(saq_home, 'lib'))
 
     # initialize saq
     import saq
@@ -331,9 +332,6 @@ def initialize_test_environment():
         os.makedirs(test_dir)
     except Exception as e:
         logging.error("unable to create temp dir {}: {}".format(test_dir, e))
-
-    # in all our testing we use the password "password" for encryption/decryption
-    #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
     #initialize_database()
     initialized = True
@@ -468,10 +466,15 @@ class ACEBasicTestCase(TestCase):
 
     def setUp(self):
         #saq.DUMP_TRACEBACKS = True
+        self.starting_thread_count = threading.active_count()
         logging.info("TEST: {}".format(self.id()))
         self.save_signal_handlers()
         initialize_test_environment()
+
         self.reset()
+        import saq
+        saq.db.remove()
+
         open_test_comms()
         memory_log_handler.clear()
         self.initialize_test_client()
@@ -515,6 +518,10 @@ class ACEBasicTestCase(TestCase):
         # clear all the registered services
         import saq.service
         saq.service._registered_services = []
+
+        thread_count_difference = threading.active_count() - self.starting_thread_count
+        if thread_count_difference != 0:
+            logging.warning(f"thread count difference after {self.id()} is {thread_count_difference}")
 
     def create_test_file(self, file_path='.unittest_test_data', file_content=None, root_analysis=None):
         """Creates a test file and returns the path to the newly created file.
@@ -580,6 +587,7 @@ class ACEBasicTestCase(TestCase):
         self.reset_crawlphish()
         self.reset_log_exports()
         self.reset_var_dir()
+        self.clear_error_reports()
 
         # re-enable encryption in case we disabled it
         #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
@@ -674,6 +682,7 @@ class ACEBasicTestCase(TestCase):
     @use_db
     def reset_correlation(self, db, c):
         global UNITTEST_USER_ID
+        import saq
 
         data_subdir = os.path.join(saq.CONFIG['global']['data_dir'], saq.SAQ_NODE)
         failed_alert_subdir = os.path.join(saq.SAQ_HOME, '.saq_alerts')
@@ -718,6 +727,9 @@ class ACEBasicTestCase(TestCase):
         UNITTEST_USER_ID = c.lastrowid
         logging.debug(f"got user id {UNITTEST_USER_ID} for unittest user")
         db.commit()
+
+        import saq.database
+        saq.database.initialize_automation_user()
 
     def reset_email_archive(self):
         import socket

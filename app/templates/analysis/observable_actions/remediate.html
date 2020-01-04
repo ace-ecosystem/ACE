@@ -1,0 +1,5 @@
+<script type="text/javascript">
+    $('#action_{{action.name}}_{{unique_reference}}').on('click', function() {
+        remediate_target('{{_observable.remediation_type}}', '{{_observable.remediation_key | s64encode}}', '{{_observable.type}}', '{{_observable.value | s64encode}}');
+    });
+</script>
