@@ -22,9 +22,6 @@ from phishfry.account import BASIC
 class PhishfryRemediationSystem(RemediationSystem):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # set this property to true when doing unit testing
-        self.testing_mode = False
         
         # load the Exchange Web Services accounts
         self.accounts = []
@@ -65,9 +62,6 @@ class PhishfryRemediationSystem(RemediationSystem):
 
             logging.debug(f"loaded phishfry EWS account user {user} server {server} version {version} auth_type {auth_type} certificate {certificate}")
 
-    def enable_testing_mode(self):
-        self.testing_mode = True
-
     def execute_request(self, remediation):
         logging.info(f"execution remediation {remediation}")
         message_id, recipient = remediation.key.split(':', 1)
@@ -82,7 +76,7 @@ class PhishfryRemediationSystem(RemediationSystem):
 
         found_recipient = False
         for account in self.accounts:
-            if self.testing_mode:
+            if saq.UNIT_TESTING:
                 pf_result = {}
                 pf_result[recipient] = phishfry.remediation_result.RemediationResult(recipient, message_id, 'mailbox', remediation.action, success=True, message='removed')
             else:

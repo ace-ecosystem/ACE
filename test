@@ -55,6 +55,7 @@ then
         saq.test_util \
         saq.test_locks \
         saq.remediation.test \
+        saq.remediation.phishfry.test \
         saq.messaging.test \
         saq.engine.test \
         saq.modules.test_alerts \
@@ -87,9 +88,6 @@ then
         #saq.engine.test_email \
         #saq.engine.test_ace \
         #saq.test_lock \
-
-        #saq.remediation.phishfry.test \
-
 
     exit 0
 fi

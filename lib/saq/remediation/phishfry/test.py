@@ -7,10 +7,9 @@ import saq.test
 
 from saq.constants import *
 from saq.database import Remediation
-from saq.remediation import initialize_remediation_system_manager, \
-                            start_remediation_system_manager, \
-                            stop_remediation_system_manager, \
-                            request_remediation
+from saq.remediation import RemediationSystemManager
+from saq.remediation.email import request_email_remediation, request_email_restoration, create_email_remediation_key,\
+                                  execute_email_remediation, execute_email_restoration
 from saq.remediation.constants import *
 from saq.test import *
 
@@ -19,38 +18,51 @@ from sqlalchemy import func, and_
 class TestCase(ACEBasicTestCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
+        saq.CONFIG['remediation_system_phishfry']['enabled'] = 'yes'
+        saq.CONFIG.add_section('phishfry_account_test')
+        s = saq.CONFIG['phishfry_account_test']
+        s['user'] = 'user'
+        s['pass'] = 'pass'
+        s['auth_type'] = 'basic'
+        s['server'] = 'outlook.office.com'
+        s['version'] = 'Exchange2016'
+        s['certificate'] = ''
+        s['use_proxy'] = 'no'
 
-        saq.CONFIG['remediation_system_phishfry'] = {
-            'enabled': 'yes',
-            'module': 'saq.remediation.phishfry',
-            'class': 'PhishfryRemediationSystem' }
 
-        del saq.CONFIG['remediation_system_test']
+    def _start_manager(self):
+        manager = RemediationSystemManager()
+        manager.start_service(threaded=True)
+        wait_for(lambda: 'email' in manager.systems \
+                         and manager.systems['email'].manager_thread is not None \
+                         and manager.systems['email'].manager_thread.is_alive())
 
-        self.manager = initialize_remediation_system_manager()
-        self.system = self.manager.systems['email']
-        self.system.enable_testing_mode()
+        return manager
 
     def test_automation_start_stop(self):
-        start_remediation_system_manager()
-        stop_remediation_system_manager()
+        manager = self._start_manager()
+        manager.stop_service()
+        manager.wait_service()
 
     def test_account_load(self):
-        self.assertEquals(len(self.system.accounts), 1)
-        self.assertEquals(self.system.accounts[0].user, 'test_user')
-        #self.assertEquals(self.system.accounts[0].password, 'test_password')
+        manager = self._start_manager()
+        manager.stop_service()
+        manager.wait_service()
+
+        self.assertEquals(len(manager.systems['email'].accounts), 1)
+        self.assertEquals(manager.systems['email'].accounts[0].user, 'user')
 
     def test_remediation_request(self):
-        remediation_id = request_remediation(REMEDIATION_TYPE_EMAIL, '<message_id>', '<recipient@localhost>', 
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
-        self.assertTrue(isinstance(remediation_id, int))
-        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
+        remediation = request_email_remediation('<message_id>', '<recipient@localhost>', 
+                                               saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
+        self.assertTrue(isinstance(remediation, Remediation))
+        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
         self.assertIsNotNone(remediation)
         self.assertEquals(remediation.type, REMEDIATION_TYPE_EMAIL)
         self.assertEquals(remediation.action, REMEDIATION_ACTION_REMOVE)
         self.assertIsNotNone(remediation.insert_date)
         self.assertEquals(remediation.user_id, saq.test.UNITTEST_USER_ID)
-        self.assertEquals(remediation.key, '<message_id>:<recipient@localhost>')
+        self.assertEquals(remediation.key, create_email_remediation_key('<message_id>', '<recipient@localhost>'))
         self.assertIsNone(remediation.result)
         self.assertIsNone(remediation.comment)
         self.assertIsNone(remediation.successful)
@@ -59,61 +71,59 @@ class TestCase(ACEBasicTestCase):
         self.assertIsNone(remediation.lock_time)
         self.assertEquals(remediation.status, REMEDIATION_STATUS_NEW)
 
-        remediation_id = self.system.request_restoration('<message_id>', '<recipient@localhost>', 
-                                                   user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
-        self.assertTrue(isinstance(remediation_id, int))
-        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
+        remediation = request_email_restoration('<message_id>', '<recipient@localhost>', 
+                                                saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
+        self.assertTrue(isinstance(remediation, Remediation))
+        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
         self.assertIsNotNone(remediation)
         self.assertEquals(remediation.action, REMEDIATION_ACTION_RESTORE)
 
     def test_remediation_execution(self):
-        remediation_id = request_remediation(REMEDIATION_TYPE_EMAIL, '<message_id>', '<recipient@localhost>', 
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
-        self.assertTrue(isinstance(remediation_id, int))
-        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
-        self.assertIsNotNone(remediation)
-        self.system.execute_request(remediation)
-
-        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
+        remediation = execute_email_remediation('<message_id>', '<recipient@localhost>', 
+                                                saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
+        self.assertTrue(isinstance(remediation, Remediation))
+        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
         self.assertIsNotNone(remediation)
         self.assertEquals(remediation.type, REMEDIATION_TYPE_EMAIL)
         self.assertEquals(remediation.action, REMEDIATION_ACTION_REMOVE)
         self.assertIsNotNone(remediation.insert_date)
         self.assertEquals(remediation.user_id, saq.test.UNITTEST_USER_ID)
-        self.assertEquals(remediation.key, '<message_id>:<recipient@localhost>')
+        self.assertEquals(remediation.key, create_email_remediation_key('<message_id>', '<recipient@localhost>'))
         self.assertIsNotNone(remediation.result)
         self.assertIsNone(remediation.comment)
         self.assertTrue(remediation.successful)
         self.assertEquals(remediation.company_id, saq.COMPANY_ID)
-        self.assertIsNone(remediation.lock)
-        self.assertIsNone(remediation.lock_time)
+        self.assertIsNotNone(remediation.lock)
+        self.assertIsNotNone(remediation.lock_time)
         self.assertEquals(remediation.status, REMEDIATION_STATUS_COMPLETED)
 
     def test_automation_queue(self):
-        start_remediation_system_manager()
-        remediation_id = request_remediation(REMEDIATION_TYPE_EMAIL, '<message_id>', '<recipient@localhost>', 
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+        manager = self._start_manager()
+        remediation = request_email_remediation('<message_id>', '<recipient@localhost>', 
+                                                saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
         wait_for(
             lambda: len(saq.db.query(Remediation).filter(
-                Remediation.id == remediation_id, 
+                Remediation.id == remediation.id, 
                 Remediation.status == REMEDIATION_STATUS_COMPLETED).all()) > 0,
             1, 5)
 
-        stop_remediation_system_manager()
+        manager.stop_service()
+        manager.wait_service()
 
     def test_automation_cleanup(self):
-        
-        # make sure a lock uuid is created
-        start_remediation_system_manager()
-        stop_remediation_system_manager()
 
+        # make sure a lock uuid is created
+        manager = self._start_manager()
+        manager.stop_service()
+        manager.wait_service()
+        
         # insert a new work request
-        remediation_id = request_remediation(REMEDIATION_TYPE_EMAIL, '<message_id>', '<recipient@localhost>', 
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+        remediation = request_email_remediation('<message_id>', '<recipient@localhost>', 
+                                                saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
 
         # pretend it started processing
         saq.db.execute(Remediation.__table__.update().values(
-            lock=self.system.lock,
+            lock=manager.systems['email'].lock,
             lock_time=func.now(),
             status=REMEDIATION_STATUS_IN_PROGRESS).where(and_(
             Remediation.company_id == saq.COMPANY_ID,
@@ -122,13 +132,14 @@ class TestCase(ACEBasicTestCase):
         saq.db.commit()
 
         # start up the system again
-        start_remediation_system_manager()
+        manager = self._start_manager()
 
         # and it should process that job
         wait_for(
             lambda: len(saq.db.query(Remediation).filter(
-                Remediation.id == remediation_id, 
+                Remediation.id == remediation.id, 
                 Remediation.status == REMEDIATION_STATUS_COMPLETED).all()) > 0,
             1, 5)
 
-        stop_remediation_system_manager()
+        manager.stop_service()
+        manager.wait_service()
