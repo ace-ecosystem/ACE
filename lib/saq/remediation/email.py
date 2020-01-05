@@ -4,6 +4,7 @@
 # remediation routines for emails
 
 import saq
+import saq.remediation
 
 from saq.database import get_db_connection, Remediation
 from saq.remediation import request_remediation, request_restoration
@@ -18,24 +19,23 @@ def parse_email_remediation_key(key):
     return key.split(':', 1)
 
 def request_email_remediation(message_id, recipient, *args, **kwargs):
-    return request_remediation(REMEDIATION_TYPE_EMAIL,
-                               f'{message_id}:{recipient}',
-                               *args, **kwargs)
+    return saq.remediation.request_remediation(REMEDIATION_TYPE_EMAIL,
+                                               f'{message_id}:{recipient}',
+                                               *args, **kwargs)
 
-def request_email_restoration(message_id=None, recipient=None, *args, **kwargs):
-    return request_restoration(type=REMEDIATION_TYPE_EMAIL,
-                               key=f'{message_id}:{recipient}',
-                               *args, **kwargs)
+def request_email_restoration(message_id, recipient, *args, **kwargs):
+    return saq.remediation.request_restoration(REMEDIATION_TYPE_EMAIL,
+                                               f'{message_id}:{recipient}',
+                                               *args, **kwargs)
 
 def execute_email_remediation(message_id, recipient, *args, **kwargs):
-    return execute_remediation(REMEDIATION_TYPE_EMAIL,
-                               f'{message_id}:{recipient}',
-                               *args, **kwargs)
+    return saq.remediation.execute_remediation(REMEDIATION_TYPE_EMAIL, f'{message_id}:{recipient}',
+                                               *args, **kwargs)
 
-def execute_email_restoration(message_id=None, recipient=None, *args, **kwargs):
-    return execute_restoration(type=REMEDIATION_TYPE_EMAIL,
-                               key=f'{message_id}:{recipient}',
-                               *args, **kwargs)
+def execute_email_restoration(message_id, recipient, *args, **kwargs):
+    return saq.remediation.execute_restoration(REMEDIATION_TYPE_EMAIL,
+                                               f'{message_id}:{recipient}',
+                                               *args, **kwargs)
 
 #
 # LEGACY CODE BELOW
