@@ -153,11 +153,11 @@ def execute_hunt(args):
     if isinstance(hunt, QueryHunt):
         start_time = datetime.datetime.strptime(args.start_time, '%m/%d/%Y:%H:%M:%S')
         if args.timezone is not None:
-            start_time = start_time.astimezone(pytz.timezone(args.timezone))
+            start_time = pytz.timezone(args.timezone).localize(start_time)
 
         end_time = datetime.datetime.strptime(args.end_time, '%m/%d/%Y:%H:%M:%S')
         if args.timezone is not None:
-            end_time = end_time.astimezone(pytz.timezone(args.timezone))
+            end_time = pytz.timezone(args.timezone).localize(end_time)
 
         exec_kwargs['start_time'] = start_time
         exec_kwargs['end_time'] = end_time

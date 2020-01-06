@@ -238,7 +238,7 @@ class QueryHunt(Hunt):
 
         try:
             # the optional offset allows hunts to run at some offset of time
-            if self.offset:
+            if not self.manual_hunt and self.offset:
                 offset_start_time -= self.offset
                 offset_end_time -= self.offset
 
