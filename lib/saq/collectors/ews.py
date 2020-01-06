@@ -237,6 +237,9 @@ class EWSCollector(Collector):
         
         for section in saq.CONFIG.sections():
             if section.startswith('ews_'):
+                if not saq.CONFIG[section].getboolean('enabled', fallback=False):
+                    continue
+
                 module_name = saq.CONFIG[section]['module']
                 try:
                     _module = importlib.import_module(module_name)
