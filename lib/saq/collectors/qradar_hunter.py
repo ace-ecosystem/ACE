@@ -29,6 +29,8 @@ class QRadarHunt(QueryHunt):
         start_time_str = start_time.strftime('%Y-%m-%d %H:%M %z')
         end_time_str = end_time.strftime('%Y-%m-%d %H:%M %z')
 
+        logging.info(f"executing hunt {self.name} with start time {start_time_str} end time {end_time_str}")
+
         target_query = self.query.replace('<O_START>', start_time_str)\
                                  .replace('<O_STOP>', end_time_str)
 
