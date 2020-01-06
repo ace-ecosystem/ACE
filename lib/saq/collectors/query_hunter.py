@@ -9,6 +9,8 @@ import re
 
 COMMENT_REGEX = re.compile(r'^\s*#.*?$', re.M)
 
+import pytz
+
 import saq
 from saq.constants import *
 from saq.collectors.hunter import Hunt, open_hunt_db
@@ -82,14 +84,22 @@ class QueryHunt(Hunt):
                     return self._last_end_time
                 else:
                     self._last_end_time = row[0]
+                    if self._last_end_time is not None and self._last_end_time.tzinfo is None:
+                        self._last_end_time = pytz.utc.localize(self._last_end_time)
                     return self._last_end_time
 
     @last_end_time.setter
     def last_end_time(self, value):
+        if value.tzinfo is None:
+            value = pytz.utc.localize(value)
+
+        value = value.astimezone(pytz.utc)
+
         with open_hunt_db(self.type) as db:
             c = db.cursor()
             c.execute("UPDATE hunt SET last_end_time = ? WHERE hunt_name = ?",
-                     (value, self.name))
+                     (value.replace(tzinfo=None), self.name))
+                     # NOTE -- datetime with tzinfo not supported by default timestamp converter in 3.6
             db.commit()
 
         self._last_end_time = value
@@ -102,19 +112,19 @@ class QueryHunt(Hunt):
         if self.full_coverage:
             # have we not executed this search yet?
             if self.last_end_time is None:
-                return datetime.datetime.now() - self.time_range
+                return local_time() - self.time_range
             else:
                 return self.last_end_time
         else:
             # if we're not doing full coverage then we don't worry about the last end time
-            return datetime.datetime.now() - self.time_range
+            return local_time() - self.time_range
 
     @property
     def end_time(self):
         """Returns the ending time of this query based on the start time and the hunt configuration."""
         # if this hunt is configured for full coverage, then the ending time for the search
         # will be equal to the ending time of the last executed search plus the total range of the search
-        now = datetime.datetime.now()
+        now = local_time()
         if self.full_coverage:
             # have we not executed this search yet?
             if self.last_end_time is None:
@@ -144,11 +154,11 @@ class QueryHunt(Hunt):
 
         # if the difference between now and the last_end_time is >= the time_range
         # then we are playing catchup and we need to run again
-        if self.last_end_time is not None and datetime.datetime.now() - self.last_end_time >= self.time_range:
+        if self.last_end_time is not None and local_time() - self.last_end_time >= self.time_range:
             return True
 
         # otherwise we're not ready until it's past the next execution time
-        return datetime.datetime.now() >= self.next_execution_time
+        return local_time() >= self.next_execution_time
 
     @property
     def query(self):
