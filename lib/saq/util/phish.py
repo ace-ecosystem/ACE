@@ -98,7 +98,7 @@ class Remediator:
             message.soft_delete()
             _logger.info(
                 f"removed message id {message.message_id} item id {message.id} "
-                f"changekey {message.changekey} from folder for user {email_address}"
+                f"changekey {message.changekey} for user {email_address}"
             )
 
     def restore(self, email_address, message_id, **kwargs):
