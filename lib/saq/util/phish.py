@@ -18,28 +18,6 @@ def check_message_id_format(message_id):
     return message_id
 
 
-def get_messages_from_all_items(account, message_id):
-    """Return list of messages matches the message id.
-
-    Messages are pulled from the AllItems folder instead of
-    manually traversing each sub folder."""
-
-    all = account.root / "AllItems"
-
-    return get_messages_from_folder(all, message_id)
-
-
-def get_deleted_messages(account, message_id):
-    """Return list of messages matching the message id.
-
-    Messages are pulled from the Recoverable Items / Deleted
-    folder."""
-
-    recoverable_items = account.root / 'Recoverable Items' / 'Deleted'
-
-    return get_messages_from_folder(recoverable_items, message_id)
-
-
 def get_messages_from_folder(folder, message_id, **kwargs):
     """Return list of messages matching message id in the given folder."""
     _logger = kwargs.get("logger") or logging
@@ -49,6 +27,7 @@ def get_messages_from_folder(folder, message_id, **kwargs):
     except exchangelib.errors.DoesNotExist:
         _logger.info(f"{folder.absolute} does not contain message id {message_id}")
         return
+
 
 class Remediator:
     """Helper class to remediate and restore emails."""
