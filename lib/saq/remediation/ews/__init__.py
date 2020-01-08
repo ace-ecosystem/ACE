@@ -9,9 +9,12 @@ import json
 
 import saq
 from saq.error import report_exception
+from saq.remediation import RemediationSystem
+from saq.remediation.constants import *
+from saq.util import PreInitCustomSSLAdapter
 
 import exchangelib
-from exchangelib.errors import DoesNotExist
+from exchangelib.errors import DoesNotExist, ErrorNonExistentMailbox
 import requests
 
 
@@ -38,6 +41,7 @@ def get_messages_from_folder(folder, message_id, **kwargs):
         return
 
 def get_exchange_build(version="Exchange2016", **kwargs):
+    """Return a valid exchangelib.Build object based on the api version."""
     _version = version.upper()
     _module = kwargs.get("version_module") or exchangelib.version
     if not _version.startswith("EXCHANGE"):
@@ -46,20 +50,28 @@ def get_exchange_build(version="Exchange2016", **kwargs):
 
     return getattr(_module, _version)
 
-class Remediator:
+class EWSRemediator:
     """Helper class to remediate and restore emails."""
 
     def __init__(self, user, password, server="outlook.office365.com", version="Exchange2016",
                  auth_type=exchangelib.BASIC, access_type=exchangelib.DELEGATE, adapter=None, **kwargs):
 
         self.credentials = exchangelib.Credentials(user, password)
+        self.server = server
         _build = get_exchange_build(version)
         _version = exchangelib.Version(_build)
         self.config = exchangelib.Configuration(credentials=self.credentials, server=server, auth_type=auth_type, version=_version)
         self.access_type = access_type
         self.account = kwargs.get("account", None)
+        self.mailbox_found = False
         if adapter is not None:
             exchangelib.protocol.BaseProtocol.HTTP_ADAPTER_CLS = adapter
+
+    def remediate(self, action, email_address, message_id):
+        if action == 'remove':
+            return self.remove(email_address, message_id)
+        return self.restore(email_address, message_id)
+
 
     def get_account(self, email_address, **kwargs):
         """Return the existing account if appropriate. Return a new one."""
@@ -78,7 +90,7 @@ class Remediator:
         _logger.debug("setup account object for {email_address} using {self.access_type}")
         return self.account
 
-    def remediate(self, email_address, message_id, **kwargs):
+    def remove(self, email_address, message_id, **kwargs):
         """Soft delete messages with a specific message id.
 
         Soft delete == recoverable"""
@@ -88,7 +100,18 @@ class Remediator:
 
         all_items = _account.root / "AllItems"
 
-        messages = get_messages_from_folder(all_items, message_id)
+        try:
+            messages = get_messages_from_folder(all_items, message_id)
+        except ErrorNonExistentMailbox:
+            self.mailbox_found = False
+            return RemediationResult(email_address, message_id, 'unknown', 'remove', success=False,
+                                     message='account does not have mailbox')
+        else:
+            self.mailbox_found = True
+
+        if not messages:
+            _logger.warning(f'inbox {} did not contain message id {} during remediation')
+            return RemediationResult(email_address, message_id, 'mailbox', 'remove', success=False, message="no messages found")
 
         for message in messages:
             message.soft_delete()
@@ -97,6 +120,9 @@ class Remediator:
                 f"changekey {message.changekey} for user {email_address}"
             )
 
+        return RemediationResult(email_address, message_id, 'mailbox',
+                                 'remove', success=True, message='removed')
+
     def restore(self, email_address, message_id, **kwargs):
         """Restore a soft deleted--but recoverable--message to the user's inbox."""
         _account = kwargs.get("account") or self.get_account(email_address)
@@ -104,7 +130,19 @@ class Remediator:
 
         recoverable_items = _account.root / 'Recoverable Items' / 'Deletions'
 
-        messages = get_messages_from_folder(recoverable_items, message_id)
+        try:
+            messages = get_messages_from_folder(recoverable_items, message_id)
+        except ErrorNonExistentMailbox:
+            self.mailbox_found = False
+            return RemediationResult(email_address, message_id, 'unknown', 'restore', success=False,
+                                     message='account does not have mailbox')
+        else:
+            self.mailbox_found = True
+
+        if not messages:
+            _logger.warning(f'inbox {} did not contain message id {} during remediation')
+            return RemediationResult(email_address, message_id, 'mailbox', 'restore', success=False,
+                                     message="no messages found")
 
         for message in messages:
             message.move(_account.inbox)
@@ -112,6 +150,165 @@ class Remediator:
                 f"move message id {message.message_id} item id {message.id} changekey "
                 f"{message.changekey} to the inbox of {email_address}"
             )
+
+        return RemediationResult(email_address, message_id, 'mailbox', 'restore', success=True,
+                                 message='restored')
+
+    @property
+    def user(self):
+        pass
+
+def get_remediator(section, timezone=None):
+    _timezone = timezone or saq.CONFIG["DEFAULT"].get("timezone", "UTC")
+    """Return EWSRemediator object"""
+    certificate = section.get("certificate", None)
+    use_proxy = section.getboolean("use_proxy", True)
+    server = section.get('server', 'outlook.office365.com')
+
+    adapter = PreInitCustomSSLAdapter
+
+    if certificate:
+        adapter.add_cert(server, certificate)
+
+    if not use_proxy:
+        adapter.PROXIES = {}
+
+    return EWSRemediator(
+        user=section['user'],
+        password=section['password'],
+        server=server,
+        auth_type=section.get('auth_type', exchangelib.BASIC),
+        access_type=section.get('access_type', exchangelib.DELEGATE),
+        version=section.get('version', "Exchange2016"),
+        adapter=adapter,
+    )
+
+
+class EWSRemediationSystem(RemediationSystem):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Create a remediator for each account
+        self.remediators = []
+
+        sections = [saq.CONFIG[section] for section in saq.CONFIG.sections() if section.startswith('ews_remediator_account_')]
+
+        for section in sections:
+
+            remediator = get_remediator(section)
+
+            self.remediators.append(remediator)
+
+            logging.debug(
+                f'loaded EWSRemediator with EWS account user {remediator.credentials.user} server {remediator.server} '
+                f'version {remediator.config.version.api_version} auth_type {remediator.config.auth_type}'
+            )
+
+    def execute_request(self, remediation):
+        logging.info(f"execution remediation {remediation}")
+        message_id, recipient = remediation.key.split(':', 1)
+
+        # TODO should we use our email address parsing utilities for this instead?
+        if recipient.startswith('<'):
+            recipient = recipient[1:]
+        if recipient.endswith('>'):
+            recipient = recipient[:-1]
+
+        logging.debug("got message_id {message_id} recipient {recipient} from key {remediation.key}")
+
+        # found_recipient = False
+
+        for remediator in self.remediators:
+
+            if saq.UNIT_TESTING:
+                pf_result = {}
+                pf_result[recipient] = RemediationResult(recipient, message_id, 'mailbox',
+                                                         remediation.action, success=True, message='removed')
+            else:
+                pf_result = remediator.remediate(remediation.action, recipient, message_id)
+
+
+            logging.info(f"got result {pf_result} for message-id {message_id} for {recipient}")
+
+            remediation.result = pf_result.message
+            remediation.successful = pf_result.success and pf_result.message in ['removed', 'restored']
+            remediation.status = REMEDIATION_STATUS_COMPLETED
+
+            # this returns a dict of the following structure
+            # pf_result[email_address] = phishfry.RemediationResult
+            # with any number of email_address keys depending on what kind of mailbox it found
+            # and how many forwards it found
+
+            # use results from whichever account succesfully resolved the mailbox
+
+            """ CODE TO REPLACE FOR FURTHER CAPABILITY
+
+            if pf_result[recipient].mailbox_type != "Unknown":  # TODO remove hcc
+                found_recipient = True
+                messages = []
+                for pf_recipient in pf_result.keys():
+                    if pf_recipient == recipient:
+                        continue
+
+                    if pf_recipient in pf_result[recipient].forwards:
+                        discovery_method = "forwarded to"
+                    elif pf_recipient in pf_result[recipient].members:
+                        discovery_method = "list membership"
+                    elif pf_result[recipient].owner:
+                        discovery_method = "owner"
+                    else:
+                        discovery_method = "UNKNOWN DISCOVERY METHOD"
+
+                    messages.append('({}) success {} disc method {} recipient {} (message {})'.format(
+                        200 if pf_result[pf_recipient].success and pf_result[pf_recipient].message in ['removed',
+                                                                                                       'restored'] else 500,
+                        pf_result[pf_recipient].success,
+                        discovery_method,
+                        pf_recipient,
+                        pf_result[pf_recipient].message))
+
+                message = pf_result[pf_recipient].message
+                if message is None:
+                    message = ''
+                if messages:
+                    message += '\n' + '\n'.join(messages)
+
+                remediation.result = message
+                remediation.successful = pf_result[pf_recipient].success and pf_result[pf_recipient].message in [
+                    'removed', 'restored']
+                remediation.status = REMEDIATION_STATUS_COMPLETED
+
+                # we found the recipient in this EWS acount so we don't need to keep looking in any others ones
+                break
+
+        # did we find it?
+        if not found_recipient:
+            remediation.result = "cannot find mailbox"
+            remediation.successful = False
+            remediation.status = REMEDIATION_STATUS_COMPLETED
+            logging.warning(f"could not find message-id {message_id} sent to {recipient}")
+        """
+        logging.info("completed remediation request {remediation}")
+        return remediation
+
+
+class RemediationResult(object):
+    def __init__(self, address, message_id, mailbox_type, action, success=True, message=None):
+        self.address = address
+        self.message_id = message_id
+        self.mailbox_type = mailbox_type
+        self.success = success
+        self.message = message
+        self.owner = None
+        self.members = []
+        self.forwards = []
+        self.action = action
+
+    def result(self, message, success=False):
+        logging.info(message)
+        self.success = success
+        self.message = message
+
 
 #######################
 ## LEGACY CODE BELOW ##
