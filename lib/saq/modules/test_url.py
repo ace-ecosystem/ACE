@@ -178,6 +178,34 @@ class TestCase(ACEModuleTestCase):
         file_observables = analysis.get_observables_by_type(F_FILE)
         self.assertEquals(len(file_observables), 0)
 
+    def test_protected_url_fireeye(self):
+        root = create_root_analysis()
+        root.initialize_storage()
+        # taken from an actual sample
+        url = root.add_observable(F_URL, 'https://protect2.fireeye.com/url?k=80831952-dcdfed5d-808333ca-0cc47a33347c-b424c0fc7973027a&u=https://mresearchsurveyengine.modernsurvey.com/Default.aspx?cid=201c1f2c-2bdc-11ea-a81b-000d3aaced43')
+        url.add_directive(DIRECTIVE_CRAWL) # not actually going to crawl, just testing that it gets copied over
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_protected_url_analyzer', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root.load()
+        url = root.get_observable(url.id)
+        from saq.modules.url import ProtectedURLAnalysis, PROTECTION_TYPE_FIREEYE
+        analysis = url.get_analysis(ProtectedURLAnalysis)
+
+        self.assertIsNotNone(analysis)
+        self.assertEquals(analysis.protection_type, PROTECTION_TYPE_FIREEYE)
+        self.assertEquals(analysis.extracted_url, 'https://mresearchsurveyengine.modernsurvey.com/Default.aspx?cid=201c1f2c-2bdc-11ea-a81b-000d3aaced43')
+        extracted_url = analysis.get_observables_by_type(F_URL)
+        self.assertEquals(len(extracted_url), 1)
+        extracted_url = extracted_url[0]
+        self.assertTrue(extracted_url.has_directive(DIRECTIVE_CRAWL))
+
     def test_protected_url_outlook_safelinks(self):
         root = create_root_analysis()
         root.initialize_storage()
