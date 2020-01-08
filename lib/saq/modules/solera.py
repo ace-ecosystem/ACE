@@ -166,6 +166,10 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
                 logging.error(f"unable to delete {pcap_zip_path}: {e}")
                 report_exception()
 
+            pcap_files = ' '.join(os.listdir(pcap_dir))
+
+            os.system(f'mergecap -w merged_pcap {pcap_files}')
+
             for pcap_file in os.listdir(pcap_dir):
                 pcap_path = os.path.join(pcap_dir, pcap_file)
                 # for pcap-ng (the default), a size of 72 bytes means the pcap is empty of content
