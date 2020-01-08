@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 
-hostname=$(hostname -f)
+fqdn=""
+hostname=""
 ipv4="127.0.0.1"
-while getopts "h:i:" opt
+while getopts "h:i:f:" opt
 do
     case ${opt} in
         h) 
             hostname="$OPTARG"
+            ;;
+        f)
+            fqdn="$OPTARG"
             ;;
         i)
             ipv4="$OPTARG"
@@ -23,6 +27,7 @@ done
     cd ssl/root/ca && \
     cat intermediate/openssl.cnf > intermediate/openssl.temp.cnf && \
     echo "DNS.1 = ${hostname}" >> intermediate/openssl.temp.cnf && \
+    echo "DNS.2 = ${fqdn}" >> intermediate/openssl.temp.cnf && \
     echo "IP.1 = ${ipv4}" >> intermediate/openssl.temp.cnf && \
     openssl genrsa -out intermediate/private/${hostname}.key.pem 2048 && \
     chmod 400 intermediate/private/${hostname}.key.pem && \
