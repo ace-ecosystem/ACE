@@ -9,7 +9,7 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.collectors import Submission
 from saq.collectors.query_hunter import QueryHunt
-from saq.qradar import QRadarAPIClient, QueryCanceledError
+from saq.qradar import QRadarAPIClient, QueryCanceledError, QueryError
 from saq.util import *
 
 class QRadarHunt(QueryHunt):
@@ -53,6 +53,9 @@ class QRadarHunt(QueryHunt):
         else:
             try:
                 query_results = self.qradar_client.execute_aql_query(target_query, continue_check_callback=None)
+            except QueryError as e:
+                logging.error(f"query error: {e} for {self}")
+                return None
             except QueryCanceledError:
                 logging.warning(f"query was canceled for {self}")
                 return None
