@@ -20,7 +20,7 @@ from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, OAuth2Cre
 from exchangelib.errors import ResponseMessageError, ErrorTimeoutExpired
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, ReadTimeout
 
 #
 # EWS Collector
@@ -124,6 +124,13 @@ class EWSCollectionBaseConfiguration(object):
                 break
 
     def execute(self, *args, **kwargs):
+        try:
+            self._execute(*args, **kwargs)
+        except ReadTimeout as e:
+            logging.error(f"read timed out for {self.target_mailbox}: {e}")
+            return
+
+    def _execute(self, *args, **kwargs):
 
         if not self.password:
             logging.error(f"no password given for {self.section}. authentication will not be attempted.")
