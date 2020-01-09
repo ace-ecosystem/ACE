@@ -266,5 +266,8 @@ class FireEyeAPIClient(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        self.close()
+        try:
+            self.close()
+        except Exception as e:
+            logging.error(f"attempt to close fireeye connection failed: {e}")
         return False
