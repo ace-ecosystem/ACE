@@ -87,7 +87,7 @@ class EWSRemediator:
             email_address, access_type=self.access_type, credentials=self.credentials, config=self.config
         )
 
-        _logger.debug("setup account object for {email_address} using {self.access_type}")
+        _logger.debug(f"setup account object for {email_address} using {self.access_type}")
         return self.account
 
     def remove(self, email_address, message_id, **kwargs):
@@ -110,7 +110,7 @@ class EWSRemediator:
             self.mailbox_found = True
 
         if not messages:
-            _logger.warning(f'inbox {} did not contain message id {} during remediation')
+            _logger.warning(f'inbox {email_address} did not contain message id {message_id} during remediation')
             return RemediationResult(email_address, message_id, 'mailbox', 'remove', success=False, message="no messages found")
 
         for message in messages:
@@ -140,7 +140,7 @@ class EWSRemediator:
             self.mailbox_found = True
 
         if not messages:
-            _logger.warning(f'inbox {} did not contain message id {} during remediation')
+            _logger.warning(f'inbox {email_address} did not contain message id {message_id} during remediation')
             return RemediationResult(email_address, message_id, 'mailbox', 'restore', success=False,
                                      message="no messages found")
 
@@ -164,6 +164,10 @@ def get_remediator(section, timezone=None):
     certificate = section.get("certificate", None)
     use_proxy = section.getboolean("use_proxy", True)
     server = section.get('server', 'outlook.office365.com')
+    auth_type = section.get('auth_type', exchangelib.BASIC)
+
+    if auth_type.upper() == exchangelib.NTLM:
+        auth_type = exchangelib.NTLM
 
     adapter = PreInitCustomSSLAdapter
 
@@ -175,9 +179,9 @@ def get_remediator(section, timezone=None):
 
     return EWSRemediator(
         user=section['user'],
-        password=section['password'],
+        password=section['pass'],
         server=server,
-        auth_type=section.get('auth_type', exchangelib.BASIC),
+        auth_type=auth_type,
         access_type=section.get('access_type', exchangelib.DELEGATE),
         version=section.get('version', "Exchange2016"),
         adapter=adapter,
@@ -191,18 +195,30 @@ class EWSRemediationSystem(RemediationSystem):
         # Create a remediator for each account
         self.remediators = []
 
-        sections = [saq.CONFIG[section] for section in saq.CONFIG.sections() if section.startswith('ews_remediator_account_')]
+        sections = [saq.CONFIG[section] for section in saq.CONFIG.sections() if section.startswith('ews_remediation_account_')]
+
+        logging.debug(f'found {len(sections)} ews remediation account sections')
 
         for section in sections:
 
+            logging.debug(f'loading section {section.name}')
+
+            if not section.get('pass'):
+                logging.error(f'ews remediation section {section.name} for EWSRemdiationSystem is missing a password '
+                              f'and will not be used.')
+
             remediator = get_remediator(section)
+
+            logging.debug(f'loaded remediator account section {section.name}')
 
             self.remediators.append(remediator)
 
-            logging.debug(
-                f'loaded EWSRemediator with EWS account user {remediator.credentials.user} server {remediator.server} '
+            logging.info(
+                f'loaded EWSRemediator with EWS account user {remediator.credentials.username} server {remediator.server} '
                 f'version {remediator.config.version.api_version} auth_type {remediator.config.auth_type}'
             )
+
+        logging.debug(f'acquired {len(self.remediators)} remediator accounts')
 
     def execute_request(self, remediation):
         logging.info(f"execution remediation {remediation}")
@@ -214,7 +230,7 @@ class EWSRemediationSystem(RemediationSystem):
         if recipient.endswith('>'):
             recipient = recipient[:-1]
 
-        logging.debug("got message_id {message_id} recipient {recipient} from key {remediation.key}")
+        logging.debug(f"got message_id {message_id} recipient {recipient} from key {remediation.key}")
 
         # found_recipient = False
 
@@ -240,54 +256,51 @@ class EWSRemediationSystem(RemediationSystem):
             # and how many forwards it found
 
             # use results from whichever account succesfully resolved the mailbox
+            #if pf_result[recipient].mailbox_type != "Unknown":  # TODO remove hcc
+            #    found_recipient = True
+            #    messages = []
+            #    for pf_recipient in pf_result.keys():
+            #        if pf_recipient == recipient:
+            #            continue
 
-            """ CODE TO REPLACE FOR FURTHER CAPABILITY
+            #        if pf_recipient in pf_result[recipient].forwards:
+            #            discovery_method = "forwarded to"
+            #        elif pf_recipient in pf_result[recipient].members:
+            #            discovery_method = "list membership"
+            #        elif pf_result[recipient].owner:
+            #            discovery_method = "owner"
+            #        else:
+            #            discovery_method = "UNKNOWN DISCOVERY METHOD"
 
-            if pf_result[recipient].mailbox_type != "Unknown":  # TODO remove hcc
-                found_recipient = True
-                messages = []
-                for pf_recipient in pf_result.keys():
-                    if pf_recipient == recipient:
-                        continue
+            #        messages.append('({}) success {} disc method {} recipient {} (message {})'.format(
+            #            200 if pf_result[pf_recipient].success and pf_result[pf_recipient].message in ['removed',
+            #                                                                                           'restored'] else 500,
+            #            pf_result[pf_recipient].success,
+            #            discovery_method,
+            #            pf_recipient,
+            #            pf_result[pf_recipient].message))
 
-                    if pf_recipient in pf_result[recipient].forwards:
-                        discovery_method = "forwarded to"
-                    elif pf_recipient in pf_result[recipient].members:
-                        discovery_method = "list membership"
-                    elif pf_result[recipient].owner:
-                        discovery_method = "owner"
-                    else:
-                        discovery_method = "UNKNOWN DISCOVERY METHOD"
+            #    message = pf_result[pf_recipient].message
+            #    if message is None:
+            #        message = ''
+            #    if messages:
+            #        message += '\n' + '\n'.join(messages)
 
-                    messages.append('({}) success {} disc method {} recipient {} (message {})'.format(
-                        200 if pf_result[pf_recipient].success and pf_result[pf_recipient].message in ['removed',
-                                                                                                       'restored'] else 500,
-                        pf_result[pf_recipient].success,
-                        discovery_method,
-                        pf_recipient,
-                        pf_result[pf_recipient].message))
-
-                message = pf_result[pf_recipient].message
-                if message is None:
-                    message = ''
-                if messages:
-                    message += '\n' + '\n'.join(messages)
-
-                remediation.result = message
-                remediation.successful = pf_result[pf_recipient].success and pf_result[pf_recipient].message in [
-                    'removed', 'restored']
-                remediation.status = REMEDIATION_STATUS_COMPLETED
+            #    remediation.result = message
+            #    remediation.successful = pf_result[pf_recipient].success and pf_result[pf_recipient].message in [
+            #        'removed', 'restored']
+            #    remediation.status = REMEDIATION_STATUS_COMPLETED
 
                 # we found the recipient in this EWS acount so we don't need to keep looking in any others ones
-                break
+            #    break
 
         # did we find it?
-        if not found_recipient:
-            remediation.result = "cannot find mailbox"
-            remediation.successful = False
-            remediation.status = REMEDIATION_STATUS_COMPLETED
-            logging.warning(f"could not find message-id {message_id} sent to {recipient}")
-        """
+        #if not found_recipient:
+        #    remediation.result = "cannot find mailbox"
+        #    remediation.successful = False
+        #    remediation.status = REMEDIATION_STATUS_COMPLETED
+        #    logging.warning(f"could not find message-id {message_id} sent to {recipient}")
+        
         logging.info("completed remediation request {remediation}")
         return remediation
 
