@@ -34,11 +34,17 @@ def get_messages_from_folder(folder, message_id, **kwargs):
     """Return list of messages matching message id in the given folder."""
     _logger = kwargs.get("logger") or logging
     message_id = check_message_id_format(message_id)
+
+    # We want to use filter WITHOUT conditional QuerySet queries... we want an EXACT match
+    # on the message id. Important to note this because if we did some sort of filter like
+    # message_id__contains, then we could accidentally pass (for example) a single letter
+    # which would cause collateral removals or restorations.
     try:
         return [message for message in folder.filter(message_id=message_id)]
+    # XXX - Not sure if this is needed since we're using .filter instead of .get
     except exchangelib.errors.DoesNotExist:
         _logger.info(f"{folder.absolute} does not contain message id {message_id}")
-        return
+        return []
 
 def get_exchange_build(version="Exchange2016", **kwargs):
     """Return a valid exchangelib.Build object based on the api version."""
@@ -48,7 +54,10 @@ def get_exchange_build(version="Exchange2016", **kwargs):
         raise ValueError("exchange version invalid")
     _version = f'EXCHANGE_{_version[8:]}'
 
-    return getattr(_module, _version)
+    try:
+        return getattr(_module, _version)
+    except AttributeError:
+        raise AttributeError("exchange version not found")
 
 class EWSRemediator:
     """Helper class to remediate and restore emails."""
@@ -154,9 +163,6 @@ class EWSRemediator:
         return RemediationResult(email_address, message_id, 'mailbox', 'restore', success=True,
                                  message='restored')
 
-    @property
-    def user(self):
-        pass
 
 def get_remediator(section, timezone=None):
     _timezone = timezone or saq.CONFIG["DEFAULT"].get("timezone", "UTC")
@@ -195,7 +201,9 @@ class EWSRemediationSystem(RemediationSystem):
         # Create a remediator for each account
         self.remediators = []
 
-        sections = [saq.CONFIG[section] for section in saq.CONFIG.sections() if section.startswith('ews_remediation_account_')]
+        _config = kwargs.get('config') or saq.CONFIG
+
+        sections = [_config[section] for section in _config.sections() if section.startswith('ews_remediation_account_')]
 
         logging.debug(f'found {len(sections)} ews remediation account sections')
 
@@ -321,6 +329,17 @@ class RemediationResult(object):
         logging.info(message)
         self.success = success
         self.message = message
+
+    def __eq__(self, other):
+        attributes = [
+            'address', 'message_id', 'mailbox_type', 'success',
+            'message', 'owner', 'members', 'forwards', 'action',
+        ]
+        for attr in attributes:
+            if getattr(self, attr) != getattr(other, attr):
+                return False
+        return True
+
 
 
 #######################
