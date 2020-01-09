@@ -4,6 +4,7 @@ import datetime
 import json
 import logging
 import os, os.path
+import subprocess
 import uuid
 import zipfile
 
@@ -166,30 +167,27 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
                 logging.error(f"unable to delete {pcap_zip_path}: {e}")
                 report_exception()
 
-            pcap_files = ' '.join(os.listdir(pcap_dir))
+            # merge all pcaps in pcap_dir to merged_pcap.pcapng
+            subprocess.Popen('mergecap -w merged_pcap {}'.format(' '.join(os.listdir(pcap_dir))))
 
-            os.system(f'mergecap -w merged_pcap {pcap_files}')
-
-            for pcap_file in os.listdir(pcap_dir):
-                pcap_path = os.path.join(pcap_dir, pcap_file)
+            pcap_path = os.path.join(pcap_dir, 'merged_pcap')
+            if os.path.getsize(pcap_path) in [ 92, 0 ]:
                 # for pcap-ng (the default), a size of 72 bytes means the pcap is empty of content
                 # also, a file of 0 means the pcap data was missing entirely
+                # merging 2 or more empty (either 0 or 72 bytes) pcap-ng files gives a pcap of size 92 bytes
                 # so we remove those
-                if os.path.getsize(pcap_path) in [ 72, 0 ]:
-                    logging.debug(f"removing empty pcap file {pcap_path}")
-                    try:
-                        os.remove(pcap_path)
-                    except Exception as e:
-                        logging.error(f"unable to remove empty pcap file {pcap_path}: {e}")
-                        report_exception()
-
-                    continue
-
+                logging.debug(f"removing empty pcap file {pcap_path}")
+                try:
+                    os.remove(pcap_path)
+                except Exception as e:
+                    logging.error(f"unable to remove empty pcap file {pcap_path}: {e}")
+                    report_exception()
+            else:
                 # add it as an observable to the analysis
                 pcap_file = analysis.add_observable(F_FILE, os.path.relpath(pcap_path, start=self.root.storage_dir))
                 pcap_file.add_tag('pcap')
                 analysis.pcap_paths.append(pcap_file.value)
-            
+
             return True
 
         except Exception as e:
