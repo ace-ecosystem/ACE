@@ -301,7 +301,7 @@ class EWSRemediationSystem(RemediationSystem):
         #    remediation.status = REMEDIATION_STATUS_COMPLETED
         #    logging.warning(f"could not find message-id {message_id} sent to {recipient}")
         
-        logging.info("completed remediation request {remediation}")
+        logging.info(f"completed remediation request {remediation}")
         return remediation
 
 
