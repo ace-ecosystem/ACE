@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+fqdn=""
+hostname=""
+ipv4="127.0.0.1"
+while getopts "h:i:f:" opt
+do
+    case ${opt} in
+        h) 
+            hostname="$OPTARG"
+            ;;
+        f)
+            fqdn="$OPTARG"
+            ;;
+        i)
+            ipv4="$OPTARG"
+            ;;
+        *)
+            echo "invalid command line option ${opt}"
+            exit 1
+            ;;
+    esac
+done
+
+# create the SSL certificates for $hostname
+( 
+    cd ssl/root/ca && \
+    cat intermediate/openssl.cnf > intermediate/openssl.temp.cnf && \
+    echo "DNS.1 = ${hostname}" >> intermediate/openssl.temp.cnf && \
+    echo "DNS.2 = ${fqdn}" >> intermediate/openssl.temp.cnf && \
+    echo "IP.1 = ${ipv4}" >> intermediate/openssl.temp.cnf && \
+    openssl genrsa -out intermediate/private/${hostname}.key.pem 2048 && \
+    chmod 400 intermediate/private/${hostname}.key.pem && \
+    openssl req -config intermediate/openssl.temp.cnf -key intermediate/private/${hostname}.key.pem -new -sha256 -out intermediate/csr/${hostname}.csr.pem -subj "/C=US/ST=OH/L=Cincinnati/O=FifthThird/OU=Security/CN=${fqdn}/emailAddress=ace@localhost" && \
+    openssl ca -passin file:.intermediate_ca.pwd -batch -config intermediate/openssl.temp.cnf -extensions server_cert -days 3649 -notext -md sha256 -in intermediate/csr/${hostname}.csr.pem -out intermediate/certs/${hostname}.cert.pem
+    chmod 444 intermediate/certs/${hostname}.cert.pem
+) || { echo "unable to create SSL certificate for ${hostname}"; exit 1; }
+
+# copy them into ace
+# create the symlink for the CA root cert bundle
+(cd ssl && ln -s root/ca/intermediate/certs/${hostname}.cert.pem .)
+(cd ssl && ln -s root/ca/intermediate/private/${hostname}.key.pem .)
