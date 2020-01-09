@@ -31,7 +31,7 @@ done
     echo "IP.1 = ${ipv4}" >> intermediate/openssl.temp.cnf && \
     openssl genrsa -out intermediate/private/${hostname}.key.pem 2048 && \
     chmod 400 intermediate/private/${hostname}.key.pem && \
-    openssl req -config intermediate/openssl.temp.cnf -key intermediate/private/${hostname}.key.pem -new -sha256 -out intermediate/csr/${hostname}.csr.pem -subj "/C=US/ST=OH/L=Cincinnati/O=FifthThird/OU=Security/CN=${fqdn}/emailAddress=ace@localhost" && \
+    openssl req -config intermediate/openssl.temp.cnf -key intermediate/private/${hostname}.key.pem -new -sha256 -out intermediate/csr/${hostname}.csr.pem -subj "/C=US/ST=OH/L=Cincinnati/O=Other/OU=Security/CN=${fqdn}/emailAddress=ace@localhost" && \
     openssl ca -passin file:.intermediate_ca.pwd -batch -config intermediate/openssl.temp.cnf -extensions server_cert -days 3649 -notext -md sha256 -in intermediate/csr/${hostname}.csr.pem -out intermediate/certs/${hostname}.cert.pem
     chmod 444 intermediate/certs/${hostname}.cert.pem
 ) || { echo "unable to create SSL certificate for ${hostname}"; exit 1; }
