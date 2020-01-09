@@ -500,7 +500,10 @@ remediation action taken on this observable."""
                                            Remediation.status == REMEDIATION_STATUS_COMPLETED)\
                                        .order_by(Remediation.insert_date.desc())\
                                        .first()
-            self._remediation_status = self._remediation_status[0]
+
+            if self._remediation_status is not None:
+                self._remediation_status = self._remediation_status[0]
+
             return self._remediation_status
         except Exception as e:
             logging.error(f"unable to query remediation status of {self}: {e}")
