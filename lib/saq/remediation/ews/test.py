@@ -226,7 +226,7 @@ class TestEWSRemediator(unittest.TestCase):
     #   via the EWSRemediationService for now.
 
 
-class TestCase(ACEBasicTestCase):
+class TestEWSRemediationSystem(ACEBasicTestCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
         saq.CONFIG['remediation_system_ews']['enabled'] = 'yes'
@@ -260,8 +260,8 @@ class TestCase(ACEBasicTestCase):
         manager.stop_service()
         manager.wait_service()
 
-        self.assertEquals(len(manager.systems['email'].accounts), 1)
-        self.assertEquals(manager.systems['email'].accounts[0].user, 'user')
+        self.assertEquals(len(manager.systems['email'].remediators), 1)
+        self.assertEquals(manager.systems['email'].remediators[0].credentials.username, 'user')
 
     def test_remediation_request(self):
         remediation = request_email_remediation('<message_id>', '<recipient@localhost>',

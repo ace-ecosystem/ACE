@@ -201,7 +201,7 @@ class EWSRemediationSystem(RemediationSystem):
         # Create a remediator for each account
         self.remediators = []
 
-        _config = kwargs.get('config') or saq.CONFIG
+        _config = kwargs.get('test_config') or saq.CONFIG
 
         sections = [_config[section] for section in _config.sections() if section.startswith('ews_remediation_account_')]
 
@@ -245,8 +245,7 @@ class EWSRemediationSystem(RemediationSystem):
         for remediator in self.remediators:
 
             if saq.UNIT_TESTING:
-                pf_result = {}
-                pf_result[recipient] = RemediationResult(recipient, message_id, 'mailbox',
+                pf_result = RemediationResult(recipient, message_id, 'mailbox',
                                                          remediation.action, success=True, message='removed')
             else:
                 pf_result = remediator.remediate(remediation.action, recipient, message_id)

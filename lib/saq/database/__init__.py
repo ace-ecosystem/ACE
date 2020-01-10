@@ -2337,6 +2337,8 @@ def initialize_database():
 def initialize_automation_user():
     # get the id of the ace automation account
     try:
+        #import pymysql
+        #pymysql.connections.DEBUG = True
         saq.AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
         saq.db.remove()
     except Exception as e:
