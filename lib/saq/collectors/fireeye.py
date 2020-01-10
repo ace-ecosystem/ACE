@@ -162,8 +162,8 @@ CREATE INDEX artifact_status_index ON uuid_tracking(artifact_status)
             for alert in self.fe_client.get_alerts(self.last_api_call, duration):
                 yield alert
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 503:
-                logging.warning("fireeye returned 503 (unavailable)")
+            if e.response.status_code in [ 502, 503 ]:
+                logging.warning(f"fireeye returned {e.response.status_code} (unavailable)")
                 return
 
             raise e

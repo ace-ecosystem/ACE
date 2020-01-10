@@ -83,6 +83,11 @@ class FireEyeArtifactAnalyzer(AnalysisModule):
             if self.delay_analysis(observable, analysis, seconds=30, timeout_minutes=60):
                 return True
 
+        # did we get the artifact file?
+        if not os.path.isdir(artifact_dir):
+            logging.warning(f"missing {artifact_dir}")
+            return False
+
         # copy the contents of the directory into the alert storage directory
         target_dir = os.path.join(self.root.storage_dir, f'fireeye_artifact_{observable.value}')
         shutil.copytree(artifact_dir, target_dir)
