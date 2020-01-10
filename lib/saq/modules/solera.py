@@ -167,7 +167,7 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
                 logging.error(f"unable to delete {pcap_zip_path}: {e}")
                 report_exception()
 
-            # check pcap_dir exists
+            # check that there is a pcap_dir
             if len(pcap_dir) > 0:
                 # build command with correct pcap-ng files
                 pcap_path = os.path.join(pcap_dir, 'merged.pcap')
