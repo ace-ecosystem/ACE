@@ -20,7 +20,7 @@ from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, OAuth2Cre
 from exchangelib.errors import ResponseMessageError, ErrorTimeoutExpired
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, ReadTimeout
 
 #
 # EWS Collector
@@ -63,7 +63,7 @@ class EWSCollectionBaseConfiguration(object):
         self.delete_emails = False
         self.always_alert = False
         self.alert_prefix = None
-        self.folder = None
+        self.folders = []
 
         BaseProtocol.HTTP_ADAPTER_CLS = RootCAAdapter
 
@@ -76,11 +76,21 @@ class EWSCollectionBaseConfiguration(object):
         self.server = saq.CONFIG[section]['server']
         self.target_mailbox = saq.CONFIG[section]['target_mailbox']
         self.frequency = saq.CONFIG[section].getint('frequency', fallback=60)
-        self.folder = saq.CONFIG[section]['folder']
+        #self.folder = saq.CONFIG[section]['folder']
         self.delete_emails = saq.CONFIG[section].getboolean('delete_emails', fallback=False)
         self.always_alert = saq.CONFIG[section].getboolean('always_alert', fallback=False)
         self.alert_prefix = saq.CONFIG[section]['alert_prefix']
         self.section = section
+
+        for option, value in saq.CONFIG[section].items():
+            if not option.startswith('folder_'):
+                continue
+
+            self.folders.append(value)
+
+        if not self.folders:
+            logging.error(f"no folder configuration options found for {self.target_mailbox} "
+                          f"in configuration section {section}")
 
     @property
     def tracking_db_path(self):
@@ -114,6 +124,13 @@ class EWSCollectionBaseConfiguration(object):
                 break
 
     def execute(self, *args, **kwargs):
+        try:
+            self._execute(*args, **kwargs)
+        except ReadTimeout as e:
+            logging.error(f"read timed out for {self.target_mailbox}: {e}")
+            return
+
+    def _execute(self, *args, **kwargs):
 
         if not self.password:
             logging.error(f"no password given for {self.section}. authentication will not be attempted.")
@@ -141,81 +158,82 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         _account_class = kwargs.get('account_class') or Account  # Account class connects to exchange.
         account = _account_class(self.target_mailbox, config=config, autodiscover=False, access_type=DELEGATE) # TODO autodiscover, access_type should be configurable
         
-        path_parts = [_.strip() for _ in self.folder.split('/')]
-        root = path_parts.pop(0)
+        for folder in self.folders:
+            path_parts = [_.strip() for _ in folder.split('/')]
+            root = path_parts.pop(0)
 
-        _account = kwargs.get('account_object') or account
-
-        try:
-            target_folder = getattr(_account, root)
-        except AttributeError:
-            public_folders_root = _account.public_folders_root
-            target_folder = public_folders_root / root
-        #print(target_folder.tree())
-
-        for path_part in path_parts:
-            target_folder = target_folder / path_part
-
-        target_folder.refresh()
-
-        logging.info(f"checking for emails in {self.target_mailbox} target {self.folder}")
-        total_count = 0
-        already_processed_count = 0
-        error_count = 0
-        for message in target_folder.all().order_by('-datetime_received'):
-            if isinstance(message, ResponseMessageError):
-                logging.warning(f"error when iterating mailbox {self.target_mailbox}: {message} ({type(message)})")
-                continue
-
-            # XXX not sure why this is happening?
-            if message.id is None:
-                continue
-
-            total_count += 1
+            _account = kwargs.get('account_object') or account
 
             try:
-                # if we're not deleting emails then we need to make sure we keep track of which ones we've already processed
-                if not self.delete_emails:
+                target_folder = getattr(_account, root)
+            except AttributeError:
+                public_folders_root = _account.public_folders_root
+                target_folder = public_folders_root / root
+            #print(target_folder.tree())
+
+            for path_part in path_parts:
+                target_folder = target_folder / path_part
+
+            target_folder.refresh()
+
+            logging.info(f"checking for emails in {self.target_mailbox} target {folder}")
+            total_count = 0
+            already_processed_count = 0
+            error_count = 0
+            for message in target_folder.all().order_by('-datetime_received'):
+                if isinstance(message, ResponseMessageError):
+                    logging.warning(f"error when iterating mailbox {self.target_mailbox} folder {folder}: {message} ({type(message)})")
+                    continue
+
+                # XXX not sure why this is happening?
+                if message.id is None:
+                    continue
+
+                total_count += 1
+
+                try:
+                    # if we're not deleting emails then we need to make sure we keep track of which ones we've already processed
+                    if not self.delete_emails:
+                        with sqlite3.connect(self.tracking_db_path) as db:
+                            c = db.cursor()
+                            c.execute("SELECT message_id FROM ews_tracking WHERE exchange_id = ?", (message.id,))
+                            result = c.fetchone()
+                            if result is not None:
+                                #logging.debug("already processed exchange message {} message id {} from {}@{}".format(
+                                              #message.id, message.message_id, self.target_mailbox, self.server))
+                                already_processed_count += 1
+                                continue
+                        
+                    # otherwise process the email message (subclasses deal with the site logic)
+                    self.email_received(message)
+
+                except Exception as e:
+                    logging.error(f"unable to process email: {e}")
+                    report_exception()
+                    error_count += 1
+
+                if self.delete_emails:
+                    try:
+                        logging.debug(f"deleting message {message.id}")
+                        message.delete()
+                    except Exception as e:
+                        logging.error(f"unable to delete message: {e}")
+                else:
+                    # if we're not deleting the emails then we track which ones we've already processed
+
                     with sqlite3.connect(self.tracking_db_path) as db:
                         c = db.cursor()
-                        c.execute("SELECT message_id FROM ews_tracking WHERE exchange_id = ?", (message.id,))
-                        result = c.fetchone()
-                        if result is not None:
-                            #logging.debug("already processed exchange message {} message id {} from {}@{}".format(
-                                          #message.id, message.message_id, self.target_mailbox, self.server))
-                            already_processed_count += 1
-                            continue
-                    
-                # otherwise process the email message (subclasses deal with the site logic)
-                self.email_received(message)
-
-            except Exception as e:
-                logging.error(f"unable to process email: {e}")
-                report_exception()
-                error_count += 1
-
-            if self.delete_emails:
-                try:
-                    logging.debug(f"deleting message {message.id}")
-                    message.delete()
-                except Exception as e:
-                    logging.error(f"unable to delete message: {e}")
-            else:
-                # if we're not deleting the emails then we track which ones we've already processed
-
-                with sqlite3.connect(self.tracking_db_path) as db:
-                    c = db.cursor()
-                    c.execute("""
+                        c.execute("""
 INSERT INTO ews_tracking (
     exchange_id,
     message_id,
     insert_date ) VALUES ( ?, ?, ? )""",
-                    (message.id, message.message_id, local_time().timestamp()))
-                    # TODO delete anything older than X days
-                    db.commit()
+                        (message.id, message.message_id, local_time().timestamp()))
+                        # TODO delete anything older than X days
+                        db.commit()
 
-        logging.info(f"finished checking for emails in {self.target_mailbox} target {self.folder}"
-                     f" total {total_count} already_processed {already_processed_count} error {error_count}")
+            logging.info(f"finished checking for emails in {self.target_mailbox} target {folder}"
+                         f" total {total_count} already_processed {already_processed_count} error {error_count}")
 
     def email_received(self, email):
         raise NotImplementedError()
@@ -237,6 +255,9 @@ class EWSCollector(Collector):
         
         for section in saq.CONFIG.sections():
             if section.startswith('ews_'):
+                if not saq.CONFIG[section].getboolean('enabled', fallback=False):
+                    continue
+
                 module_name = saq.CONFIG[section]['module']
                 try:
                     _module = importlib.import_module(module_name)

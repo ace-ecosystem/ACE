@@ -9,7 +9,7 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.collectors import Submission
 from saq.collectors.query_hunter import QueryHunt
-from saq.qradar import QRadarAPIClient, QueryCanceledError
+from saq.qradar import QRadarAPIClient, QueryCanceledError, QueryError
 from saq.util import *
 
 class QRadarHunt(QueryHunt):
@@ -28,6 +28,8 @@ class QRadarHunt(QueryHunt):
 
         start_time_str = start_time.strftime('%Y-%m-%d %H:%M %z')
         end_time_str = end_time.strftime('%Y-%m-%d %H:%M %z')
+
+        logging.info(f"executing hunt {self.name} with start time {start_time_str} end time {end_time_str}")
 
         target_query = self.query.replace('<O_START>', start_time_str)\
                                  .replace('<O_STOP>', end_time_str)
@@ -51,6 +53,9 @@ class QRadarHunt(QueryHunt):
         else:
             try:
                 query_results = self.qradar_client.execute_aql_query(target_query, continue_check_callback=None)
+            except QueryError as e:
+                logging.error(f"query error: {e} for {self}")
+                return None
             except QueryCanceledError:
                 logging.warning(f"query was canceled for {self}")
                 return None

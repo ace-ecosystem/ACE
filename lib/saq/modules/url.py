@@ -1140,6 +1140,7 @@ PROTECTION_TYPE_ONE_DRIVE = 'one drive'
 PROTECTION_TYPE_GOOGLE_DRIVE = 'google drive'
 PROTECTION_TYPE_SHAREPOINT = 'sharepoint'
 PROTECTION_TYPE_EGNYTE = 'egnyte'
+PROTECTION_TYPE_FIREEYE = 'fireeye'
 
 REGEX_GOOGLE_DRIVE = re.compile(r'drive\.google\.com/file/d/([^/]+)/view')
 REGEX_SHAREPOINT = re.compile(r'^/:b:/g/(.+)/([^/]+)$')
@@ -1172,6 +1173,14 @@ class ProtectedURLAnalyzer(AnalysisModule):
                 extracted_url = url.value.replace('/dl/', '/dd/')
                 protection_type = PROTECTION_TYPE_EGNYTE
                 logging.info("translated egnyte.com url {} to {}".format(url.value, extracted_url))
+
+        # fireeye links
+        if parsed_url.netloc.lower().endswith('fireeye.com'):
+            if parsed_url.netloc.lower().startswith('protect'):
+                qs = parse_qs(parsed_url.query)
+                if 'u' in qs:
+                    protection_type = PROTECTION_TYPE_FIREEYE
+                    extracted_url = qs['u'][0]
 
         # "safelinks" by outlook
         if parsed_url.netloc.lower().endswith('safelinks.protection.outlook.com'):

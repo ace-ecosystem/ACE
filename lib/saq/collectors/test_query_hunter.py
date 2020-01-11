@@ -131,18 +131,18 @@ class TestCase(HunterBaseTestCase):
 
         # now put the last time we executed to 5 minutes ago
         # ready should return False
-        hunt.last_executed_time = datetime.datetime.now() - datetime.timedelta(minutes=5)
+        hunt.last_executed_time = local_time() - datetime.timedelta(minutes=5)
         self.assertFalse(hunt.ready)
 
         # now put the last time we executed to 65 minutes ago
         # ready should return True
-        hunt.last_executed_time = datetime.datetime.now() - datetime.timedelta(minutes=65)
+        hunt.last_executed_time = local_time() - datetime.timedelta(minutes=65)
         self.assertTrue(hunt.ready)
 
         # set the last time we executed to 3 hours ago
-        hunt.last_executed_time = datetime.datetime.now() - datetime.timedelta(hours=3)
+        hunt.last_executed_time = local_time() - datetime.timedelta(hours=3)
         # and the last end date to 2 hours ago
-        hunt.last_end_time = datetime.datetime.now() - datetime.timedelta(hours=2)
+        hunt.last_end_time = local_time() - datetime.timedelta(hours=2)
         # so now we have 2 hours to cover under full coverage
         # ready should return True, start should be 3 hours ago and end should be 2 hours ago
         self.assertTrue(hunt.ready)
@@ -154,24 +154,24 @@ class TestCase(HunterBaseTestCase):
         # at this point, the last_end_time becomes the end_time
         hunt.last_end_time = hunt.end_time
         # and the last_executed_time becomes now
-        hunt.last_executed_time = datetime.datetime.now()
+        hunt.last_executed_time = local_time()
         # at this point the hunt should still be ready because we're not caught up yet
         self.assertTrue(hunt.ready)
 
         # now give the hunt the ability to cover 2 hours instead of 1 to get caught up
         hunt.max_time_range = create_timedelta('02:00:00')
         # set the last time we executed to 3 hours ago
-        hunt.last_executed_time = datetime.datetime.now() - datetime.timedelta(hours=3)
+        hunt.last_executed_time = local_time() - datetime.timedelta(hours=3)
         # and the last end date to 2 hours ago
-        hunt.last_end_time = datetime.datetime.now() - datetime.timedelta(hours=2)
+        hunt.last_end_time = local_time() - datetime.timedelta(hours=2)
         # now the difference between the stop and stop should be 2 hours instead of one
         #logging.info(f"MARKER: start {hunt.start_time} end {hunt.end_time} comp {hunt.end_time - hunt.start_time} >= {hunt.time_range}")
         self.assertTrue(hunt.end_time - hunt.start_time >= hunt.max_time_range)
 
         # set the last time we executed to 3 hours ago
-        hunt.last_executed_time = datetime.datetime.now() - datetime.timedelta(hours=3)
+        hunt.last_executed_time = local_time() - datetime.timedelta(hours=3)
         # and the last end date to 2 hours ago
-        hunt.last_end_time = datetime.datetime.now() - datetime.timedelta(hours=2)
+        hunt.last_end_time = local_time() - datetime.timedelta(hours=2)
         # so now we have 2 hours to cover but let's turn off full coverage
         hunt.full_coverage = False
         # it should be ready to run
@@ -186,9 +186,9 @@ class TestCase(HunterBaseTestCase):
         manager.add_hunt(hunt)
 
         # set the last time we executed to 3 hours ago
-        hunt.last_executed_time = datetime.datetime.now() - datetime.timedelta(hours=3)
+        hunt.last_executed_time = local_time() - datetime.timedelta(hours=3)
         # and the last end date to 2 hours ago
-        target_start_time = hunt.last_end_time = datetime.datetime.now() - datetime.timedelta(hours=2)
+        target_start_time = hunt.last_end_time = local_time() - datetime.timedelta(hours=2)
         self.assertTrue(hunt.ready)
         hunt.execute()
 

@@ -4,11 +4,14 @@
 # TODO - iterate results instead of loading the entire thing into memory
 
 import datetime
-import logging
-import threading
-import time
 import io
 import json
+import json.decoder
+import logging
+import os, os.path
+import tempfile
+import threading
+import time
 
 import requests
 
@@ -41,7 +44,7 @@ class QueryCanceledError(RuntimeError):
 class QRadarAPIClient(object):
     """Represents a single QRadar API request."""
 
-    def __init__(self, url, token):
+    def __init__(self, url, token, error_directory=None):
         # the base URL for all QRadar API requests
         self.url = url
         # the security token 
@@ -66,6 +69,9 @@ class QRadarAPIClient(object):
 
         # used to wait until the next attempt to query the status of a search
         self.wait_control_event = threading.Event()
+
+        # when reporting the details of errors, use this directory
+        self.error_directory = error_directory
 
     def execute_aql_query(self, query, 
                                 timeout=None, 
@@ -208,9 +214,21 @@ class QRadarAPIClient(object):
         if filter is not None:
             params['filter'] = filter
 
-        return requests.get(f'{self.url}/siem/offenses', params=params,
-            headers=self.headers,
-            verify=False).json()
+        try:
+            response = requests.get(f'{self.url}/siem/offenses', params=params,
+                headers=self.headers,
+                verify=False)
+
+            return response.json()
+
+        except json.decoder.JSONDecodeError as e:
+            if self.error_directory is not None:
+                fd, file_name = tempfile.mkstemp(suffix='json', prefix='qradar_collector', dir=self.error_directory)
+                os.write(fd, response.content)
+                os.close(fd)
+                logging.error(f"qradar collector response has malformed json: review at {file_name}")
+
+            raise e
 
     def close_siem_offense(self, offense_id, closing_reason_id):
         """Sets the status field of the given offense to CLOSED with the given closing_reason_id."""
