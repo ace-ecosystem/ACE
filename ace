@@ -1018,9 +1018,9 @@ def execute_remediation(args):
     sys.exit(0)
 
 def execute_email_remediation(args):
-    import saq.remediation
+    from saq.remediation.email import create_email_remediation_key
     setattr(args, 'type', 'email')
-    setattr(args, 'targets', [saq.remediation.email.create_email_remediation_key(args.message_id, args.email_address)])
+    setattr(args, 'targets', [create_email_remediation_key(args.message_id, args.email_address)])
     execute_remediation(args)
 
 # most of the arguments are shared between the remove and restore action
