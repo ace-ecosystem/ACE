@@ -20,7 +20,7 @@ from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, OAuth2Cre
 from exchangelib.errors import ResponseMessageError, ErrorTimeoutExpired
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
-from requests.exceptions import ConnectionError, ReadTimeout
+from requests.exceptions import ConnectionError, ReadTimeout, ChunkedEncodingError
 
 #
 # EWS Collector
@@ -126,8 +126,8 @@ class EWSCollectionBaseConfiguration(object):
     def execute(self, *args, **kwargs):
         try:
             self._execute(*args, **kwargs)
-        except ReadTimeout as e:
-            logging.error(f"read timed out for {self.target_mailbox}: {e}")
+        except (ChunkedEncodingError, ReadTimeout) as e:
+            logging.error(f"caught network error for {self.target_mailbox}: {e}")
             return
 
     def _execute(self, *args, **kwargs):
