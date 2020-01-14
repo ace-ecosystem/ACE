@@ -36,6 +36,7 @@ export SAQ_UNIT_TESTING=1
 if [ "$#" -eq "0" ]
 then
     PYTHONPATH=lib python3 -W ignore -m unittest -f -v \
+        $(find -L lib -type f -name 'test*.py' -ipath '*/site/*' | sed -e 's;^lib/;;' -e 's/\.py$//' -e 's;/;.;g') \
         saq.analysis.test \
         saq.service.test \
         saq.util.test \
@@ -55,7 +56,6 @@ then
         saq.test_util \
         saq.test_locks \
         saq.remediation.test \
-        saq.remediation.phishfry.test \
         saq.messaging.test \
         saq.engine.test \
         saq.modules.test_alerts \
@@ -88,6 +88,10 @@ then
         #saq.engine.test_email \
         #saq.engine.test_ace \
         #saq.test_lock \
+
+        # we'll re-introduce these in anoter way... TODO
+        #saq.remediation.phishfry.test \
+        #saq.remediation.ews.test \
 
     exit 0
 fi
