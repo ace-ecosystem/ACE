@@ -176,7 +176,7 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
                 command.extend(os.path.join(pcap_dir, i) for i in os.listdir(pcap_dir))
 
                 # merge all pcaps in pcap_dir to merged_pcap.pcapng
-                p = Popen(command, stdout=PIPE, stdout=PIPE)
+                p = Popen(command, stdout=PIPE, stderr=PIPE)
                 _stdout, _stderr = p.communicate()
 
                 if os.path.getsize(pcap_path) in [ 92, 0 ]:
