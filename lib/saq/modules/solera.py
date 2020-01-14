@@ -4,9 +4,10 @@ import datetime
 import json
 import logging
 import os, os.path
-import subprocess
 import uuid
 import zipfile
+
+from subprocess import Popen, PIPE
 
 import pytz
 
@@ -175,7 +176,8 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
                 command.extend(os.path.join(pcap_dir, i) for i in os.listdir(pcap_dir))
 
                 # merge all pcaps in pcap_dir to merged_pcap.pcapng
-                subprocess.Popen(command)
+                p = Popen(command, stdout=PIPE, stdout=PIPE)
+                _stdout, _stderr = p.communicate()
 
                 if os.path.getsize(pcap_path) in [ 92, 0 ]:
                     # for pcap-ng (the default), a size of 72 bytes means the pcap is empty of content
