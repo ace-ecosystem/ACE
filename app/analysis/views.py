@@ -2970,29 +2970,32 @@ def metrics():
             if not events.empty:
                 tables.append(events)
 
-        # Legacy -- Needs update
         # generate SIP ;-) indicator intel tables
         # XXX add support for using CRITS/SIP based on what ACE is configured to use
-            """if 'indicator_intel' in metric_actions:
-            try:
-                indicator_source_table, indicator_status_table = generate_intel_tables()
-                tables.append(indicator_source_table)
-                tables.append(indicator_status_table) 
-            except Exception as e:
-                flash("Problem generating overall source and status indicator tables : {0}".format(str(e)))
-            # Count all created indicators during daterange by their status
-            try:
-                created_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=True)
-                if created_indicators is not False:
-                    tables.append(created_indicators)
-            except Exception as e:
-                flash("Problem generating created indicator table: {0}".format(str(e)))
-            try:
-                modified_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, modified=True)
-                if modified_indicators is not False:
-                    tables.append(modified_indicators)
-            except Exception as e:
-                flash("Problem generating modified indicator table: {0}".format(str(e)))"""
+        if 'indicator_intel' in metric_actions:
+            if not (saq.CONFIG.get("crits", "mongodb_uri") or
+                    (saq.CONFIG.get("sip", "remote_address") or saq.CONFIG.get("sip", "api_key"))):
+                flash("intel source not configured; skipping indicator stats table generation")
+            else:
+                try:
+                    indicator_source_table, indicator_status_table = generate_intel_tables()
+                    tables.append(indicator_source_table)
+                    tables.append(indicator_status_table)
+                except Exception as e:
+                    flash("Problem generating overall source and status indicator tables : {0}".format(str(e)))
+                # Count all created indicators during daterange by their status
+                try:
+                    created_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=True)
+                    if created_indicators is not False:
+                        tables.append(created_indicators)
+                except Exception as e:
+                    flash("Problem generating created indicator table: {0}".format(str(e)))
+                try:
+                    modified_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, modified=True)
+                    if modified_indicators is not False:
+                        tables.append(modified_indicators)
+                except Exception as e:
+                    flash("Problem generating modified indicator table: {0}".format(str(e)))
 
     if download_results:
         if tables:
