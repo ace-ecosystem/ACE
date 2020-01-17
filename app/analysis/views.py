@@ -2870,8 +2870,9 @@ def metrics():
         # First, alert quantities by disposition per month
         alert_df.set_index('month', inplace=True)
         months = alert_df.index.get_level_values('month').unique()
-        
-        # if March 2015 alerts in our results then manually insert alert 
+
+        # Legacy -- remove?
+        # if March 2015 alerts in our results then manually insert alert
         # for https://wiki.local/display/integral/20150309+ctbCryptoLocker
         # No alert was ever put into ACE for this event
         if '201503' in months:
@@ -2969,9 +2970,10 @@ def metrics():
             if not events.empty:
                 tables.append(events)
 
+        # Legacy -- Needs update
         # generate SIP ;-) indicator intel tables
         # XXX add support for using CRITS/SIP based on what ACE is configured to use
-        if 'indicator_intel' in metric_actions:
+            """if 'indicator_intel' in metric_actions:
             try:
                 indicator_source_table, indicator_status_table = generate_intel_tables()
                 tables.append(indicator_source_table)
@@ -2990,19 +2992,24 @@ def metrics():
                 if modified_indicators is not False:
                     tables.append(modified_indicators)
             except Exception as e:
-                flash("Problem generating modified indicator table: {0}".format(str(e)))
+                flash("Problem generating modified indicator table: {0}".format(str(e)))"""
 
     if download_results:
-        outBytes = io.BytesIO()
-        writer = pd.ExcelWriter(outBytes)
-        for table in tables:
-            table.to_excel(writer, table.name)
-        writer.close()
-        filename = company_name+"_metrics.xlsx" if company_name else "ACE_metrics.xlsx"
-        output = make_response(outBytes.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename="+filename
-        output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return output
+        if tables:
+            outBytes = io.BytesIO()
+            writer = pd.ExcelWriter(outBytes)
+            for table in tables:
+                table.to_excel(writer, table.name)
+            writer.close()
+            outBytes.seek(0)
+            filename = company_name+"_metrics.xlsx" if company_name else "ACE_metrics.xlsx"
+            output = make_response(outBytes.read())
+
+            output.headers["Content-Disposition"] = "attachment; filename="+filename
+            output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            return output
+        else:
+            flash("No results; .xlsx could not be generated")
 
     return render_template(
         'analysis/metrics.html',
