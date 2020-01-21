@@ -3007,7 +3007,6 @@ def metrics():
             outBytes.seek(0)
             filename = company_name+"_metrics.xlsx" if company_name else "ACE_metrics.xlsx"
             output = make_response(outBytes.read())
-
             output.headers["Content-Disposition"] = "attachment; filename="+filename
             output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             return output
