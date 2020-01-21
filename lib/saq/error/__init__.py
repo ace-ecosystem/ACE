@@ -48,14 +48,14 @@ def report_exception():
 
         return error_report_path
 
-        #if saq.engine.CURRENT_ENGINE and saq.engine.CURRENT_ENGINE.root:
-            #if os.path.isdir(saq.engine.CURRENT_ENGINE.root.storage_dir):
-                #analysis_dir = '{}.ace'.format(error_report_path)
-                #try:
-                    #shutil.copytree(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir)
-                    #logging.warning("copied analysis from {} to {} for review".format(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir))
-                #except Exception as e:
-                    #logging.error("unable to copy from {} to {}: {}".format(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir, e))
+        if saq.engine.CURRENT_ENGINE and saq.engine.CURRENT_ENGINE.root:
+            if os.path.isdir(saq.engine.CURRENT_ENGINE.root.storage_dir):
+                analysis_dir = '{}.ace'.format(error_report_path)
+                try:
+                    shutil.copytree(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir)
+                    logging.warning("copied analysis from {} to {} for review".format(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir))
+                except Exception as e:
+                    logging.error("unable to copy from {} to {}: {}".format(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir, e))
 
         # do we send an email?
         #email_addresses = [x.strip() for x in saq.CONFIG['global']['error_reporting_email'].split(',') if x.strip() != '']
