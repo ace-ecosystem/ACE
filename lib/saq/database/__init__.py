@@ -626,10 +626,13 @@ class Event(Base):
 
     @property
     def wiki(self):
-        domain = saq.CONFIG['mediawiki']['domain']
-        date = self.creation_date.strftime("%Y%m%d").replace(' ', '+')
-        name = self.name.replace(' ', '+')
-        return "{}display/integral/{}+{}".format(domain, date, name)
+        if saq.CONFIG['mediawiki'].getboolean('enabled'):
+            domain = saq.CONFIG['mediawiki']['domain']
+            date = self.creation_date.strftime("%Y%m%d").replace(' ', '+')
+            name = self.name.replace(' ', '+')
+            return "{}display/integral/{}+{}".format(domain, date, name)
+        else:
+            return None
 
 class EventMapping(Base):
 
