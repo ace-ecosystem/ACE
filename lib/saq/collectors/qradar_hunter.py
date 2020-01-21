@@ -12,7 +12,7 @@ from saq.collectors.query_hunter import QueryHunt
 from saq.qradar import QRadarAPIClient, QueryCanceledError, QueryError
 from saq.util import *
 
-from requests.exceptions import HTTPError
+from requests.exceptions import HTTPError, ConnectionError
 
 class QRadarHunt(QueryHunt):
     def __init__(self, *args, **kwargs):
@@ -55,7 +55,7 @@ class QRadarHunt(QueryHunt):
         else:
             try:
                 query_results = self.qradar_client.execute_aql_query(target_query, continue_check_callback=None)
-            except HTTPError as e:
+            except (HTTPError, ConnectionError) as e:
                 logging.error(f"request failed: {e} for {self}")
                 return None
             except QueryError as e:
