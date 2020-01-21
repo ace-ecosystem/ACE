@@ -847,17 +847,18 @@ def correlate(args):
 
 # analyze-files
 correlate_parser = subparsers.add_parser('correlate',
-    help="Analyze one or more observables or alerts.")
+    help="Analyze one or more observables or alerts.",
+    epilog="Example: ace correlate ipv4 8.8.8.8 -G email -E ip_inspector -E gglsbl_service -D carbon_black_process_analysis_v1 -G common")
 correlate_parser.add_argument('--single-threaded', required=False, dest='single_threaded', default=False, action='store_true',
     help="Force execution to take place in a single process and a single thread.  Useful for manual debugging.")
-correlate_parser.add_argument('-D', '--disable-module', required=False, dest='disabled_modules', nargs='*',
-    help="Zero or more module names (substring match) to disable.")
+correlate_parser.add_argument('-D', '--disable-module', required=False, dest='disabled_modules', action='append',
+    help="Specify a module name (substring match) to disable. This option can be specified multiple times.")
 correlate_parser.add_argument('--disable-all', required=False, dest='disable_all', default=False, action='store_true',
     help="Disable all analysis modules (use -E switch to enable specific modules.")
-correlate_parser.add_argument('-E', '--enable-module', required=False, dest='enabled_modules', nargs='*', 
-    help="Zero or more module names (substring match) to enable.")
-correlate_parser.add_argument('-G', '--enable-module-group', required=False, dest='enable_module_group', nargs='+',
-    help="One or more module group names to enable.")
+correlate_parser.add_argument('-E', '--enable-module', required=False, dest='enabled_modules', action='append', 
+    help="Specify module names (substring match) to enable. This option can be specified multiple times.")
+correlate_parser.add_argument('-G', '--enable-module-group', required=False, dest='enable_module_group', action='append',
+    help="Module groups to enable by name. Specify for each module group.")
 correlate_parser.add_argument('-m', '--analysis-mode', required=False, dest='analysis_mode', 
     help="The analysis mode to use for this analysis. Defaults to cli")
 correlate_parser.add_argument('-d', '--storage-dir', required=False, dest='storage_dir', default='ace.out',
@@ -3078,9 +3079,8 @@ def verify_modules(args):
     # COPY-PASTA!!
     import importlib
 
-    for section in saq.CONFIG.sections():
-        if not section.startswith('analysis_module_'):
-            continue
+    analysis_module_sections = [section for section in saq.CONFIG.sections() if section.startswith('analysis_module_')]
+    for section in sorted(analysis_module_sections):
 
         # is this module disabled globally?
         # modules that are disable globally are not used anywhere
