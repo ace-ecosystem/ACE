@@ -10,6 +10,20 @@ cd $SAQ_HOME || { echo "unable to cd to $SAQ_HOME"; exit 1; }
 # set $prefix and $options
 source bin/mysql_common.sh
 
+update_only="0"
+while getopts "u" opt
+do
+    case ${opt} in
+        u) 
+            update_only="1"
+            ;;
+        *)
+            echo "invalid command line option ${opt}"
+            exit 1
+            ;;
+    esac
+done
+
 find updates/sql -type f -name 'patch.list' | while read patch_list
 do
     database=$(echo $patch_list | awk -F / '{print $3}')
@@ -49,23 +63,26 @@ EOF
             continue
         fi
 
-        echo "installing patch $patch_name on database $database"
-        if ! $prefix mysql $options --database=$database 2> $sql.stderr > $sql.stdout < $sql
+        if [ "$update_only" -eq "0" ]
         then
-            echo "unable to install $patch_name on $database (command returned error result $?)"
-        fi
+            echo "installing patch $patch_name on database $database"
+            if ! $prefix mysql $options --database=$database 2> $sql.stderr > $sql.stdout < $sql
+            then
+                echo "unable to install $patch_name on $database (command returned error result $?)"
+            fi
 
-        if [ -s $sql.stderr ]
-        then
-            echo "possible error installing $sql (review $sql.stderr to confirm)"
-        elif [ -z $sql.stderr ]
-        then
-            rm $sql.stderr
-        fi
+            if [ -s $sql.stderr ]
+            then
+                echo "possible error installing $sql (review $sql.stderr to confirm)"
+            elif [ -z $sql.stderr ]
+            then
+                rm $sql.stderr
+            fi
 
-        if [ -z $sql.stdout ]
-        then
-            rm $sql.stdout
+            if [ -z $sql.stdout ]
+            then
+                rm $sql.stdout
+            fi
         fi
 
         $prefix mysql $options --database=$database -e "INSERT INTO \`config\` ( \`key\`, \`value\` ) VALUES ( '$patch_name', 'installed' )"

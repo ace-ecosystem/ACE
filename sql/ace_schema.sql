@@ -1,8 +1,8 @@
--- MySQL dump 10.13  Distrib 5.7.27, for Linux (x86_64)
+-- MySQL dump 10.13  Distrib 5.7.28, for Linux (x86_64)
 --
 -- Host: localhost    Database: ace
 -- ------------------------------------------------------
--- Server version	5.7.27-0ubuntu0.18.04.1
+-- Server version	5.7.28-0ubuntu0.18.04.4
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -185,6 +185,20 @@ CREATE TABLE `company_mapping` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `config`
+--
+
+DROP TABLE IF EXISTS `config`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `config` (
+  `key` varchar(512) COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  `value` text COLLATE utf8mb4_unicode_520_ci NOT NULL,
+  PRIMARY KEY (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci COMMENT='holds generic key=value configuration settings';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `delayed_analysis`
 --
 
@@ -207,6 +221,20 @@ CREATE TABLE `delayed_analysis` (
   KEY `idx_node_delayed_until` (`node_id`,`delayed_until`),
   CONSTRAINT `fk_delayed_analysis_node_id` FOREIGN KEY (`node_id`) REFERENCES `nodes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `encrypted_passwords`
+--
+
+DROP TABLE IF EXISTS `encrypted_passwords`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `encrypted_passwords` (
+  `key` varchar(256) COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'The name (key) of the value being stored. Can either be a single name, or a section.option key.',
+  `encrypted_value` text COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'Encrypted value, base64 encoded',
+  PRIMARY KEY (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -640,4 +668,4 @@ CREATE TABLE `workload` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2019-10-21 10:14:59
+-- Dump completed on 2020-01-22 13:17:37
