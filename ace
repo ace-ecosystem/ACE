@@ -2445,6 +2445,26 @@ update_organization_parsers = subparsers.add_parser('update-organization',
     help="Updates the files used by the UserTaggingAnalyzer module.")
 update_organization_parsers.set_defaults(func=update_organization)
 
+def update_maxmind_databases(args):
+    import saq
+    from ip_inspector import maxmind
+
+    config = saq.CONFIG['analysis_module_ip_inspector']
+    proxies = saq.PROXIES if 'use_proxy' in config and config.getboolean('use_proxy') else None
+    license_key = config['license_key'] if 'license_key' in config else args.license_key
+    if license_key:
+        if not maxmind.update_databases(license_key=license_key, proxies=proxies):
+            logging.error("Problem updating MaxMind GeoLite2 databases.")
+            sys.exit(1)
+
+    sys.exit(0)
+
+update_maxmind_parser = subparsers.add_parser('update-maxmind-databases',
+    help="Update the local MaxMind GeoLite2 databases.")
+update_maxmind_parser.add_argument('--license-key', action='store', default=None,
+    help="Manually supply a license key.")
+update_maxmind_parser.set_defaults(func=update_maxmind_databases)
+
 # TODO move this into integration
 def update_crits_cache(args):
     from saq.crits import update_local_cache
