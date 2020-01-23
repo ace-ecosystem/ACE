@@ -8,7 +8,7 @@ import saq, saq.test
 from saq.constants import *
 from saq.test import *
 
-from splunklib import SplunkQueryObject
+from saq.splunk import SplunkQueryObject
 
 class AssetAnalysisModuleTestCase(ACEModuleTestCase):
     @unittest.skip("skipping this one for now...")
