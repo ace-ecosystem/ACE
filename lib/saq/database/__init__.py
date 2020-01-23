@@ -706,7 +706,7 @@ class Threat(Base):
     __tablename__ = 'malware_threat_mapping'
 
     malware_id = Column(Integer, ForeignKey('malware.id'), primary_key=True)
-    type = Column(Enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD'), primary_key=True, nullable=False)
+    type = Column(Enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD','CUSTOMER_THREAT'), primary_key=True, nullable=False)
 
     def __str__(self):
         return self.type
