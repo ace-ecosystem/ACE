@@ -1,38 +1,38 @@
 # vim: sw=4:ts=4:et
 
-__all__ = [
-    'EV_TEST_DATE',
-    'EV_ROOT_ANALYSIS_TOOL',
-    'EV_ROOT_ANALYSIS_TOOL_INSTANCE',
-    'EV_ROOT_ANALYSIS_ALERT_TYPE',
-    'EV_ROOT_ANALYSIS_DESCRIPTION',
-    'EV_ROOT_ANALYSIS_EVENT_TIME',
-    'EV_ROOT_ANALYSIS_NAME',
-    'EV_ROOT_ANALYSIS_UUID',
-    'create_root_analysis',
-    'ACEBasicTestCase',
-    'ACEEngineTestCase',
-    'ACEModuleTestCase',
-    'reset_alerts',
-    'log_count',
-    'wait_for_log_count',
-    'WaitTimedOutError',
-    'wait_for_log_entry',
-    'track_io',
-    'send_test_message',
-    'recv_test_message',
-    'splunk_query',
-    'wait_for',
-    'enable_module',
-    'force_alerts',
-    'GUIServer',
-    'search_log',
-    'search_log_regex',
-    'search_log_condition',
-    'TestEngine',
-    'UNITTEST_USER_NAME',
-    'UNITTEST_USER_ID',
-]
+#__all__ = [
+    #'EV_TEST_DATE',
+    #'EV_ROOT_ANALYSIS_TOOL',
+    #'EV_ROOT_ANALYSIS_TOOL_INSTANCE',
+    #'EV_ROOT_ANALYSIS_ALERT_TYPE',
+    #'EV_ROOT_ANALYSIS_DESCRIPTION',
+    #'EV_ROOT_ANALYSIS_EVENT_TIME',
+    #'EV_ROOT_ANALYSIS_NAME',
+    #'EV_ROOT_ANALYSIS_UUID',
+    #'create_root_analysis',
+    #'ACEBasicTestCase',
+    #'ACEEngineTestCase',
+    #'ACEModuleTestCase',
+    #'reset_alerts',
+    #'log_count',
+    #'wait_for_log_count',
+    #'WaitTimedOutError',
+    #'wait_for_log_entry',
+    #'track_io',
+    #'send_test_message',
+    #'recv_test_message',
+    #'splunk_query',
+    #'wait_for',
+    #'enable_module',
+    #'force_alerts',
+    #'GUIServer',
+    #'search_log',
+    #'search_log_regex',
+    #'search_log_condition',
+    #'TestEngine',
+    #'UNITTEST_USER_NAME',
+    #'UNITTEST_USER_ID',
+#]
 
 import atexit
 import datetime
@@ -58,7 +58,7 @@ from saq.engine import Engine
 from saq.error import report_exception
 from saq.util import storage_dir_from_uuid, workload_storage_dir, abs_path
 
-from splunklib import SplunkQueryObject
+from saq.splunk import SplunkQueryObject
 
 test_dir = None
 UNITTEST_USER_NAME = 'unittest'

@@ -75,6 +75,12 @@ class Hunt(object):
         # in that case we don't want to record any of the execution time stamps
         self.manual_hunt = False
 
+        # this property maps to the "tool_instance" property of alerts
+        # this shows where the alert came from
+        # by default we use localhost
+        # subclasses might use the address or url they are hitting for their queries
+        self.tool_instance = 'localhost'
+
     @property
     def last_executed_time(self):
         # if we don't already have this value then load it from the sqlite db
@@ -496,9 +502,12 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
             logging.debug(f"releasing concurrency semaphore for hunt type {self.hunt_type}")
             semaphore.release()
 
-    def load_hunts_from_config(self):
+    def load_hunts_from_config(self, hunt_filter=lambda hunt: True):
         """Loads the hunts from the configuration settings.
-           Returns True if all of the hunts were loaded correctly, False if any errors occurred."""
+           Returns True if all of the hunts were loaded correctly, False if any errors occurred.
+           The hunt_filter paramter defines an optional lambda function that takes the Hunt object
+           after it is loaded and returns True if the Hunt should be added, False otherwise.
+           This is useful for unit testing."""
         for rule_dir in self.rule_dirs:
             rule_dir = abs_path(rule_dir)
             if not os.path.isdir(rule_dir):
@@ -517,8 +526,11 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                     logging.debug(f"loading hunt from {hunt_config}")
                     hunt.load_from_ini(hunt_config)
                     hunt.type = self.hunt_type
-                    logging.info(f"loaded {hunt} from {hunt_config}")
-                    self.add_hunt(hunt)
+                    if hunt_filter(hunt):
+                        logging.info(f"loaded {hunt} from {hunt_config}")
+                        self.add_hunt(hunt)
+                    else:
+                        logging.debug(f"not loading {hunt} (hunt_filter returned False)")
 
         # remember that we loaded the hunts from the configuration file
         # this is used when we receive the signal to reload the hunts
