@@ -17,10 +17,10 @@ from saq.util import local_time
 
 from exchangelib import DELEGATE, IMPERSONATION, Account, Credentials, OAuth2Credentials, \
     FaultTolerance, Configuration, NTLM, GSSAPI, SSPI, OAUTH2, Build, Version
-from exchangelib.errors import ResponseMessageError, ErrorTimeoutExpired
+from exchangelib.errors import ResponseMessageError, ErrorTimeoutExpired, EWSError
 from exchangelib.protocol import BaseProtocol
 from requests.adapters import HTTPAdapter
-from requests.exceptions import ConnectionError, ReadTimeout
+from requests.exceptions import ConnectionError, ReadTimeout, ChunkedEncodingError
 
 #
 # EWS Collector
@@ -113,7 +113,7 @@ class EWSCollectionBaseConfiguration(object):
         while not self.collector.is_service_shutdown:
             try:
                 self.execute()
-            except ( ErrorTimeoutExpired, ConnectionError ) as e:
+            except ( EWSError, ConnectionError ) as e:
                 logging.warning(f"attempt to pull emails from {self.target_mailbox} failed: {e}")
             except Exception as e:
                 logging.error(f"uncaught exception {e}")
@@ -126,8 +126,8 @@ class EWSCollectionBaseConfiguration(object):
     def execute(self, *args, **kwargs):
         try:
             self._execute(*args, **kwargs)
-        except ReadTimeout as e:
-            logging.error(f"read timed out for {self.target_mailbox}: {e}")
+        except (ChunkedEncodingError, ReadTimeout) as e:
+            logging.error(f"caught network error for {self.target_mailbox}: {e}")
             return
 
     def _execute(self, *args, **kwargs):
