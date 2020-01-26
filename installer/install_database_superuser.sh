@@ -12,7 +12,8 @@ host=localhost
 user=ace-superuser
 password=$password
 EOF
-	chmod 660 etc/mysql_defaults.root
+    chown ace:ace etc/mysql_defaults.root 
+    chmod 660 etc/mysql_defaults.root
 
     sed -e "s/ACE_SUPERUSER_DB_USER_PASSWORD/$password/g" sql/create_db_super_user.sql > sql/create_db_super_user.exec.sql
     # create the mysql database user for ace
