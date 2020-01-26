@@ -1352,6 +1352,23 @@ delete_user_parser = user_sp.add_parser('delete',
 delete_user_parser.add_argument('username', help="The username of the user to modify.")
 delete_user_parser.set_defaults(func=delete_user)
 
+def list_users(args):
+    import saq
+    from saq.database import User
+    print("{:<6}{:<15}{:<40}{}".format('Id', 'User', 'Name', 'TZ'))
+    for user in saq.db.query(User).order_by(User.username):
+        print("{:<6}{:<15}{:<40}{}".format(
+              user.id, 
+              user.username, 
+              '' if user.display_name is None else user.display_name, 
+              user.timezone))
+
+    sys.exit(0)
+
+list_users_parser = user_sp.add_parser('list',
+    help="List existing users in the system.")
+list_users_parser.set_defaults(func=list_users)
+
 # ============================================================================
 # test utilities
 #
