@@ -4,47 +4,52 @@
 #
 
 import base64
+import logging
 import os, os.path
-import shutil
-import sqlite3
 import sys
 import traceback
 
 from configparser import ConfigParser, Interpolation
 
 import saq
+from saq.crypto import encrypt_chunk, decrypt_chunk
+
+class EncryptedPasswordError(Exception):
+    """Thrown whenever an attept is made to access a password that is encrypted without the decryption key loaded."""
+    def __init__(self, key=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.key = key
 
 class ExtendedConfigParser(ConfigParser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # dict of encrypted passwords where key = section_name.option_name, value = decrypted password or None
-        self.encrypted_passwords = None
-        self.initializing = True
-
-    def load_encrypted_passwords(self):
-        self.encrypted_passwords = get_encrypted_passwords()
-        self.initializing = False
+        # local cache of decrypted passwords
+        # this is loaded as the passwords are decrypted
+        self.encrypted_password_cache = {}
 
 class EncryptedPasswordInterpolation(Interpolation):
     def before_get(self, parser, section, option, value, defaults):
-        # if we haven't set this attribute yet then just return the value as-is
-        # this is will the case when we're initializing
-        if parser.encrypted_passwords is None and parser.initializing:
+        # if this is not an encrypted value then just return it as-is
+        if value is None or not value.startswith('encrypted:'):
             return value
 
-        key = f'{section}.{option}'
-        # if we're asking for an encrypted password and we've decrypted it, return that value
-        if parser.encrypted_passwords is not None and key in parser.encrypted_passwords:
-            if parser.encrypted_passwords[key] is None:
-                # if we haven't decrypted it and we're asking for it, raise an error
-                raise RuntimeError(f"configuration section {section} option {option} has encrypted password but no decrypt key was used\n"
-                                    "maybe you missed using the -p option for the ace command")
-            else:
-                return parser.encrypted_passwords[key]
-        else:
-            # otherwise return the value as-is
-            return value
+        # to reference an encrypted password we use the format
+        # encrypted:NAME
+        # where NAME is the key in the encrypted password database
+        # this allows you to reference the same encrypted value multiple times in the configuration
+        if value.startswith('encrypted:'):
+            key = value[len('encrypted:'):]
+
+        try:
+            # have we already decrypted it?
+            return parser.encrypted_password_cache[key]
+        except KeyError:
+            pass
+        
+        # decrypt, cache and return the value
+        parser.encrypted_password_cache[key] = decrypt_password(key)
+        return parser.encrypted_password_cache[key]
 
 def apply_config(source, override):
     """Takes the loaded ConfigParser override and applies it to source such that any 
@@ -134,77 +139,77 @@ def _load_configuration():
 
     saq.CONFIG = default_config
 
-def encrypted_password_db_path():
-    """Returns the full path to the sqlite database that contains the encrypted passwords."""
-    return os.path.join(saq.DATA_DIR, saq.CONFIG['global']['encrypted_password_db_path'])
-
-def _create_db(db, c):
-        # if the database file didn't exist then we need to create the table
-        c.execute("""
-CREATE TABLE IF NOT EXISTS encrypted_passwords (
-section_name TEXT,
-key_name TEXT,
-encrypted_password TEXT )""")
-        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_section_key ON encrypted_passwords ( section_name, key_name )")
-        db.commit()
-
-def store_encrypted_password(section, key, value):
-    """Stores a configuration setting as an encrypted value."""
-    
-    with sqlite3.connect(encrypted_password_db_path()) as db:
+def export_encrypted_passwords():
+    """Returns a JSON dict of all the encrypted passwords with decrypted values."""
+    from saq.database import get_db_connection
+    with get_db_connection() as db:
         c = db.cursor()
-        _create_db(db, c)
-
-        from saq.crypto import encrypt_chunk
         c.execute("""
-INSERT OR REPLACE INTO encrypted_passwords ( 
-    section_name,
-    key_name,
-    encrypted_password ) 
-VALUES ( 
-    ?, ?, ? )""", (section, key, base64.b64encode(encrypt_chunk(value.encode('utf8')))))
-        db.commit()
+SELECT
+    `key`, `encrypted_value`
+FROM
+    `encrypted_passwords`
+ORDER BY
+    `key`""")
+        export = {}
+        for row in c:
+            #logging.info(f"exporting password for {row[0]}")
+            try:
+                export[row[0]] = decrypt_password(row[0])
+            except EncryptedPasswordError:
+                export[row[0]] = None
 
-def delete_encrypted_password(section, key):
-    """Deletes a stored configuration setting."""
-    
-    with sqlite3.connect(encrypted_password_db_path()) as db:
+        return export
+
+def import_encrypted_passwords(export):
+    """Imports the JSON dict generated by export_encrypted_passwords."""
+    for key, value in export.items():
+        logging.info(f"importing password for {key}")
+        encrypt_password(key, value)
+
+def encrypt_password(key, value):
+    """Stores sensitive data as an encrypted value."""
+    encrypted_value = base64.b64encode(encrypt_chunk(value.encode('utf8')))
+
+    from saq.database import get_db_connection
+    with get_db_connection() as db:
         c = db.cursor()
-        _create_db(db, c)
-
-        from saq.crypto import encrypt_chunk
         c.execute("""
-DELETE FROM encrypted_passwords WHERE section_name = ? AND key_name = ?""", 
-        (section, key))
+INSERT INTO `encrypted_passwords` ( `key`, `encrypted_value` )
+VALUES ( %s, %s )
+ON DUPLICATE KEY UPDATE
+    `encrypted_value` = %s""", ( key, encrypted_value, encrypted_value ))
         db.commit()
-        return c.rowcount
 
-def get_encrypted_passwords():
-    """Returns a dict with key = section.key and value = either the decrypted password or None if decryption is not enabled."""
-    if not os.path.exists(encrypted_password_db_path()):
-        return None
+def delete_password(key):
+    """Deletes the given password from the database. Returns True if the password was deleted."""
+    from saq.database import get_db_connection
+    with get_db_connection() as db:
+        c = db.cursor()
+        c.execute("DELETE FROM `encrypted_passwords` WHERE `key` = %s", (key,))
+        db.commit()
+        return c.rowcount == 1
 
-    with sqlite3.connect(encrypted_password_db_path()) as db:
+def decrypt_password(key):
+    """Returns the decrypted value for the given key."""
+    from saq.database import get_db_connection
+    with get_db_connection() as db:
         c = db.cursor()
         c.execute("""
 SELECT 
-    section_name,
-    key_name,
-    encrypted_password
+    `encrypted_value`
 FROM
-    encrypted_passwords
-ORDER BY 
-    section_name, key_name
-""")
-        result = {}
-        for section_name, key_name, encrypted_password in c:
-            value = None # if we didn't specify the decryption password then we just have None as the value
-            if saq.ENCRYPTION_PASSWORD is not None:
-                from saq.crypto import decrypt_chunk
-                value = decrypt_chunk(base64.b64decode(encrypted_password)).decode('utf8')
+    `encrypted_passwords`
+WHERE
+    `key` = %s
+""", (key,))
+        row = c.fetchone()
+        if row is None:
+            logging.warning(f"request for unknown encrypted password {key}")
+            return None
 
-            result[f'{section_name}.{key_name}'] = value
-
-        return result
-            #print("{}.{} = {}".format(section_name, key_name, displayed_value))
-
+        if saq.ENCRYPTION_PASSWORD is not None:
+            from saq.crypto import decrypt_chunk
+            return decrypt_chunk(base64.b64decode(row[0])).decode('utf8')
+        else:
+            raise EncryptedPasswordError(key=key)

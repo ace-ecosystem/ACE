@@ -450,6 +450,13 @@ def retry(func, *args, **kwargs):
 
     return wrapper
 
+class Config(Base):
+
+    __tablename__ = 'config'
+
+    key = Column(String(512), primary_key=True)
+    value = Column(Text, nullable=False)
+
 class User(UserMixin, Base):
 
     __tablename__ = 'users'
