@@ -9,8 +9,8 @@ $prefix mysqladmin $options drop -f ace-unittest-2
 $prefix mysqladmin $options create ace-unittest
 $prefix mysqladmin $options create ace-unittest-2
 
-$prefix mysqldump $options --comments --no-data ace | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql --database=ace-unittest
-$prefix mysqldump $options --comments --no-data ace | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql --database=ace-unittest-2
+$prefix mysqldump $options --comments --no-data ace | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql $options --database=ace-unittest
+$prefix mysqldump $options --comments --no-data ace | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql $options --database=ace-unittest-2
 
 if [ -e sql/ace_init.sql ]
 then
