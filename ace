@@ -166,6 +166,8 @@ def execute_hunt(args):
         exec_kwargs['start_time'] = start_time
         exec_kwargs['end_time'] = end_time
 
+        hunt.query_result_file = args.query_result_file
+
     if args.json_dir is not None:
         os.makedirs(args.json_dir, exist_ok=True)
 
@@ -243,6 +245,8 @@ execute_hunt_parser.add_argument('-d', '--details', required=False, default=Fals
     help="Include the details of the submissions in the output.")
 execute_hunt_parser.add_argument('--submit-alerts', required=False, default=None, 
     help="Submit as alerts to the given host[:port]")
+execute_hunt_parser.add_argument('--query-result-file', required=False, default=None,
+    help="Valid only for query hunts. Save the raw query results to the given file.")
     
 execute_hunt_parser.set_defaults(func=execute_hunt)
 
@@ -1018,9 +1022,9 @@ def execute_remediation(args):
     sys.exit(0)
 
 def execute_email_remediation(args):
-    import saq.remediation
+    from saq.remediation.email import create_email_remediation_key
     setattr(args, 'type', 'email')
-    setattr(args, 'targets', [saq.remediation.email.create_email_remediation_key(args.message_id, args.email_address)])
+    setattr(args, 'targets', [create_email_remediation_key(args.message_id, args.email_address)])
     execute_remediation(args)
 
 # most of the arguments are shared between the remove and restore action

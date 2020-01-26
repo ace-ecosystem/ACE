@@ -633,10 +633,13 @@ class Event(Base):
 
     @property
     def wiki(self):
-        domain = saq.CONFIG['mediawiki']['domain']
-        date = self.creation_date.strftime("%Y%m%d").replace(' ', '+')
-        name = self.name.replace(' ', '+')
-        return "{}display/integral/{}+{}".format(domain, date, name)
+        if saq.CONFIG['mediawiki'].getboolean('enabled'):
+            domain = saq.CONFIG['mediawiki']['domain']
+            date = self.creation_date.strftime("%Y%m%d").replace(' ', '+')
+            name = self.name.replace(' ', '+')
+            return "{}display/integral/{}+{}".format(domain, date, name)
+        else:
+            return None
 
 class EventMapping(Base):
 
@@ -710,7 +713,7 @@ class Threat(Base):
     __tablename__ = 'malware_threat_mapping'
 
     malware_id = Column(Integer, ForeignKey('malware.id'), primary_key=True)
-    type = Column(Enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD'), primary_key=True, nullable=False)
+    type = Column(Enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD','CUSTOMER_THREAT'), primary_key=True, nullable=False)
 
     def __str__(self):
         return self.type
@@ -2344,6 +2347,8 @@ def initialize_database():
 def initialize_automation_user():
     # get the id of the ace automation account
     try:
+        #import pymysql
+        #pymysql.connections.DEBUG = True
         saq.AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
         saq.db.remove()
     except Exception as e:
