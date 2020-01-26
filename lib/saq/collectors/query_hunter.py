@@ -202,10 +202,10 @@ class QueryHunt(Hunt):
         self.use_index_time = rule_section.getboolean('use_index_time')
 
         self.max_result_count =  rule_section.getint('max_result_count', 
-                                                     fallback=saq.CONFIG['splunk']['max_result_count'])
+                                                     fallback=saq.CONFIG['query_hunter']['max_result_count'])
 
         self.query_timeout = rule_section.get('query_timeout',
-                                              fallback=saq.CONFIG['splunk']['query_timeout'])
+                                              fallback=saq.CONFIG['query_hunter']['query_timeout'])
 
         if 'offset' in rule_section:
             self.offset = create_timedelta(rule_section['offset'])

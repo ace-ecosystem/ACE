@@ -2,8 +2,10 @@
 
 import datetime
 import json
+import unittest
 
 import saq
+from saq.integration import integration_enabled
 from saq.collectors.hunter import HuntManager, HunterCollector, open_hunt_db
 from saq.collectors.test_hunter import HunterBaseTestCase
 from saq.collectors.splunk_hunter import SplunkHunt
@@ -21,6 +23,9 @@ def manager_kwargs():
 class TestCase(HunterBaseTestCase):
     def setUp(self):
         super().setUp()
+
+        if not integration_enabled('splunk'):
+            raise unittest.SkipTest("skipping splunk tests (splunk integration not enabled)")
 
         ips_txt = 'hunts/test/splunk/ips.txt'
         with open(ips_txt, 'w') as fp:
