@@ -5,6 +5,8 @@ import logging
 from ip_inspector import maxmind
 from ip_inspector import Inspector, Inspected_IP
 
+import saq
+
 from saq.constants import *
 from saq.analysis import Analysis
 from saq.modules import AnalysisModule
@@ -20,12 +22,72 @@ class IpInspectorAnalysis(Analysis):
                 'whitelist': None,
                 'raw': None,
                 'pretty': None,
-                'summary_strings': {'asn': None,
-                                    'org': None,
-                                    'city': None,
-                                    'country': None,
-                                    'region': None},
+                'asn': None,
+                'org': None,
+                'city': None,
+                'country': None,
+                'region': None
                 }
+
+    @property
+    def asn(self):
+        if self.details is None:
+            return None
+        return self.details['asn']
+
+    @asn.setter
+    def asn(self, value):
+        if self.details is None:
+            self.initialize_details()
+        self.details['asn'] = value
+
+    @property
+    def org(self):
+        if self.details is None:
+            return None
+        return self.details['org']
+
+    @org.setter
+    def org(self, value):
+        if self.details is None:
+            self.initialize_details()
+        self.details['org'] = value
+
+    @property
+    def city(self):
+        if self.details is None:
+            return None
+        return self.details['city']
+
+    @city.setter
+    def city(self, value):
+        if self.details is None:
+            self.initialize_details()
+        self.details['city'] = value
+
+    @property
+    def country(self):
+        if self.details is None:
+            return None
+        return self.details['country']
+
+    @country.setter
+    def country(self, value):
+        if self.details is None:
+            self.initialize_details()
+        self.details['country'] = value
+
+    @property
+    def region(self):
+        if self.details is None:
+            return None
+        return self.details['region']
+
+    @region.setter
+    def region(self, value):
+        if self.details is None:
+            self.initialize_details()
+        self.details['region'] = value
 
     def generate_summary(self):
         summary = "IP Inspection: "
@@ -33,20 +95,14 @@ class IpInspectorAnalysis(Analysis):
             summary += 'BLACKLISTED '
         if self.details['whitelist']:
             summary += '(whitelisted) '
-        results = self.details['summary_strings']
-        asn = results['asn']
-        city = results['city']
-        region = results['region']
-        country = results['country']
-        org = results['org']
-        if city:
-            summary += "{}, ".format(city)
-        if region:
-            summary += "{}, ".format(region)
-        if country:
-            summary += "{} - ".format(country)
-        summary += "AS{} - ".format(asn)
-        summary += org
+        if self.city:
+            summary += "{}, ".format(self.city)
+        if self.region:
+            summary += "{}, ".format(self.region)
+        if self.country:
+            summary += "{} - ".format(self.country)
+        summary += "AS{} - ".format(self.asn)
+        summary += "{}".format(self.org)
         return summary
 
 
@@ -66,42 +122,50 @@ class IPIAnalyzer(AnalysisModule):
     def license_key(self):
         return self.config['license_key']
 
+    @property
+    def use_proxy(self):
+        return self.config['use_proxy']
+
     def verify_environment(self):
         self.verify_config_item_has_value('license_key')
+        self.verify_config_exists('use_proxy')
 
     def execute_analysis(self, observable):
-        logging.info("Inspecting {}".format(observable.value))
+        logging.debug("Inspecting {}".format(observable.value))
         try:
+            proxies = saq.PROXIES if self.use_proxy else None
             # Create Inspector with MaxMind API
-            mmi = Inspector(maxmind.Client(license_key=self.license_key))
-            inspected_ip = mmi.inspect(observable.value)
+            mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=proxies))
+        except Exception as e:
+            logging.error("Failed to create MaxMind Inspector: {}".format(e))
+            return False
 
+        try:
+            inspected_ip = mmi.inspect(observable.value)
+            if not inspected_ip:
+                logging.debug("no results for '{}'".format(observable.value))
+                return False
             analysis = self.create_analysis(observable)
             analysis.details['raw'] = inspected_ip.raw
 
             # get the most interesting details for primary use, tag some
-            country = inspected_ip.get('Country')
-            org = inspected_ip.get('ORG')
-            city = inspected_ip.get('City')
-            region = inspected_ip.get('Region')
-            asn = inspected_ip.get('ASN')
-            observable.add_tag(country)
-            observable.add_tag(org)
-            analysis.details['summary_strings']['org'] = org
-            analysis.details['summary_strings']['country'] = country
-            analysis.details['summary_strings']['asn'] = asn
-            analysis.details['summary_strings']['city'] = city
-            analysis.details['summary_strings']['region'] = region
+            analysis.country = inspected_ip.get('Country')
+            analysis.org = inspected_ip.get('ORG')
+            analysis.city = inspected_ip.get('City')
+            analysis.region = inspected_ip.get('Region')
+            analysis.asn = inspected_ip.get('ASN')
+            observable.add_tag(analysis.country)
+            observable.add_tag(analysis.org)
 
             if inspected_ip.is_blacklisted:
-                logging.info("IP '{}' on blacklist for '{}'".format(inspected_ip.blacklist_reason))
+                logging.info("IP '{}' on blacklist for '{}'".format(inspected_ip.ip, inspected_ip.blacklist_reason))
                 observable.add_detection_point("IP Address '{}' on blacklist".format(inspected_ip.blacklist_reason))
                 analysis.details['blacklist'] = inspected_ip.get(inspected_ip.blacklist_reason)
                 observable.add_tag('blacklisted:{}'.format(inspected_ip.blacklist_reason))
             # It shouldn't happen but it's possible an IP could hit on a blacklist and whitelist
             # for this reason, I'm making the next line an if instead of an elif to catch it.
             if inspected_ip.is_whitelisted:
-                logging.info("IP '{}' on whitelist for '{}'".format(inspected_ip.whitelist_reason))
+                logging.info("IP '{}' on whitelist for '{}'".format(inspected_ip.ip, inspected_ip.whitelist_reason))
                 analysis.details['whitelist'] = inspected_ip.get(inspected_ip.whitelist_reason)
                 observable.add_tag('whitelisted:{}'.format(inspected_ip.whitelist_reason))
 

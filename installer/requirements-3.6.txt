@@ -51,4 +51,5 @@ vxstreamlib
 yara_scanner
 python-whois
 gglsbl-rest-client
-argcomplete==1.10.0
+argcomplete
+ip-inspector
