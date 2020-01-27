@@ -56,7 +56,7 @@ EOF
         fi
 
         # have we already installed this patch?
-        result=$($prefix mysql $options --database $database --batch --raw -s -e "SELECT \`value\` FROM \`config\` WHERE \`key\` = '$patch_name'")
+        result=$($prefix mysql $options --database $database --batch --raw -s -e "SELECT \`value\` FROM \`config\` WHERE \`key\` = 'patch-$patch_name'")
         if [ ! -z "$result" ]
         then
             echo "patch $patch_name already installed"
@@ -85,6 +85,6 @@ EOF
             fi
         fi
 
-        $prefix mysql $options --database=$database -e "INSERT INTO \`config\` ( \`key\`, \`value\` ) VALUES ( '$patch_name', 'installed' )"
+        $prefix mysql $options --database=$database -e "INSERT INTO \`config\` ( \`key\`, \`value\` ) VALUES ( 'patch-$patch_name', 'installed' )"
     done
 done
