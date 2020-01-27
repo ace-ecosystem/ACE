@@ -344,7 +344,7 @@ def get_db_connection(*args, **kwargs):
 # new school database connections
 import logging
 import os.path
-from sqlalchemy import Column, Integer, BigInteger, String, ForeignKey, DateTime, TIMESTAMP, DATE, text, create_engine, Text, Enum, func
+from sqlalchemy import Column, Integer, BigInteger, String, ForeignKey, DateTime, TIMESTAMP, DATE, DATETIME, text, create_engine, Text, Enum, func
 from sqlalchemy.dialects.mysql import BOOLEAN, VARBINARY, BLOB
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker, relationship, reconstructor, backref, validates, scoped_session
@@ -510,6 +510,13 @@ class Event(Base):
     malware = relationship("saq.database.MalwareMapping", passive_deletes=True, passive_updates=True)
     alert_mappings = relationship("saq.database.EventMapping", passive_deletes=True, passive_updates=True)
     companies = relationship("saq.database.CompanyMapping", passive_deletes=True, passive_updates=True)
+    first_event_time = Column(DATETIME, nullable=True)
+    first_alert_time = Column(DATETIME, nullable=True)
+    first_ownership_time = Column(DATETIME, nullable=True)
+    first_disposition_time = Column(DATETIME, nullable=True)
+    first_contain_time = Column(DATETIME, nullable=True)
+    first_remediation_time = Column(DATETIME, nullable=True)
+
 
     @property
     def json(self):
@@ -520,6 +527,12 @@ class Event(Base):
             'comment': self.comment,
             'companies': self.company_names,
             'creation_date': str(self.creation_date),
+            'first_event_time': str(self.first_event_time),
+            'first_alert_time': str(self.first_alert_time),
+            'first_ownership_time': str(self.first_ownership_time),
+            'first_disposition_time': str(self.first_ownership_time),
+            'first_contain_time': str(self.first_contain_time),
+            'first_remediation_time': str(self.first_remediation_time),
             'disposition': self.disposition,
             'malware': [{mal.name: [t.type for t in mal.threats]} for mal in self.malware],
             'name': self.name,

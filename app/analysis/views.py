@@ -1119,6 +1119,31 @@ def add_to_event():
     campaign_id = request.form.get('campaign_id', None)
     new_campaign = request.form.get('new_campaign', None)
     company_ids = request.form.getlist('company', None)
+    first_event_time = request.form.get('first_event_time', None)
+    first_alert_time = request.form.get('first_alert_time', None)
+    first_ownership_time = request.form.get('first_ownership_time', None)
+    first_disposition_time = request.form.get('first_disposition_time', None)
+    first_contain_time = request.form.get('first_contain_time', None)
+    first_remediation_time = request.form.get('first_remediation_time', None)
+    first_event_time = None if first_event_time in ['', 'None'] else datetime.datetime.strptime(first_event_time, '%Y-%m-%d %H:%M:%S')
+    first_alert_time = None if first_alert_time in ['', 'None'] else datetime.datetime.strptime(first_alert_time, '%Y-%m-%d %H:%M:%S')
+    first_ownership_time = None if first_ownership_time in ['', 'None'] else datetime.datetime.strptime(first_ownership_time, '%Y-%m-%d %H:%M:%S')
+    first_disposition_time = None if first_disposition_time in ['', 'None'] else datetime.datetime.strptime(first_disposition_time, '%Y-%m-%d %H:%M:%S')
+    first_contain_time = None if first_contain_time in ['', 'None'] else datetime.datetime.strptime(first_contain_time, '%Y-%m-%d %H:%M:%S')
+    first_remediation_time = None if first_remediation_time in ['', 'None'] else datetime.datetime.strptime(first_remediation_time, '%Y-%m-%d %H:%M:%S')
+
+    # Enforce logical chronoglogy
+    dates = [d for d in [first_event_time, first_alert_time, first_ownership_time, first_disposition_time, first_contain_time, first_remediation_time] if d is not None]
+    sorted_dates = sorted(dates)
+    if not dates == sorted_dates:
+        flash("One or more of your dates has been entered out of valid order. "
+              "Please ensure entered dates follow the scheme: "
+              "Event Time < Alert Time <= Ownership Time < Disposition Time <= Contain Time <= Remediation Time")
+        if analysis_page:
+            return redirect(url_for('analysis.index'))
+        else:
+            return redirect(url_for('analysis.manage'))
+
     alert_uuids = []
     if ("alert_uuids" in request.form):
         alert_uuids = request.form['alert_uuids'].split(',')
@@ -1155,8 +1180,12 @@ def add_to_event():
                 result = c.fetchone()
                 event_id = result[0]
             else:
-                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, prevention_tool, comment) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_prevention, event_comment))
+                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, 
+                prevention_tool, comment, first_event_time, first_alert_time, first_ownership_time, first_disposition_time, 
+                first_contain_time, first_remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector,
+                         event_prevention, event_comment, first_event_time, first_alert_time, first_ownership_time,
+                         first_disposition_time, first_contain_time, first_remediation_time))
                 dbm.commit()
                 c.execute("""SELECT LAST_INSERT_ID()""")
                 result = c.fetchone()
@@ -3235,6 +3264,27 @@ def edit_event():
     threats = request.form.getlist('threats', None)
     campaign_id = request.form.get('campaign_id', None)
     new_campaign = request.form.get('new_campaign', None)
+    first_event_time = request.form.get('first_event_time', None)
+    first_alert_time = request.form.get('first_alert_time', None)
+    first_ownership_time = request.form.get('first_ownership_time', None)
+    first_disposition_time = request.form.get('first_disposition_time', None)
+    first_contain_time = request.form.get('first_contain_time', None)
+    first_remediation_time = request.form.get('first_remediation_time', None)
+    first_event_time = None if first_event_time in ['', 'None'] else datetime.datetime.strptime(first_event_time, '%Y-%m-%d %H:%M:%S')
+    first_alert_time = None if first_alert_time in ['', 'None'] else datetime.datetime.strptime(first_alert_time, '%Y-%m-%d %H:%M:%S')
+    first_ownership_time = None if first_ownership_time in ['', 'None'] else datetime.datetime.strptime(first_ownership_time, '%Y-%m-%d %H:%M:%S')
+    first_disposition_time = None if first_disposition_time in ['', 'None'] else datetime.datetime.strptime(first_disposition_time, '%Y-%m-%d %H:%M:%S')
+    first_contain_time = None if first_contain_time in ['', 'None'] else datetime.datetime.strptime(first_contain_time, '%Y-%m-%d %H:%M:%S')
+    first_remediation_time = None if first_remediation_time in ['', 'None'] else datetime.datetime.strptime(first_remediation_time, '%Y-%m-%d %H:%M:%S')
+
+    # Enforce logical chronoglogy
+    dates = [d for d in [first_event_time, first_alert_time, first_ownership_time, first_disposition_time, first_contain_time, first_remediation_time] if d is not None]
+    sorted_dates = sorted(dates)
+    if not dates == sorted_dates:
+        flash("One or more of your dates has been entered out of valid order. "
+              "Please ensure entered dates follow the scheme: "
+              "Event Time < Alert Time <= Ownership Time < Disposition Time <= Contain Time <= Remediation Time")
+        redirect(url_for('analysis.events'))
 
     with get_db_connection() as db:
         c = db.cursor()
@@ -3251,8 +3301,8 @@ def edit_event():
                 result = c.fetchone()
                 campaign_id = result[0]
 
-        c.execute("""UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, prevention_tool=%s, comment=%s, campaign_id=%s WHERE id=%s""",
-                (event_status, event_remediation, event_type, event_vector, event_prevention, event_comment, campaign_id, event_id))
+        c.execute("""UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, prevention_tool=%s, comment=%s, campaign_id=%s, first_event_time=%s, first_alert_time=%s, first_ownership_time=%s, first_disposition_time=%s, first_contain_time=%s, first_remediation_time=%s WHERE id=%s""",
+                (event_status, event_remediation, event_type, event_vector, event_prevention, event_comment, campaign_id, first_event_time, first_alert_time, first_ownership_time, first_disposition_time, first_contain_time, first_remediation_time, event_id))
         db.commit()
 
         c.execute("""DELETE FROM malware_mapping WHERE event_id=%s""", (event_id))

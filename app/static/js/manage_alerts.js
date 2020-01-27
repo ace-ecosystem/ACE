@@ -38,6 +38,7 @@ $(document).ready(function() {
         if (all_alert_uuids.length > 0) {
             $("#event-form").append('<input type="hidden" name="alert_uuids" value="' + all_alert_uuids.join(",") + '" />');
         }
+
     });
 
     $("#btn-realHours").click(function(e) {
@@ -90,6 +91,37 @@ $(document).ready(function() {
 });
 
 $(document).ready(function() {
+    $('input[name="first_event_time"]').datetimepicker({
+        showSecond: true,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="first_alert_time"]').datetimepicker({
+        showSecond: true,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="first_ownership_time"]').datetimepicker({
+        showSecond: true,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="first_disposition_time"]').datetimepicker({
+        showSecond: true,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="first_contain_time"]').datetimepicker({
+        showSecond: true,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="first_remediation_time"]').datetimepicker({
+        showSecond: true,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+
     if ($('input[name="daterange"]').val() == '') {
         $('input[name="daterange"]').val(
             moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +

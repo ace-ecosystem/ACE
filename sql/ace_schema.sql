@@ -272,6 +272,12 @@ CREATE TABLE `events` (
   `status` enum('OPEN','CLOSED','IGNORE') NOT NULL,
   `comment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci,
   `campaign_id` int(11) NOT NULL,
+  `first_event_time` DATETIME DEFAULT NULL,
+  `first_alert_time` DATETIME DEFAULT NULL,
+  `first_ownership_time` DATETIME DEFAULT NULL,
+  `first_disposition_time` DATETIME DEFAULT NULL,
+  `first_contain_time` DATETIME DEFAULT NULL,
+  `first_remediation_time` DATETIME DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `creation_date` (`creation_date`,`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;

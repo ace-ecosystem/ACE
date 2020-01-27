@@ -22,7 +22,6 @@ $(document).ready(function() {
             alert("Event names can only have the characters a-Z A-Z 0-9 - . and space.");
             return;
         }
-
         this.submit();
     });
 });

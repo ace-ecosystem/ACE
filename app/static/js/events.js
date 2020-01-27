@@ -38,13 +38,42 @@ function edit_event(event_id) {
     if (existing_dom_element.length != 0) {
         existing_dom_element.remove();
     }
-
     $.ajax({
         dataType: "html",
         url: 'edit_event_modal',
         data: { event_id: event_id },
         success: function(data, textStatus, jqXHR) {
             $('#edit_event_insert').after(data);
+            $('input[name="first_event_time"]').datetimepicker({
+              showSecond: true,
+              dateFormat: 'yy-mm-dd',
+              timeFormat: 'HH:mm:ss'
+            });
+            $('input[name="first_alert_time"]').datetimepicker({
+              showSecond: true,
+              dateFormat: 'yy-mm-dd',
+                timeFormat: 'HH:mm:ss'
+            });
+            $('input[name="first_ownership_time"]').datetimepicker({
+              showSecond: true,
+              dateFormat: 'yy-mm-dd',
+                timeFormat: 'HH:mm:ss'
+            });
+            $('input[name="first_disposition_time"]').datetimepicker({
+              showSecond: true,
+              dateFormat: 'yy-mm-dd',
+                timeFormat: 'HH:mm:ss'
+            });
+            $('input[name="first_contain_time"]').datetimepicker({
+              showSecond: true,
+              dateFormat: 'yy-mm-dd',
+                timeFormat: 'HH:mm:ss'
+            });
+            $('input[name="first_remediation_time"]').datetimepicker({
+              showSecond: true,
+              dateFormat: 'yy-mm-dd',
+                timeFormat: 'HH:mm:ss'
+            });
         },
         error: function(jqXHR, textStatus, errorThrown) {
             alert("DOH: " + textStatus);
