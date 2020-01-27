@@ -3284,7 +3284,7 @@ def edit_event():
         flash("One or more of your dates has been entered out of valid order. "
               "Please ensure entered dates follow the scheme: "
               "Event Time < Alert Time <= Ownership Time < Disposition Time <= Contain Time <= Remediation Time")
-        redirect(url_for('analysis.events'))
+        return redirect(url_for('analysis.events'))
 
     with get_db_connection() as db:
         c = db.cursor()
