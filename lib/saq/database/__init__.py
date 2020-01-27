@@ -1,6 +1,7 @@
 import datetime
 import functools
 import logging
+import os
 import shutil
 import sys
 import threading
@@ -263,51 +264,95 @@ def _get_db_connection(name='ace'):
     if name:
         config_section = 'database_{}'.format(name)
 
-    if config_section not in saq.CONFIG:
-        raise ValueError("invalid database {}".format(name))
+    if saq.CONFIG is None or config_section not in saq.CONFIG:
+        # try using environment variables
+        if name == 'ace' and 'ACE_DB_NAME' in os.environ:
+            kwargs = {
+                'db': os.environ['ACE_DB_NAME'],
+                'user': os.environ['ACE_DB_USER'],
+                'passwd': os.environ['ACE_DB_PASSWORD'],
+                'charset': 'utf8mb4',
+            }
 
-    _section = saq.CONFIG[config_section]
-    kwargs = {
-        'db': _section['database'],
-        'user': _section['username'],
-        'passwd': _section['password'],
-        'charset': 'utf8mb4',
-    }
+            if 'ACE_DB_HOSTNAME' in os.environ:
+                kwargs['host'] = os.environ['ACE_DB_HOSTNAME']
 
-    if 'hostname' in _section:
-        kwargs['host'] = _section['hostname']
+            if 'ACE_DB_PORT' in os.environ:
+                kwargs['port'] = int(os.environ['ACE_DB_PORT'])
+            
+            if 'ACE_DB_UNIX_SOCKET' in os.environ:
+                kwargs['unix_socket'] = os.environ['ACE_DB_UNIX_SOCKET']
 
-    if 'port' in _section:
-        kwargs['port'] = _section.getint('port')
-    
-    if 'unix_socket' in _section:
-        kwargs['unix_socket'] = _section['unix_socket']
+            kwargs['init_command'] = 'SET NAMES utf8mb4'
 
-    kwargs['init_command'] = 'SET NAMES utf8mb4'
+            if 'ACE_DB_SSL_CA' in os.environ or 'ACE_DB_SSL_KEY' in os.environ or 'ACE_DB_SSL_CERT' in os.environ:
+                kwargs['ssl'] = {}
 
-    if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
-        kwargs['ssl'] = {}
+                if 'ACE_DB_SSL_CA' in os.environ:
+                    path = abs_path(os.environ['ACE_DB_SSL_CA'])
+                    if not os.path.exists(path):
+                        logging.error("ssl_ca file {} does not exist".format(path))
+                    else:
+                        kwargs['ssl']['ca'] = path
 
-        if 'ssl_ca' in _section and _section['ssl_ca']:
-            path = abs_path(_section['ssl_ca'])
-            if not os.path.exists(path):
-                logging.error("ssl_ca file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['ca'] = path
+                if 'ACE_DB_SSL_KEY' in os.environ:
+                    path = abs_path(os.environ['ACE_DB_SSL_KEY'])
+                    if not os.path.exists(path):
+                        logging.error("ssl_key file {} does not exist".format(path))
+                    else:
+                        kwargs['ssl']['key'] = path
 
-        if 'ssl_key' in _section and _section['ssl_key']:
-            path = abs_path(_section['ssl_key'])
-            if not os.path.exists(path):
-                logging.error("ssl_key file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['key'] = path
+                if 'ACE_DB_SSL_CERT' in os.environ:
+                    path = abs_path(os.environ['ACE_DB_SSL_CERT'])
+                    if not os.path.exists(path):
+                        logging.error("ssl_cert file {} does not exist".format(path))
+                    else:
+                        kwargs['ssl']['cert'] = path
+        else:
+            raise ValueError("invalid database {}".format(name))
+    else:
+        _section = saq.CONFIG[config_section]
+        kwargs = {
+            'db': _section['database'],
+            'user': _section['username'],
+            'passwd': _section['password'],
+            'charset': 'utf8mb4',
+        }
 
-        if 'ssl_cert' in _section and _section['ssl_cert']:
-            path = _section['ssl_cert']
-            if not os.path.exists(path):
-                logging.error("ssl_cert file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['cert'] = path
+        if 'hostname' in _section:
+            kwargs['host'] = _section['hostname']
+
+        if 'port' in _section:
+            kwargs['port'] = _section.getint('port')
+        
+        if 'unix_socket' in _section:
+            kwargs['unix_socket'] = _section['unix_socket']
+
+        kwargs['init_command'] = 'SET NAMES utf8mb4'
+
+        if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
+            kwargs['ssl'] = {}
+
+            if 'ssl_ca' in _section and _section['ssl_ca']:
+                path = abs_path(_section['ssl_ca'])
+                if not os.path.exists(path):
+                    logging.error("ssl_ca file {} does not exist (specified in {})".format(path, config_section))
+                else:
+                    kwargs['ssl']['ca'] = path
+
+            if 'ssl_key' in _section and _section['ssl_key']:
+                path = abs_path(_section['ssl_key'])
+                if not os.path.exists(path):
+                    logging.error("ssl_key file {} does not exist (specified in {})".format(path, config_section))
+                else:
+                    kwargs['ssl']['key'] = path
+
+            if 'ssl_cert' in _section and _section['ssl_cert']:
+                path = _section['ssl_cert']
+                if not os.path.exists(path):
+                    logging.error("ssl_cert file {} does not exist (specified in {})".format(path, config_section))
+                else:
+                    kwargs['ssl']['cert'] = path
 
     logging.debug("opening database connection {}".format(name))
     return pymysql.connect(**kwargs)
