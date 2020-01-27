@@ -369,7 +369,7 @@ def initialize(saq_home=None,
         # are we prompting for the decryption password?
         if args and args.provide_decryption_password:
             while True:
-                ENCRYPTION_PASSWORD_PLAINTEXT = getpass.getpass("Enter the decryption password:")
+                ENCRYPTION_PASSWORD_PLAINTEXT = getpass("Enter the decryption password:")
                 try:
                     ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)
                 except InvalidPasswordError:
