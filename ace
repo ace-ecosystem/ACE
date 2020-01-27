@@ -1356,6 +1356,25 @@ delete_user_parser.set_defaults(func=delete_user)
 # test utilities
 #
 
+test_parser = subparsers.add_parser('test',
+    help="Test commands.")
+test_sp = test_parser.add_subparsers(dest='test_cmd')
+
+def test_proxy(args):
+    import requests
+    try:
+        requests.get(args.url, proxies=saq.PROXIES)
+        sys.exit(0)
+    except Exception as e:
+        traceback.print_exc()
+        sys.exit(1)
+
+test_proxy_parser = test_sp.add_parser('proxy',
+    help="Text proxy access")
+test_proxy_parser.add_argument('url',
+    help="Test the proxy by accessing the given URL. Any content downloaded is discarded.")
+test_proxy_parser.set_defaults(func=test_proxy)
+
 def test_database_connections(args):
     import saq
     from saq.database import get_db_connection
