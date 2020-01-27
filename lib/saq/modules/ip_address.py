@@ -123,12 +123,18 @@ class IPIAnalyzer(AnalysisModule):
         return self.config['license_key']
 
     @property
+    def tag_list(self):
+        tag_list = self.config['tag_list']
+        return tag_list.split(',')
+
+    @property
     def use_proxy(self):
         return self.config['use_proxy']
 
     def verify_environment(self):
         self.verify_config_item_has_value('license_key')
         self.verify_config_exists('use_proxy')
+        self.verify_config_exists('tag_list')
 
     def execute_analysis(self, observable):
         logging.debug("Inspecting {}".format(observable.value))
@@ -148,14 +154,18 @@ class IPIAnalyzer(AnalysisModule):
             analysis = self.create_analysis(observable)
             analysis.details['raw'] = inspected_ip.raw
 
-            # get the most interesting details for primary use, tag some
+            # get the most interesting details for primary use
             analysis.country = inspected_ip.get('Country')
             analysis.org = inspected_ip.get('ORG')
             analysis.city = inspected_ip.get('City')
             analysis.region = inspected_ip.get('Region')
             analysis.asn = inspected_ip.get('ASN')
-            observable.add_tag(analysis.country)
-            observable.add_tag(analysis.org)
+            # tag what's configured to be tagged
+            for field in self.tag_list:
+                if field not in maxmind.FIELDS:
+                    logging.error("{} is not defined in ip_inspector.maxmind.FIELDS".format(field))
+                    continue
+                observable.add_tag(inspected_ip.get(field))
 
             if inspected_ip.is_blacklisted:
                 logging.info("IP '{}' on blacklist for '{}'".format(inspected_ip.ip, inspected_ip.blacklist_reason))
