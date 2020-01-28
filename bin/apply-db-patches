@@ -31,6 +31,10 @@ do
     cat $patch_list | while read sql
     do
         patch_name=$(echo $sql | sed -e 's;updates/sql/ace/;;' -e 's/\.sql$//')
+        if [ -z "$patch_name" ]
+        then
+            continue
+        fi
 
         #echo $sql
         #echo $installed_marker
