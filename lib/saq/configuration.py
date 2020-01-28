@@ -228,4 +228,6 @@ WHERE
             from saq.crypto import decrypt_chunk
             return decrypt_chunk(base64.b64decode(row[0])).decode('utf8')
         else:
-            raise EncryptedPasswordError(key=key)
+            logging.debug(f"request to decrypt {key} without decryption key set")
+            return None
+            #raise EncryptedPasswordError(key=key)
