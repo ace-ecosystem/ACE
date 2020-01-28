@@ -100,8 +100,20 @@
       </td>
     </tr>
     <tr><th>Comment</th><td><input class="form-control" type="text" id="event_comment" name="event_comment" value="{{event.comment}}"></input></td></tr>
+  </table>
+    {% if event.status == 'OPEN' %}
+  <br>
+  <table>
+    <tr><th>Event Times (UTC)</th></tr>
+      <tr><th>Event Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="event_time" name="event_time" value="{{event.event_time}}" placeholder="None"/></td></tr>
+      <tr><th>Alert Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="alert_time" name="alert_time" value="{{event.alert_time}}" placeholder="None"/></td></tr>
+      <tr><th>Ownership Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="ownership_time" name="ownership_time" value="{{event.ownership_time}}" placeholder="None"/></td></tr>
+      <tr><th>Disposition Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="disposition_time" name="disposition_time" value="{{event.disposition_time}}" placeholder="None"/></td></tr>
+      <tr><th>Contain Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="contain_time" name="contain_time" value="{{event.contain_time}}" placeholder="None"/></td></tr>
+      <tr><th>Remediation Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="remediation_time" name="remediation_time" value="{{event.remediation_time}}" placeholder="None"/></td></tr>
   </table><br>
-  <h4>Threat Name
+      {% endif %}
+  <h4>Threat
     <button onclick="new_malware_option()" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-plus-sign"></span> Add</button>
   </h4>
   {% for mal in malware %}

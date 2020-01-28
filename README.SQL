@@ -15,3 +15,7 @@ How to introduce MySQL schema changes.
 
     The patches are applied in the order they appear in the patch.list file.
 3) Update the database schema files in the repository by executing bin/dump-database-schema.
+
+NOTES
+
+Make sure you don't reference the database specifically in your SQL.

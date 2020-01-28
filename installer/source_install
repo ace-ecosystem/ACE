@@ -122,6 +122,7 @@ if grep ACE_DB_USER_PASSWORD etc/saq.ini > /dev/null 2>&1
 then
 	echo "generating mysql accounts for ACE with random password"
 	tr -cd '[:alnum:]' < /dev/urandom | fold -w14 | head -n1 > .mysql.password.sed
+    password=$(cat .mysql.password.sed)
 	# modify the configuration files to use it
 	sed -i -e 's;^;s/ACE_DB_USER_PASSWORD/;' -e 's;$;/g;' .mysql.password.sed
     for path in etc/saq.ini etc/amc_mda.ini etc/amc_client.ini
@@ -132,6 +133,13 @@ then
 	sed -f .mysql.password.sed sql/create_db_user.sql > sql/create_db_user.exec.sql
 	sed -f .mysql.password.sed etc/mysql_defaults.example > etc/mysql_defaults && chmod 660 etc/mysql_defaults 
 	rm .mysql.password.sed
+
+    cat >> load_local_environment <<EOF
+export ACE_DB_NAME="ace"
+export ACE_DB_USER="ace-user"
+export ACE_DB_PASSWORD="$password"
+export ACE_DB_UNIX_SOCKET="/var/run/mysqld/mysqld.sock"
+EOF
 
 	# create the mysql database user for ace
 	sudo mysql < sql/create_db_user.exec.sql && rm sql/create_db_user.exec.sql

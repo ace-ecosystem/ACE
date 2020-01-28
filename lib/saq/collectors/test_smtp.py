@@ -5,20 +5,24 @@ import os, os.path
 import re
 import shutil
 import tempfile
+import unittest
 
 from subprocess import Popen
 
 import saq
 from saq.analysis import RootAnalysis
-from saq.constants import *
-from saq.collectors.test_bro import BroBaseTestCase
 from saq.collectors.smtp import BroSMTPStreamCollector
+from saq.collectors.test_bro import BroBaseTestCase
+from saq.constants import *
+from saq.integration import integration_enabled
 from saq.test import *
 from saq.util import storage_dir_from_uuid, workload_storage_dir
-
 class BroSMTPBaseTestCase(BroBaseTestCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
+
+        if not integration_enabled('bro'):
+            raise unittest.SkipTest("skipping bro tests (bro integration not enabled)")
 
         self.bro_smtp_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['bro']['smtp_dir'])
 

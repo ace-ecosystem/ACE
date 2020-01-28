@@ -1,2 +1,2 @@
-ALTER TABLE `ace`.`malware_threat_mapping`
+ALTER TABLE `malware_threat_mapping`
 MODIFY `type` enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD','CUSTOMER_THREAT') NOT NULL;
