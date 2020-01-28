@@ -510,12 +510,12 @@ class Event(Base):
     malware = relationship("saq.database.MalwareMapping", passive_deletes=True, passive_updates=True)
     alert_mappings = relationship("saq.database.EventMapping", passive_deletes=True, passive_updates=True)
     companies = relationship("saq.database.CompanyMapping", passive_deletes=True, passive_updates=True)
-    first_event_time = Column(DATETIME, nullable=True)
-    first_alert_time = Column(DATETIME, nullable=True)
-    first_ownership_time = Column(DATETIME, nullable=True)
-    first_disposition_time = Column(DATETIME, nullable=True)
-    first_contain_time = Column(DATETIME, nullable=True)
-    first_remediation_time = Column(DATETIME, nullable=True)
+    event_time = Column(DATETIME, nullable=True)
+    alert_time = Column(DATETIME, nullable=True)
+    ownership_time = Column(DATETIME, nullable=True)
+    disposition_time = Column(DATETIME, nullable=True)
+    contain_time = Column(DATETIME, nullable=True)
+    remediation_time = Column(DATETIME, nullable=True)
 
 
     @property
@@ -527,12 +527,12 @@ class Event(Base):
             'comment': self.comment,
             'companies': self.company_names,
             'creation_date': str(self.creation_date),
-            'first_event_time': str(self.first_event_time),
-            'first_alert_time': str(self.first_alert_time),
-            'first_ownership_time': str(self.first_ownership_time),
-            'first_disposition_time': str(self.first_ownership_time),
-            'first_contain_time': str(self.first_contain_time),
-            'first_remediation_time': str(self.first_remediation_time),
+            'event_time': str(self.event_time),
+            'alert_time': str(self.alert_time),
+            'ownership_time': str(self.ownership_time),
+            'disposition_time': str(self.ownership_time),
+            'contain_time': str(self.contain_time),
+            'remediation_time': str(self.remediation_time),
             'disposition': self.disposition,
             'malware': [{mal.name: [t.type for t in mal.threats]} for mal in self.malware],
             'name': self.name,
