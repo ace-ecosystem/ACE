@@ -1373,6 +1373,25 @@ list_users_parser.set_defaults(func=list_users)
 # test utilities
 #
 
+test_parser = subparsers.add_parser('test',
+    help="Test commands.")
+test_sp = test_parser.add_subparsers(dest='test_cmd')
+
+def test_proxy(args):
+    try:
+        import requests
+        requests.get(args.url, proxies=saq.PROXIES, verify=saq.CONFIG['proxy']['verify'] if 'verify' in saq.CONFIG['proxy'] else False)
+        sys.exit(0)
+    except Exception as e:
+        traceback.print_exc()
+        sys.exit(1)
+
+test_proxy_parser = test_sp.add_parser('proxy',
+    help="Text proxy access")
+test_proxy_parser.add_argument('url',
+    help="Test the proxy by accessing the given URL. Any content downloaded is discarded.")
+test_proxy_parser.set_defaults(func=test_proxy)
+
 def test_database_connections(args):
     import saq
     from saq.database import get_db_connection
@@ -3582,33 +3601,6 @@ if __name__ == '__main__':
     # initialize saq
     import saq
     saq.initialize(saq_home=saq_home, config_paths=[], logging_config_path=None, args=args, relative_dir=args.relative_dir)
-
-    # has the encryption password been set yet?
-    import saq.crypto
-    from saq.crypto import get_aes_key, InvalidPasswordError
-
-    # are we prompting for the decryption password?
-    if args.provide_decryption_password:
-        while True:
-            saq.ENCRYPTION_PASSWORD_PLAINTEXT = getpass.getpass("Enter the decryption password:")
-            try:
-                saq.ENCRYPTION_PASSWORD = get_aes_key(saq.ENCRYPTION_PASSWORD_PLAINTEXT)
-            except InvalidPasswordError:
-                logging.error("invalid encryption password")
-                continue
-
-            break
-
-    elif saq.crypto.encryption_key_set():
-        # if we're not prompting for it, are we running the encryption cache service yet?
-        logging.debug("reading encryption password from ecs")
-        saq.ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
-        if saq.ENCRYPTION_PASSWORD_PLAINTEXT is not None:
-            try:
-                saq.ENCRYPTION_PASSWORD = get_aes_key(saq.ENCRYPTION_PASSWORD_PLAINTEXT)
-            except InvalidPasswordError:
-                logging.error("read password from ecs but the password is wrong")
-                saq.ENCRYPTION_PASSWORD_PLAINTEXT = None
 
     if args.debug_on_error:
         def info(type, value, tb):

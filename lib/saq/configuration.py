@@ -4,6 +4,7 @@
 #
 
 import base64
+import json
 import logging
 import os, os.path
 import sys
@@ -30,6 +31,10 @@ class ExtendedConfigParser(ConfigParser):
 
 class EncryptedPasswordInterpolation(Interpolation):
     def before_get(self, parser, section, option, value, defaults):
+        # if we have not initialized encryption yet then just return as-is
+        if not saq.ENCRYPTION_INITIALIZED:
+            return value
+
         # if this is not an encrypted value then just return it as-is
         if value is None or not value.startswith('encrypted:'):
             return value
@@ -72,6 +77,17 @@ def load_configuration():
         
 def _load_configuration():
     default_config = ExtendedConfigParser(allow_no_value=True, interpolation=EncryptedPasswordInterpolation())
+
+    # XXX HACK
+    # optionally when unit testing, the local site passwords can be saved in etc/unittest.passwords.json
+    # this will automatically load these passwords, not requiring ecs running
+    if saq.UNIT_TESTING:
+        unittest_passwords_path = os.path.join(saq.SAQ_HOME, 'etc', 'unittest.passwords.json')
+        if os.path.exists(unittest_passwords_path):
+            logging.info(f"loading passwords from {unittest_passwords_path}")
+            with open(unittest_passwords_path, 'r') as fp:
+                default_config.encrypted_password_cache = json.load(fp)
+
     default_config.read(os.path.join(saq.SAQ_HOME, 'etc', 'saq.default.ini'))
 
     # first we apply the default configuration for integrations
@@ -212,4 +228,6 @@ WHERE
             from saq.crypto import decrypt_chunk
             return decrypt_chunk(base64.b64decode(row[0])).decode('utf8')
         else:
-            raise EncryptedPasswordError(key=key)
+            logging.debug(f"request to decrypt {key} without decryption key set")
+            return None
+            #raise EncryptedPasswordError(key=key)

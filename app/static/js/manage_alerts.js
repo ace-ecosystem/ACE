@@ -90,6 +90,37 @@ $(document).ready(function() {
 });
 
 $(document).ready(function() {
+    $('input[name="event_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="alert_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="ownership_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="disposition_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="contain_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="remediation_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+
     if ($('input[name="daterange"]').val() == '') {
         $('input[name="daterange"]').val(
             moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
