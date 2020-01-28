@@ -100,7 +100,11 @@
     <div class="panel-heading">
         <h3 class="panel-title">Alert Details <a role="button" data-toggle="collapse" data-target="#collapse_alert_details" aria-expanded="true" aria-controls="collapse_alert_details">(hide/show)</a></h3>
     </div>
-    <div class="panel-body" id="collapse_alert_details">
+    {%if ace_config['gui'].getboolean('alert_details_collapsed') %}
+        <div class="panel-body collapse" id="collapse_alert_details">
+    {% else %}
+        <div class="panel-body" id="collapse_alert_details">
+    {% endif %}
         <!-- by default we just pretty-print the json -->
         {% block alert_details %} <pre>{{ analysis.details | pprint }}</pre> {% endblock %}
     </div>
