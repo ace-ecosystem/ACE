@@ -38,6 +38,7 @@ function edit_event(event_id) {
     if (existing_dom_element.length != 0) {
         existing_dom_element.remove();
     }
+
     $.ajax({
         dataType: "html",
         url: 'edit_event_modal',

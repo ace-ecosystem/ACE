@@ -38,7 +38,6 @@ $(document).ready(function() {
         if (all_alert_uuids.length > 0) {
             $("#event-form").append('<input type="hidden" name="alert_uuids" value="' + all_alert_uuids.join(",") + '" />');
         }
-
     });
 
     $("#btn-realHours").click(function(e) {

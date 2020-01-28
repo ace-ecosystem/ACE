@@ -375,11 +375,7 @@ DROP TABLE IF EXISTS `malware_threat_mapping`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `malware_threat_mapping` (
   `malware_id` int(11) NOT NULL,
-<<<<<<< HEAD
   `type` enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD','CUSTOMER_THREAT') NOT NULL,
-=======
-  `type` enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','CLICK_FRAUD','CUSTOMER_THREAT','DENIAL_OF_SERVICE') NOT NULL,
->>>>>>> 58a6d7c94b7426eb2045be7b8257f233bc2e2c71
   PRIMARY KEY (`malware_id`,`type`),
   CONSTRAINT `malware_threat_mapping_ibfk_1` FOREIGN KEY (`malware_id`) REFERENCES `malware` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
