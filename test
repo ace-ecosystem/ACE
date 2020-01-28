@@ -32,6 +32,8 @@ fi
 
 export SAQ_UNIT_TESTING=1
 
+bin/build-unittest-database
+
 # if we passed no parameters then we run all the tests
 if [ "$#" -eq "0" ]
 then
@@ -47,6 +49,7 @@ then
         saq.collectors.test_smtp \
         saq.collectors.test_hunter \
         saq.collectors.test_query_hunter \
+        saq.collectors.test_splunk_hunter \
         saq.database.test \
         saq.error.test \
         saq.test_email \
