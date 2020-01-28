@@ -92,32 +92,32 @@ $(document).ready(function() {
 
 $(document).ready(function() {
     $('input[name="first_event_time"]').datetimepicker({
-        showSecond: true,
+        showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="first_alert_time"]').datetimepicker({
-        showSecond: true,
+        showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="first_ownership_time"]').datetimepicker({
-        showSecond: true,
+        showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="first_disposition_time"]').datetimepicker({
-        showSecond: true,
+        showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="first_contain_time"]').datetimepicker({
-        showSecond: true,
+        showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="first_remediation_time"]').datetimepicker({
-        showSecond: true,
+        showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
