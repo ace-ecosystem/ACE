@@ -26,7 +26,8 @@ class QRadarOffenseCollector(Collector):
                          *args, **kwargs)
 
         self.qradar_client = QRadarAPIClient(saq.CONFIG['qradar']['url'], 
-                                             saq.CONFIG['qradar']['token'])
+                                             saq.CONFIG['qradar']['token'],
+                                             error_directory=saq.TEMP_DIR)
 
         # load filters
         self.filters = {} # key = JSON field, value = Filter 

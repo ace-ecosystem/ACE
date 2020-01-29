@@ -20,9 +20,9 @@ from saq.analysis import Analysis, Observable, MODULE_PATH
 from saq.constants import *
 from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
+from saq.splunk import SplunkQueryObject
 from saq.util import create_timedelta, parse_event_time
 
-from splunklib import SplunkQueryObject
 
 import pytz
 import requests

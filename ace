@@ -153,14 +153,20 @@ def execute_hunt(args):
     if isinstance(hunt, QueryHunt):
         start_time = datetime.datetime.strptime(args.start_time, '%m/%d/%Y:%H:%M:%S')
         if args.timezone is not None:
-            start_time = start_time.astimezone(pytz.timezone(args.timezone))
+            start_time = pytz.timezone(args.timezone).localize(start_time)
+        else:
+            start_time = pytz.utc.localize(start_time)
 
         end_time = datetime.datetime.strptime(args.end_time, '%m/%d/%Y:%H:%M:%S')
         if args.timezone is not None:
-            end_time = end_time.astimezone(pytz.timezone(args.timezone))
+            end_time = pytz.timezone(args.timezone).localize(end_time)
+        else:
+            end_time = pytz.utc.localize(end_time)
 
         exec_kwargs['start_time'] = start_time
         exec_kwargs['end_time'] = end_time
+
+        hunt.query_result_file = args.query_result_file
 
     if args.json_dir is not None:
         os.makedirs(args.json_dir, exist_ok=True)
@@ -239,6 +245,8 @@ execute_hunt_parser.add_argument('-d', '--details', required=False, default=Fals
     help="Include the details of the submissions in the output.")
 execute_hunt_parser.add_argument('--submit-alerts', required=False, default=None, 
     help="Submit as alerts to the given host[:port]")
+execute_hunt_parser.add_argument('--query-result-file', required=False, default=None,
+    help="Valid only for query hunts. Save the raw query results to the given file.")
     
 execute_hunt_parser.set_defaults(func=execute_hunt)
 
@@ -1015,9 +1023,9 @@ def execute_remediation(args):
     sys.exit(0)
 
 def execute_email_remediation(args):
-    import saq.remediation
+    from saq.remediation.email import create_email_remediation_key
     setattr(args, 'type', 'email')
-    setattr(args, 'targets', [saq.remediation.email.create_email_remediation_key(args.message_id, args.email_address)])
+    setattr(args, 'targets', [create_email_remediation_key(args.message_id, args.email_address)])
     execute_remediation(args)
 
 # most of the arguments are shared between the remove and restore action
@@ -1345,9 +1353,45 @@ delete_user_parser = user_sp.add_parser('delete',
 delete_user_parser.add_argument('username', help="The username of the user to modify.")
 delete_user_parser.set_defaults(func=delete_user)
 
+def list_users(args):
+    import saq
+    from saq.database import User
+    print("{:<6}{:<15}{:<40}{}".format('Id', 'User', 'Name', 'TZ'))
+    for user in saq.db.query(User).order_by(User.username):
+        print("{:<6}{:<15}{:<40}{}".format(
+              user.id, 
+              user.username, 
+              '' if user.display_name is None else user.display_name, 
+              user.timezone))
+
+    sys.exit(0)
+
+list_users_parser = user_sp.add_parser('list',
+    help="List existing users in the system.")
+list_users_parser.set_defaults(func=list_users)
+
 # ============================================================================
 # test utilities
 #
+
+test_parser = subparsers.add_parser('test',
+    help="Test commands.")
+test_sp = test_parser.add_subparsers(dest='test_cmd')
+
+def test_proxy(args):
+    try:
+        import requests
+        requests.get(args.url, proxies=saq.PROXIES, verify=saq.CONFIG['proxy']['verify'] if 'verify' in saq.CONFIG['proxy'] else False)
+        sys.exit(0)
+    except Exception as e:
+        traceback.print_exc()
+        sys.exit(1)
+
+test_proxy_parser = test_sp.add_parser('proxy',
+    help="Text proxy access")
+test_proxy_parser.add_argument('url',
+    help="Test the proxy by accessing the given URL. Any content downloaded is discarded.")
+test_proxy_parser.set_defaults(func=test_proxy)
 
 def test_database_connections(args):
     import saq
@@ -3277,23 +3321,13 @@ config_encryption_parser = encryption_sp.add_parser('config',
     help="Configuration encryption management commands.")
 config_encryption_sp = config_encryption_parser.add_subparsers(dest='config_enc_cmd')
 
-def store_config_password(args):
+def set_encrypted_password(args):
     if saq.ENCRYPTION_PASSWORD is None:
         logging.error("missing encryption password (use the -p option or start the ecs service)\n")
         sys.exit(1)
 
-    # make sure the given configuration setting exists
-    section, key = args.config_setting.split('.', 1)
-    if section not in saq.CONFIG:
-        logging.error(f"unknown config section {section}")
-        sys.exit(1)
-
-    if key not in saq.CONFIG[section]:
-        logging.error(f"unknown value name {key} in section {section}")
-        sys.exit(1)
-
     while True:
-        password = getpass.getpass(f"Enter the value to be encrypted and stored for section {section} option {key}:")
+        password = getpass.getpass(f"Enter the data to be encrypted and stored:")
         password_2 = getpass.getpass("Re-enter the value for verification:")
 
         if password != password_2:
@@ -3302,31 +3336,24 @@ def store_config_password(args):
 
         break
 
-    from saq.configuration import store_encrypted_password
-    store_encrypted_password(section, key, password)
+    from saq.configuration import encrypt_password
+    encrypt_password(args.key, password)
     sys.exit(0)
 
-store_config_password_parser = subparsers.add_parser('store-config-password',
-    help="Encrypt and store a password as one of the configuration settings.")
-store_config_password_parser.add_argument('config_setting',
-    help="The configuration setting to set the password for.")
-store_config_password_parser.set_defaults(func=store_config_password)
+set_encrypted_password_parser = config_encryption_sp.add_parser('set',
+    help="Set a password in the system, storing the value encrypted in the database. You will be prompted for the password.")
+set_encrypted_password_parser.add_argument('key',
+    help="The key (name) of the password.")
+set_encrypted_password_parser.set_defaults(func=set_encrypted_password)
 
-store_config_password_parser = config_encryption_sp.add_parser('store',
-    help="Encrypt and store a password as one of the configuration settings.")
-store_config_password_parser.add_argument('config_setting',
-    help="The configuration setting to set the password for.")
-store_config_password_parser.set_defaults(func=store_config_password)
-
-def list_config_passwords(args):
-    from saq.configuration import get_encrypted_passwords
-    encrypted_passwords = get_encrypted_passwords()
-    if encrypted_passwords is None:
+def list_encrypted_passwords(args):
+    from saq.configuration import export_encrypted_passwords
+    encrypted_passwords = export_encrypted_passwords()
+    if not encrypted_passwords:
         print("no passwords have been encrypted")
-        return
+        sys.exit(0)
 
-    for key in encrypted_passwords.keys():
-        value = encrypted_passwords[key]
+    for key, value in encrypted_passwords.items():
         if value is None:
             value = "<encrypted>"
 
@@ -3334,40 +3361,73 @@ def list_config_passwords(args):
 
     sys.exit(0)
 
-list_config_passwords_parser = subparsers.add_parser('list-config-passwords',
-    help="List the config settings that have their password stored as an encrypted value.")
-list_config_passwords_parser.set_defaults(func=list_config_passwords)
+list_encrypted_passwords_parser = subparsers.add_parser('list-encrypted-passwords',
+    help="Lists the encrypted passwords.")
+list_encrypted_passwords_parser.set_defaults(func=list_encrypted_passwords)
 
-list_config_passwords_parser = config_encryption_sp.add_parser('list',
-    help="List the config settings that have their password stored as an encrypted value.")
-list_config_passwords_parser.set_defaults(func=list_config_passwords)
+list_encrypted_passwords_parser = config_encryption_sp.add_parser('list',
+    help="Lists the encrypted passwords.")
+list_encrypted_passwords_parser.set_defaults(func=list_encrypted_passwords)
 
-def delete_config_password(args):
-    from saq.configuration import delete_encrypted_password
-    section, key = args.config_setting.split('.', 1)
-    if section not in saq.CONFIG:
-        logging.error(f"unknown config section {section}")
-        sys.exit(1)
+def delete_encrypted_password(args):
+    from saq.configuration import delete_password
+    if delete_password(args.key):
+        print(f"password deleted")
+    else:
+        print(f"ERROR: unable to delete password")
 
-    if key not in saq.CONFIG[section]:
-        logging.error(f"unknown value name {key} in section {section}")
-        sys.exit(1)
-
-    count = delete_encrypted_password(section, key)
-    print(f"deleted {count} records")
     sys.exit(0)
 
-delete_config_password_parser = subparsers.add_parser('delete-config-password',
+delete_encrypted_password_parser = subparsers.add_parser('delete-encrypted-password',
     help="Deletes a given encrypted password.")
-delete_config_password_parser.add_argument('config_setting',
-    help="The configuration setting to delete the password for.")
-delete_config_password_parser.set_defaults(func=delete_config_password)
+delete_encrypted_password_parser.add_argument('key',
+    help="The name of the password to delete.")
+delete_encrypted_password_parser.set_defaults(func=delete_encrypted_password)
 
-delete_config_password_parser = config_encryption_sp.add_parser('delete',
+delete_encrypted_password_parser = config_encryption_sp.add_parser('delete',
     help="Deletes a given encrypted password.")
-delete_config_password_parser.add_argument('config_setting',
-    help="The configuration setting to delete the password for.")
-delete_config_password_parser.set_defaults(func=delete_config_password)
+delete_encrypted_password_parser.add_argument('key',
+    help="The name of the password to delete.")
+delete_encrypted_password_parser.set_defaults(func=delete_encrypted_password)
+
+def export_encrypted_passwords(args):
+    import saq.configuration
+
+    if args.file == '-':
+        fp = sys.stdout
+    else:
+        fp = open(args.file, 'w')
+
+    json.dump(saq.configuration.export_encrypted_passwords(), fp)
+    fp.write('\n')
+    fp.close()
+    sys.exit(0)
+
+export_encrypted_passwords_parser = config_encryption_sp.add_parser('export',
+    help="Exports the encrypted passwords to JSON.")
+export_encrypted_passwords_parser.add_argument('file',
+    help="""The name of the file to store the JSON. 
+            Use a file name of - to export to stdout.""")
+export_encrypted_passwords_parser.set_defaults(func=export_encrypted_passwords)
+
+def import_encrypted_passwords(args):
+    import saq.configuration
+
+    if args.file == '-':
+        fp = sys.stdin
+    else:
+        fp = open(args.file, 'r')
+
+    saq.configuration.import_encrypted_passwords(json.load(fp))
+    fp.close()
+    sys.exit(0)
+
+import_encrypted_passwords_parser = config_encryption_sp.add_parser('import',
+    help="Imports the encrypted passwords JSON generated by the export command.")
+import_encrypted_passwords_parser.add_argument('file',
+    help="""The name of the JSON export. 
+            Use a file name of - to import from stdin.""")
+import_encrypted_passwords_parser.set_defaults(func=import_encrypted_passwords)
 
 # move to bro integration
 def add_bro_http_whitelist(args):
@@ -3561,36 +3621,6 @@ if __name__ == '__main__':
     # initialize saq
     import saq
     saq.initialize(saq_home=saq_home, config_paths=[], logging_config_path=None, args=args, relative_dir=args.relative_dir)
-
-    # has the encryption password been set yet?
-    import saq.crypto
-    from saq.crypto import get_aes_key, InvalidPasswordError
-
-    # are we prompting for the decryption password?
-    if args.provide_decryption_password:
-        while True:
-            saq.ENCRYPTION_PASSWORD_PLAINTEXT = getpass.getpass("Enter the decryption password:")
-            try:
-                saq.ENCRYPTION_PASSWORD = get_aes_key(saq.ENCRYPTION_PASSWORD_PLAINTEXT)
-            except InvalidPasswordError:
-                logging.error("invalid encryption password")
-                continue
-
-            break
-
-    elif saq.crypto.encryption_key_set():
-        # if we're not prompting for it, are we running the encryption cache service yet?
-        logging.debug("reading encryption password from ecs")
-        saq.ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
-        if saq.ENCRYPTION_PASSWORD_PLAINTEXT is not None:
-            try:
-                saq.ENCRYPTION_PASSWORD = get_aes_key(saq.ENCRYPTION_PASSWORD_PLAINTEXT)
-            except InvalidPasswordError:
-                logging.error("read password from ecs but the password is wrong")
-                saq.ENCRYPTION_PASSWORD_PLAINTEXT = None
-
-    # NOTE we call this function if the user provides a password or not
-    saq.CONFIG.load_encrypted_passwords()
 
     if args.debug_on_error:
         def info(type, value, tb):

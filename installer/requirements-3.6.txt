@@ -43,7 +43,6 @@ setuptools_git
 six
 sphinx
 sphinx_rtd_theme
-splunklib
 tld
 tzlocal
 urlfinderlib

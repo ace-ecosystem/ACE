@@ -32,6 +32,8 @@ import signal
 import threading
 import sqlite3
 
+import pytz
+
 import saq
 from saq.collectors import Collector, Submission
 from saq.constants import *
@@ -73,6 +75,12 @@ class Hunt(object):
         # in that case we don't want to record any of the execution time stamps
         self.manual_hunt = False
 
+        # this property maps to the "tool_instance" property of alerts
+        # this shows where the alert came from
+        # by default we use localhost
+        # subclasses might use the address or url they are hitting for their queries
+        self.tool_instance = 'localhost'
+
     @property
     def last_executed_time(self):
         # if we don't already have this value then load it from the sqlite db
@@ -89,14 +97,20 @@ class Hunt(object):
                     return self._last_executed_time
                 else:
                     self._last_executed_time = row[0]
+                    if self._last_executed_time is not None and self._last_executed_time.tzinfo is None:
+                        self._last_executed_time = pytz.utc.localize(self._last_executed_time)
                     return self._last_executed_time
 
     @last_executed_time.setter
     def last_executed_time(self, value):
+        if value.tzinfo is None:
+            value = pytz.utc.localize(value)
+
         with open_hunt_db(self.type) as db:
             c = db.cursor()
             c.execute("UPDATE hunt SET last_executed_time = ? WHERE hunt_name = ?",
-                     (value, self.name))
+                     (value.replace(tzinfo=None), self.name))
+                     # NOTE -- datetime with tzinfo not supported by default timestamp converter in 3.6
             db.commit()
 
         self._last_executed_time = value
@@ -115,7 +129,7 @@ class Hunt(object):
         self.execution_lock.acquire()
 
         # remember the last time we executed
-        self.last_executed_time = datetime.datetime.now()
+        self.last_executed_time = local_time()
 
         # notify the manager that this is now executing
         # this releases the manager thread to continue processing hunts
@@ -126,9 +140,9 @@ class Hunt(object):
 
         try:
             logging.info(f"executing {self}")
-            start_time = datetime.datetime.now()
+            start_time = local_time()
             return self.execute(*args, **kwargs)
-            self.record_execution_time(datetime.datetime.now() - start_time)
+            self.record_execution_time(local_time() - start_time)
         except Exception as e:
             logging.error(f"{self} failed: {e}")
             report_exception()
@@ -192,14 +206,14 @@ class Hunt(object):
             return True
 
         # otherwise we're not ready until it's past the next execution time
-        return datetime.datetime.now() >= self.next_execution_time
+        return local_time() >= self.next_execution_time
 
     @property
     def next_execution_time(self):
         """Returns the next time this hunt should execute."""
         # if it hasn't executed at all yet, then execute it now
         if self.last_executed_time is None:
-            return datetime.datetime.now() 
+            return local_time()
 
         return self.last_executed_time + self.frequency
 
@@ -373,7 +387,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                 continue
             else:
                 # this one isn't ready so wait for this hunt to be ready
-                wait_time = (hunt.next_execution_time - datetime.datetime.now()).total_seconds()
+                wait_time = (hunt.next_execution_time - local_time()).total_seconds()
                 logging.info(f"next hunt is {hunt} @ {hunt.next_execution_time} ({wait_time} seconds)")
                 self.wait_control_event.wait(wait_time)
                 self.wait_control_event.clear()
@@ -386,7 +400,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
     def execute_hunt(self, hunt):
         # are we ready to run another one of these types of hunts?
         # NOTE this will BLOCK until a semaphore is ready OR this manager is shutting down
-        start_time = datetime.datetime.now()
+        start_time = local_time()
         hunt.semaphore = self.acquire_concurrency_lock()
 
         if self.manager_control_event.is_set():
@@ -396,7 +410,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
 
         # keep track of how long it's taking to acquire the resource
         if hunt.semaphore is not None:
-            self.record_semaphore_acquire_time(datetime.datetime.now() - start_time)
+            self.record_semaphore_acquire_time(local_time() - start_time)
 
         # start the execution of the hunt on a new thread
         hunt_execution_thread = threading.Thread(target=self.execute_threaded_hunt, 
@@ -461,7 +475,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
             return None
 
         result = None
-        start_time = datetime.datetime.now()
+        start_time = local_time()
         if self.concurrency_type == CONCURRENCY_TYPE_NETWORK_SEMAPHORE:
             logging.debug(f"acquiring network concurrency semaphore {self.concurrency_semaphore} "
                           f"for hunt type {self.hunt_type}")
@@ -477,7 +491,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                     break
 
         if result is not None:
-            total_seconds = (datetime.datetime.now() - start_time).total_seconds()
+            total_seconds = (local_time() - start_time).total_seconds()
             logging.debug(f"acquired concurrency semaphore for hunt type {self.hunt_type} in {total_seconds} seconds")
 
         return result
@@ -488,9 +502,12 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
             logging.debug(f"releasing concurrency semaphore for hunt type {self.hunt_type}")
             semaphore.release()
 
-    def load_hunts_from_config(self):
+    def load_hunts_from_config(self, hunt_filter=lambda hunt: True):
         """Loads the hunts from the configuration settings.
-           Returns True if all of the hunts were loaded correctly, False if any errors occurred."""
+           Returns True if all of the hunts were loaded correctly, False if any errors occurred.
+           The hunt_filter paramter defines an optional lambda function that takes the Hunt object
+           after it is loaded and returns True if the Hunt should be added, False otherwise.
+           This is useful for unit testing."""
         for rule_dir in self.rule_dirs:
             rule_dir = abs_path(rule_dir)
             if not os.path.isdir(rule_dir):
@@ -509,8 +526,11 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                     logging.debug(f"loading hunt from {hunt_config}")
                     hunt.load_from_ini(hunt_config)
                     hunt.type = self.hunt_type
-                    logging.info(f"loaded {hunt} from {hunt_config}")
-                    self.add_hunt(hunt)
+                    if hunt_filter(hunt):
+                        logging.info(f"loaded {hunt} from {hunt_config}")
+                        self.add_hunt(hunt)
+                    else:
+                        logging.debug(f"not loading {hunt} (hunt_filter returned False)")
 
         # remember that we loaded the hunts from the configuration file
         # this is used when we receive the signal to reload the hunts

@@ -250,9 +250,23 @@
                                       <input class="form-control" type="text" id="new_campaign" name="new_campaign" style="display:none;"></input>
                                     </td>
                                   </tr>
-                                  <tr><th>Comment</th><td><input class="form-control" type="text" id="event_comment" name="event_comment"></input></td></tr>
+                                    <tr>
+                                        <th>Comment</th>
+                                        <td><input class="form-control" type="text" id="event_comment" name="event_comment"></input>
+                                        </td>
+                                    </tr>
+                                </table>
+                                <br>
+                                <table>
+                                <tr><th>Event Times (UTC)</th></tr>
+                                <tr><th>Event Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="event_time" name="event_time" placeholder="None"/></td></tr>
+                                    <tr><th>Alert Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="alert_time" name="alert_time" placeholder="None"/></td></tr>
+                                    <tr><th>Ownership Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="ownership_time" name="ownership_time" placeholder="None"/></td></tr>
+                                    <tr><th>Disposition Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="disposition_time" name="disposition_time" placeholder="None"/></td></tr>
+                                    <tr><th>Contain Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="contain_time" name="contain_time" placeholder="None"/></td></tr>
+                                    <tr><th>Remediation Time</th><td style="padding-right:10px;"><input class="form-control" style="width:auto;" type="text" id="remediation_time" name="remediation_time" placeholder="None"/></td></tr>
                                 </table><br>
-                                <h4>Malware
+                                <h4>Threat
                                   <button onclick="new_malware_option()" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-plus-sign"></span> Add</button>
                                 </h4>
                             </div>
@@ -267,7 +281,7 @@
         </div>
     </div>
     {% endblock event_modal %}
-    
+
     {% block disposition_modal %}
     <div class="modal fade" id="disposition_modal" tabindex="-1" role="dialog" aria-labelledby="disposition_modal_label" aria-hidden="true">
         <div class="modal-dialog">

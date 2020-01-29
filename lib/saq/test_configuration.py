@@ -1,6 +1,7 @@
 # vim: sw=4:ts=4:et
 
 import logging
+import unittest
 
 import saq
 
@@ -13,32 +14,28 @@ class TestCase(ACEBasicTestCase):
         super().setUp(*args, **kwargs)
         set_encryption_password('test')
 
-    def test_store_encrypted_password(self):
-        store_encrypted_password('proxy', 'password', 'unittest')
-        self.assertTrue(os.path.exists(encrypted_password_db_path()))
-        p = get_encrypted_passwords()
-        self.assertEquals(p['proxy.password'], 'unittest')
+    def test_encrypt_decrypt_delete_password(self):
+        encrypt_password('password', 'Hello, World!')
+        self.assertEquals(decrypt_password('password'), 'Hello, World!')
+        self.assertEquals(delete_password('password'), 1)
+        self.assertIsNone(decrypt_password('password'))
+
+    @unittest.skip("no longer throws exception")
+    def test_no_decryption_key(self):
+        encrypt_password('password', 'Hello, World!')
+        saq.ENCRYPTION_PASSWORD = None
+        with self.assertRaises(EncryptedPasswordError):
+            decrypt_password('password')
 
     def test_encrypted_password_config(self):
-        store_encrypted_password('proxy', 'password', 'unittest')
-        load_configuration()
-        saq.CONFIG.load_encrypted_passwords()
+        encrypt_password('proxy.password', 'unittest')
+        saq.CONFIG['proxy']['password'] = 'encrypted:proxy.password'
         self.assertEquals(saq.CONFIG['proxy']['password'], 'unittest')
 
+    @unittest.skip("no longer throws exception")
     def test_encrypted_password_config_no_decryption_key(self):
-        store_encrypted_password('proxy', 'password', 'unittest')
+        encrypt_password('proxy.password', 'unittest')
+        saq.CONFIG['proxy']['password'] = 'encrypted:proxy.password'
         saq.ENCRYPTION_PASSWORD = None
-        load_configuration()
-        saq.CONFIG.load_encrypted_passwords()
-        with self.assertRaises(RuntimeError):
-            self.assertEquals(saq.CONFIG['proxy']['password'], None)
-
-    def test_delete_encrypted_password(self):
-        store_encrypted_password('proxy', 'password', 'unittest')
-        load_configuration()
-        saq.CONFIG.load_encrypted_passwords()
-        self.assertEquals(saq.CONFIG['proxy']['password'], 'unittest')
-        delete_encrypted_password('proxy', 'password')
-        load_configuration()
-        saq.CONFIG.load_encrypted_passwords()
-        self.assertEquals(saq.CONFIG['proxy']['password'], '')
+        with self.assertRaises(EncryptedPasswordError):
+            self.assertEquals(saq.CONFIG['proxy']['password'], 'unittest')

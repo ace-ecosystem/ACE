@@ -1,6 +1,7 @@
 import datetime
 import functools
 import logging
+import os
 import shutil
 import sys
 import threading
@@ -263,51 +264,95 @@ def _get_db_connection(name='ace'):
     if name:
         config_section = 'database_{}'.format(name)
 
-    if config_section not in saq.CONFIG:
-        raise ValueError("invalid database {}".format(name))
+    if saq.CONFIG is None or config_section not in saq.CONFIG:
+        # try using environment variables
+        if name == 'ace' and 'ACE_DB_NAME' in os.environ:
+            kwargs = {
+                'db': os.environ['ACE_DB_NAME'],
+                'user': os.environ['ACE_DB_USER'],
+                'passwd': os.environ['ACE_DB_PASSWORD'],
+                'charset': 'utf8mb4',
+            }
 
-    _section = saq.CONFIG[config_section]
-    kwargs = {
-        'db': _section['database'],
-        'user': _section['username'],
-        'passwd': _section['password'],
-        'charset': 'utf8mb4',
-    }
+            if 'ACE_DB_HOSTNAME' in os.environ:
+                kwargs['host'] = os.environ['ACE_DB_HOSTNAME']
 
-    if 'hostname' in _section:
-        kwargs['host'] = _section['hostname']
+            if 'ACE_DB_PORT' in os.environ:
+                kwargs['port'] = int(os.environ['ACE_DB_PORT'])
+            
+            if 'ACE_DB_UNIX_SOCKET' in os.environ:
+                kwargs['unix_socket'] = os.environ['ACE_DB_UNIX_SOCKET']
 
-    if 'port' in _section:
-        kwargs['port'] = _section.getint('port')
-    
-    if 'unix_socket' in _section:
-        kwargs['unix_socket'] = _section['unix_socket']
+            kwargs['init_command'] = 'SET NAMES utf8mb4'
 
-    kwargs['init_command'] = 'SET NAMES utf8mb4'
+            if 'ACE_DB_SSL_CA' in os.environ or 'ACE_DB_SSL_KEY' in os.environ or 'ACE_DB_SSL_CERT' in os.environ:
+                kwargs['ssl'] = {}
 
-    if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
-        kwargs['ssl'] = {}
+                if 'ACE_DB_SSL_CA' in os.environ:
+                    path = abs_path(os.environ['ACE_DB_SSL_CA'])
+                    if not os.path.exists(path):
+                        logging.error("ssl_ca file {} does not exist".format(path))
+                    else:
+                        kwargs['ssl']['ca'] = path
 
-        if 'ssl_ca' in _section and _section['ssl_ca']:
-            path = abs_path(_section['ssl_ca'])
-            if not os.path.exists(path):
-                logging.error("ssl_ca file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['ca'] = path
+                if 'ACE_DB_SSL_KEY' in os.environ:
+                    path = abs_path(os.environ['ACE_DB_SSL_KEY'])
+                    if not os.path.exists(path):
+                        logging.error("ssl_key file {} does not exist".format(path))
+                    else:
+                        kwargs['ssl']['key'] = path
 
-        if 'ssl_key' in _section and _section['ssl_key']:
-            path = abs_path(_section['ssl_key'])
-            if not os.path.exists(path):
-                logging.error("ssl_key file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['key'] = path
+                if 'ACE_DB_SSL_CERT' in os.environ:
+                    path = abs_path(os.environ['ACE_DB_SSL_CERT'])
+                    if not os.path.exists(path):
+                        logging.error("ssl_cert file {} does not exist".format(path))
+                    else:
+                        kwargs['ssl']['cert'] = path
+        else:
+            raise ValueError("invalid database {}".format(name))
+    else:
+        _section = saq.CONFIG[config_section]
+        kwargs = {
+            'db': _section['database'],
+            'user': _section['username'],
+            'passwd': _section['password'],
+            'charset': 'utf8mb4',
+        }
 
-        if 'ssl_cert' in _section and _section['ssl_cert']:
-            path = _section['ssl_cert']
-            if not os.path.exists(path):
-                logging.error("ssl_cert file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['cert'] = path
+        if 'hostname' in _section:
+            kwargs['host'] = _section['hostname']
+
+        if 'port' in _section:
+            kwargs['port'] = _section.getint('port')
+        
+        if 'unix_socket' in _section:
+            kwargs['unix_socket'] = _section['unix_socket']
+
+        kwargs['init_command'] = 'SET NAMES utf8mb4'
+
+        if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
+            kwargs['ssl'] = {}
+
+            if 'ssl_ca' in _section and _section['ssl_ca']:
+                path = abs_path(_section['ssl_ca'])
+                if not os.path.exists(path):
+                    logging.error("ssl_ca file {} does not exist (specified in {})".format(path, config_section))
+                else:
+                    kwargs['ssl']['ca'] = path
+
+            if 'ssl_key' in _section and _section['ssl_key']:
+                path = abs_path(_section['ssl_key'])
+                if not os.path.exists(path):
+                    logging.error("ssl_key file {} does not exist (specified in {})".format(path, config_section))
+                else:
+                    kwargs['ssl']['key'] = path
+
+            if 'ssl_cert' in _section and _section['ssl_cert']:
+                path = _section['ssl_cert']
+                if not os.path.exists(path):
+                    logging.error("ssl_cert file {} does not exist (specified in {})".format(path, config_section))
+                else:
+                    kwargs['ssl']['cert'] = path
 
     logging.debug("opening database connection {}".format(name))
     return pymysql.connect(**kwargs)
@@ -344,7 +389,7 @@ def get_db_connection(*args, **kwargs):
 # new school database connections
 import logging
 import os.path
-from sqlalchemy import Column, Integer, BigInteger, String, ForeignKey, DateTime, TIMESTAMP, DATE, text, create_engine, Text, Enum, func
+from sqlalchemy import Column, Integer, BigInteger, String, ForeignKey, DateTime, TIMESTAMP, DATE, DATETIME, text, create_engine, Text, Enum, func
 from sqlalchemy.dialects.mysql import BOOLEAN, VARBINARY, BLOB
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker, relationship, reconstructor, backref, validates, scoped_session
@@ -450,6 +495,13 @@ def retry(func, *args, **kwargs):
 
     return wrapper
 
+class Config(Base):
+
+    __tablename__ = 'config'
+
+    key = Column(String(512), primary_key=True)
+    value = Column(Text, nullable=False)
+
 class User(UserMixin, Base):
 
     __tablename__ = 'users'
@@ -510,6 +562,13 @@ class Event(Base):
     malware = relationship("saq.database.MalwareMapping", passive_deletes=True, passive_updates=True)
     alert_mappings = relationship("saq.database.EventMapping", passive_deletes=True, passive_updates=True)
     companies = relationship("saq.database.CompanyMapping", passive_deletes=True, passive_updates=True)
+    event_time = Column(DATETIME, nullable=True)
+    alert_time = Column(DATETIME, nullable=True)
+    ownership_time = Column(DATETIME, nullable=True)
+    disposition_time = Column(DATETIME, nullable=True)
+    contain_time = Column(DATETIME, nullable=True)
+    remediation_time = Column(DATETIME, nullable=True)
+
 
     @property
     def json(self):
@@ -520,6 +579,12 @@ class Event(Base):
             'comment': self.comment,
             'companies': self.company_names,
             'creation_date': str(self.creation_date),
+            'event_time': str(self.event_time),
+            'alert_time': str(self.alert_time),
+            'ownership_time': str(self.ownership_time),
+            'disposition_time': str(self.ownership_time),
+            'contain_time': str(self.contain_time),
+            'remediation_time': str(self.remediation_time),
             'disposition': self.disposition,
             'malware': [{mal.name: [t.type for t in mal.threats]} for mal in self.malware],
             'name': self.name,
@@ -626,10 +691,13 @@ class Event(Base):
 
     @property
     def wiki(self):
-        domain = saq.CONFIG['mediawiki']['domain']
-        date = self.creation_date.strftime("%Y%m%d").replace(' ', '+')
-        name = self.name.replace(' ', '+')
-        return "{}display/integral/{}+{}".format(domain, date, name)
+        if saq.CONFIG['mediawiki'].getboolean('enabled'):
+            domain = saq.CONFIG['mediawiki']['domain']
+            date = self.creation_date.strftime("%Y%m%d").replace(' ', '+')
+            name = self.name.replace(' ', '+')
+            return "{}display/integral/{}+{}".format(domain, date, name)
+        else:
+            return None
 
 class EventMapping(Base):
 
@@ -703,7 +771,7 @@ class Threat(Base):
     __tablename__ = 'malware_threat_mapping'
 
     malware_id = Column(Integer, ForeignKey('malware.id'), primary_key=True)
-    type = Column(Enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD'), primary_key=True, nullable=False)
+    type = Column(Enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD','CUSTOMER_THREAT'), primary_key=True, nullable=False)
 
     def __str__(self):
         return self.type
@@ -2337,6 +2405,8 @@ def initialize_database():
 def initialize_automation_user():
     # get the id of the ace automation account
     try:
+        #import pymysql
+        #pymysql.connections.DEBUG = True
         saq.AUTOMATION_USER_ID = saq.db.query(User).filter(User.username == 'ace').one().id
         saq.db.remove()
     except Exception as e:

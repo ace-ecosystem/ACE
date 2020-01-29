@@ -404,7 +404,7 @@ class TestCase(CollectorBaseTestCase):
             'database': 'ace-unittest-2',
             'username': saq.CONFIG['database_ace']['username'],
             'password': saq.CONFIG['database_ace']['password'],
-            'ssl_ca': saq.CONFIG['database_ace']['ssl_ca'],
+            #'ssl_ca': saq.CONFIG['database_ace']['ssl_ca'],
         }
 
         # start an engine to get a node created for the "ace" node (but not the ace_2 node)
@@ -465,7 +465,7 @@ class TestCase(CollectorBaseTestCase):
             'database': 'ace-unittest-2',
             'username': saq.CONFIG['database_ace']['username'],
             'password': saq.CONFIG['database_ace']['password'],
-            'ssl_ca': saq.CONFIG['database_ace']['ssl_ca'],
+            #'ssl_ca': saq.CONFIG['database_ace']['ssl_ca'],
         }
 
         # start an engine to get a node created for the "ace" node (but not the ace_2 node)

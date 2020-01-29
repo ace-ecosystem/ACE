@@ -34,7 +34,8 @@ apt-get -y install \
     rng-tools \
     memcached \
     default-jdk \
-    mysql-server || fail "package installation failed"
+    mysql-server \
+    wireshark-common || fail "package installation failed"
 
 apt-get -y install nodejs
 apt-get -y install npm

@@ -541,3 +541,37 @@ class CustomSSLAdapter(requests.adapters.HTTPAdapter):
         hostname = urllib.parse.urlparse(url).hostname
         super().cert_verify(conn=conn, url=url, verify=self.cert_file_map[hostname], cert=cert)
 
+class PreInitCustomSSLAdapter(requests.adapters.HTTPAdapter):
+    """Adapter to override certificate verifications.
+
+    This class used to add certificates BEFORE the adapter is
+    initialized.. for example, when replacing the adapter in
+    exchangelib. You must load your certificates without
+    initializing this class because Exchangelib initializes
+    the class and then mounts it to its own session later.
+
+    Important to note that whatever server/cert mappings are added
+    to this class exist for the entire application.
+    """
+    CERT_FILE_MAP = collections.defaultdict(lambda: True)
+    PROXIES = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @classmethod
+    def add_cert(cls, fqdn, cert):
+        """Add an FQDN and Cert pair to the cert file map."""
+        cls.CERT_FILE_MAP[fqdn] = cert
+
+    def cert_verify(self, conn, url, verify, cert):
+        """Override the HTTPAdapter 'cert_verify' to include specific certificates
+        for the FQDN/Cert pairs added by 'add_cert()'.
+        """
+        hostname = urllib.parse.urlparse(url).hostname
+        super().cert_verify(conn=conn, url=url, verify=self.CERT_FILE_MAP[hostname], cert=cert)
+
+    def send(self, *args, proxies=None, **kwargs):
+        if proxies is None:
+            return super().send(*args, **kwargs)
+        return super().send(*args, proxies=self.PROXIES, **kwargs)

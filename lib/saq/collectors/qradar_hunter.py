@@ -3,31 +3,79 @@
 # ACE QRadar Hunting System
 #
 
+import datetime
+import logging
 
 import saq
 from saq.constants import *
 from saq.error import report_exception
-from saq.collectors import Submission
 from saq.collectors.query_hunter import QueryHunt
-from saq.qradar import QRadarAPIClient, QueryCanceledError
+from saq.qradar import QRadarAPIClient, QueryCanceledError, QueryError
 from saq.util import *
+
+from requests.exceptions import HTTPError, ConnectionError
 
 class QRadarHunt(QueryHunt):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.tool_instance = saq.CONFIG['qradar']['url']
+
         # reference to the client used to make the request
         self.qradar_client = None
 
         # supports hash-style comments
         self.strip_comments = True
 
+    def extract_event_timestamp(self, event):
+        # the time of the event is always going to be in the deviceTimeFormatted field (see above)
+        # 2019-10-29 19:50:38.592 -0400
+        if 'deviceTime' in event:
+            return datetime.datetime.fromtimestamp(event['deviceTime'] / 1000.0).astimezone(pytz.UTC)
+        elif 'deviceTimeFormatted' in event:
+            return datetime.datetime.strptime(event['deviceTimeFormatted'], 
+                                              '%Y-%m-%d %H:%M:%S.%f %z').astimezone(pytz.UTC)
+            event_time = event_time.astimezone(pytz.UTC)
+        else:
+            logging.warning(f"{self} does not include deviceTime field for event time (defaulting to now)")
+            return local_time()
+
     def execute_query(self, start_time, end_time, unit_test_query_results=None):
+        self.qradar_client = QRadarAPIClient(saq.CONFIG['qradar']['url'], 
+                                             saq.CONFIG['qradar']['token'])
+
+        start_time_str = start_time.strftime('%Y-%m-%d %H:%M %z')
+        end_time_str = end_time.strftime('%Y-%m-%d %H:%M %z')
+
+        logging.info(f"executing hunt {self.name} with start time {start_time_str} end time {end_time_str}")
+
+        target_query = self.query.replace('<O_START>', start_time_str)\
+                                 .replace('<O_STOP>', end_time_str)
+
+        # TODO implement the continue check callback
+        if unit_test_query_results is not None:
+            query_results = unit_test_query_results
+        else:
+            try:
+                query_results = self.qradar_client.execute_aql_query(target_query, continue_check_callback=None)
+            except QueryError as e:
+                logging.error(f"query error: {e} for {self}")
+                return None
+            except QueryCanceledError:
+                logging.warning(f"query was canceled for {self}")
+                return None
+
+        return query_results['events']
+        
+    def old_execute_query(self, start_time, end_time, unit_test_query_results=None):
         submissions = [] # of Submission objects
         self.qradar_client = QRadarAPIClient(saq.CONFIG['qradar']['url'], 
                                              saq.CONFIG['qradar']['token'])
 
         start_time_str = start_time.strftime('%Y-%m-%d %H:%M %z')
         end_time_str = end_time.strftime('%Y-%m-%d %H:%M %z')
+
+        logging.info(f"executing hunt {self.name} with start time {start_time_str} end time {end_time_str}")
 
         target_query = self.query.replace('<O_START>', start_time_str)\
                                  .replace('<O_STOP>', end_time_str)
@@ -51,6 +99,12 @@ class QRadarHunt(QueryHunt):
         else:
             try:
                 query_results = self.qradar_client.execute_aql_query(target_query, continue_check_callback=None)
+            except (HTTPError, ConnectionError) as e:
+                logging.error(f"request failed: {e} for {self}")
+                return None
+            except QueryError as e:
+                logging.error(f"query error: {e} for {self}")
+                return None
             except QueryCanceledError:
                 logging.warning(f"query was canceled for {self}")
                 return None

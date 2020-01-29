@@ -252,12 +252,19 @@ class FireEyeAPIClient(object):
 
         logging.info(f"saved fireeye artifacts for {alert_uuid} to {zip_path}")
 
-        zip_fp = zipfile.ZipFile(zip_path)
-        for artifact_entry in json_result[KEY_ARTIFACTS_INFO_LIST]:
-            file_name = artifact_entry[KEY_ARTIFACT_NAME]
-            file_type = artifact_entry[KEY_ARTIFACT_TYPE]
-            logging.debug(f"extracting {file_name} type {file_type} from {zip_path}")
-            zip_fp.extract(file_name, path=target_dir)
+        try:
+            zip_fp = zipfile.ZipFile(zip_path)
+            for artifact_entry in json_result[KEY_ARTIFACTS_INFO_LIST]:
+                file_name = artifact_entry[KEY_ARTIFACT_NAME]
+                file_type = artifact_entry[KEY_ARTIFACT_TYPE]
+                logging.debug(f"extracting {file_name} type {file_type} from {zip_path}")
+                try:
+                    zip_fp.extract(file_name, path=target_dir)
+                except KeyError as e:
+                    logging.error(f"file {file_name} does not exist in the zip file {zip_path}")
+                    continue
+        except zipfile.BadZipFile as e:
+            logging.error(f"fireeye artifact file {zip_path} for {alert_uuid} is bad: {e}")
 
         os.remove(zip_path)
         return json_result
@@ -266,5 +273,8 @@ class FireEyeAPIClient(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        self.close()
+        try:
+            self.close()
+        except Exception as e:
+            logging.error(f"attempt to close fireeye connection failed: {e}")
         return False
