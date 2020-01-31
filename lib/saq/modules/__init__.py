@@ -254,6 +254,12 @@ class AnalysisModule(object):
         except KeyError:
             raise KeyError("module {} missing configuration item {}".format(self, config_name))
 
+    def verify_config_item_has_value(self, config_key):
+        """Verifies the given configuration exists and has a value. Use this from verify_environment."""
+        self.verify_config_exists(config_key)
+        if not self.config[config_key]:
+            raise TypeError("module {} cofiguration item {} is not defined.".format(self, config_key))
+
     def verify_path_exists(self, path):
         """Verifies the given path exists.  If the path is relative then it is relative to SAQ_HOME."""
         _path = path
