@@ -3270,12 +3270,12 @@ def edit_event():
     disposition_time = request.form.get('disposition_time', None)
     contain_time = request.form.get('contain_time', None)
     remediation_time = request.form.get('remediation_time', None)
-    event_time = None if event_time in ['', 'None'] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
-    alert_time = None if alert_time in ['', 'None'] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
-    ownership_time = None if ownership_time in ['', 'None'] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
-    disposition_time = None if disposition_time in ['', 'None'] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
-    contain_time = None if contain_time in ['', 'None'] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
-    remediation_time = None if remediation_time in ['', 'None'] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
+    event_time = None if event_time in ['', 'None', None] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
+    alert_time = None if alert_time in ['', 'None', None] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
+    ownership_time = None if ownership_time in ['', 'None', None] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
+    disposition_time = None if disposition_time in ['', 'None', None] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
+    contain_time = None if contain_time in ['', 'None', None] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
+    remediation_time = None if remediation_time in ['', 'None', None] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
 
     # Enforce logical chronoglogy
     dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if d is not None]
