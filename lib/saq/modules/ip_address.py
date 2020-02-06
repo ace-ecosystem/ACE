@@ -1,4 +1,4 @@
-
+import os
 import sys
 import logging
 
@@ -152,16 +152,33 @@ class IPIAnalyzer(AnalysisModule):
     @property
     def ipi_config(self):
         if not self.__ipi_config:
-            self.__ipi_config = load_ipi_config(saved_config_path=self.override_config_path)
+            if self.override_config_path:
+                self.__ipi_config = load_ipi_config(saved_config_path=self.override_config_path)
+            else:
+                self.__ipi_config = load_ipi_config()
         return self.__ipi_config
 
     @property
     def blacklist_maps(self):
-        return self.ipi_config['default']['blacklists']
+        _bl_map = {}
+        for bl_type, bl_path in self.ipi_config['default']['blacklists'].items():
+            _bl_map[bl_type] = bl_path
+            if os.path.exists(bl_path):
+                continue
+            if os.path.exists(os.path.join(saq.SAQ_HOME, bl_path)):
+                _bl_map[bl_type] = os.path.exists(os.path.join(saq.SAQ_HOME, bl_path))
+        return _bl_map
 
     @property
     def whitelist_maps(self):
-        return self.ipi_config['default']['whitelists']
+        _bl_map = {}
+        for bl_type, bl_path in self.ipi_config['default']['whitelists'].items():
+            _bl_map[bl_type] = bl_path
+            if os.path.exists(bl_path):
+                continue
+            if os.path.exists(os.path.join(saq.SAQ_HOME, bl_path)):
+                _bl_map[bl_type] = os.path.exists(os.path.join(saq.SAQ_HOME, bl_path))
+        return _bl_map
 
     @property
     def use_proxy(self):
@@ -178,8 +195,8 @@ class IPIAnalyzer(AnalysisModule):
             proxies = saq.PROXIES if self.use_proxy else None
             # Create Inspector with MaxMind API
             mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=proxies),
-                            blacklists=self.blacklist_map,
-                            whitelists=self.whitelist_map)
+                            blacklists=self.blacklist_maps,
+                            whitelists=self.whitelist_maps)
         except Exception as e:
             logging.error("Failed to create MaxMind Inspector: {}".format(e))
             return False
