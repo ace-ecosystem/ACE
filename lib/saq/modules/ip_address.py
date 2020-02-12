@@ -1,8 +1,9 @@
-
+import os
 import sys
 import logging
 
 from ip_inspector import maxmind
+from ip_inspector.config import load as load_ipi_config
 from ip_inspector import Inspector, Inspected_IP
 
 import saq
@@ -110,6 +111,10 @@ class IPIAnalyzer(AnalysisModule):
     """Lookup an IP address in MaxMind's free GeoLite2 databases and wrap those results around a whitelist/blacklist check.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__ipi_config = None
+
     @property
     def generated_analysis_type(self):
         return IpInspectorAnalysis
@@ -128,6 +133,54 @@ class IPIAnalyzer(AnalysisModule):
         return tag_list.split(',')
 
     @property
+    def override_config_path(self):
+        if 'override_config_path' not in self.config:
+            logging.warning("Missing expected default config field.")
+            return False
+        ocp = self.config['override_config_path']
+        if not ocp:
+            # value not set
+            return None
+        if os.path.exists(ocp):
+            return ocp
+        ocp = os.path.join(saq.SAQ_HOME, ocp)
+        if os.path.exists(ocp):
+            return ocp
+        logging.warning("Can't find '{}'".format(self.config['override_config_path']))
+        return False
+
+    @property
+    def ipi_config(self):
+        if not self.__ipi_config:
+            if self.override_config_path:
+                self.__ipi_config = load_ipi_config(saved_config_path=self.override_config_path)
+            else:
+                self.__ipi_config = load_ipi_config()
+        return self.__ipi_config
+
+    @property
+    def blacklist_maps(self):
+        _bl_map = {}
+        for bl_type, bl_path in self.ipi_config['default']['blacklists'].items():
+            _bl_map[bl_type] = bl_path
+            if os.path.exists(bl_path):
+                continue
+            if os.path.exists(os.path.join(saq.SAQ_HOME, bl_path)):
+                _bl_map[bl_type] = os.path.exists(os.path.join(saq.SAQ_HOME, bl_path))
+        return _bl_map
+
+    @property
+    def whitelist_maps(self):
+        _bl_map = {}
+        for bl_type, bl_path in self.ipi_config['default']['whitelists'].items():
+            _bl_map[bl_type] = bl_path
+            if os.path.exists(bl_path):
+                continue
+            if os.path.exists(os.path.join(saq.SAQ_HOME, bl_path)):
+                _bl_map[bl_type] = os.path.exists(os.path.join(saq.SAQ_HOME, bl_path))
+        return _bl_map
+
+    @property
     def use_proxy(self):
         return self.config['use_proxy']
 
@@ -141,7 +194,9 @@ class IPIAnalyzer(AnalysisModule):
         try:
             proxies = saq.PROXIES if self.use_proxy else None
             # Create Inspector with MaxMind API
-            mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=proxies))
+            mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=proxies),
+                            blacklists=self.blacklist_maps,
+                            whitelists=self.whitelist_maps)
         except Exception as e:
             logging.error("Failed to create MaxMind Inspector: {}".format(e))
             return False
