@@ -5,17 +5,6 @@
 # instead of being "installed" into some other directory
 #
 
-# make sure the correct locale is set for supporting unicode characters
-sudo update-locale LANG=en_US.utf8
-# uncomment the following for apache2 to use the system locale 
-sudo sed -i '/^#. \/etc\/default\/locale/s/^#//' /etc/apache2/envvars 
-
-# If ACE is cloned from Github the dir becomes /opt/ACE but we want it lower case at /opt/ace
-if [ ! -d /opt/ace ]; then
-	echo renaming /opt/ACE to /opt/ace
-	mv /opt/ACE /opt/ace
-fi
-
 # make sure we've already set the SAQ_HOME environment variable
 if [ -z "${SAQ_HOME}" ]
 then
@@ -85,7 +74,6 @@ create_ace_dirs || fail "cannot create required directories"
 
 # install the required packages
 sudo -E installer/install_packages.sh || fail "package installation failed"
-#sudo -H -E installer/install_python_packages.sh || fail "python package installation failed"
 sudo -H -E python3 -m pip install -r installer/requirements-3.6.txt -U || fail "python3.6 package installation failed"
 sudo -H -E python2 -m pip install -r installer/requirements-2.7.txt -U || fail "python2.7 package installation failed"
 if [ "${use_local_mysql}" == "Yes" ]
@@ -99,7 +87,23 @@ then
 fi
 
 # set up environment
-echo -e "\\nsource $SAQ_HOME/load_environment" >> ~/.bashrc
+if grep "source \"$SAQ_HOME/load_environment\"" ~/.bashrc > /dev/null
+then
+    echo -e "\\nsource $SAQ_HOME/load_environment" >> ~/.bashrc
+fi
+
+if [ ! -e "$SAQ_HOME/load_environment" ]
+then
+    cat > "$SAQ_HOME/load_environment" <<EOF
+export SAQ_HOME="$SAQ_HOME"
+export PATH="\$PATH:\$SAQ_HOME:\$SAQ_HOME/bin:/opt/site/bin"
+
+if [ -e "\$SAQ_HOME/load_local_environment" ]
+then
+    source "\$SAQ_HOME/load_local_environment"
+fi
+EOF
+fi
 
 for l in ace api apache amc_mda carbon_black email_scanner http_scanner gui falcon_collector
 do

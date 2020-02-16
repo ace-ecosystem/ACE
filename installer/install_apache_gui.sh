@@ -11,6 +11,11 @@ then
 	exit 1
 fi
 
+# make sure the correct locale is set for supporting unicode characters
+sudo update-locale LANG=en_US.utf8
+# uncomment the following for apache2 to use the system locale 
+sudo sed -i '/^#. \/etc\/default\/locale/s/^#//' /etc/apache2/envvars 
+
 # have we already configured apache for ace?
 if [ -L /etc/apache2/sites-available/ace.conf ]; then exit 0; fi
 
