@@ -18,6 +18,8 @@ then
 	done
 fi
 
+export SAQ_USER=$(whoami)
+
 if [ ! -d "${SAQ_HOME}" ]
 then
 	echo "Your SAQ_HOME environment variable points to ${SAQ_HOME} which does not exist."
