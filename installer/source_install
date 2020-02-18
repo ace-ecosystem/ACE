@@ -89,7 +89,7 @@ then
 fi
 
 # set up environment
-if grep "source \"$SAQ_HOME/load_environment\"" ~/.bashrc > /dev/null
+if ! grep "source \"$SAQ_HOME/load_environment\"" ~/.bashrc > /dev/null
 then
     echo -e "\\nsource $SAQ_HOME/load_environment" >> ~/.bashrc
 fi

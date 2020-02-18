@@ -48,7 +48,7 @@ tld
 tzlocal
 urlfinderlib
 vxstreamlib
-yara_scanner
+yara_scanner==1.0.15
 python-whois
 gglsbl-rest-client
 argcomplete
