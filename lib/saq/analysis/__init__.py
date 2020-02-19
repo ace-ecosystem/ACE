@@ -552,6 +552,7 @@ class Analysis(TaggableObject, DetectableObject):
         """Saves the current results of the Analysis to disk."""
 
         if not self._is_modified:
+            #logging.debug(f"{self} was not modified so not saving")
             return
 
         # the only thing we actually save is the self.details object
@@ -559,7 +560,7 @@ class Analysis(TaggableObject, DetectableObject):
 
         # do we not have anything to save?
         if not self.external_details_loaded and self._details is None:
-            #logging.debug("called save() on analysis {} but nothing to save".format(self))
+            logging.debug(f"called save() on analysis {self} but nothing to save")
             return
 
         if self.storage_dir is None:
@@ -1114,9 +1115,44 @@ class Analysis(TaggableObject, DetectableObject):
         """Override this function to implement any upgrade routines for the details of the analysis."""
         return None
 
-class DeprecatedAnalysis(Analysis):
-    """A dummy class used when the data.json references an Analysis class that is no longer available."""
-    pass
+class ReadOnlyAnalysis(Analysis):
+    """Represents an Analysis that cannot be modified."""
+
+    def set_modified(self):
+        pass
+
+    def save(self):
+        pass
+
+    def flush(self):
+        pass
+
+    def reset(self):
+        pass
+
+    def discard_details(self):
+        pass
+
+    def clear_observables(self):
+        pass
+
+    def add_observable(self, *args, **kwargs):
+        pass
+
+    def _add_observable(self, observable):
+        pass
+
+    def _add_observable_by_spec(self, o_type, o_value, o_time=None):
+        pass
+
+    def tag_detection(self, source, event, tag):
+        pass
+
+class DeprecatedAnalysis(ReadOnlyAnalysis):
+    """Used when the data.json references an Analysis class that is no longer available."""
+
+class ErrorAnalysis(ReadOnlyAnalysis):
+    """Used when an Analysis object fails to load as a fallback."""
 
 class Relationship(object):
     """Represents a relationship to another object."""
@@ -1223,6 +1259,11 @@ class Observable(TaggableObject, DetectableObject):
     def matches(self, value):
         """Returns True if the given value matches this value of this observable.  This can be overridden to provide more advanced matching such as CIDR for ipv4."""
         return self.value == value
+
+    @property
+    def display_preview(self):
+        """Returns a value that can be used by a display to preview the observation."""
+        return None 
 
     @property
     def display_value(self):
@@ -1860,20 +1901,17 @@ class Observable(TaggableObject, DetectableObject):
                     a = DeprecatedAnalysis()
                     break
 
-            if a is None:
+            while a is None:
 
-                #logging.debug("dynamically loading {0}".format(module_path))
                 _module, _class, _instance = SPLIT_MODULE_PATH(module_path)
-                #m = re.match(r'^([^:]+):(.+)$', module_path)
-                #assert m is not None
-                #(_module, _class) = m.groups()
 
                 try:
                     m = importlib.import_module(_module)
                 except Exception as e:
                     logging.error("unable to import module {}: {}".format(_module, e))
                     report_exception()
-                    return None
+                    a = ErrorAnalysis()
+                    break
 
                 try:
                     c = getattr(m, _class)
@@ -1881,7 +1919,8 @@ class Observable(TaggableObject, DetectableObject):
                     logging.error("unable to import class {} from module {}: {}".format(
                         _class, _module, e))
                     report_exception()
-                    return None
+                    a = ErrorAnalysis()
+                    break
 
                 try:
                     a = c()
@@ -1889,7 +1928,10 @@ class Observable(TaggableObject, DetectableObject):
                     logging.error("unable to create instance of {} from module {}: {}".format(
                         _class, _module, e))
                     report_exception()
-                    return None
+                    a = ErrorAnalysis()
+                    break
+
+                break
 
             a.root = self.root # set the analysis root
             a.observable = self # set the source of the analysis

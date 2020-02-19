@@ -8,22 +8,16 @@ import logging
 import saq
 from saq.database import Remediation
 
-from saq.remediation import EmailRemediationSystem, request_remediation, request_restoration, \
-                            initialize_remediation_system_manager, start_remediation_system_manager, stop_remediation_system_manager, \
-                            REMEDIATION_STATUS_COMPLETED
+from saq.remediation import *
 from saq.remediation.constants import *
 from saq.test import *
 
 from sqlalchemy import func, and_
 
-class TestRemediationSystem(EmailRemediationSystem):
+class TestRemediationSystem(RemediationSystem):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.remediation_executed = threading.Event()
-
-    @property
-    def remediation_type(self):
-        return REMEDIATION_TYPE_TEST
 
     def execute_request(self, remediation):
         if '<fail>' in remediation.key:
@@ -37,26 +31,45 @@ class TestRemediationSystem(EmailRemediationSystem):
 
 class TestCase(ACEBasicTestCase):
 
-    def test_automation_start_stop(self):
-        initialize_remediation_system_manager()
-        start_remediation_system_manager()
-        stop_remediation_system_manager()
+    def setUp(self, *args, **kwargs):
+        super().setUp(*args, **kwargs)
+
+        saq.CONFIG.add_section('remediation_system_test')
+        s = saq.CONFIG['remediation_system_test']
+        s['module'] = 'saq.remediation.test'
+        s['class'] = 'TestRemediationSystem'
+        s['type'] = 'test'
+        s['enabled'] = 'yes'
+
+    def _start_manager(self):
+        manager = RemediationSystemManager()
+        manager.start_service(threaded=True)
+        wait_for(lambda: 'test' in manager.systems \
+                         and manager.systems['test'].manager_thread is not None \
+                         and manager.systems['test'].manager_thread.is_alive())
+
+        return manager
+        
+
+    def test_start_stop(self):
+        manager = self._start_manager()
+        manager.stop_service()
+        manager.wait_service()
 
     def test_requests(self):
-        initialize_remediation_system_manager()
-        remediation_id = request_remediation(REMEDIATION_TYPE_TEST, '<message_id>', '<recipient@localhost>',
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+        manager = self._start_manager()
+        remediation = request_remediation(REMEDIATION_TYPE_TEST, 'some_value', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
 
-        self.assertTrue(isinstance(remediation_id, int))
-        r = saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
+        self.assertTrue(isinstance(remediation.id, int))
+        r = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
         self.assertIsNotNone(r)
 
-        self.assertEquals(r.id, remediation_id)
+        self.assertEquals(r.id, remediation.id)
         self.assertEquals(r.type, REMEDIATION_TYPE_TEST)
         self.assertEquals(r.action, REMEDIATION_ACTION_REMOVE)
         self.assertTrue(isinstance(r.insert_date, datetime.datetime))
         self.assertEquals(r.user_id, saq.test.UNITTEST_USER_ID)
-        self.assertEquals(r.key, '<message_id>:<recipient@localhost>')
+        self.assertEquals(r.key, 'some_value')
         self.assertIsNone(r.result)
         self.assertIsNone(r.comment)
         self.assertIsNone(r.successful)
@@ -65,19 +78,18 @@ class TestCase(ACEBasicTestCase):
         self.assertIsNone(r.lock_time)
         self.assertEquals(r.status, REMEDIATION_STATUS_NEW)
 
-        remediation_id = request_restoration(REMEDIATION_TYPE_TEST, '<message_id>', '<recipient@localhost>',
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+        remediation = request_restoration(REMEDIATION_TYPE_TEST, 'some_value', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
 
-        self.assertTrue(isinstance(remediation_id, int))
-        r = saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
+        self.assertTrue(isinstance(remediation.id, int))
+        r = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
         self.assertIsNotNone(r)
 
-        self.assertEquals(r.id, remediation_id)
+        self.assertEquals(r.id, remediation.id)
         self.assertEquals(r.type, REMEDIATION_TYPE_TEST)
         self.assertEquals(r.action, REMEDIATION_ACTION_RESTORE)
         self.assertTrue(isinstance(r.insert_date, datetime.datetime))
         self.assertEquals(r.user_id, saq.test.UNITTEST_USER_ID)
-        self.assertEquals(r.key, '<message_id>:<recipient@localhost>')
+        self.assertEquals(r.key, 'some_value')
         self.assertIsNone(r.result)
         self.assertIsNone(r.comment)
         self.assertIsNone(r.successful)
@@ -86,100 +98,97 @@ class TestCase(ACEBasicTestCase):
         self.assertIsNone(r.lock_time)
         self.assertEquals(r.status, REMEDIATION_STATUS_NEW)
 
-    def test_automation_queue(self):
-        manager = initialize_remediation_system_manager()
-        start_remediation_system_manager()
+        manager.stop_service()
+        manager.wait_service()
 
-        remediation_id = request_remediation(REMEDIATION_TYPE_TEST, '<message_id>', '<recipient@localhost>', 
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+    def test_automation_queue(self):
+        manager = self._start_manager()
+        remediation = request_remediation(REMEDIATION_TYPE_TEST, 'some_value', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
+
         wait_for(
             lambda: len(saq.db.query(Remediation).filter(
-                Remediation.id == remediation_id, 
+                Remediation.id == remediation.id, 
                 Remediation.status == REMEDIATION_STATUS_COMPLETED).all()) > 0,
             1, 5)
 
-        stop_remediation_system_manager()
+        manager.stop_service()
+        manager.wait_service()
         saq.db.commit()
 
         self.assertTrue(manager.systems['test'].remediation_executed.is_set())
-        self.assertEquals(len(saq.db.query(Remediation).filter(Remediation.id == remediation_id, Remediation.status == REMEDIATION_STATUS_COMPLETED).all()), 1)
+        self.assertEquals(len(saq.db.query(Remediation).filter(Remediation.id == remediation.id, Remediation.status == REMEDIATION_STATUS_COMPLETED).all()), 1)
 
     def test_worker_loop(self):
 
         # test that a single worker can work two items
         
         # create a single worker
-        saq.CONFIG['service_engine']['max_concurrent_remediation_count'] = '1'
-
-        manager = initialize_remediation_system_manager()
-        start_remediation_system_manager()
-
-        remediation_id_1 = request_remediation(REMEDIATION_TYPE_TEST, '<message_id_1>', '<recipient_1@localhost>', 
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+        saq.CONFIG['remediation_system_test']['max_concurrent_remediation_count'] = '1'
+        manager = self._start_manager()
+        remediation_1 = request_remediation(REMEDIATION_TYPE_TEST, 'some_value', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
 
         wait_for(
             lambda: len(saq.db.query(Remediation).filter(
-                Remediation.id == remediation_id_1, 
+                Remediation.id == remediation_1.id, 
                 Remediation.status == REMEDIATION_STATUS_COMPLETED).all()) > 0,
             1, 5)
 
-        remediation_id_2 = request_remediation(REMEDIATION_TYPE_TEST, '<message_id_2>', '<recipient_2@localhost>', 
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+        remediation_2 = request_remediation(type=REMEDIATION_TYPE_TEST, key='some_value_2', 
+                                            user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
 
         wait_for(
             lambda: len(saq.db.query(Remediation).filter(
-                Remediation.id == remediation_id_2, 
+                Remediation.id == remediation_2.id, 
                 Remediation.status == REMEDIATION_STATUS_COMPLETED).all()) > 0,
             1, 5)
 
         saq.db.commit()
-        self.assertEquals(len(saq.db.query(Remediation).filter(Remediation.id == remediation_id_1, Remediation.status == REMEDIATION_STATUS_COMPLETED).all()), 1)
-        self.assertEquals(len(saq.db.query(Remediation).filter(Remediation.id == remediation_id_2, Remediation.status == REMEDIATION_STATUS_COMPLETED).all()), 1)
+        self.assertEquals(len(saq.db.query(Remediation).filter(Remediation.id == remediation_1.id, Remediation.status == REMEDIATION_STATUS_COMPLETED).all()), 1)
+        self.assertEquals(len(saq.db.query(Remediation).filter(Remediation.id == remediation_2.id, Remediation.status == REMEDIATION_STATUS_COMPLETED).all()), 1)
 
-        stop_remediation_system_manager()
+        manager.stop_service()
+        manager.wait_service()
 
     def test_automation_failure(self):
-        manager = initialize_remediation_system_manager()
-        start_remediation_system_manager()
-
-        remediation_id = request_remediation(REMEDIATION_TYPE_TEST, '<fail>', '<recipient@localhost>', 
-                                             user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+        manager = self._start_manager()
+        remediation = request_remediation(REMEDIATION_TYPE_TEST, '<fail>', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
 
         wait_for(
             lambda: len(saq.db.query(Remediation).filter(
-                Remediation.id == remediation_id, 
+                Remediation.id == remediation.id, 
                 Remediation.status == REMEDIATION_STATUS_COMPLETED).all()) > 0,
             1, 5)
 
-        stop_remediation_system_manager()
+        manager.stop_service()
+        manager.wait_service()
         saq.db.commit()
 
         self.assertFalse(manager.systems['test'].remediation_executed.is_set())
-        self.assertEquals(len(saq.db.query(Remediation).filter(Remediation.id == remediation_id, Remediation.status == REMEDIATION_STATUS_COMPLETED).all()), 1)
+        self.assertEquals(len(saq.db.query(Remediation).filter(Remediation.id == remediation.id, Remediation.status == REMEDIATION_STATUS_COMPLETED).all()), 1)
         self.assertEquals(log_count('unable to execute remediation item'), 1)
 
         saq.db.commit()
-        r = saq.db.query(Remediation).filter(Remediation.id == remediation_id).one()
+        r = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
         self.assertFalse(r.successful)
         self.assertTrue('forced failure' in r.result)
 
     def test_automation_cleanup(self):
 
-        from saq.database import Remediation
-        
-        # make sure a lock uuid is created
-        manager = initialize_remediation_system_manager()
-        system = manager.systems['test']
-        start_remediation_system_manager()
-        stop_remediation_system_manager()
+        # start it up so we generate the lock
+        manager = self._start_manager()
+        manager.stop_service()
+        manager.wait_service()
+
+        # make sure we got a lock
+        self.assertIsNotNone(manager.systems['test'].lock)
+        existing_lock = manager.systems['test'].lock
 
         # insert a new work request
-        remediation_id = system.request_remediation('<message_id>', '<recipient@localhost>', 
-                                                    user_id=saq.test.UNITTEST_USER_ID, company_id=saq.COMPANY_ID)
+        remediation = saq.remediation.request_remediation(REMEDIATION_TYPE_TEST, 'some_value', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
 
         # pretend it started processing
         saq.db.execute(Remediation.__table__.update().values(
-            lock=system.lock,
+            lock=existing_lock,
             lock_time=func.now(),
             status=REMEDIATION_STATUS_IN_PROGRESS).where(and_(
             Remediation.company_id == saq.COMPANY_ID,
@@ -188,14 +197,54 @@ class TestCase(ACEBasicTestCase):
         saq.db.commit()
 
         # start up the system again
-        manager = initialize_remediation_system_manager()
-        start_remediation_system_manager()
+        manager = self._start_manager()
+        # make sure it started back up with the same lock
+        self.assertEquals(manager.systems['test'].lock, existing_lock)
 
         # and it should process that job
         wait_for(
             lambda: len(saq.db.query(Remediation).filter(
-                Remediation.id == remediation_id, 
+                Remediation.id == remediation.id, 
                 Remediation.status == REMEDIATION_STATUS_COMPLETED).all()) > 0,
             1, 5)
 
-        stop_remediation_system_manager()
+        manager.stop_service()
+        manager.wait_service()
+
+    def test_execute_now(self):
+        remediation = execute_remediation(REMEDIATION_TYPE_TEST, 'some_value', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
+        self.assertTrue(isinstance(remediation, Remediation))
+        self.assertEquals(remediation.status, REMEDIATION_STATUS_COMPLETED)
+        self.assertTrue(remediation.successful)
+        self.assertEquals(remediation.result, 'completed')
+
+    def test_execute_now_while_running(self):
+        # execute a remediation WHILE the remediation service is running
+        manager = self._start_manager()
+
+        remediation = execute_remediation(REMEDIATION_TYPE_TEST, 'some_value', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
+        self.assertTrue(isinstance(remediation, Remediation))
+        self.assertEquals(remediation.status, REMEDIATION_STATUS_COMPLETED)
+        self.assertTrue(remediation.successful)
+        self.assertEquals(remediation.result, 'completed')
+
+        # make sure the lock used by the Remediation object is not the same as the lock used by the service
+        self.assertIsNotNone(remediation.lock)
+        self.assertNotEquals(remediation.lock, manager.systems['test'].lock)
+
+        manager.stop_service()
+        manager.wait_service()
+
+    def test_debug_mode(self):
+        # insert a new work request
+        remediation = saq.remediation.request_remediation(REMEDIATION_TYPE_TEST, 'some_value', saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
+
+        manager = RemediationSystemManager()
+        manager.start_service(debug=True)
+
+        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
+        self.assertTrue(isinstance(remediation, Remediation))
+        
+        self.assertEquals(remediation.status, REMEDIATION_STATUS_COMPLETED)
+        self.assertTrue(remediation.successful)
+        self.assertEquals(remediation.result, 'completed')

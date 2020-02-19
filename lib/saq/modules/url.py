@@ -46,6 +46,46 @@ KEY_DOWNLOADED = 'downloaded'
 KEY_PROXY = 'proxy'
 KEY_PROXY_NAME = 'proxy_name'
 
+class ParseURLAnalysis(Analysis):
+    """Add the FQDN of the URL as an observable."""
+    def initialize_details(self):
+        self.details = { 'netloc': None,
+                         'scheme': None,
+                         'path': None,
+                         'query': None,
+                         'params': None,
+                         'fragment': None }
+
+    #def generate_summary(self):
+    #    return f"Parsed: {self.details['netloc']}"
+
+class ParseURLAnalyzer(AnalysisModule):
+    """Parse the URL and add the FQDN as an observable."""
+
+    @property
+    def generated_analysis_type(self):
+        return ParseURLAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_URL
+
+    def execute_analysis(self, observable):
+        try:
+            parsed_url = urlparse(observable.value)
+            analysis = self.create_analysis(observable)
+            analysis.details['netloc'] = parsed_url.netloc
+            analysis.details['scheme'] = parsed_url.scheme
+            analysis.details['path'] = parsed_url.path
+            analysis.details['query'] = parsed_url.query
+            analysis.details['params'] = parsed_url.params
+            analysis.details['fragment'] = parsed_url.fragment
+            analysis.add_observable(F_FQDN, parsed_url.netloc)
+            return True
+        except Exception as e:
+            logging.error(f"Problem parsing URL: {e}")
+            return False
+
 class GglsblAnalysis(Analysis):
     """URL matches against Google's SafeBrowsing List using the [gglsbl-rest](https://github.com/mlsecproject/gglsbl-rest) service.
     """
@@ -1140,6 +1180,7 @@ PROTECTION_TYPE_ONE_DRIVE = 'one drive'
 PROTECTION_TYPE_GOOGLE_DRIVE = 'google drive'
 PROTECTION_TYPE_SHAREPOINT = 'sharepoint'
 PROTECTION_TYPE_EGNYTE = 'egnyte'
+PROTECTION_TYPE_FIREEYE = 'fireeye'
 
 REGEX_GOOGLE_DRIVE = re.compile(r'drive\.google\.com/file/d/([^/]+)/view')
 REGEX_SHAREPOINT = re.compile(r'^/:b:/g/(.+)/([^/]+)$')
@@ -1172,6 +1213,14 @@ class ProtectedURLAnalyzer(AnalysisModule):
                 extracted_url = url.value.replace('/dl/', '/dd/')
                 protection_type = PROTECTION_TYPE_EGNYTE
                 logging.info("translated egnyte.com url {} to {}".format(url.value, extracted_url))
+
+        # fireeye links
+        if parsed_url.netloc.lower().endswith('fireeye.com'):
+            if parsed_url.netloc.lower().startswith('protect'):
+                qs = parse_qs(parsed_url.query)
+                if 'u' in qs:
+                    protection_type = PROTECTION_TYPE_FIREEYE
+                    extracted_url = qs['u'][0]
 
         # "safelinks" by outlook
         if parsed_url.netloc.lower().endswith('safelinks.protection.outlook.com'):

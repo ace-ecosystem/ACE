@@ -5,17 +5,25 @@ import json
 import logging
 import os.path
 import shutil
+import unittest
 
 import saq
 
 from saq.analysis import RootAnalysis
 from saq.constants import *
+from saq.integration import integration_enabled
 from saq.test import *
 from saq.util import storage_dir_from_uuid, workload_storage_dir
 
 import pytz
 
 class TestCase(ACEModuleTestCase):
+    def setUp(self, *args, **kwargs):
+        super().setUp(*args, **kwargs)
+
+        if not integration_enabled('bro'):
+            raise unittest.SkipTest("skipping bro tests (bro integration not enabled)")
+
     def test_bro_http_analyzer(self):
         saq.CONFIG['analysis_mode_http']['cleanup'] = 'no'
 

@@ -1,0 +1,40 @@
+{% extends "analysis/alert.html" %}
+{% block alert_details %}
+<div class="panel panel-default">
+    <div class="panel-heading">Alert Summary <a role="button" data-toggle="collapse" data-target="#collapse_qradar_summary" aria-expanded="true" aria-controls="collapse_qradar_summary">(hide/show)</a></div>
+    <div class="panel-body" id="collapse_qradar_summary">
+    <table class="table">
+    <tr>
+        <td>Description</td>
+        <td><a target="_blank" href="https://{{ace_config['qradar']['hostname']}}/console/qradar/jsp/QRadar.jsp?appName=Sem&pageId=OffenseSummary&summaryId={{analysis.details['offense']['id']}}">{{analysis.details['offense']['description']}}</a></td>
+    </tr>
+    <tr>
+        <td>Event Count</td>
+        <td>{{analysis.details['offense']['event_count']}}</td>
+    </tr>
+    <tr>
+        <td>Log Sources</td>
+        <td><ul>
+        {% for log_source in analysis.details['offense']['log_sources'] %}
+            <li>{{log_source['name']}}</li>
+        {% endfor %}
+        </ul></td>
+    </tr>
+    </table>
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading">Raw Logs <a role="button" data-toggle="collapse" data-target="#collapse_qradar_raw_logs" aria-expanded="true" aria-controls="collapse_qradar_raw_logs">(hide/show)</a></div>
+    <div class="panel-body collapse" id="collapse_qradar_raw_logs">
+        {% for event in analysis.details['events'] %}
+        <div class="well raw-log">{{(event['payload'] | b64decode).decode('utf8', errors='replace')}}</div>
+        {% endfor %}
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading">Raw JSON <a role="button" data-toggle="collapse" data-target="#collapse_raw_json" aria-expanded="true" aria-controls="collapse_raw_json">(hide/show)</a></div>
+    <div class="panel-body collapse" id="collapse_raw_json">
+        <pre>{{analysis.jinja_details | pprint}}</pre>
+    </div>
+</div>
+{% endblock %}

@@ -32,8 +32,8 @@
                         <th></th>
                         <th><span id='sort_by_date' style="cursor:pointer">Date{% if sort_by == "date" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
                         <th><span id='sort_by_event' style="cursor:pointer">Event{% if sort_by == "event" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
-                        <th><span>Threat</span></th>
-                        <th><span>Malware</span></th>
+                        <th><span>Threat Type</span></th>
+                        <th><span>Threat Name</span></th>
                         <th><span id='sort_by_campaign' style="cursor:pointer">Campaign{% if sort_by == "campaign" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
                         <th><span id='sort_by_disposition' style="cursor:pointer">Disposition{% if sort_by == "disposition" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
                         <th><span id='sort_by_prevention' style="cursor:pointer">Prevention{% if sort_by == "prevention" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
@@ -47,14 +47,18 @@
                         <td class="event-cell"><button onclick="load_event_alerts('{{event.id}}')" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-triangle-right"></span></button></td>
                         <td class="event-cell"><button onclick="edit_event('{{event.id}}')" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-pencil"></span></button></td>
                         <td class="event-cell">{{event.creation_date}}</td>
-                        <td>
-                            <a target="_blank" href="{{event.wiki}}">{{event.type}} - {{event.vector}} - {{event.name}}</a>
-                            {% if event_tags[event.id]|length != 0 %}
-			      {% for tag in event_tags[event.id] %}
-                                {% if tag.display %}<span class="label {{tag.style}}" style="cursor:pointer">{{tag.name}}</span>{% endif %}
-                              {% endfor %}
-			    {% endif %}
-                        </td>
+                        {% if event.wiki %}
+                            <td>
+                                <a target="_blank" href="{{event.wiki}}">{{event.type}} - {{event.vector}} - {{event.name}}</a>
+                                {% if event_tags[event.id]|length != 0 %}
+                      {% for tag in event_tags[event.id] %}
+                                    {% if tag.display %}<span class="label {{tag.style}}" style="cursor:pointer">{{tag.name}}</span>{% endif %}
+                                  {% endfor %}
+                    {% endif %}
+                            </td>
+                        {% else %}
+                            <td class="event-cell">{{event.type}} - {{event.vector}} - {{event.name}}</td>
+                        {% endif %}
                         <td>
                             {% for t in event.threats %}
                             <span class="label label-default">{{t}}</span>
@@ -123,6 +127,7 @@
                             <option value="recon" {% if filter_state['filter_event_type'] == 'recon' %}SELECTED{% endif %}>recon</option>
                             <option value="host compromise" {% if filter_state['filter_event_type'] == 'host compromise' %}SELECTED{% endif %}>host compromise</option>
                             <option value="credential compromise" {% if filter_state['filter_event_type'] == 'credential compromise' %}SELECTED{% endif %}>credential compromise</option>
+                            <option value="web browsing" {% if filter_state['filter_event_type'] == 'web browsing' %}SELECTED{% endif %}>web browsing</option>
                         </select>
                       </td>
                     </tr>
@@ -169,7 +174,7 @@
                     <div class="col-xs-3"><input type="checkbox" name="campaign_{{campaign.id}}" {{filter_state['campaign_{}'.format(campaign.id)]}}> {{campaign.name}}</input></div>
                     {% endfor %}
                 </div></br>
-                <h4>Malware</h4>
+                <h4>Threat</h4>
                 <div class="row">
                     {% for mal in malware %}
                     <div class="col-xs-12"><input type="checkbox" name="malz_{{mal.id}}" {{filter_state['malz_{}'.format(mal.id)]}}> {{mal.name}}</input></div>

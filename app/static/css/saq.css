@@ -35,6 +35,12 @@ html, body {
     text-shadow: 1px 1px 1px lightgray;
 }
 
+.observable-preview {
+    font-family: monospace;
+    white-space: pre;
+    font-size: smaller;
+}
+
 /* user-related (blue) */
 .user {
     color: #0000ff; 
@@ -184,4 +190,9 @@ html, body {
 .label.label-outlined.label-danger {
   border-color: #ef1c1c;
   color: #ef1c1c
+}
+
+.raw-log {
+  font-family : monospace;
+  font-size : smaller;
 }

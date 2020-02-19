@@ -1,3 +1,4 @@
+import base64
 import collections.abc
 import calendar
 import datetime
@@ -42,6 +43,7 @@ import saq
 import saq.analysis
 import saq.intel
 import saq.remediation
+import saq.remediation.email
 import virustotal
 import splunklib
 
@@ -55,12 +57,20 @@ from saq.database import User, UserAlertMetrics, Comment, get_db_connection, Eve
                          Workload, DelayedAnalysis, \
                          acquire_lock, release_lock, \
                          get_available_nodes, use_db, set_dispositions, add_workload, \
-                         add_observable_tag_mapping, remove_observable_tag_mapping
+                         add_observable_tag_mapping, remove_observable_tag_mapping, \
+                         Remediation
 from saq.email import search_archive, get_email_archive_sections
 from saq.error import report_exception
 from saq.gui import GUIAlert
 from saq.performance import record_execution_time
 from saq.util import abs_path
+from saq.remediation import execute_remediation, execute_restoration, request_remediation, request_restoration
+import saq.remediation
+from saq.remediation.email import old_request_email_remediation, \
+                                  old_request_email_restoration, \
+                                  remediate_emails, \
+                                  unremediate_emails
+from saq.remediation.constants import REMEDIATION_TYPE_EMAIL
 
 import ace_api
 
@@ -166,7 +176,6 @@ def download_json():
         node = {
             'id': analysis.node_id,
             # yellow if it's the alert otherwise white for analysis nodes
-            'color': '#FFFF00' if analysis is alert else '#FFFFFF',
             # there is a bug in the library preventing this from working
             # 'fixed': True if analysis is alert else False,
             # 'physics': False if analysis is alert else True,
@@ -187,7 +196,6 @@ def download_json():
         next_node_id += 1
         nodes.append({
             'id': observable.node_id,
-            'color': OBSERVABLE_NODE_COLORS[observable.type],
             'label': observable.type,
             'details': str(observable)})
 
@@ -216,7 +224,6 @@ def download_json():
                 next_node_id += 1
                 tag_node = {
                     'id': next_node_id,
-                    'color': '#FFFFFF',
                     'shape': 'star',
                     'label': str(tag)}
 
@@ -1112,6 +1119,31 @@ def add_to_event():
     campaign_id = request.form.get('campaign_id', None)
     new_campaign = request.form.get('new_campaign', None)
     company_ids = request.form.getlist('company', None)
+    event_time = request.form.get('event_time', None)
+    alert_time = request.form.get('alert_time', None)
+    ownership_time = request.form.get('ownership_time', None)
+    disposition_time = request.form.get('disposition_time', None)
+    contain_time = request.form.get('contain_time', None)
+    remediation_time = request.form.get('remediation_time', None)
+    event_time = None if event_time in ['', 'None'] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
+    alert_time = None if alert_time in ['', 'None'] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
+    ownership_time = None if ownership_time in ['', 'None'] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
+    disposition_time = None if disposition_time in ['', 'None'] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
+    contain_time = None if contain_time in ['', 'None'] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
+    remediation_time = None if remediation_time in ['', 'None'] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
+
+    # Enforce logical chronoglogy
+    dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if d is not None]
+    sorted_dates = sorted(dates)
+    if not dates == sorted_dates:
+        flash("One or more of your dates has been entered out of valid order. "
+              "Please ensure entered dates follow the scheme: "
+              "Event Time < Alert Time <= Ownership Time < Disposition Time <= Contain Time <= Remediation Time")
+        if analysis_page:
+            return redirect(url_for('analysis.index'))
+        else:
+            return redirect(url_for('analysis.manage'))
+
     alert_uuids = []
     if ("alert_uuids" in request.form):
         alert_uuids = request.form['alert_uuids'].split(',')
@@ -1148,8 +1180,12 @@ def add_to_event():
                 result = c.fetchone()
                 event_id = result[0]
             else:
-                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, prevention_tool, comment) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_prevention, event_comment))
+                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, 
+                prevention_tool, comment, event_time, alert_time, ownership_time, disposition_time, 
+                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector,
+                         event_prevention, event_comment, event_time, alert_time, ownership_time,
+                         disposition_time, contain_time, remediation_time))
                 dbm.commit()
                 c.execute("""SELECT LAST_INSERT_ID()""")
                 result = c.fetchone()
@@ -2863,8 +2899,9 @@ def metrics():
         # First, alert quantities by disposition per month
         alert_df.set_index('month', inplace=True)
         months = alert_df.index.get_level_values('month').unique()
-        
-        # if March 2015 alerts in our results then manually insert alert 
+
+        # Legacy -- remove?
+        # if March 2015 alerts in our results then manually insert alert
         # for https://wiki.local/display/integral/20150309+ctbCryptoLocker
         # No alert was ever put into ACE for this event
         if '201503' in months:
@@ -2965,37 +3002,45 @@ def metrics():
         # generate SIP ;-) indicator intel tables
         # XXX add support for using CRITS/SIP based on what ACE is configured to use
         if 'indicator_intel' in metric_actions:
-            try:
-                indicator_source_table, indicator_status_table = generate_intel_tables()
-                tables.append(indicator_source_table)
-                tables.append(indicator_status_table) 
-            except Exception as e:
-                flash("Problem generating overall source and status indicator tables : {0}".format(str(e)))
-            # Count all created indicators during daterange by their status
-            try:
-                created_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=True)
-                if created_indicators is not False:
-                    tables.append(created_indicators)
-            except Exception as e:
-                flash("Problem generating created indicator table: {0}".format(str(e)))
-            try:
-                modified_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, modified=True)
-                if modified_indicators is not False:
-                    tables.append(modified_indicators)
-            except Exception as e:
-                flash("Problem generating modified indicator table: {0}".format(str(e)))
+            if not (saq.CONFIG.get("crits", "mongodb_uri") or
+                    (saq.CONFIG.get("sip", "remote_address") or saq.CONFIG.get("sip", "api_key"))):
+                flash("intel source not configured; skipping indicator stats table generation")
+            else:
+                try:
+                    indicator_source_table, indicator_status_table = generate_intel_tables()
+                    tables.append(indicator_source_table)
+                    tables.append(indicator_status_table)
+                except Exception as e:
+                    flash("Problem generating overall source and status indicator tables : {0}".format(str(e)))
+                # Count all created indicators during daterange by their status
+                try:
+                    created_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=True)
+                    if created_indicators is not False:
+                        tables.append(created_indicators)
+                except Exception as e:
+                    flash("Problem generating created indicator table: {0}".format(str(e)))
+                try:
+                    modified_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, modified=True)
+                    if modified_indicators is not False:
+                        tables.append(modified_indicators)
+                except Exception as e:
+                    flash("Problem generating modified indicator table: {0}".format(str(e)))
 
     if download_results:
-        outBytes = io.BytesIO()
-        writer = pd.ExcelWriter(outBytes)
-        for table in tables:
-            table.to_excel(writer, table.name)
-        writer.close()
-        filename = company_name+"_metrics.xlsx" if company_name else "ACE_metrics.xlsx"
-        output = make_response(outBytes.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename="+filename
-        output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return output
+        if tables:
+            outBytes = io.BytesIO()
+            writer = pd.ExcelWriter(outBytes)
+            for table in tables:
+                table.to_excel(writer, table.name)
+            writer.close()
+            outBytes.seek(0)
+            filename = company_name+"_metrics.xlsx" if company_name else "ACE_metrics.xlsx"
+            output = make_response(outBytes.read())
+            output.headers["Content-Disposition"] = "attachment; filename="+filename
+            output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            return output
+        else:
+            flash("No results; .xlsx could not be generated")
 
     return render_template(
         'analysis/metrics.html',
@@ -3219,6 +3264,27 @@ def edit_event():
     threats = request.form.getlist('threats', None)
     campaign_id = request.form.get('campaign_id', None)
     new_campaign = request.form.get('new_campaign', None)
+    event_time = request.form.get('event_time', None)
+    alert_time = request.form.get('alert_time', None)
+    ownership_time = request.form.get('ownership_time', None)
+    disposition_time = request.form.get('disposition_time', None)
+    contain_time = request.form.get('contain_time', None)
+    remediation_time = request.form.get('remediation_time', None)
+    event_time = None if event_time in ['', 'None', None] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
+    alert_time = None if alert_time in ['', 'None', None] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
+    ownership_time = None if ownership_time in ['', 'None', None] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
+    disposition_time = None if disposition_time in ['', 'None', None] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
+    contain_time = None if contain_time in ['', 'None', None] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
+    remediation_time = None if remediation_time in ['', 'None', None] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
+
+    # Enforce logical chronoglogy
+    dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if d is not None]
+    sorted_dates = sorted(dates)
+    if not dates == sorted_dates:
+        flash("One or more of your dates has been entered out of valid order. "
+              "Please ensure entered dates follow the scheme: "
+              "Event Time < Alert Time <= Ownership Time < Disposition Time <= Contain Time <= Remediation Time")
+        return redirect(url_for('analysis.events'))
 
     with get_db_connection() as db:
         c = db.cursor()
@@ -3235,8 +3301,8 @@ def edit_event():
                 result = c.fetchone()
                 campaign_id = result[0]
 
-        c.execute("""UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, prevention_tool=%s, comment=%s, campaign_id=%s WHERE id=%s""",
-                (event_status, event_remediation, event_type, event_vector, event_prevention, event_comment, campaign_id, event_id))
+        c.execute("""UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, prevention_tool=%s, comment=%s, campaign_id=%s, event_time=%s, alert_time=%s, ownership_time=%s, disposition_time=%s, contain_time=%s, remediation_time=%s WHERE id=%s""",
+                (event_status, event_remediation, event_type, event_vector, event_prevention, event_comment, campaign_id, event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time, event_id))
         db.commit()
 
         c.execute("""DELETE FROM malware_mapping WHERE event_id=%s""", (event_id))
@@ -3658,6 +3724,18 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
             email_remediations.extend(search_archive(source, message_ids,
                                       excluded_emails=saq.CONFIG['remediation']['excluded_emails'].split(',')).values())
 
+    # get the remediation history for all RemediationTarget in this alert
+    remediation_history = []
+    query_keys = []
+    for remediation_target in alert.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
+        logging.info(f"MARKER: looking up {remediation_target}")
+        query_keys.append(remediation_target.remediation_key)
+
+    if len(query_keys) > 0:
+        remediation_history = saq.db.query(Remediation).filter(Remediation.key.in_(query_keys))\
+                                                       .order_by(Remediation.key, Remediation.insert_date.desc())\
+                                                       .all()
+
     # get list of domains that appear in the alert
     domains = find_all_url_domains(analysis)
     #domain_list = list(domains)
@@ -3717,7 +3795,8 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
                            domains=domains,
                            domain_list=domain_list,
                            domain_summary_str=domain_summary_str,
-                           email_remediations=email_remediations)
+                           email_remediations=email_remediations,
+                           remediation_history=remediation_history)
 
 @analysis.route('/file', methods=['GET'])
 @login_required
@@ -4209,12 +4288,11 @@ def remediate_emails():
             if not do_it_now:
                 for target in targets.values():
                     try:
-                        r_id = saq.remediation.request_remediation(saq.remediation.constants.REMEDIATION_TYPE_EMAIL,
-                                                                   target.message_id,
-                                                                   target.recipient,
-                                                                   user_id=current_user.id,
-                                                                   company_id=target.company_id,
-                                                                   comment=','.join(alert_uuids))
+                        r_id = old_request_email_remediation(target.message_id,
+                                                             target.recipient,
+                                                             current_user.id,
+                                                             target.company_id,
+                                                             ','.join(alert_uuids))
 
                         target.result_text = f"request remediation (id {r_id})"
                         target.result_success = True
@@ -4224,18 +4302,17 @@ def remediate_emails():
                         target.result_success = False
             else:
                 # TODO refactor this to use the classes of the new system
-                results = saq.remediation.remediate_emails(params, user_id=current_user.id)
+                results = saq.remediation.email.remediate_emails(current_user.id, None, params)
 
         elif action == 'restore':
             if not do_it_now:
                 for target in targets.values():
                     try:
-                        r_id = saq.remediation.request_restoration(saq.remediation.constants.REMEDIATION_TYPE_EMAIL,
-                                                                   target.message_id,
-                                                                   target.recipient,
-                                                                   user_id=current_user.id,
-                                                                   company_id=target.company_id,
-                                                                   comment=','.join(alert_uuids))
+                        r_id = old_request_email_restoration(target.message_id,
+                                                             target.recipient,
+                                                             current_user.id,
+                                                             target.company_id,
+                                                             ','.join(alert_uuids))
 
                         target.result_text = f"request restoration (id {r_id})"
                         target.result_success = True
@@ -4245,10 +4322,11 @@ def remediate_emails():
                         target.result_success = False
             else:
                 # TODO refactor this to use the classes of the new system
-                results = saq.remediation.unremediate_emails(params, user_id=current_user.id)
+                results = saq.remediation.email.unremediate_emails(current_user.id, None, params)
 
     except Exception as e:
         logging.error("unable to perform email remediation action {}: {}".format(action, e))
+        report_exception()
         for target in targets.values():
             target.result_text = str(e)
             target.result_success = False
@@ -4267,5 +4345,64 @@ def remediate_emails():
     
     from saq.analysis import _JSONEncoder
     response = make_response(json.dumps(targets, cls=_JSONEncoder))
+    response.mimetype = 'application/json'
+    return response
+
+@analysis.route('/query_remediation_targets', methods=['POST'])
+@login_required
+def query_remediation_targets():
+    """Obtains a list of all the remediation targets for the given list of alert uuids."""
+    result = {} # key = remediation_key, value = dict (see below)
+    for alert in saq.db.query(Alert).filter(Alert.uuid.in_(json.loads(request.values['alert_uuids']))):
+        try:
+            alert.load()
+            for observable in alert.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
+                result[observable.remediation_key] = {'type': observable.type,
+                                                      'remediation_type': observable.remediation_type,
+                                                      'value': observable.value,
+                                                      'remediation_key': observable.remediation_key,
+                                                      'history': []}
+        except Exception as e:
+            logging.error(f"unable to load remediation targets: {e}")
+
+    for history in saq.db.query(Remediation).filter(Remediation.key.in_([key for key, _ in result.items()]))\
+                                            .order_by(Remediation.insert_date.desc()):
+        result[history.key]['history'].append(history.json)
+        
+    from saq.analysis import _JSONEncoder
+    response = make_response(json.dumps(result, cls=_JSONEncoder))
+    response.mimetype = 'application/json'
+    return response
+
+@analysis.route('/remediate_targets', methods=['POST'])
+@login_required
+def remediate_targets():
+    json_request = json.loads(request.values['json_request'])
+
+    action = json_request['action']
+    targets = json_request['targets']
+    blocking = json_request['blocking']
+
+    result = []
+    for target in targets:
+        remediation_type = target['remediation_type']
+        remediation_key_b64 = target['remediation_key_b64']
+        remediation_key = base64.b64decode(remediation_key_b64).decode('utf8', errors='replace')
+        observable_type = target['observable_type']
+        observable_value_b64 = target['observable_value_b64']
+        observable_value = base64.b64decode(observable_value_b64).decode('utf8', errors='replace')
+
+        logging.info(f"got request from {current_user.username} to remediate action {action} type {observable_type} value {observable_value} key {remediation_key}")
+        
+        if blocking:
+            remediation_result = saq.remediation.execute(action, remediation_type, remediation_key, current_user.id, saq.COMPANY_ID)
+        else:
+            remediation_result = saq.remediation.request(action, remediation_type, remediation_key, current_user.id, saq.COMPANY_ID)
+
+        if remediation_result is not None:
+            result.append(remediation_result.json)
+
+    from saq.analysis import _JSONEncoder
+    response = make_response(json.dumps(result, cls=_JSONEncoder))
     response.mimetype = 'application/json'
     return response

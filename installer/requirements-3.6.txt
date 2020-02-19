@@ -43,7 +43,6 @@ setuptools_git
 six
 sphinx
 sphinx_rtd_theme
-splunklib
 tld
 tzlocal
 urlfinderlib
@@ -51,3 +50,5 @@ vxstreamlib
 yara_scanner
 python-whois
 gglsbl-rest-client
+argcomplete
+ip-inspector

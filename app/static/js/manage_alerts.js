@@ -90,6 +90,37 @@ $(document).ready(function() {
 });
 
 $(document).ready(function() {
+    $('input[name="event_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="alert_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="ownership_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="disposition_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="contain_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="remediation_time"]').datetimepicker({
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+
     if ($('input[name="daterange"]').val() == '') {
         $('input[name="daterange"]').val(
             moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
@@ -204,6 +235,18 @@ $(document).ready(function() {
         }
 
         remediate_emails(all_alert_uuids, message_ids);
+    });
+
+    $('#btn-mass-remediation').click(function(e) {
+        var all_alert_uuids = get_all_checked_alerts();
+        var message_ids = null;
+
+        if (all_alert_uuids.length == 0 ) {
+            alert("You need to select some alerts first. And THEN click this button. lol.")
+            return;
+        } else {
+            remediation_selection(all_alert_uuids, null);
+        }
     });
 
     $('#btn-limit').click(function(e) {

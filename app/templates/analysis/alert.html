@@ -97,8 +97,14 @@
 {% endblock %}
 
 <div class="panel panel-default">
-    <div class="panel-heading">Alert Details <a role="button" data-toggle="collapse" data-target="#collapse_alert_details" aria-expanded="true" aria-controls="collapse_alert_details">(hide/show)</a></div>
-    <div class="panel-body collapse" id="collapse_alert_details">
+    <div class="panel-heading">
+        <h3 class="panel-title">Alert Details <a role="button" data-toggle="collapse" data-target="#collapse_alert_details" aria-expanded="true" aria-controls="collapse_alert_details">(hide/show)</a></h3>
+    </div>
+    {%if ace_config['gui'].getboolean('alert_details_collapsed') %}
+        <div class="panel-body collapse" id="collapse_alert_details">
+    {% else %}
+        <div class="panel-body" id="collapse_alert_details">
+    {% endif %}
         <!-- by default we just pretty-print the json -->
         {% block alert_details %} <pre>{{ analysis.details | pprint }}</pre> {% endblock %}
     </div>
@@ -119,6 +125,13 @@
                     </button>
                 {% endfor %}
                 <span class="observable_display {{observable_node.obj.type}}" title="">{% include observable_node.obj.jinja_template_path %}</span> 
+
+                {% if observable_node.obj.has_directive('preview') %}
+                <div class="panel panel-default">
+                    <div class="panel-body observable-preview">{{observable_node.obj.display_preview}}</div>
+                </div>
+                {% endif %}
+
                 {% for tag in observable_node.obj.tags %}{% if tag.level != 'hidden' %}<span class="label {{tag.css_class}}">{{ tag }}</span>{% if tag.name.lower().startswith('atos') %} 🤡 {% endif %}{% endif %}{% endfor %}
                 {% if observable_node.disposition_history %}
                     {% for disposition, count, percentage in observable_node.disposition_history %}
@@ -211,6 +224,44 @@
 </div>
     {% endif %}
 {% endfor %}
+
+{% if remediation_history %}
+<div class="panel panel-default">
+    <div class="panel-heading">
+        <h3 class="panel-title">Remediation History</h3>
+    </div>
+    <div class="panel-body">
+        <table class="table table-condensed">
+        <tr>
+            <td><b>type</b></td>
+            <td><b>action</b></td>
+            <td><b>key</b></td>
+            <td><b>date</b></td>
+            <td><b>user</b></td>
+            <td><b>status</b></td>
+            <td><b>result</b></td>
+        </tr>
+        {% for remediation_entry in remediation_history %}
+        {% if remediation_entry is none %}
+        <tr>
+        {% elif remediation_entry.successful %}
+        <tr class="success">
+        {% elif not remediation_entry.success %}
+        <tr class="error">
+        {% endif %}
+            <td>{{remediation_entry.type}}</td>
+            <td>{{remediation_entry.action}}</td>
+            <td>{{remediation_entry.key}}</td>
+            <td>{{remediation_entry.insert_date}}</td>
+            <td>{{remediation_entry.user.gui_display}}</td>
+            <td>{{remediation_entry.status}}</td>
+            <td>{{remediation_entry.result}}</td>
+        </tr>
+        {% endfor %}
+        </table>
+    </div>
+</div>
+{% endif %}
 
 {% if domain_summary_str %}
 <div class="panel panel-default">

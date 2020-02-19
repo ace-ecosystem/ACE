@@ -20,9 +20,9 @@ from saq.analysis import Analysis, Observable, MODULE_PATH
 from saq.constants import *
 from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
+from saq.splunk import SplunkQueryObject
 from saq.util import create_timedelta, parse_event_time
 
-from splunklib import SplunkQueryObject
 
 import pytz
 import requests
@@ -253,6 +253,12 @@ class AnalysisModule(object):
             _ = self.config[config_name]
         except KeyError:
             raise KeyError("module {} missing configuration item {}".format(self, config_name))
+
+    def verify_config_item_has_value(self, config_key):
+        """Verifies the given configuration exists and has a value. Use this from verify_environment."""
+        self.verify_config_exists(config_key)
+        if not self.config[config_key]:
+            raise TypeError("module {} cofiguration item {} is not defined.".format(self, config_key))
 
     def verify_path_exists(self, path):
         """Verifies the given path exists.  If the path is relative then it is relative to SAQ_HOME."""

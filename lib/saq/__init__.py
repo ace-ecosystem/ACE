@@ -1,6 +1,7 @@
 # vim: sw=4:ts=4:et
 
 import datetime
+import json
 import locale
 import logging
 import logging.config
@@ -11,15 +12,15 @@ import socket
 import sys
 import time
 import traceback
+import urllib
 
 from getpass import getpass
 
 import ace_api
-from saq.configuration import load_configuration
+from saq.configuration import load_configuration, import_encrypted_passwords
 from saq.constants import *
 from saq.messaging import initialize_message_system
 from saq.network_semaphore import initialize_fallback_semaphores
-from saq.remediation import initialize_remediation_system_manager
 from saq.sla import SLA
 from saq.util import create_directory
 
@@ -29,6 +30,9 @@ import tzlocal
 
 # this is set to True when unit testing, False otherwise
 UNIT_TESTING = 'SAQ_UNIT_TESTING' in os.environ
+
+# global user ID for the "automation" user
+AUTOMATION_USER_ID = None # (initialized in saq.database.initialize_database())
 
 # disable the verbose logging in the requests module
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -130,9 +134,10 @@ def initialize(saq_home=None,
                args=None, 
                relative_dir=None):
 
-    from saq.database import initialize_database, initialize_node
+    from saq.database import initialize_database, initialize_node, initialize_automation_user
 
     global API_PREFIX
+    global AUTOMATION_USER_ID
     global CA_CHAIN_PATH
     global COMPANY_ID
     global COMPANY_NAME
@@ -144,6 +149,7 @@ def initialize(saq_home=None,
     global DEFAULT_ENCODING
     global DUMP_TRACEBACKS
     global ECS_SOCKET_PATH
+    global ENCRYPTION_INITIALIZED
     global ENCRYPTION_PASSWORD
     global ENCRYPTION_PASSWORD_PLAINTEXT
     global EXCLUDED_SLA_ALERT_TYPES
@@ -194,6 +200,8 @@ def initialize(saq_home=None,
     ENCRYPTION_PASSWORD = None
     # *this* is the password that is used to encrypt/decrypt the ENCRYPTION_PASSWORD at rest
     ENCRYPTION_PASSWORD_PLAINTEXT = None
+    # set to True after we've initialized encryption
+    ENCRYPTION_INITIALIZED = False
 
     # the global log level setting
     LOG_LEVEL = logging.INFO
@@ -353,6 +361,36 @@ def initialize(saq_home=None,
     except Exception as e:
         sys.exit(1)
 
+    # has the encryption password been set yet?
+    import saq.crypto
+    from saq.crypto import get_aes_key, InvalidPasswordError
+
+    if not saq.UNIT_TESTING:
+        # are we prompting for the decryption password?
+        if args and args.provide_decryption_password:
+            while True:
+                ENCRYPTION_PASSWORD_PLAINTEXT = getpass("Enter the decryption password:")
+                try:
+                    ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)
+                except InvalidPasswordError:
+                    logging.error("invalid encryption password")
+                    continue
+
+                break
+
+        elif saq.crypto.encryption_key_set():
+            # if we're not prompting for it, are we running the encryption cache service yet?
+            logging.debug("reading encryption password from ecs")
+            ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
+            if ENCRYPTION_PASSWORD_PLAINTEXT is not None:
+                try:
+                    ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)
+                except InvalidPasswordError:
+                    logging.error("read password from ecs but the password is wrong")
+                    ENCRYPTION_PASSWORD_PLAINTEXT = None
+
+    ENCRYPTION_INITIALIZED = True
+
     GUI_WHITELIST_EXCLUDED_OBSERVABLE_TYPES = [_.strip() for _ in 
                                                CONFIG['gui']['whitelist_excluded_observable_types'].split(',')]
 
@@ -477,13 +515,16 @@ def initialize(saq_home=None,
             logging.debug("removing proxy environment variable for {}".format(proxy_key))
             del os.environ[proxy_key]
 
-
     # set up the PROXY global dict (to be used with the requests library)
     for proxy_key in [ 'http', 'https' ]:
         if CONFIG['proxy']['host'] and CONFIG['proxy']['port'] and CONFIG['proxy']['transport']:
             if CONFIG['proxy']['user'] and CONFIG['proxy']['password']:
-                PROXIES[proxy_key] = '{}://{}:{}@{}:{}'.format(CONFIG['proxy']['transport'], CONFIG['proxy']['user'], 
-                CONFIG['proxy']['password'], CONFIG['proxy']['host'], CONFIG['proxy']['port'])
+                PROXIES[proxy_key] = '{}://{}:{}@{}:{}'.format(
+                CONFIG['proxy']['transport'], 
+                urllib.parse.quote_plus(CONFIG['proxy']['user']), 
+                urllib.parse.quote_plus(CONFIG['proxy']['password']), 
+                CONFIG['proxy']['host'], 
+                CONFIG['proxy']['port'])
             else:
                 PROXIES[proxy_key] = '{}://{}:{}'.format(CONFIG['proxy']['transport'], CONFIG['proxy']['host'], CONFIG['proxy']['port'])
 
@@ -499,8 +540,11 @@ def initialize(saq_home=None,
                     if 'user' in CONFIG[section] and 'password' in CONFIG[section] \
                     and CONFIG[section]['user'] and CONFIG[section]['password']:
                         OTHER_PROXIES[proxy_name][proxy_key] = '{}://{}:{}@{}:{}'.format(
-                        CONFIG[section]['transport'], CONFIG[section]['user'], CONFIG[section]['password'], 
-                        CONFIG[section]['host'], CONFIG[section]['port'])
+                        CONFIG[section]['transport'], 
+                        urllib.parse.quote_plus(CONFIG[section]['user']), 
+                        urllib.parse.quote_plus(CONFIG[section]['password']), 
+                        CONFIG[section]['host'], 
+                        CONFIG[section]['port'])
                     else:
                         OTHER_PROXIES[proxy_name][proxy_key] = '{}://{}:{}'.format(
                         CONFIG[section]['transport'], CONFIG[section]['host'], CONFIG[section]['port'])
@@ -520,8 +564,10 @@ def initialize(saq_home=None,
     if args:
         DAEMON_MODE = args.daemon
 
+    # make sure we've got the automation user set up
+    initialize_automation_user()
+
     # initialize other systems
-    initialize_remediation_system_manager()
     initialize_message_system()
 
     logging.debug("SAQ initialized")

@@ -1,0 +1,1 @@
+index=proxy {time_spec} src_ip=<include:hunts/test/splunk/ips.txt>

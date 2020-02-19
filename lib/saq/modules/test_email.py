@@ -934,6 +934,36 @@ class TestCase(ACEModuleTestCase):
         self.assertIsNotNone(email_analysis.body)
         self.assertIsInstance(email_analysis.attachments, list)
         self.assertEquals(len(email_analysis.attachments), 0)
+
+        email_address_obervables = email_analysis.get_observables_by_type(F_EMAIL_ADDRESS)
+        self.assertEquals(set([_.value for _ in email_address_obervables]), 
+                          set(['jwdavison@company.com', 'unixfreak0037@gmail.com']))
+
+        email_conversation_obervables = email_analysis.get_observables_by_type(F_EMAIL_CONVERSATION)
+        self.assertEquals(set([_.value for _ in email_conversation_obervables]), 
+                          set([create_email_conversation('unixfreak0037@gmail.com', 'jwdavison@company.com')]))
+
+        message_id_obervables = email_analysis.get_observables_by_type(F_MESSAGE_ID)
+        self.assertEquals(set([_.value for _ in message_id_obervables]), 
+                          set(['<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>']))
+
+        email_delivery_obervables = email_analysis.get_observables_by_type(F_EMAIL_DELIVERY)
+        self.assertEquals(set([_.value for _ in email_delivery_obervables]), 
+                          set([create_email_delivery('<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>', 
+                                                     'jwdavison@company.com')]))
+
+        file_observables = email_analysis.get_observables_by_type(F_FILE)
+        self.assertEquals(set([_.value for _ in file_observables]),
+                          set(['email.rfc822.unknown_text_plain_000',
+                               'email.rfc822.unknown_text_html_000',
+                               'email.rfc822.headers']))
+
+        for file_observable in file_observables:
+            if file_observable.value == 'email.rfc822.unknown_text_plain_000':
+                self.assertTrue(file_observable.has_directive(DIRECTIVE_EXTRACT_URLS))
+                self.assertTrue(file_observable.has_directive(DIRECTIVE_PREVIEW))
+            elif file_observable.value == 'email.rfc822.unknown_text_html_000':
+                self.assertTrue(file_observable.has_directive(DIRECTIVE_EXTRACT_URLS))
         
     def test_o365_journal_email_parsing(self):
 
@@ -1089,3 +1119,85 @@ class TestCase(ACEModuleTestCase):
         self.assertTrue(file_observable.has_tag('no_render'))
         from saq.modules.url import LiveBrowserAnalysis
         self.assertFalse(file_observable.get_analysis(LiveBrowserAnalysis))
+
+    def test_automated_email_remediation(self):
+
+        import saq
+        from saq.database import Remediation
+        from saq.remediation.email import create_email_remediation_key
+
+        # reduce wait time for checking
+        saq.CONFIG['analysis_module_automated_email_remediation']['update_frequency'] = '1'
+
+        root = create_root_analysis()
+        root.initialize_storage()
+        email_delivery_obervable = root.add_observable(F_EMAIL_DELIVERY, create_email_delivery('<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>', 'jwdavison@company.com'))
+        email_delivery_obervable.add_directive(DIRECTIVE_REMEDIATE)
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine()
+        engine.enable_module('analysis_module_automated_email_remediation', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+
+        # watch for the remediation entry
+        def _condition():
+            try:
+                r = saq.db.query(Remediation).filter(Remediation.key == create_email_remediation_key('<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>', 'jwdavison@company.com')).first()
+                return r is not None
+            finally:
+                saq.db.remove()
+
+        self.wait_for_condition(_condition)
+        engine.stop()
+        engine.wait()
+
+        # at this point the remediation is started but not completed
+        
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+        from saq.modules.email import AutomatedEmailRemediationAction
+        email_delivery_obervable = root.get_observable(email_delivery_obervable.id)
+        self.assertIsNotNone(email_delivery_obervable)
+        remediation_analysis = email_delivery_obervable.get_analysis(AutomatedEmailRemediationAction)
+        self.assertIsNotNone(remediation_analysis)
+
+        self.assertIsNotNone(remediation_analysis.remediation)
+        self.assertTrue(remediation_analysis.delayed)
+        self.assertTrue(isinstance(remediation_analysis.remediation['id'], int))
+        self.assertEquals(remediation_analysis.remediation['type'], 'email')
+        self.assertEquals(remediation_analysis.remediation['action'], 'remove')
+        self.assertTrue(isinstance(remediation_analysis.remediation['insert_date'], str))
+        self.assertEquals(remediation_analysis.remediation['user_id'], saq.AUTOMATION_USER_ID)
+        self.assertIsNone(remediation_analysis.remediation['result'])
+        self.assertIsNotNone(remediation_analysis.remediation['comment'])
+        self.assertIsNone(remediation_analysis.remediation['successful'])
+        self.assertEquals(remediation_analysis.remediation['status'], 'NEW')
+
+        # now mark the remediation as completed and start the engine back up
+        saq.db.execute(Remediation.__table__.update()
+            .where(Remediation.id == remediation_analysis.remediation['id'])
+            .values(status='COMPLETED', successful=True, result='completed'))
+        saq.db.commit()
+        saq.db.remove()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_automated_email_remediation', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+        from saq.modules.email import AutomatedEmailRemediationAction
+        email_delivery_obervable = root.get_observable(email_delivery_obervable.id)
+        self.assertIsNotNone(email_delivery_obervable)
+        remediation_analysis = email_delivery_obervable.get_analysis(AutomatedEmailRemediationAction)
+        self.assertIsNotNone(remediation_analysis)
+
+        self.assertIsNotNone(remediation_analysis.remediation)
+        self.assertFalse(remediation_analysis.delayed)
+        self.assertIsNotNone(remediation_analysis.remediation['result'])
+        self.assertTrue(remediation_analysis.remediation['successful'])
+        self.assertEquals(remediation_analysis.remediation['status'], 'COMPLETED')

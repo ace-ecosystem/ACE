@@ -2978,3 +2978,78 @@ class TestCase(ACEEngineTestCase):
         from saq.modules.test import GenericTestAnalysis
         # in this case both of them should have been analyzed
         self.assertEquals(len(root.get_analysis_by_type(GenericTestAnalysis)), 2)
+
+    def test_deprecated_analysis(self):
+        root = create_root_analysis(uuid=str(uuid.uuid4()), analysis_mode='test_single')
+        root.initialize_storage()
+        test_observable = root.add_observable(F_TEST, 'test')
+        root.save()
+        root.schedule()
+
+        engine = TestEngine(analysis_pools={'test_single': 1})
+        engine.enable_module('analysis_module_generic_test', 'test_single')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+        test_observable = root.get_observable(test_observable.id)
+        self.assertIsNotNone(test_observable)
+        analysis = test_observable.get_analysis('saq.modules.test:GenericTestAnalysis')
+        from saq.modules.test import GenericTestAnalysis
+        self.assertTrue(isinstance(analysis, GenericTestAnalysis))
+        self.assertEquals(analysis.summary, str(test_observable.value))
+
+        # mark this Analysis as deprected and then try to load it
+        saq.CONFIG['deprecated_modules']['analysis_module_generic_test'] = 'saq.modules.test:GenericTestAnalysis'
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+
+        test_observable = root.get_observable(test_observable.id)
+        self.assertIsNotNone(test_observable)
+        analysis = test_observable.get_analysis('saq.modules.test:GenericTestAnalysis')
+        self.assertIsNotNone(analysis)
+        # the class that gets loaded is different
+        from saq.analysis import DeprecatedAnalysis
+        self.assertTrue(isinstance(analysis, DeprecatedAnalysis))
+        # but the summary should still be the same
+        self.assertEquals(analysis.summary, str(test_observable.value))
+
+    def test_missing_analysis(self):
+        root = create_root_analysis(uuid=str(uuid.uuid4()), analysis_mode='test_single')
+        root.initialize_storage()
+        test_observable = root.add_observable(F_TEST, 'test')
+        root.save()
+        root.schedule()
+
+        engine = TestEngine(analysis_pools={'test_single': 1})
+        engine.enable_module('analysis_module_generic_test', 'test_single')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # the idea here is a module was removed but it wasn't added to the deprecated analysis modules list
+        # we'll fake that by editing the JSON
+        with open(root.json_path, 'r') as fp:
+            analysis_json = json.load(fp)
+
+        analysis_json['observable_store'][test_observable.id]['analysis']['saq.modules.test:DoesNotExist'] = \
+            analysis_json['observable_store'][test_observable.id]['analysis']['saq.modules.test:GenericTestAnalysis'].copy()
+        del analysis_json['observable_store'][test_observable.id]['analysis']['saq.modules.test:GenericTestAnalysis']
+        with open(root.json_path, 'w') as fp:
+            json.dump(analysis_json, fp)
+
+        # now when we try to load it we should have a missing analysis module
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+
+        test_observable = root.get_observable(test_observable.id)
+        self.assertIsNotNone(test_observable)
+        analysis = test_observable.get_analysis('saq.modules.test:DoesNotExist')
+        self.assertIsNotNone(analysis)
+        # the class that gets loaded is different
+        from saq.analysis import ErrorAnalysis
+        self.assertTrue(isinstance(analysis, ErrorAnalysis))
+        # but the summary should still be the same
+        self.assertEquals(analysis.summary, str(test_observable.value))

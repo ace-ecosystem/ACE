@@ -5,9 +5,16 @@
 
 import datetime
 import logging
+import re
+import json
+
+COMMENT_REGEX = re.compile(r'^\s*#.*?$', re.M)
+
+import pytz
 
 import saq
 from saq.constants import *
+from saq.collectors import Submission
 from saq.collectors.hunter import Hunt, open_hunt_db
 from saq.util import local_time, create_timedelta, abs_path
 
@@ -20,10 +27,14 @@ class QueryHunt(Hunt):
                        offset=None,
                        group_by=None,
                        search_query_path=None,
+                       query=None,
                        observable_mapping=None,
                        temporal_fields=None,
                        directives=None,
                        directive_options=None,
+                       strip_comments=False,
+                       max_result_count=None,
+                       query_result_file=None,
                        *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -45,11 +56,20 @@ class QueryHunt(Hunt):
 
         self.group_by = group_by
         self.search_query_path = search_query_path
-        self._query = None
+        self.query = query
         self.observable_mapping = observable_mapping # key = field, value = observable type
         self.temporal_fields = temporal_fields # of fields
         self.directives = directives # key = field, value = [ directive ]
         self.directive_options = directive_options # key = field, value = { key = option_name value = option_value }
+
+        # if this is set to True then hash-style comments are stripped from the loaded query
+        self.strip_comments = strip_comments
+
+        # maximum number of results we want back from the query 
+        self.max_result_count = max_result_count
+
+        # debugging utility to save the results of the query to a file
+        self.query_result_file = query_result_file
 
     def execute_query(self, start_time, end_time, *args, **kwargs):
         """Called to execute the query over the time period given by the start_time and end_time parameters.
@@ -75,14 +95,22 @@ class QueryHunt(Hunt):
                     return self._last_end_time
                 else:
                     self._last_end_time = row[0]
+                    if self._last_end_time is not None and self._last_end_time.tzinfo is None:
+                        self._last_end_time = pytz.utc.localize(self._last_end_time)
                     return self._last_end_time
 
     @last_end_time.setter
     def last_end_time(self, value):
+        if value.tzinfo is None:
+            value = pytz.utc.localize(value)
+
+        value = value.astimezone(pytz.utc)
+
         with open_hunt_db(self.type) as db:
             c = db.cursor()
             c.execute("UPDATE hunt SET last_end_time = ? WHERE hunt_name = ?",
-                     (value, self.name))
+                     (value.replace(tzinfo=None), self.name))
+                     # NOTE -- datetime with tzinfo not supported by default timestamp converter in 3.6
             db.commit()
 
         self._last_end_time = value
@@ -95,19 +123,19 @@ class QueryHunt(Hunt):
         if self.full_coverage:
             # have we not executed this search yet?
             if self.last_end_time is None:
-                return datetime.datetime.now() - self.time_range
+                return local_time() - self.time_range
             else:
                 return self.last_end_time
         else:
             # if we're not doing full coverage then we don't worry about the last end time
-            return datetime.datetime.now() - self.time_range
+            return local_time() - self.time_range
 
     @property
     def end_time(self):
         """Returns the ending time of this query based on the start time and the hunt configuration."""
         # if this hunt is configured for full coverage, then the ending time for the search
         # will be equal to the ending time of the last executed search plus the total range of the search
-        now = datetime.datetime.now()
+        now = local_time()
         if self.full_coverage:
             # have we not executed this search yet?
             if self.last_end_time is None:
@@ -137,23 +165,20 @@ class QueryHunt(Hunt):
 
         # if the difference between now and the last_end_time is >= the time_range
         # then we are playing catchup and we need to run again
-        if self.last_end_time is not None and datetime.datetime.now() - self.last_end_time >= self.time_range:
+        if self.last_end_time is not None and local_time() - self.last_end_time >= self.time_range:
             return True
 
         # otherwise we're not ready until it's past the next execution time
-        return datetime.datetime.now() >= self.next_execution_time
+        return local_time() >= self.next_execution_time
 
-    @property
-    def query(self):
-        """Returns the query to execute. Loads the query if required."""
-        # have we loaded it yet?
-        if self._query is not None:
-            return self._query
-
+    def load_query_from_file(self, path):
         with open(abs_path(self.search_query_path), 'r') as fp:
-            self._query = fp.read()
+            result = fp.read()
 
-        return self._query
+            if self.strip_comments:
+                result = COMMENT_REGEX.sub('', result)
+
+        return result
     
     def load_from_ini(self, path, *args, **kwargs):
         config = super().load_from_ini(path, *args, **kwargs)
@@ -172,9 +197,15 @@ class QueryHunt(Hunt):
             self.max_time_range = create_timedelta(self.max_time_range)
 
         self.full_coverage = rule_section.getboolean('full_coverage')
-        self.group_by = rule_section['group_by']
+        self.group_by = rule_section.get('group_by', fallback=None)
         self.search_query_path = rule_section['search']
         self.use_index_time = rule_section.getboolean('use_index_time')
+
+        self.max_result_count =  rule_section.getint('max_result_count', 
+                                                     fallback=saq.CONFIG['query_hunter']['max_result_count'])
+
+        self.query_timeout = rule_section.get('query_timeout',
+                                              fallback=saq.CONFIG['query_hunter']['query_timeout'])
 
         if 'offset' in rule_section:
             self.offset = create_timedelta(rule_section['offset'])
@@ -217,6 +248,7 @@ class QueryHunt(Hunt):
 
                 self.directives[key].append(directive)
 
+        self.query = self.load_query_from_file(self.search_query_path)
         return config
 
     # start_time and end_time are optionally arguments
@@ -228,13 +260,122 @@ class QueryHunt(Hunt):
 
         try:
             # the optional offset allows hunts to run at some offset of time
-            if self.offset:
+            if not self.manual_hunt and self.offset:
                 offset_start_time -= self.offset
                 offset_end_time -= self.offset
 
-            return self.execute_query(offset_start_time, offset_end_time, *args, **kwargs)
+            query_result = self.execute_query(offset_start_time, offset_end_time, *args, **kwargs)
+
+            if self.query_result_file is not None:
+                with open(self.query_result_file, 'w') as fp:
+                    json.dump(query_result, fp)
+
+                logging.info(f"saved results to {self.query_result_file}")
+
+            return self.process_query_results(query_result)
 
         finally:
             # if we're not manually hunting then record the last end time
             if not self.manual_hunt:
                 self.last_end_time = target_end_time
+
+    def extract_event_timestamp(self, query_result):
+        """Given a JSON object that represents a single row/entry from a query result, return a datetime.datetime
+           object that represents the actual time of the event.
+           Return None if one cannot be extracted."""
+        return None
+
+    def process_query_results(self, query_results):
+        if query_results is None:
+            return
+
+        submissions = [] # of Submission objects
+
+        def _create_submission():
+            return Submission(description=self.description,
+                              # TODO support other analysis modes!
+                              analysis_mode=ANALYSIS_MODE_CORRELATION,
+                              tool=f'hunter-{self.type}',
+                              #tool_instance=saq.CONFIG['qradar']['url'], # XXX <-- 
+                              tool_instance=self.tool_instance,
+                              type=self.type,
+                              tags=self.tags,
+                              details=[],
+                              observables=[],
+                              event_time=None,
+                              files=[])
+
+        event_grouping = {} # key = self.group_by field value, value = Submission
+
+        # this is used when grouping is specified but some events don't have that field
+        missing_group = None
+
+        # map results to observables
+        for event in query_results:
+            observable_time = None
+            event_time = self.extract_event_timestamp(event) or local_time()
+
+            # pull the observables out of this event
+            observables = []
+            for field_name, observable_type in self.observable_mapping.items():
+                if field_name in event and event[field_name] is not None:
+                    observable = { 'type': observable_type, 
+                                   'value': event[field_name] }
+
+                    if field_name in self.directives:
+                        observable['directives'] = self.directives[field_name]
+
+                    if field_name in self.temporal_fields:
+                        observable['time'] = event_time
+
+                    if observable not in observables:
+                        observables.append(observable)
+
+            # if we are NOT grouping then each row is an alert by itself
+            if self.group_by is None or self.group_by not in event:
+                submission = _create_submission()
+                submission.event_time = event_time
+                submission.observables = observables
+                submission.details.append(event)
+                submissions.append(submission)
+
+            # if we are grouping but the field we're grouping by is missing
+            elif self.group_by not in event:
+                if missing_group is None:
+                    missing_group = _create_submission()
+                    submissions.append(missing_group)
+
+                
+                missing_group.observables.extend([_ for _ in observables if _ not in missing_group.observables])
+                missing_group.details.append(event)
+                
+                # see below about grouped events and event_time
+                if missing_group.event_time is None:
+                    missing_group.event_time = event_time
+                elif event_time < missing_group.event_time:
+                    missing_group.event_time = event_time
+                
+            # if we are grouping then we start pulling all the data into groups
+            else:
+                if event[self.group_by] not in event_grouping:
+                    event_grouping[event[self.group_by]] = _create_submission()
+                    event_grouping[event[self.group_by]].description += f': {event[self.group_by]}'
+                    submissions.append(event_grouping[event[self.group_by]])
+
+                event_grouping[event[self.group_by]].observables.extend([_ for _ in observables if _ not in 
+                                                                        event_grouping[event[self.group_by]].observables])
+                event_grouping[event[self.group_by]].details.append(event)
+
+                # for grouped events, the overall event time is the earliest event time in the group
+                # this won't really matter if the observables are temporal
+                if event_grouping[event[self.group_by]].event_time is None:
+                    event_grouping[event[self.group_by]].event_time = event_time
+                elif event_time < event_grouping[event[self.group_by]].event_time:
+                    event_grouping[event[self.group_by]].event_time = event_time
+
+        # update the descriptions of grouped alerts with the event counts
+        if self.group_by is not None:
+            for submission in submissions:
+                submission.description += f' ({len(submission.details)} events)'
+
+        return submissions

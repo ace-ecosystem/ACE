@@ -7,3 +7,4 @@ if [ -e "$SAQ_HOME/load_local_environment" ]
 then
     source "$SAQ_HOME/load_local_environment"
 fi
+

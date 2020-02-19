@@ -4,17 +4,22 @@ import logging
 import os, os.path
 import shutil
 import tempfile
+import unittest
 
 from subprocess import Popen
 
 import saq
 from saq.collectors.test_bro import BroBaseTestCase
 from saq.collectors.http import BroHTTPStreamCollector
+from saq.integration import integration_enabled
 from saq.test import *
 
 class BroHTTPBaseTestCase(BroBaseTestCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
+
+        if not integration_enabled('bro'):
+            raise unittest.SkipTest("skipping bro tests (bro integration not enabled)")
 
         self.bro_http_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['bro']['http_dir'])
 

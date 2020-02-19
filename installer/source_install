@@ -61,6 +61,26 @@ select gui in Apache Debug; do
 	esac
 done
 
+echo "Do you want to use a local MySQL database?"
+select use_local_mysql in Yes No; do
+    case ${use_local_mysql} in
+        Yes ) break ;;
+        No ) break ;;
+    esac
+done
+
+if [ "${use_local_mysql}" == "Yes" ]
+then
+    echo "Do you want to create an alternative root MySQL user?"
+    echo "This is a MySQL account that has root access and accessible remotely."
+    select create_alt_mysql_root in Yes No; do
+        case ${create_alt_mysql_root} in
+            Yes ) break ;;
+            No ) break ;;
+        esac
+    done
+fi
+
 create_ace_dirs || fail "cannot create required directories"
 
 # install the required packages
@@ -68,8 +88,15 @@ sudo -E installer/install_packages.sh || fail "package installation failed"
 #sudo -H -E installer/install_python_packages.sh || fail "python package installation failed"
 sudo -H -E python3 -m pip install -r installer/requirements-3.6.txt -U || fail "python3.6 package installation failed"
 sudo -H -E python2 -m pip install -r installer/requirements-2.7.txt -U || fail "python2.7 package installation failed"
-sudo -E installer/install_database.sh || fail "database installation failed"
-sudo -E bin/reset-unittest-databases || fail "unittest database installation failed"
+if [ "${use_local_mysql}" == "Yes" ]
+then
+    sudo -E installer/install_database.sh || fail "database installation failed"
+    sudo -E bin/reset-unittest-databases || fail "unittest database installation failed"
+    if [ "${create_alt_mysql_root}" == "Yes" ]
+    then
+        sudo -E ./installer/install_database_superuser.sh || fail "unable to install alt superuser account"
+    fi
+fi
 
 # set up environment
 echo -e "\\nsource $SAQ_HOME/load_environment" >> ~/.bashrc
@@ -95,6 +122,7 @@ if grep ACE_DB_USER_PASSWORD etc/saq.ini > /dev/null 2>&1
 then
 	echo "generating mysql accounts for ACE with random password"
 	tr -cd '[:alnum:]' < /dev/urandom | fold -w14 | head -n1 > .mysql.password.sed
+    password=$(cat .mysql.password.sed)
 	# modify the configuration files to use it
 	sed -i -e 's;^;s/ACE_DB_USER_PASSWORD/;' -e 's;$;/g;' .mysql.password.sed
     for path in etc/saq.ini etc/amc_mda.ini etc/amc_client.ini
@@ -105,6 +133,13 @@ then
 	sed -f .mysql.password.sed sql/create_db_user.sql > sql/create_db_user.exec.sql
 	sed -f .mysql.password.sed etc/mysql_defaults.example > etc/mysql_defaults && chmod 660 etc/mysql_defaults 
 	rm .mysql.password.sed
+
+    cat >> load_local_environment <<EOF
+export ACE_DB_NAME="ace"
+export ACE_DB_USER="ace-user"
+export ACE_DB_PASSWORD="$password"
+export ACE_DB_UNIX_SOCKET="/var/run/mysqld/mysqld.sock"
+EOF
 
 	# create the mysql database user for ace
 	sudo mysql < sql/create_db_user.exec.sql && rm sql/create_db_user.exec.sql
@@ -205,6 +240,8 @@ fi
         #No ) break ;;
     #esac
 #done
+
+sudo activate-global-python-argcomplete
 
 echo next steps:
 echo "cd $SAQ_HOME && source load_environment && ace service start --daemon engine"

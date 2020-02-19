@@ -1,6 +1,18 @@
 // Alert Correlation Engine
 // 
 
+function escape_html(unsafe) {
+    if (unsafe === null)
+        return 'null';
+
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 $(document).ready(function() {
     $("#event-form").on("submit", function(e) {
         e.preventDefault();

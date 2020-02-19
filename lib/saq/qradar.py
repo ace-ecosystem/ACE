@@ -4,7 +4,12 @@
 # TODO - iterate results instead of loading the entire thing into memory
 
 import datetime
+import io
+import json
+import json.decoder
 import logging
+import os, os.path
+import tempfile
 import threading
 import time
 
@@ -22,6 +27,11 @@ STATUS_COMPLETED = 'COMPLETED'
 STATUS_CANCELED = 'CANCELED'
 STATUS_ERROR = 'ERROR'
 
+def format_qradar_datetime(t):
+    """Format the given datatime object into a string suitable for AQL."""
+    assert isinstance(t, datetime.datetime)
+    return t.strftime('%Y-%m-%d %H:%M %z')
+
 class QueryTimeoutError(RuntimeError):
     pass
 
@@ -34,7 +44,7 @@ class QueryCanceledError(RuntimeError):
 class QRadarAPIClient(object):
     """Represents a single QRadar API request."""
 
-    def __init__(self, url, token):
+    def __init__(self, url, token, error_directory=None):
         # the base URL for all QRadar API requests
         self.url = url
         # the security token 
@@ -60,7 +70,16 @@ class QRadarAPIClient(object):
         # used to wait until the next attempt to query the status of a search
         self.wait_control_event = threading.Event()
 
-    def execute_aql_query(self, query, timeout=None, query_timeout=None, delete=True, status_callback=None, continue_check_callback=None, retries=5):
+        # when reporting the details of errors, use this directory
+        self.error_directory = error_directory
+
+    def execute_aql_query(self, query, 
+                                timeout=None, 
+                                query_timeout=None, 
+                                delete=True, 
+                                status_callback=None, 
+                                continue_check_callback=None, 
+                                retries=5):
         self.cancel_flag = False
         self.wait_control_event.clear()
 
@@ -87,19 +106,21 @@ class QRadarAPIClient(object):
             # was the query canceled?
             if self.cancel_flag:
                 logging.warning(f"query {search_id} canceled")
-                self.delete_aql_query(search_id)
+                if delete:
+                    self.delete_aql_query(search_id)
                 raise QueryCanceledError(f"query {search_id} canceled")
 
             # has the query been executing for too long?
             if self.query_limit is not None:
                 if datetime.datetime.now() > self.query_limit:
                     logging.error(f"query {query} search_id {search_id} timed out")
-                    self.delete_aql_query(search_id)
+                    if delete:
+                        self.delete_aql_query(search_id)
                     raise QueryTimeoutError()
 
             # should we keep checking?
             if continue_check_callback is not None and not continue_check_callback(self):
-                raise QueryError("continue_check_callback returned False")
+                raise QueryCanceledError("continue_check_callback returned False")
 
             # check the status of the query
             response = requests.get(f'{self.url}/ariel/searches/{search_id}', headers=self.headers, verify=False)
@@ -132,7 +153,8 @@ class QRadarAPIClient(object):
             
             if response.status_code < 200 or response.status_code > 299:
                 logging.error(f"unexpected error code for query {search_id}: {response.status_code} {response.text}")
-                self.delete_aql_query(search_id)
+                if delete:
+                    self.delete_aql_query(search_id)
                 raise QueryError(f"{response.status_code}:{response.text}")
 
             self.status_json = response.json()
@@ -152,7 +174,8 @@ class QRadarAPIClient(object):
 
             # did it get cancelled or error out
             if self.status_json[KEY_STATUS] in [ STATUS_CANCELED, STATUS_ERROR ]:
-                self.delete_aql_query(search_id)
+                if delete:
+                    self.delete_aql_query(search_id)
                 raise QueryError(f"query status {self.status_json[KEY_STATUS]}")
 
             # otherwise it completed
@@ -161,10 +184,14 @@ class QRadarAPIClient(object):
 
             if response.status_code == 200:
                 self.result_json = response.json()
-                self.delete_aql_query(search_id)
+                if delete:
+                    self.delete_aql_query(search_id)
+
                 return self.result_json
 
-            self.delete_aql_query(search_id)
+            if delete:
+                self.delete_aql_query(search_id)
+
             raise QueryError(f"search result download returned {response.status_code}: {response.text}")
 
     def cancel_aql_query(self):
@@ -179,3 +206,56 @@ class QRadarAPIClient(object):
             logging.debug(f"got result {response.status_code} for deletion of {search_id}")
         except Exception as e:
             logging.error(f"unable to delete query {search_id}: {e}")
+
+    def get_siem_offenses(self, range=None, fields=None, sort=None, filter=None):
+        """Retrieve a list of offenses currently in the system."""
+        assert filter is None or (isinstance(filter, str) and filter)
+        params = {}
+        if filter is not None:
+            params['filter'] = filter
+
+        try:
+            response = requests.get(f'{self.url}/siem/offenses', params=params,
+                headers=self.headers,
+                verify=False)
+
+            return response.json()
+
+        except json.decoder.JSONDecodeError as e:
+            if self.error_directory is not None:
+                fd, file_name = tempfile.mkstemp(suffix='json', prefix='qradar_collector', dir=self.error_directory)
+                os.write(fd, response.content)
+                os.close(fd)
+                logging.error(f"qradar collector response has malformed json: review at {file_name}")
+
+            raise e
+
+    def close_siem_offense(self, offense_id, closing_reason_id):
+        """Sets the status field of the given offense to CLOSED with the given closing_reason_id."""
+        assert isinstance(offense_id, int)
+        assert isinstance(closing_reason_id, int)
+        return requests.post(f'{self.url}/siem/offenses/{offense_id}', params={
+            'status': 'CLOSED',
+            'closing_reason_id': str(closing_reason_id), },
+            headers=self.headers,
+            verify=False).json()
+
+    def get_offense_closing_reasons(self, filter=None):
+        """Queries for the closing reason that matches the given filter."""
+        assert filter is None or isinstance(filter, str)
+        params = {}
+        if filter is not None:
+            params['filter'] = filter
+
+        return requests.get(f'{self.url}/siem/offense_closing_reasons', 
+            params=params,
+            headers=self.headers,
+            verify=False).json()
+
+    def create_offense_closing_reason(self, reason):
+        """Creates a new closing reason with the given reason text."""
+        assert isinstance(reason, str) and reason
+        return requests.post(f'{self.url}/siem/offense_closing_reasons', params={
+            'reason': reason, },
+            headers=self.headers,
+            verify=False).json()

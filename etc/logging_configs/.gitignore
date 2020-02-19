@@ -7,4 +7,6 @@ service_engine.ini
 service_ews_collector.ini
 service_fireeye_collector.ini
 service_network_semaphore.ini
+service_qradar_offense_collector.ini
+service_remediation.ini
 service_yara.ini

@@ -3,6 +3,7 @@
 # various utility functions
 #
 
+import collections
 import datetime
 import functools
 import json
@@ -11,12 +12,14 @@ import os, os.path
 import re
 import signal
 import tempfile
+import urllib
 
 import saq
 from saq.constants import *
 
 import psutil
 import pytz
+import requests
 
 CIDR_REGEX = re.compile(r'^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$')
 CIDR_WITH_NETMASK_REGEX = re.compile(r'^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/[0-9]{1,2}$')
@@ -358,8 +361,13 @@ class RegexObservableParser:
         ex: delimeter of '_' might be used to join two email address
         like 'email1@email.com_email2@email2.com'.
     """
-    def __init__(self, regex, observable_type, capture_groups=None, delimiter='_', tags=None, directives=None):
-        self.regex = re.compile(regex)
+    def __init__(self, regex, observable_type, 
+                 capture_groups=None, 
+                 delimiter='_', 
+                 tags=None, 
+                 directives=None,
+                 re_compile_options=0):
+        self.regex = re.compile(regex, re_compile_options)
         self.observable_type = observable_type
         self.matches = None
         self.capture_groups = capture_groups
@@ -424,10 +432,8 @@ class RegexObservableParserGroup:
         self._observables = []
         self.tags = tags or []
 
-    def add(
-        self, regex, observable_type, capture_groups=None, delimiter='_',
-        override_class=None, tags=None, directives=None,
-    ):
+    def add(self, regex, observable_type, capture_groups=None, delimiter='_',
+            override_class=None, tags=None, directives=None, re_compile_options=0):
         """Add a parser to the list of parsers for this group.
             
             You may pass in a subclass if you want to customize
@@ -444,8 +450,9 @@ class RegexObservableParserGroup:
             delimiter=delimiter,
             tags=_tags,
             directives=directives,
+            re_compile_options=re_compile_options,
         )
-        
+
         self.parsers.append(parser)
 
     def parse_content(self, content):
@@ -497,3 +504,74 @@ class RegexObservableParserGroup:
 
         return self._observables
 
+
+class CustomSSLAdapter(requests.adapters.HTTPAdapter):
+    """Adapter to override certificate verifications.
+
+    >>> import requests
+    >>>
+    >>> from saq.util import SSLDecryptAdapter
+    >>>
+    >>> adapter = SSLDecryptAdapter()
+    >>> adapter.add_cert('hello.world.com', '/home/certguy/my/cert.crt')
+    >>>
+    >>> session = reqeusts.Session()
+    >>>
+    >>> session.mount('https://', adapter)
+    >>> session.post('https://hello.world.com', etc.)
+
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # If the FQDN is not found in the mapping, then we want
+        #   to verify the SSL cert as normal.
+        self.cert_file_map = collections.defaultdict(lambda: True)
+
+    def add_cert(self, fqdn, cert):
+        """Add an FQDN and Cert pair to the cert file map."""
+        self.cert_file_map[fqdn] = cert
+
+    def cert_verify(self, conn, url, verify, cert):
+        """Override the HTTPAdapter 'cert_verify' to include specific certificates
+        for the FQDN/Cert pairs added by 'add_cert()'.
+        """
+
+        if self.cert_file_map is None:
+            raise ValueError("missing certificate file map")
+        hostname = urllib.parse.urlparse(url).hostname
+        super().cert_verify(conn=conn, url=url, verify=self.cert_file_map[hostname], cert=cert)
+
+class PreInitCustomSSLAdapter(requests.adapters.HTTPAdapter):
+    """Adapter to override certificate verifications.
+
+    This class used to add certificates BEFORE the adapter is
+    initialized.. for example, when replacing the adapter in
+    exchangelib. You must load your certificates without
+    initializing this class because Exchangelib initializes
+    the class and then mounts it to its own session later.
+
+    Important to note that whatever server/cert mappings are added
+    to this class exist for the entire application.
+    """
+    CERT_FILE_MAP = collections.defaultdict(lambda: True)
+    PROXIES = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @classmethod
+    def add_cert(cls, fqdn, cert):
+        """Add an FQDN and Cert pair to the cert file map."""
+        cls.CERT_FILE_MAP[fqdn] = cert
+
+    def cert_verify(self, conn, url, verify, cert):
+        """Override the HTTPAdapter 'cert_verify' to include specific certificates
+        for the FQDN/Cert pairs added by 'add_cert()'.
+        """
+        hostname = urllib.parse.urlparse(url).hostname
+        super().cert_verify(conn=conn, url=url, verify=self.CERT_FILE_MAP[hostname], cert=cert)
+
+    def send(self, *args, proxies=None, **kwargs):
+        if proxies is None:
+            return super().send(*args, **kwargs)
+        return super().send(*args, proxies=self.PROXIES, **kwargs)

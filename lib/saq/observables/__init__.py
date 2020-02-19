@@ -19,6 +19,9 @@ from saq.email import normalize_email_address
 from saq.error import report_exception
 from saq.gui import *
 from saq.intel import query_sip_indicator
+from saq.remediation import RemediationTarget
+from saq.remediation.constants import *
+from saq.remediation.email import create_email_remediation_key
 from saq.util import is_subdomain
 
 import iptools
@@ -347,6 +350,11 @@ class FileObservable(Observable):
         return True
 
     @property
+    def display_preview(self):
+        with open(self.path, 'rb') as fp:
+            return fp.read(saq.CONFIG['gui'].getint('file_preview_bytes')).decode('utf8', errors='replace')
+
+    @property
     def jinja_template_path(self):
         return "analysis/file_observable.html"
 
@@ -552,6 +560,29 @@ class EmailAddressObservable(CaselessObservable):
         result.extend(super().jinja_available_actions)
         return result
 
+class EmailDeliveryObservable(CaselessObservable, RemediationTarget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(F_EMAIL_DELIVERY, *args, **kwargs)
+        self.message_id, self.email_address = parse_email_delivery(self.value)
+
+    @property
+    def jinja_available_actions(self):
+        result = [ ObservableActionRemediate(), ObservableActionRestore(), ObservableActionSeparator() ]
+        result.extend(super().jinja_available_actions)
+        return result
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/email_delivery_observable.html"
+
+    @property
+    def remediation_type(self):
+        return REMEDIATION_TYPE_EMAIL
+
+    @property
+    def remediation_key(self):
+        return create_email_remediation_key(self.message_id, self.email_address)
+
 class YaraRuleObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_YARA_RULE, *args, **kwargs)
@@ -708,31 +739,32 @@ class TestObservable(Observable):
 
 _OBSERVABLE_TYPE_MAPPING = {
     F_ASSET: AssetObservable,
-    F_IPV4_CONVERSATION: IPv4ConversationObservable,
-    F_IPV4_FULL_CONVERSATION: IPv4FullConversationObservable,
-    F_PCAP: FileObservable,
-    F_SNORT_SIGNATURE: SnortSignatureObservable,
     F_EMAIL_ADDRESS: EmailAddressObservable,
     F_EMAIL_CONVERSATION: EmailConversationObservable,
+    F_EMAIL_DELIVERY: EmailDeliveryObservable,
     F_FILE: FileObservable,
     F_FILE_LOCATION: FileLocationObservable,
     F_FILE_NAME: FileNameObservable,
     F_FILE_PATH: FilePathObservable,
+    F_FIREEYE_UUID: FireEyeUUIDObservable,
     F_FQDN: FQDNObservable,
     F_HOSTNAME: HostnameObservable,
     F_INDICATOR: IndicatorObservable,
     F_IPV4: IPv4Observable,
+    F_IPV4_CONVERSATION: IPv4ConversationObservable,
+    F_IPV4_FULL_CONVERSATION: IPv4FullConversationObservable,
     F_MD5: MD5Observable,
+    F_MESSAGE_ID: MessageIDObservable,
+    F_PCAP: FileObservable,
+    F_PROCESS_GUID: ProcessGUIDObservable,
     F_SHA1: SHA1Observable,
     F_SHA256: SHA256Observable,
+    F_SNORT_SIGNATURE: SnortSignatureObservable,
     F_SUSPECT_FILE: FileObservable,
+    F_TEST: TestObservable,
     F_URL: URLObservable,
     F_USER: UserObservable,
     F_YARA_RULE: YaraRuleObservable,
-    F_MESSAGE_ID: MessageIDObservable,
-    F_PROCESS_GUID: ProcessGUIDObservable,
-    F_TEST: TestObservable,
-    F_FIREEYE_UUID: FireEyeUUIDObservable,
 }
 
 def create_observable(o_type, o_value, o_time=None):
