@@ -229,6 +229,7 @@ def submit(
     tool='ace_api',
     tool_instance='ace_api:{}'.format(socket.getfqdn()),
     type='generic',
+    company_id=None,
     event_time=None,
     details={},
     observables=[],
