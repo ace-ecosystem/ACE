@@ -244,6 +244,7 @@ def submit(
     :param str tool: (optional) The "tool" that is submitting this analysis. Meant for distinguishing your custom hunters and detection tools. Default: 'ace_api'.
     :param str tool_instance: (optional) The instance of the tool that is submitting this analysis.
     :param str type: (optional) The type of the analysis. Defaults to 'generic'.
+    :param str company_id: (optional) The ID of a company/organization/group this submission should be associated with.
     :param datetime event_time: (optional) Assign a time to this analysis. Usually, the time associated to what ever event triggered this analysis creation. Default: now()
     :param dict details: (optional) The dict of details for the analysis. This is a free form JSON object and typically
     contains detailed information about what is being analyzed or what was found that triggered the analysis.
@@ -314,6 +315,7 @@ def submit(
             'tool': tool,
             'tool_instance': tool_instance,
             'type': type,
+            'company_id': company_id,
             'description': description,
             'event_time': formatted_event_time,
             'details': details,
