@@ -54,6 +54,7 @@ def submit():
         abort(Response("missing {} field (see documentation)".format(KEY_ANALYSIS), 400))
 
     r = json.loads(request.values[KEY_ANALYSIS])
+    logging.debug("received analysis submission data: {}".format(r))
 
     # the specified company needs to match the company of this node
     # TODO eventually we'll have a single node that serves API to all configured companies

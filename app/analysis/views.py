@@ -1000,6 +1000,10 @@ def new_alert(db, c):
     tool_instance = saq.CONFIG['global']['instance_name']
     alert_type = request.form.get('new_alert_type', 'manual')
     description = request.form.get('new_alert_description', 'Manual Alert')
+    node_data = request.form.get('target_node_data').split(',')
+    node_id = node_data[0]
+    node_location = node_data[1]
+    company_id = node_data[2]
     event_time = event_time
     details = {'user': current_user.username, 'comment': comment}
 
@@ -1045,11 +1049,6 @@ def new_alert(db, c):
                     observable['value'] = upload_file.filename
 
                 observables.append(observable)
-
-        # get the location for this node id
-        c.execute("SELECT location FROM nodes WHERE id = %s", (int(request.form.get('target_node_id'))))
-        node_location = c.fetchone()
-        node_location = node_location[0] # meh ...
             
         try:
             result = ace_api.submit(
@@ -1059,6 +1058,7 @@ def new_alert(db, c):
                 analysis_mode = ANALYSIS_MODE_CORRELATION,
                 tool = tool,
                 tool_instance = tool_instance,
+                company_id=company_id,
                 type = alert_type,
                 event_time = event_time,
                 details = details,
@@ -3812,7 +3812,7 @@ SELECT
     company.name
 FROM
     nodes LEFT JOIN node_modes ON nodes.id = node_modes.node_id
-    JOIN company ON nodes.company_id = company.id
+    JOIN company ON company.id = nodes.company_id {}
 WHERE
     nodes.is_local = 0
     AND ( nodes.any_mode OR node_modes.analysis_mode = %s )
@@ -3820,6 +3820,16 @@ ORDER BY
     company.name,
     nodes.location
 """
+    secondary_companies_query_string = ""
+    secondary_companies = saq.CONFIG['global'].get('secondary_company_ids', None)
+    if secondary_companies is not None:
+        # trusting that the admin configured this field with an appropriate company_id
+        secondary_companies_query_string = " OR company.id = "
+        secondary_companies = secondary_companies.split(',')
+        secondary_companies_query_string += secondary_companies_query_string.join(secondary_companies)
+        logging.warning("secondary companies string: {}".format(secondary_companies_query_string))
+    sql = sql.format(secondary_companies_query_string)
+
     c.execute(sql, (ANALYSIS_MODE_CORRELATION,))
     available_nodes = c.fetchall()
     date = datetime.datetime.now().strftime("%m-%d-%Y %H:%M:%S")
