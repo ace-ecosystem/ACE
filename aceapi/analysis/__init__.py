@@ -38,6 +38,7 @@ KEY_DETAILS = 'details'
 KEY_OBSERVABLES = 'observables'
 KEY_TAGS = 'tags'
 KEY_COMPANY_NAME = 'company_name'
+KEY_COMPANY_ID = 'company_id'
 
 KEY_O_TYPE = 'type'
 KEY_O_VALUE = 'value'
@@ -57,8 +58,10 @@ def submit():
     # the specified company needs to match the company of this node
     # TODO eventually we'll have a single node that serves API to all configured companies
 
-    if KEY_COMPANY_NAME in r and r[KEY_COMPANY_NAME] != saq.CONFIG['global']['company_name']:
-        abort(Response("wrong company {} (are you sending to the correct system?)".format(r[KEY_COMPANY_NAME]), 400))
+    if KEY_COMPANY_NAME in r:
+        logging.info("Received post with company name field supplied: {}".format(r[KEY_COMPANY_NAME]))
+        if r[KEY_COMPANY_NAME] != saq.CONFIG['global']['company_name']:
+            abort(Response("wrong company {} (are you sending to the correct system?)".format(r[KEY_COMPANY_NAME]), 400))
 
     if KEY_DESCRIPTION not in r:
         abort(Response("missing {} field in submission".format(KEY_DESCRIPTION), 400))
@@ -79,6 +82,8 @@ def submit():
 
         root.analysis_mode = r[KEY_ANALYSIS_MODE] if KEY_ANALYSIS_MODE in r else saq.CONFIG['service_engine']['default_analysis_mode']
         root.company_id = saq.CONFIG['global'].getint('company_id')
+        if KEY_COMPANY_ID in r and r[KEY_COMPANY_ID]:
+            root.company_id =  r[KEY_COMPANY_ID]
         root.tool = r[KEY_TOOL] if KEY_TOOL in r else 'api'
         root.tool_instance = r[KEY_TOOL_INSTANCE] if KEY_TOOL_INSTANCE in r else 'api({})'.format(request.remote_addr)
         root.alert_type = r[KEY_TYPE] if KEY_TYPE in r else saq.CONFIG['api']['default_alert_type']
