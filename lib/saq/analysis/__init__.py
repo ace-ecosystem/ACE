@@ -2278,24 +2278,35 @@ class RootAnalysis(Analysis):
             self.state = state
 
         self._company_name = None
+        self._company_id = None
 
-        try:
-            # we take the default company ownership from the config file (if specified)
-            self._company_name = saq.CONFIG['global']['company_name']
-        except KeyError:
-            pass
+        # if both company_id and company_name were passed, validate agreement
+        if company_name and company_id:
+            _name = [c['name'] for c in saq.NODE_COMPANIES if c['id'] == company_id][0]
+            if company_name != _name:
+                raise ValueError(f"Company name={company_name} and id={company_id} mismatch. Official: {saq.NODE_COMPANIES}")
 
         if company_name:
             self._company_name = company_name
-
-        try:
-            # we take the default company ownership from the config file (if specified)
-            self._company_id = saq.CONFIG['global'].getint('company_id')
-        except KeyError:
-            pass
+            self._company_id = [c['id'] for c in saq.NODE_COMPANIES if c['name'] == company_name][0]
 
         if company_id:
             self._company_id = company_id
+            self._company_name = [c['name'] for c in saq.NODE_COMPANIES if c['id'] == company_id][0]
+
+        if not self._company_name:
+            try:
+                # we take the default company ownership from the config file (if specified)
+                self._company_name = saq.CONFIG['global']['company_name']
+            except KeyError:
+                pass
+
+        if not self._company_id:
+            try:
+                # we take the default company ownership from the config file (if specified)
+                self._company_id = saq.CONFIG['global'].getint('company_id')
+            except KeyError:
+                pass
 
         # all of the Observables discovered during analysis go into the observable_store
         # these objects are what are serialized to and from JSON
@@ -2384,6 +2395,7 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING: self.delayed_analysis_tracking,
             RootAnalysis.KEY_DEPENDECY_TRACKING: self.dependency_tracking,
         })
+        logging.warning(f"I'm right HERE: {self.company_name}")
         return result
 
     @json.setter
@@ -2675,6 +2687,20 @@ class RootAnalysis(Analysis):
         assert isinstance(value, bool)
         self.state[STATE_KEY_WHITELISTED] = value
 
+    def _get_company_id(self, name):
+        try:
+            return [c['id'] for c in saq.NODE_COMPANIES if c['name'] == name][0]
+        except:
+            logging.warning(f"no record of company for this node by name={name}")
+            return None
+
+    def _get_company_name(self, _id):
+        try:
+            return [c['name'] for c in saq.NODE_COMPANIES if c['id'] == _id][0]
+        except:
+            logging.warning(f"no record of company for this node by id={_id}")
+            return None
+
     @property
     def company_name(self):
         """The organzaition this analysis belongs to."""
@@ -2683,6 +2709,7 @@ class RootAnalysis(Analysis):
     @company_name.setter
     def company_name(self, value):
         self._company_name = value
+        self._company_id = self._get_company_id(value)
         self.set_modified()
 
     @property
@@ -2692,6 +2719,7 @@ class RootAnalysis(Analysis):
     @company_id.setter
     def company_id(self, value):
         self._company_id = value
+        self._company_name = self._get_company_name(value)
         self.set_modified()
 
     @property

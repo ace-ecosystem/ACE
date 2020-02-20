@@ -163,6 +163,7 @@ def initialize(saq_home=None,
     global LOG_LEVEL
     global MANAGED_NETWORKS
     global MODULE_STATS_DIR
+    global NODE_COMPANIES
     global OTHER_PROXIES 
     global OTHER_SLA_SETTINGS
     global PROXIES
@@ -245,6 +246,9 @@ def initialize(saq_home=None,
     # the company/custom this node belongs to
     COMPANY_NAME = None
     COMPANY_ID = None
+
+    # A list of company names and IDs this node will work for
+    NODE_COMPANIES = []
 
     # go ahead and try to figure out what text encoding we're using
     DEFAULT_ENCODING = locale.getpreferredencoding()
@@ -474,6 +478,23 @@ def initialize(saq_home=None,
 
     # initialize the database connection
     initialize_database()
+
+    # Store validated list of companies this node can work with
+    # Assume configued defaults are already valid
+    NODE_COMPANIES.append({'name': COMPANY_NAME, 'id': COMPANY_ID})
+    _secondary_company_ids = CONFIG['global'].get('secondary_company_ids', None)
+    if _secondary_company_ids is not None:
+        _secondary_company_ids = [int(_) for _ in _secondary_company_ids.split(',')]
+        from saq.database import get_db_connection
+        try:
+            with get_db_connection() as db:
+                c = db.cursor()
+                c.execute("SELECT name,id FROM company")
+                for row in c:
+                    if row[1] in _secondary_company_ids:
+                        NODE_COMPANIES.append({'name': row[0], 'id': row[1]})
+        except Exception as e:
+            logging.error(f"problem querying database {e}")
 
     # initialize fallback semaphores
     initialize_fallback_semaphores()
