@@ -180,8 +180,11 @@ def get_remediator(section, timezone=None):
     if certificate:
         adapter.add_cert(server, certificate)
 
-    if not use_proxy:
+    if use_proxy:
+        adapter.PROXIES = saq.PROXIES
+    else:
         adapter.PROXIES = {}
+
 
     return EWSRemediator(
         user=section['user'],
