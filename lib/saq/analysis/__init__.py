@@ -2395,7 +2395,6 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING: self.delayed_analysis_tracking,
             RootAnalysis.KEY_DEPENDECY_TRACKING: self.dependency_tracking,
         })
-        logging.warning(f"I'm right HERE: {self.company_name}")
         return result
 
     @json.setter
