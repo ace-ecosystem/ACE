@@ -30,7 +30,7 @@ class EmailCollectorBaseTestCase(CollectorBaseTestCase):
         self.amc_mda_path = os.path.join(saq.SAQ_HOME, 'bin', 'amc_mda')
 
     def submit_email(self, email_path):
-        p = Popen(['python3', self.amc_mda_path, '--data-dir', self.email_dir], stdin=PIPE)
+        p = Popen(['python3', self.amc_mda_path, '--base-dir', saq.SAQ_HOME, '--data-dir', self.email_dir], stdin=PIPE)
         with open(email_path, 'rb') as fp:
             shutil.copyfileobj(fp, p.stdin)
         p.stdin.close()

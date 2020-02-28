@@ -14,6 +14,9 @@ fi
 
 cd "$SAQ_HOME" || { echo "cannot cd to $SAQ_HOME"; exit 1; }
 
+sed -e "s;SAQ_HOME;$SAQ_HOME;g" ssl/root/ca/openssl.template.cnf > ssl/root/ca/openssl.cnf
+sed -e "s;SAQ_HOME;$SAQ_HOME;g" ssl/root/ca/intermediate/openssl.template.cnf > ssl/root/ca/intermediate/openssl.cnf
+
 # initialize root certificate directory
 (
     cd ssl/root/ca && \

@@ -111,6 +111,7 @@ venv.bak/
 
 archive/
 crontab
+load_environment
 load_local_environment
 splunk_logs/
 stats/

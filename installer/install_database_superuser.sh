@@ -12,7 +12,10 @@ host=localhost
 user=ace-superuser
 password=$password
 EOF
-    chown ace:ace etc/mysql_defaults.root 
+    if [ ! -z "${SAQ_USER}" ]
+    then
+        chown $SAQ_USER:$SAQ_USER etc/mysql_defaults.root 
+    fi
     chmod 660 etc/mysql_defaults.root
 
     sed -e "s/ACE_SUPERUSER_DB_USER_PASSWORD/$password/g" sql/create_db_super_user.sql > sql/create_db_super_user.exec.sql

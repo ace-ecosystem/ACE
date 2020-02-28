@@ -319,13 +319,13 @@ class CloudphishAnalyzer(AnalysisModule):
         # start the clock XXX isn't this built-in to the delay analysis system?
         if analysis.query_start is None:
             analysis.query_start = int(time.time())
-        #else:
-            ## or has the clock expired?
-            #if int(time.time()) - analysis.query_start > self.query_timeout:
-                #logging.warning("cloudphish query for {} has timed out".format(url.value))
-                #analysis.result = RESULT_ERROR
-                #analysis.result_details = 'QUERY TIMED OUT'
-                #return
+        else:
+            # or has the clock expired?
+            if int(time.time()) - analysis.query_start > self.query_timeout:
+                logging.warning("cloudphish query for {} has timed out".format(url.value))
+                analysis.result = RESULT_ERROR
+                analysis.result_details = 'QUERY TIMED OUT'
+                return True
 
         # do we have a local cache result for this url?
         sha256_url = hash_url(url.value)
