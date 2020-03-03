@@ -94,19 +94,6 @@ then
     echo -e "\\nsource $SAQ_HOME/load_environment" >> ~/.bashrc
 fi
 
-if [ ! -e "$SAQ_HOME/load_environment" ]
-then
-    cat > "$SAQ_HOME/load_environment" <<EOF
-export SAQ_HOME="$SAQ_HOME"
-export PATH="\$PATH:\$SAQ_HOME:\$SAQ_HOME/bin:/opt/site/bin"
-
-if [ -e "\$SAQ_HOME/load_local_environment" ]
-then
-    source "\$SAQ_HOME/load_local_environment"
-fi
-EOF
-fi
-
 for l in ace api apache amc_mda carbon_black email_scanner http_scanner gui falcon_collector
 do
 	if [ ! -e etc/$l\_logging.ini ]

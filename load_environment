@@ -1,0 +1,8 @@
+# this is meant to be sourced from bash
+export SAQ_HOME=${SAQ_HOME:=/opt/ace}
+export PATH="$PATH:$SAQ_HOME:$SAQ_HOME/bin:/opt/site/bin"
+
+if [ -e "$SAQ_HOME/load_local_environment" ]
+then
+    source "$SAQ_HOME/load_local_environment"
+fi
