@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-cd /opt/ace
+cd ${SAQ_HOME:=/opt/ace}
 source load_environment
 
 echo "executing bin/query_domain_admins"

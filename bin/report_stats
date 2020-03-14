@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+cd ${SAQ_HOME:=/opt/ace} || exit 1
 find stats/modules -type f -name '*.stats' | while read f
 do
     result=$(tail -n 1000000 "$f" | bin/compute_stats.py)

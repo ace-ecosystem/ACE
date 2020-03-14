@@ -1,5 +1,6 @@
 # vim: sw=4:ts=4:et:cc=120
 
+import datetime
 import json
 import os, os.path
 import tempfile
@@ -10,67 +11,12 @@ from saq.test import *
 from saq.util import *
 
 class TestCase(ACEBasicTestCase):
-    def test_file_monitor_link_cleanup(self):
-        with tempfile.NamedTemporaryFile(dir=saq.TEMP_DIR, delete=False) as temp_file:
-            path = temp_file.name
-        
-        self.assertTrue(os.path.exists(path))
-        monitor = FileMonitorLink(path)
-        self.assertTrue(os.path.exists(monitor.link_path))
-        monitor.close()
-        self.assertFalse(os.path.exists(monitor.link_path))
-        os.remove(path)
-        
-    def test_file_monitor_missing_file(self):
-        with tempfile.NamedTemporaryFile(dir=saq.TEMP_DIR, delete=True) as temp_file:
-            path = temp_file.name
-        
-        self.assertFalse(os.path.exists(path))
-        monitor = FileMonitorLink(path)
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_DELETED)
-        monitor.close()
-
-    def test_file_monitor_modified(self):
-        with tempfile.NamedTemporaryFile(mode='w', dir=saq.TEMP_DIR, delete=False) as temp_file:
-            path = temp_file.name
-            temp_file.write("test")
-        
-        self.assertTrue(os.path.exists(path))
-        monitor = FileMonitorLink(path)
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_NEW)
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_UNMODIFIED)
-
-        with open(path, 'a') as fp:
-            fp.write('test2')
-
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_MODIFIED)
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_UNMODIFIED)
-
-        os.unlink(path)
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_DELETED)
-    
-        monitor.close()
-
-    def test_file_monitor_moved(self):
-        with tempfile.NamedTemporaryFile(mode='w', dir=saq.TEMP_DIR, delete=False) as temp_file:
-            path = temp_file.name
-            temp_file.write("test")
-        
-        self.assertTrue(os.path.exists(path))
-        monitor = FileMonitorLink(path)
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_NEW)
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_UNMODIFIED)
-
-        os.unlink(path)
-        with open(path, 'w') as fp:
-            fp.write("blah")
-
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_MOVED)
-
-        os.unlink(path)
-        self.assertEquals(monitor.status(), FileMonitorLink.FILE_DELETED)
-        
-        monitor.close()
+    def test_create_timedelta(self):
+        self.assertEquals(create_timedelta('01'), datetime.timedelta(seconds=1))
+        self.assertEquals(create_timedelta('01:00'), datetime.timedelta(minutes=1))
+        self.assertEquals(create_timedelta('01:00:00'), datetime.timedelta(hours=1))
+        self.assertEquals(create_timedelta('01:00:00:00'), datetime.timedelta(days=1))
+        self.assertEquals(create_timedelta('07:00:00:00'), datetime.timedelta(days=7))
 
     def test_json_parse(self):
         # read a single JSON object out of a file

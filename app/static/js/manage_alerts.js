@@ -14,6 +14,14 @@ function get_all_checked_alerts() {
 }
 
 $(document).ready(function() {
+
+    document.getElementById("event_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("alert_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("ownership_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("disposition_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("contain_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("remediation_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+
     $("#master_checkbox").change(function(e) {
         $("input[name^='detail_']").prop('checked', $("#master_checkbox").prop('checked'));
     });
@@ -91,31 +99,37 @@ $(document).ready(function() {
 
 $(document).ready(function() {
     $('input[name="event_time"]').datetimepicker({
+        timezone: 0,
         showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="alert_time"]').datetimepicker({
+        timezone: 0,
         showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="ownership_time"]').datetimepicker({
+        timezone: 0,
         showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="disposition_time"]').datetimepicker({
+        timezone: 0,
         showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="contain_time"]').datetimepicker({
+        timezone: 0,
         showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="remediation_time"]').datetimepicker({
+        timezone: 0,
         showSecond: false,
         dateFormat: 'yy-mm-dd',
         timeFormat: 'HH:mm:ss'
@@ -333,4 +347,13 @@ function change_limit(current_limit) {
 function navigate(direction) {
     $("#frm-filter").append('<input type="hidden" name="navigate" value="' + direction + '"/>');
     $("#frm-filter").submit();
+}
+
+function toggle_chevron(alert_row_id) {
+    let button_state = document.getElementById(alert_row_id).className;
+    if (button_state == "glyphicon glyphicon-chevron-down") {
+        document.getElementById(alert_row_id).className = "glyphicon glyphicon-chevron-up";
+    } else {
+        document.getElementById(alert_row_id).className = "glyphicon glyphicon-chevron-down";
+    }
 }

@@ -6,6 +6,8 @@ import time
 
 import saq
 
+from hexdump import hexdump
+
 from flask import Flask, render_template
 from flask_bootstrap import Bootstrap
 #from flask.ext.moment import Moment
@@ -76,15 +78,21 @@ def create_app():
     app.register_blueprint(vt_hash_cache_blueprint)
 
     # utility functions to encoding/decoding base64 to/from strings
-    def s64decode(b):
-        return base64.b64decode(b).decode('utf8', errors='replace')
+    def s64decode(s):
+        return base64.b64decode(s + '===').decode('utf8', errors='replace')
 
     def s64encode(s):
         return base64.b64encode(s.encode('utf8', errors='replace')).decode('ascii')
 
-    app.jinja_env.filters['b64decode'] = base64.b64decode
+    def b64decode_wrapper(s):
+        # sometimes base64 encoded data that tools send do not have the correct padding
+        # this deals with that without breaking anything
+        return base64.b64decode(s + '===')
+
+    app.jinja_env.filters['b64decode'] = b64decode_wrapper
     app.jinja_env.filters['b64encode'] = base64.b64encode
     app.jinja_env.filters['s64decode'] = s64decode
     app.jinja_env.filters['s64encode'] = s64encode
+    app.jinja_env.filters['hexdump'] = hexdump
 
     return app

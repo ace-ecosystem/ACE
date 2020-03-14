@@ -1,9 +1,9 @@
 {% extends "analysis/default_observable.html" %}
-{% block observable_display %}
-{{_observable.message_id}} delivered to {{_observable.email_address}} 
-{% if _observable.remediation_status == 'remove' %}
-<span class="label label-special">remediated</span>
-{% elif _observable.remediation_status == 'restore' %}
-<span class="label label-special">restored</span>
-{% endif %}
+{% block observable_display_value %}{{ _observable.message_id }} delivered to {{ _observable.email_address }}{% endblock %}
+{% block observable_display_misc %}
+    {% if _observable.remediation_status == 'remove' %}
+        <span class="label label-special">remediated</span>
+    {% elif _observable.remediation_status == 'restore' %}
+        <span class="label label-special">restored</span>
+    {% endif %}
 {% endblock %}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-cd /opt/ace || exit 1
+cd ${SAQ_HOME:=/opt/ace} || exit 1
 source load_environment
 
 if [ -d data/$(ace config -v elk_logging.elk_log_dir) ]

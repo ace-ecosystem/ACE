@@ -1,4 +1,2 @@
 {% extends "analysis/default_observable.html" %}
-{% block observable_display %}
-from {{_observable.mail_from}} to {{_observable.rcpt_to}}
-{% endblock %}
+{% block observable_display_value %}from {{_observable.mail_from}} to {{_observable.rcpt_to}}{% endblock %}

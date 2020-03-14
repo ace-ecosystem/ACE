@@ -2216,7 +2216,7 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
 
         # if this was a delayed analysis request then we want to start with a specific observable and analysis module
         if self.delayed_analysis_request is not None:
-            logging.debug("processing delayed analysis request {}".format(self.delayed_analysis_request))
+            #logging.debug("processing delayed analysis request {}".format(self.delayed_analysis_request))
             work_stack.append(WorkTarget(observable=self.delayed_analysis_request.observable,
                                          analysis_module=self.delayed_analysis_request.analysis_module))
 

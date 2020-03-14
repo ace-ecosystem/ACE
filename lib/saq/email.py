@@ -9,6 +9,11 @@ import saq
 from email.utils import parseaddr
 from email.header import decode_header
 from saq.database import get_db_connection
+from saq import util
+
+import exchangelib
+from exchangelib.errors import DoesNotExist
+
 
 def normalize_email_address(email_address):
     """Returns a normalized version of email address.  Returns None if the address cannot be parsed."""
@@ -263,3 +268,143 @@ def maintain_archive(verbose=False):
             sql = "DELETE FROM archive WHERE archive_id IN ( {} )".format(','.join([str(r[0]) for r in results]))
             c.execute(sql)
             db.commit()
+
+
+def normalize_message_id(message_id):
+    """Returns message id with < and > prepended and appended respectively
+
+    Required format for exchangelib filter."""
+    message_id = message_id.strip()
+    if not message_id.startswith("<"):
+        message_id = f"<{message_id}"
+    if not message_id.endswith(">"):
+        message_id = f"{message_id}>"
+    return message_id
+
+
+def get_exchange_build(version="Exchange2016", **kwargs):
+    """Return a valid exchangelib.Build object based on the api version."""
+    _version = version.upper()
+    _module = kwargs.get("version_module") or exchangelib.version
+    if not _version.startswith("EXCHANGE"):
+        raise ValueError("exchange version invalid")
+    _version = f'EXCHANGE_{_version[8:]}'
+
+    try:
+        return getattr(_module, _version)
+    except AttributeError:
+        raise AttributeError("exchange version not found")
+
+
+class EWSApi:
+    """Helper class to handle account info for EWS"""
+
+    def __init__(self, user, password, server="outlook.office365.com", version="Exchange2016",
+                 auth_type=exchangelib.BASIC, access_type=exchangelib.DELEGATE, adapter=None, **kwargs):
+
+        self.credentials = exchangelib.Credentials(user, password)
+        self.server = server
+        _build = kwargs.get('build') or get_exchange_build(version)
+        _version = exchangelib.Version(_build)
+        self.config = exchangelib.Configuration(credentials=self.credentials, server=server, auth_type=auth_type, version=_version)
+        self.access_type = access_type
+        self._account = kwargs.get("account", None)
+        self.mailbox_found = False
+        if adapter is not None:
+            exchangelib.protocol.BaseProtocol.HTTP_ADAPTER_CLS = adapter
+
+    def initialize(self):
+        """No pre-initialization needed. Authenticaiton will happen when
+        email address is requested in 'get_account'.
+
+        This is here as to not break when this class is being used in a
+        generic."""
+        if not self.credentials.password:
+            # Prevent lockout if possible
+            raise ValueError("no password received for ews account")
+
+    def load_account(self, email_address, **kwargs):
+        """Return the existing account if appropriate. Return a new one."""
+
+        _account_class = kwargs.get("account_class") or exchangelib.Account
+        _logger = kwargs.get("logger") or logging
+
+        if self._account is not None:
+            if email_address.strip().lower() == self._account.primary_smtp_address.lower():
+                return self._account
+
+        self._account = _account_class(
+            email_address, access_type=self.access_type, credentials=self.credentials, config=self.config
+        )
+
+        _logger.debug(f"setup account object for {email_address} using {self.access_type}")
+
+    def get_account(self, email_address, **kwargs):
+        _load = kwargs.get('load') or self.load_account
+        _load(email_address, **kwargs)
+        return self._account
+
+    @property
+    def account(self):
+        return self._account
+
+    @staticmethod
+    def step_folder(parent_folder, path):
+        parts = path.split('/')
+        target_folder = parent_folder
+        for part in parts:
+            target_folder = target_folder / part
+        return target_folder
+
+
+def get_messages_from_exchangelib_folder(folder, message_id, **kwargs):
+    """Return list of messages matching message id in the given folder."""
+    _logger = kwargs.get("logger") or logging
+    message_id = normalize_message_id(message_id)
+
+    # We want to use filter WITHOUT conditional QuerySet queries... we want an EXACT match
+    # on the message id. Important to note this because if we did some sort of filter like
+    # message_id__contains, then we could accidentally pass (for example) a single letter
+    # which would cause collateral removals or restorations.
+    try:
+        return [message for message in folder.filter(message_id=message_id)]
+    # XXX - Not sure if this is needed since we're using .filter instead of .get
+    except exchangelib.errors.DoesNotExist:
+        _logger.info(f"{folder.absolute} does not contain message id {message_id}")
+        return []
+
+
+def get_ews_api_object(config_section, **kwargs) -> EWSApi:
+    _api_class = kwargs.get('api_class') or EWSApi
+
+    certificate = config_section.get("certificate", None)
+    use_proxy = config_section.getboolean("use_proxy", True)
+    server = config_section.get('server', 'outlook.office365.com')
+    auth_type = config_section.get('auth_type', exchangelib.BASIC)
+
+    if auth_type.upper() == exchangelib.NTLM:
+        auth_type = exchangelib.NTLM
+
+    adapter = kwargs.get('pre_init_adapter') or util.PreInitCustomSSLAdapter
+
+    if certificate:
+        adapter.add_cert(server, certificate)
+
+    if not use_proxy:
+        adapter.PROXIES = {}
+
+    try:
+        api_object = _api_class(
+            config_section['user'],
+            config_section['pass'],
+            server=server,
+            version=config_section['version'],
+            auth_type=auth_type,
+            access_type=config_section['access_type'],
+            adapter=adapter,
+        )
+    except Exception as e:
+        logging.error(f'error creating EWS API object: {e}')
+        raise e
+    else:
+        return api_object

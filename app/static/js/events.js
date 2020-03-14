@@ -46,31 +46,37 @@ function edit_event(event_id) {
         success: function(data, textStatus, jqXHR) {
             $('#edit_event_insert').after(data);
             $('input[name="event_time"]').datetimepicker({
+                timezone: 0,
               showSecond: false,
               dateFormat: 'yy-mm-dd',
               timeFormat: 'HH:mm:ss'
             });
             $('input[name="alert_time"]').datetimepicker({
+                timezone: 0,
               showSecond: false,
               dateFormat: 'yy-mm-dd',
                 timeFormat: 'HH:mm:ss'
             });
             $('input[name="ownership_time"]').datetimepicker({
+                timezone: 0,
               showSecond: false,
               dateFormat: 'yy-mm-dd',
                 timeFormat: 'HH:mm:ss'
             });
             $('input[name="disposition_time"]').datetimepicker({
+                timezone: 0,
               showSecond: false,
               dateFormat: 'yy-mm-dd',
                 timeFormat: 'HH:mm:ss'
             });
             $('input[name="contain_time"]').datetimepicker({
+                timezone: 0,
               showSecond: false,
               dateFormat: 'yy-mm-dd',
                 timeFormat: 'HH:mm:ss'
             });
             $('input[name="remediation_time"]').datetimepicker({
+                timezone: 0,
               showSecond: false,
               dateFormat: 'yy-mm-dd',
                 timeFormat: 'HH:mm:ss'

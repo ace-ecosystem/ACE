@@ -12,6 +12,7 @@ from saq.error import report_exception
 from saq.analysis import Analysis, Observable
 from saq.modules import AnalysisModule, LDAPAnalysisModule
 from saq.constants import *
+import saq.ldap
 
 class UserTagAnalysis(Analysis):
     def initialize_details(self):
@@ -60,19 +61,16 @@ class EmailAddressAnalysis(Analysis):
     """Who is the user associated to this email address?"""
 
     def initialize_details(self):
-        self.details = {} # free form from ldap query
+        self.details = []
 
     def generate_summary(self):
-        if self.details is not None:
-            if 'uid' in self.details:
-                return "Email Analysis - {0} - {1}".format(
-                    self.details['uid'],
-                    self.details['cn'] if 'cn' in self.details else '?')
-            else:
-                return "Email Analysis - {0} - {1}".format(
-                    self.details['cn'] if 'cn' in self.details else '?', 
-                    self.details['displayName'] if 'displayName' in self.details else '?')
-
+        if self.details is not None and len(self.details) > 0:
+            users = []
+            for entry in self.details:
+                if 'attributes' in entry and 'displayName' in entry['attributes'] and 'cn' in entry['attributes']:
+                    users.append(f"{entry['attributes']['displayName']} ({entry['attributes']['cn']})") 
+            desc = ", ".join(users)
+            return f"Email Analysis - {desc}"
         return None
 
 class EmailAddressAnalyzer(LDAPAnalysisModule):
@@ -85,35 +83,18 @@ class EmailAddressAnalyzer(LDAPAnalysisModule):
         return F_EMAIL_ADDRESS
 
     def execute_analysis(self, email_address):
-
-        m = re.match(r'^<?([^>]+)>?$', email_address.value.strip())
-        if m is None:
-            logging.debug("unable to parse email address {}".format(email_address.value))
-            return False
-
-        normalized_email_address = m.group(1)
-
-        ldap_result = self.ldap_query("mail={}".format(normalized_email_address))
-        tivoli_ldap_result = self.tivoli_ldap_query("mail={}".format(normalized_email_address))
-        if ldap_result is None and tivoli_ldap_result is None: 
-            logging.debug("no results for {}".format(normalized_email_address))
-            return False
-
         analysis = self.create_analysis(email_address)
-        analysis.details = ldap_result
-        if analysis.details is not None:
-            if 'cn' in analysis.details:
-                analysis.add_observable(F_USER, analysis.details['cn'])
-                return True
+        analysis.details = saq.ldap.lookup_email_address(email_address.value)
 
-        analysis.details = tivoli_ldap_result
-        if analysis.details is not None:
-            if 'uid' in analysis.details:
-                analysis.details['cn'] = analysis.details['cn'][0] if 'cn' in analysis.details else ''
-                analysis.details['uid'] = analysis.details['uid'][0] if 'uid' in analysis.details else ''
-                analysis.add_observable(F_USER, analysis.details['uid'])
-                return True
+        # add user observables for each user id found
+        for entry in analysis.details:
+            if 'attributes' not in entry or 'cn' not in entry['attributes']:
+                continue
+            analysis.add_observable(F_USER, entry['attributes']['cn'])
 
+        # return true if user was found, false otherwise
+        if len(analysis.details) > 0:
+            return True
         return False
 
 class UserAnalysis(Analysis):
@@ -158,57 +139,48 @@ class UserAnalyzer(LDAPAnalysisModule):
         return F_USER
 
     def _ldap_query_user(self, username):
-        return self.ldap_query("cn={}*".format(username))
-
-    def _tivoli_ldap_query_user(self, username):
-        return self.tivoli_ldap_query("uid={}*".format(username))
-
-    def execute_analysis(self, user):
-
-        ldap_result = self._ldap_query_user(user.value)
-        tivoli_ldap_result = self._tivoli_ldap_query_user(user.value)
-
-        # try to look up the manager
-        manager_result = None
-        if ldap_result is None:
-            logging.debug("did not find an ldap result for {}".format(user.value))
-        elif 'manager' in ldap_result:
-            for name_value_pair in ldap_result['manager'].split(','):
+        results = self.ldap_query("cn={}*".format(username))
+        if results is not None and 'manager' in results:
+            for name_value_pair in results['manager'].split(','):
                 (name, value) = name_value_pair.split('=', 2)
                 if name == 'CN':
-                    logging.debug("performing LDAP query for manager CN {} of user {}".format(
-                        value, user.value))
-                    manager_result = self._ldap_query_user(value)
-                    if manager_result is not None and 'displayName' in manager_result:
-                        logging.debug("got manager {} for user {}".format(manager_result['displayName'], user.value))
+                    results['manager_cn'] = value
+        return results
 
-        # try again with tivoli
-        if manager_result is None:
-            if tivoli_ldap_result is None:
-                logging.debug("did not find an tivoli ldap result for {}".format(user.value))
-            elif 'managerID' in tivoli_ldap_result:
-                manager_value = tivoli_ldap_result['managerID']
-                logging.debug("performing LDAP query for manager CN {} of user {}".format(
-                    manager_value, user.value))
-                manager_result = self._ldap_query_user(manager_value)
-                if manager_result is not None and 'displayName' in manager_result:
-                    logging.debug("got manager {} for user {}".format(manager_result['displayName'], user.value))
-
+    def execute_analysis(self, user):
         analysis = self.create_analysis(user)
+        analysis.details = {}
+        analysis.details['ldap'] = self._ldap_query_user(user.value)
+        if analysis.details['ldap'] is None:
+            logging.error(f"Failed to fetch ldap info for {user.value}")
+            return False
 
-        if ldap_result is None and tivoli_ldap_result is not None:
-            analysis.details = { 'ldap': tivoli_ldap_result, 'manager_ldap': manager_result }
-            # 'mail' and 'cn' return lists, take first entry or add_observable will error
-            for key in [ 'mail', 'cn' ]:
-                if key in analysis.details['ldap'] and isinstance(analysis.details['ldap'][key], list):
-                    analysis.details['ldap'][key] = analysis.details['ldap'][key][0]
-                else:
-                    analysis.details['ldap'][key] = ''
-        else:
-            analysis.details = { 'ldap': ldap_result, 'manager_ldap': manager_result }
+        # get manager info and determine if user is executive
+        top_user = saq.CONFIG['ldap_executives']['top_user']
+        if 'manager_cn' in analysis.details['ldap'] and analysis.details['ldap']['manager_cn'] is not None:
+            analysis.details['manager_ldap'] = self._ldap_query_user(analysis.details['ldap']['manager_cn'])
+            if analysis.details['manager_ldap'] is None:
+                logging.error(f"Failed to fetch manger ldap info for {user.value}")
+            elif 'manager_cn' in analysis.details['manager_ldap'] and analysis.details['manager_ldap']['manager_cn'] is not None:
+                if top_user in [user.value.lower(), analysis.details['ldap']['manager_cn'].lower(), analysis.details['manager_ldap']['manager_cn'].lower()]:
+                    user.add_tag("executive")
+
+        # check for privileged access
+        analysis.details['ldap']['entitlements'] = []
+        if 'memberOf' in analysis.details['ldap'] and analysis.details['ldap']['memberOf'] is not None:
+            privileged_groups = dict(saq.CONFIG['ldap_privileged_groups'])
+            for group in analysis.details['ldap']['memberOf']:
+                privileged = False
+                for _, privileged_group in privileged_groups.items():
+                    logging.debug(f"privileged_group = '{privileged_group}' and group = '{group}'")
+                    if privileged_group in group:
+                        user.add_tag("admin")
+                        privileged = True
+                        break
+                analysis.details['ldap']['entitlements'].append({'group':group, 'privileged':privileged})
 
         # did we get an email address?
-        if analysis.details and 'ldap' in analysis.details and analysis.details['ldap'] is not None and 'mail' in analysis.details['ldap'] and analysis.details['ldap']['mail'] is not None:
+        if 'mail' in analysis.details['ldap'] and analysis.details['ldap']['mail'] is not None:
             analysis.add_observable(F_EMAIL_ADDRESS, analysis.details['ldap']['mail'])
 
         return True

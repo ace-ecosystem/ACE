@@ -18,9 +18,8 @@
         <button id="btn-add-observable" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#add_observable_modal" {% if alert.is_locked() or not ace_config['gui'].getboolean('add_observable') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add Observable</button>
         <button type="button" name="btn-show-add-tags" class="btn btn-default btn-sm" data-toggle="modal" data-target="#tag_modal"><span class="glyphicon glyphicon-tags"></span> Add Tag(s)</button>
         <button id="btn-analyze_alert" type="button" class="btn btn-default btn-sm" {% if alert.is_locked() or not ace_config['gui'].getboolean('analyze_alert') %}disabled{% endif %}><span class="glyphicon glyphicon-lock"></span> Re-Analyze</button>
-        <button id="btn-remediate-alerts" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('email_remediation') %}tabindex="-1" disabled{% endif %} ><span class="glyphicon glyphicon-envelope"></span> Email Remediation</button>
         <button id="btn-remediation" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-remove"></span> Remediation</button>
-        <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#event_modal" {%if not ace_config['gui'].getboolean('event_management') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add To Event</button>
+        <button id="btn-add-to-event" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#event_modal" {%if not ace_config['gui'].getboolean('event_management') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add To Event</button>
     </form>
 </div>
 <div class="col-md-5">
@@ -156,6 +155,12 @@
         <input type="hidden" name="comment_id" id="comment_id" value=""/>
         <input type="hidden" name="direct" value="{{alert.uuid}}"/>
     </form>
+
+    <form id="frm-observable-filter" method="POST" action="{{ url_for('analysis.manage') }}">
+        <input type="hidden" name="use_search_observable" value="on">
+        <input type="hidden" id="frm-observable-filter-value" name="search_observable_value" value="">
+        <input type="hidden" id="frm-observable-filter-type" name="search_observable_type" value="">
+    </form>
 </div>
 
 <form id="ownership-form" action="{{url_for('analysis.take_ownership')}}" method="POST">
@@ -189,7 +194,7 @@
                         {% endfor %}
                     </select>
                     </div>
-                    <div class="col-xs-6">
+                    <div class="col-xs-6" id="add_observable_value_content">
                         <input type="text" class="form-control" id="add_observable_value" name="add_observable_value" value="" placeholder="Enter Value"/>
                     </div>
                 </div>

@@ -15,9 +15,10 @@ from subprocess import Popen, PIPE
 import saq
 from saq.analysis import Observable, DetectionPoint
 from saq.constants import *
-from saq.email import normalize_email_address
+from saq.email import normalize_email_address, normalize_message_id
 from saq.error import report_exception
 from saq.gui import *
+from saq.integration import integration_enabled
 from saq.intel import query_sip_indicator
 from saq.remediation import RemediationTarget
 from saq.remediation.constants import *
@@ -228,6 +229,10 @@ class FileObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_FILE, *args, **kwargs)
 
+        # do not allow empty file names
+        if self.value == '':
+            raise ObservableValueError("empty file name")
+
         self._md5_hash = None
         self._sha1_hash = None
         self._sha256_hash = None
@@ -430,12 +435,22 @@ class FileObservable(Observable):
             result.append(ObservableActionSeparator())
             result.append(ObservableActionViewAsHex())
             result.append(ObservableActionViewAsText())
-            result.append(ObservableActionSeparator())
-            result.append(ObservableActionUploadToVt())
-            result.append(ObservableActionUploadToVx())
+            if integration_enabled('vt') or integration_enabled('vx') or integration_enabled('falcon_sandbox'):
+                result.append(ObservableActionSeparator())
+                if integration_enabled('vt'):
+                    result.append(ObservableActionUploadToVt())
+                if integration_enabled('vx'):
+                    result.append(ObservableActionUploadToVx())
+                if integration_enabled('falcon_sandbox'):
+                    result.append(ObservableActionUploadToFalconSandbox())
+
             result.append(ObservableActionSeparator())
             result.append(ObservableActionViewInVt())
-            result.append(ObservableActionViewInVx())
+            if integration_enabled('vx'):
+                result.append(ObservableActionViewInVx())
+            if integration_enabled('falcon_sandbox'):
+                result.append(ObservableActionViewInFalconSandbox())
+
             result.append(ObservableActionSeparator())
         result.extend(super().jinja_available_actions)
         return result
@@ -700,6 +715,7 @@ class SnortSignatureObservable(Observable):
 class MessageIDObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_MESSAGE_ID, *args, **kwargs)
+        self.value = normalize_message_id(self.value)
 
     @property
     def jinja_available_actions(self):
@@ -710,6 +726,31 @@ class MessageIDObservable(Observable):
 class ProcessGUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_PROCESS_GUID, *args, **kwargs)
+
+class ExternalUIDObservable(Observable): 
+    def __init__(self, *args, **kwargs): 
+        super().__init__(F_EXTERNAL_UID, *args, **kwargs)
+        self._tool, self._uid = self.value.split(':', 1)
+
+    @property
+    def tool(self):
+        return self._tool
+
+    @property
+    def uid(self):
+        return self._uid
+
+class ExabeamSessionObservable(Observable): 
+    def __init__(self, *args, **kwargs): 
+        super().__init__(F_EXABEAM_SESSION, *args, **kwargs)
+
+    @property
+    def jinja_available_actions(self):
+        result = []
+        result.append(ObservableActionViewInExabeam())
+        result.append(ObservableActionSeparator())
+        result.extend(super().jinja_available_actions)
+        return result
 
 class FireEyeUUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
@@ -742,6 +783,8 @@ _OBSERVABLE_TYPE_MAPPING = {
     F_EMAIL_ADDRESS: EmailAddressObservable,
     F_EMAIL_CONVERSATION: EmailConversationObservable,
     F_EMAIL_DELIVERY: EmailDeliveryObservable,
+    F_EXTERNAL_UID: ExternalUIDObservable,
+    F_EXABEAM_SESSION: ExabeamSessionObservable,
     F_FILE: FileObservable,
     F_FILE_LOCATION: FileLocationObservable,
     F_FILE_NAME: FileNameObservable,

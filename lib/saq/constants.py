@@ -38,6 +38,8 @@ F_CIDR = 'cidr'
 F_EMAIL_ADDRESS = 'email_address'
 F_EMAIL_CONVERSATION = 'email_conversation'
 F_EMAIL_DELIVERY = 'email_delivery'
+F_EXTERNAL_UID = 'external_uid'
+F_EXABEAM_SESSION = 'exabeam_session'
 F_FILE = 'file'
 F_FILE_LOCATION = 'file_location'
 F_FILE_NAME = 'file_name'
@@ -70,6 +72,8 @@ OBSERVABLE_DESCRIPTIONS = {
     F_EMAIL_ADDRESS: 'email address',
     F_EMAIL_CONVERSATION: 'a conversation between a source email address (MAIL FROM) and a destination email address (RCPT TO)',
     F_EMAIL_DELIVERY: 'a delivery of a an email to a target mailbox',
+    F_EXTERNAL_UID: 'unique identifier for something that is stored in an external tool. Format: tool_name:uid',
+    F_EXABEAM_SESSION: 'session id of an exabeam session',
     F_FILE: 'path to an attached file',
     F_FILE_LOCATION: 'the location of file with format hostname@full_path',
     F_FILE_NAME: 'a file name (no directory path)',
@@ -103,6 +107,8 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_EMAIL_ADDRESS,
     F_EMAIL_CONVERSATION,
     F_EMAIL_DELIVERY,
+    F_EXTERNAL_UID,
+    F_EXABEAM_SESSION,
     F_FILE,
     F_FILE_LOCATION,
     F_FILE_NAME,
@@ -274,6 +280,8 @@ DIRECTIVE_CRAWL = 'crawl'
 DIRECTIVE_FORCE_DOWNLOAD = 'force_download'
 # extract URLs from the given file
 DIRECTIVE_EXTRACT_URLS = 'extract_urls'
+# extract email from exchange server or O365 (requires email address and message id)
+DIRECTIVE_EXTRACT_EMAIL = 'extract_email'
 # run the observable through a sandbox
 DIRECTIVE_SANDBOX = 'sandbox'
 # treat this file as the original email file
@@ -308,6 +316,7 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_CRAWL: 'crawl the URL',
     DIRECTIVE_DELAY: 'instructs various analysis modules to delay the analysis',
     DIRECTIVE_EXCLUDE_ALL: 'instructs ACE to NOT analyze this observable at all',
+    DIRECTIVE_EXTRACT_EMAIL: 'extract email from exchange or o365',
     DIRECTIVE_EXTRACT_PCAP: 'extract PCAP for the given observable and given time',
     DIRECTIVE_EXTRACT_URLS: 'extract URLs from the given file',
     DIRECTIVE_FORCE_DOWNLOAD: 'download the content of the URL no matter what',
@@ -329,6 +338,7 @@ VALID_DIRECTIVES = [
     DIRECTIVE_CRAWL,
     DIRECTIVE_DELAY,
     DIRECTIVE_EXCLUDE_ALL,
+    DIRECTIVE_EXTRACT_EMAIL,
     DIRECTIVE_EXTRACT_PCAP,
     DIRECTIVE_EXTRACT_URLS,
     DIRECTIVE_FORCE_DOWNLOAD,
@@ -397,13 +407,16 @@ VALID_EVENTS = [
 # available actions for observables
 ACTION_CLEAR_CLOUDPHISH_ALERT = 'clear_cloudphish_alert'
 ACTION_COLLECT_FILE = 'collect_file'
+ACTION_EXABEAM_SESSION_VIEW_EXABEAM = 'exabeam_session_view_exabeam'
 ACTION_FILE_DOWNLOAD = 'file_download'
 ACTION_FILE_DOWNLOAD_AS_ZIP = 'file_download_as_zip'
 ACTION_FILE_UPLOAD_VT = 'file_upload_vt'
+ACTION_FILE_UPLOAD_FALCON_SANDBOX = 'file_upload_falcon_sandbox'
 ACTION_FILE_UPLOAD_VX = 'file_upload_vx'
 ACTION_FILE_VIEW_AS_HEX = 'file_view_as_hex'
 ACTION_FILE_VIEW_AS_TEXT = 'file_view_as_text'
 ACTION_FILE_VIEW_VT = 'file_view_vt'
+ACTION_FILE_VIEW_FALCON_SANDBOX = 'file_view_falcon_sandbox'
 ACTION_FILE_VIEW_VX = 'file_view_vx'
 ACTION_REMEDIATE = 'remediate'
 ACTION_REMEDIATE_EMAIL = 'remediate_email'
@@ -465,6 +478,7 @@ ANALYSIS_MODE_DISPOSITIONED = 'dispositioned'
 ANALYSIS_TYPE_GENERIC = 'generic'
 ANALYSIS_TYPE_MAILBOX = 'mailbox'
 ANALYSIS_TYPE_EWS = 'ews'
+ANALYSIS_TYPE_EXABEAM = 'exabeam'
 ANALYSIS_TYPE_BRO_SMTP = 'bro - smtp'
 ANALYSIS_TYPE_BRO_HTTP = 'bro - http'
 ANALYSIS_TYPE_CLOUDPHISH = 'cloudphish'
@@ -473,6 +487,7 @@ ANALYSIS_TYPE_FAQUEUE = 'faqueue'
 ANALYSIS_TYPE_FALCON = 'falcon'
 ANALYSIS_TYPE_FIREEYE = 'fireeye'
 ANALYSIS_TYPE_QRADAR_OFFENSE = 'qradar_offense'
+ANALYSIS_TYPE_BRICATA = 'bricata'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'

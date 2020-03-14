@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-source $(dirname "$0")/common.sh
-cd $SAQ_HOME
-ace -L etc/email_collection_logging.ini collector start --daemon email

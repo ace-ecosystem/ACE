@@ -121,7 +121,7 @@ class VTHashFileDownloader(AnalysisModule):
                 'apikey': self.api_key,
                 'hash': md5_hash }
 
-            r = requests.get(self.download_url, params=params, proxies=saq.PROXIES)
+            r = requests.get(self.download_url, params=params, proxies=saq.PROXIES, verify=False)
             if r.status_code == 200:
                 file_content = r.content
                 # then save it to the cache

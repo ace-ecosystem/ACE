@@ -62,6 +62,7 @@ class RootAnalysisTestCase(ACEBasicTestCase):
         self.assertEquals(root.location, saq.CONFIG['global']['node'])
         self.assertEquals(root.company_id, saq.CONFIG['global'].getint('company_id'))
         self.assertEquals(root.company_name, saq.CONFIG['global']['company_name'])
+        self.assertTrue(root.submission is None)
 
     def test_save(self):
         root = create_root_analysis()

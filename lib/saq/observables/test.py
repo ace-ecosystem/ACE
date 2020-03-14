@@ -64,6 +64,8 @@ class ObservableTestCase(ACEBasicTestCase):
         self.assertIsNone(o)
         o = root.add_observable(F_URL, '\xFF')
         self.assertIsNone(o)
+        o = root.add_observable(F_FILE, '')
+        self.assertIsNone(o)
 
     def test_observable_002_observable_storage(self):
         root = create_root_analysis()
@@ -100,3 +102,8 @@ class ObservableTestCase(ACEBasicTestCase):
         # this should not add an observable since this is an ipv6 address
         o1 = root.add_observable(F_IPV4, '::1')
         self.assertIsNone(o1)
+
+    def test_add_invalid_message_id(self):
+        root = create_root_analysis()
+        observable = root.add_observable(F_MESSAGE_ID, 'CANTOGZtOdse1SqNtFRs2o22ohrWpbddWfCzkzn+iy1SEHxt2pg@mail.gmail.com')
+        self.assertEquals(observable.value, '<CANTOGZtOdse1SqNtFRs2o22ohrWpbddWfCzkzn+iy1SEHxt2pg@mail.gmail.com>')

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 
-cd $SAQ_HOME || { echo "unable to cd to $SAQ_HOME"; exit 1; }
+cd ${SAQ_HOME:=/opt/ace} || { echo "unable to cd to $SAQ_HOME"; exit 1; }
 
 # set $prefix and $options
 source bin/mysql_common.sh
