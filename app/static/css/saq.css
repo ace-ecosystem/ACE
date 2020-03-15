@@ -25,14 +25,25 @@ html, body {
     flex: 1;
 }
 
+.link:hover {
+    text-decoration: underline;
+    text-shadow: 1px 1px 1px #555;
+}
+
 .voffset5 { margin-top : 5px; }
 .voffset10 { margin-top : 10px; }
 
 /* observable type highlights */
 
 .observable_display {
+    cursor: pointer;
     font-weight: bold;
     text-shadow: 1px 1px 1px lightgray;
+}
+
+.observable_display:hover {
+    cursor: pointer;
+    text-decoration: underline;
 }
 
 .observable-preview {
@@ -195,4 +206,8 @@ html, body {
 .raw-log {
   font-family : monospace;
   font-size : smaller;
+}
+
+.pre {
+  white-space: pre;
 }

@@ -1,25 +1,7 @@
 #!/usr/bin/env bash
 
-if [ -z "$SAQ_HOME" ]
-then
-    echo "you are missing SAQ_HOME environment variable"
-    exit 1
-fi
-
-env_path="/$SAQ_HOME/load_environment"
-proxy_path="/$SAQ_HOME/load_proxy"
-
-if [ -e "$env_path" ]
-then
-    source /$SAQ_HOME/load_environment
-fi
-
-if [ -e "$proxy_path" ]
-then
-    source /$SAQ_HOME/load_proxy
-fi
-
-cd $SAQ_HOME || { echo "cannot cd to $SAQ_HOME" ; exit 1;  }
+cd ${SAQ_HOME:=/opt/ace} || { echo "cannot cd to $SAQ_HOME" ; exit 1;  }
+source load_environment
 
 if [ ! -d etc/asn ]
 then

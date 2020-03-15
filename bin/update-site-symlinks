@@ -10,6 +10,8 @@
 # this script goes through all of them and inserts them as symlinks
 #
 
+cd ${SAQ_HOME:=/opt/ace}
+
 for site_dir in /opt/site /opt/site_common
 do
     if [ ! -d "${site_dir}" ]; then continue; fi

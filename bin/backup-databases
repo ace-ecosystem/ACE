@@ -1,21 +1,28 @@
 #!/usr/bin/env bash
-source $(dirname "$0")/common.sh
-cd $SAQ_HOME
+cd ${SAQ_HOME:=/opt/ace}
+source bin/common.sh
 
-if [ ! -e "etc/mysql_defaults" ]
+if [ ! -e "etc/mysql_defaults.root" ]
 then
-    echo "missing etc/mysql_defaults"
+    echo "missing etc/mysql_defaults.root"
     exit 1
 fi
 
-if [ ! -d backups ]
+if [ ! -d data/backups ]
 then
-    mkdir backups
+    mkdir data/backups
 fi
 
-for db in ace ace-workload brocess email-archive hal9000 cloudphish vt-hash-cache
+for db in ace brocess email-archive vt-hash-cache
 do
-    backup_file="backups/$db-$(date '+%Y%m%d').sql"
-    mysqldump --defaults-file=etc/mysql_defaults --quick --single-transaction $db > $backup_file
-    gzip $backup_file
+    backup_file="data/backups/$db-$(date '+%Y%m%d').sql"
+    echo "backup $db to $backup_file"
+    mysqldump --defaults-file=etc/mysql_defaults.root --quick --single-transaction $db > $backup_file
+    gzip -f $backup_file
 done
+
+# delete backups older than 30 days
+if [ -d "data/backups" ]
+then
+    find -L "data/backups" -type f -name '*.sql.gz' -mtime +30 -delete
+fi

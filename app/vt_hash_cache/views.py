@@ -94,11 +94,15 @@ def query():
             if not row:
                 # if we don't have it in the database then we perform a query here
                 try:
-                    logging.info("vt api request for {}".format(_hash))
+                    logging.info(f"vt api request for {_hash}")
                     r = requests.get(saq.CONFIG['virus_total']['query_url'], params={
                         'resource': _hash,
-                        'apikey': saq.CONFIG['virus_total']['api_key']}, proxies=saq.PROXIES, timeout=5)
+                        'apikey': saq.CONFIG['virus_total']['api_key']}, 
+                        proxies=saq.PROXIES, 
+                        timeout=5,
+                        verify=False)
                 except Exception as e:
+                    logging.error(f"unable to query VT: {e}")
                     return "unable to query VT: {}".format(e), 500
 
                 if r.status_code == 403:

@@ -5,12 +5,15 @@
 #
 
 import importlib
+import io
+import json
 import logging
 import os, os.path
 import pickle
 import queue
 import shutil
 import socket
+import tempfile
 import threading
 import uuid
 
@@ -24,11 +27,16 @@ from saq.database import use_db, \
                          disable_cached_db_connections
 
 from saq.error import report_exception
+from saq.persistence import Persistable
 from saq.service import ACEService
-from saq.util import create_directory
+from saq.submission import Submission, SubmissionFilter
+from saq.util import create_directory, abs_path
 
 import urllib3.exceptions
 import requests.exceptions
+from yara_scanner import YaraScanner
+import yara
+import plyara
 
 # some constants used as return values
 WORK_SUBMITTED = 1
@@ -40,54 +48,33 @@ NO_WORK_SUBMITTED = 4
 TEST_MODE_STARTUP = 'startup'
 TEST_MODE_SINGLE_SUBMISSION = 'single_submission'
 
-class Submission(object):
-    """A single analysis submission.
-       Keep in mind that this object gets serialized into a database blob via the pickle module.
-       NOTE - The files parameter MUST be either a list of file names or a list of tuples of (source, dest)
-              NOT file descriptors."""
+def submission_target_buffer(self, 
+                             description,
+                             analysis_mode,
+                             tool,
+                             tool_instance,
+                             type,
+                             event_time,
+                             tags,
+                             observables,
+                             details):
+    """Returns the buffer used for scanning submission details as a bytes object."""
+    from saq.analysis import _JSONEncoder
 
-    # this is basically just all the arguments that are passed to ace_api.submit
-    
-    def __init__(self,
-                 description, 
-                 analysis_mode,
-                 tool,
-                 tool_instance,
-                 type,
-                 event_time,
-                 details,
-                 observables,
-                 tags,
-                 files,
-                 group_assignments=[]):
+    details_json = json.dumps(details, indent=True, sort_keys=True, cls=_JSONEncoder)
+    observables_json = json.dumps(observables, indent=True, sort_keys=True, cls=_JSONEncoder)
+    return f"""description = {description}
+analysis_mode = {analysis_mode}
+tool = {tool}
+tool_instance = {tool_instance}
+type = {type}
+event_time = {event_time}
+tags = {','.join(tags)}
 
-        self.description = description
-        self.analysis_mode = analysis_mode
-        self.tool = tool
-        self.tool_instance = tool_instance
-        self.type = type
-        self.event_time = event_time
-        self.details = details
-        self.observables = observables
-        self.tags = tags
-        self.files = files
-        self.uuid = str(uuid.uuid4())
+{observables_json}
 
-        # list of RemoteNodeGroup.name values
-        # empty list means send to all configured groups
-        self.group_assignments = group_assignments
-
-    def __str__(self):
-        return "{} ({})".format(self.description, self.analysis_mode)
-
-    def success(self, group, result):
-        """Called by the RemoteNodeGroup when this has been successfully submitted to a remote node group.
-           result is the result of the ace_api.submit command for the submission"""
-        pass
-
-    def fail(self, group):
-        """Called by the RemoteNodeGroup when this has failed to be submitted and full_delivery is disabled."""
-        pass
+{details_json}
+""".encode('utf8', errors='backslashreplace')
 
 class RemoteNode(object):
     def __init__(self, id, name, location, any_mode, last_update, analysis_mode, workload_count):
@@ -484,7 +471,7 @@ LIMIT %s""".format(','.join(['%s' for _ in available_modes]))
         return "RemoteNodeGroup(name={}, coverage={}, full_delivery={}, company_id={}, database={})".format(
                 self.name, self.coverage, self.full_delivery, self.company_id, self.database)
 
-class Collector(ACEService):
+class Collector(ACEService, Persistable):
     def __init__(self, workload_type=None, 
                        delete_files=False, 
                        test_mode=None, 
@@ -492,6 +479,7 @@ class Collector(ACEService):
                        *args, **kwargs):
 
         super().__init__(*args, **kwargs)
+
         # often used as the "tool_instance" property of analysis
         self.fqdn = socket.getfqdn()
 
@@ -504,6 +492,10 @@ class Collector(ACEService):
 
         # the directory that contains any files that to be transfered along with submissions
         self.incoming_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['incoming_dir'])
+
+        # the id of the persistence source this collector uses to store persistence data in the database
+        # loaded at initialization
+        self.persistence_source_id = None
 
         # the directory that can contain various forms of persistence for collections
         self.persistence_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir'])
@@ -538,6 +530,10 @@ class Collector(ACEService):
         # NOTE there is no wait if something was previously collected
         self.collection_frequency = collection_frequency
 
+        # this is used to filter out submissions according to yara rules
+        # see README.SUBMISSION_FILTERS
+        self.submission_filter = SubmissionFilter()
+
         # XXX meh -- maybe this should be hard coded, or at least in a configuratin file or something
         # get the workload type_id from the database, or, add it if it does not already exist
         try:
@@ -568,6 +564,10 @@ class Collector(ACEService):
         """Adds the given Submission object to the queue."""
         assert isinstance(submission, Submission)
         self.submission_list.put(submission)
+
+    def get_submission_target_dir(self, submission):
+        """Returns the target incoming directory for a given submission."""
+        return os.path.join(self.incoming_dir, submission.uuid)
 
     # 
     # ACEService implementation
@@ -601,6 +601,12 @@ class Collector(ACEService):
         if not self.remote_node_groups:
             raise RuntimeError("no RemoteNodeGroup objects have been added to {}".format(self))
 
+        # load tuning rules
+        self.submission_filter.load_tuning_rules()
+
+        # initialize persistence for this collector
+        self.register_persistence_source(self.service_name)
+
         # call any subclass-defined initialization routines
         self.initialize_collector()
 
@@ -619,7 +625,7 @@ class Collector(ACEService):
         self.cleanup_thread = threading.Thread(target=self.cleanup_loop, name="Collector Cleanup")
         self.cleanup_thread.start()
 
-        self.extended_collection_thread = threading.Thread(target=self.extended_collection, name="Extended")
+        self.extended_collection_thread = threading.Thread(target=self.extended_collection_wrapper, name="Extended")
         self.extended_collection_thread.start()
 
         # start the node groups
@@ -631,6 +637,8 @@ class Collector(ACEService):
         if not self.remote_node_groups:
             self.load_groups()
 
+        enable_cached_db_connections()
+
         try:
             self.debug_extended_collection()
         except NotImplementedError:
@@ -638,6 +646,7 @@ class Collector(ACEService):
 
         self.execute()
         self.execute_workload_cleanup()
+        disable_cached_db_connections()
 
         # start the node groups
         #for group in self.remote_node_groups:
@@ -779,8 +788,7 @@ HAVING
 
         disable_cached_db_connections()
 
-    @use_db
-    def execute(self, db, c):
+    def execute(self):
 
         if self.test_mode == TEST_MODE_STARTUP:
             next_submission = None
@@ -801,17 +809,28 @@ HAVING
         if not isinstance(next_submission, Submission):
             logging.critical("get_next_submission() must return an object derived from Submission")
 
+        # does this submission match any tuning rules we have?
+        tuning_matches = self.submission_filter.get_tuning_matches(next_submission)
+        if tuning_matches:
+            self.submission_filter.log_tuning_matches(next_submission, tuning_matches)
+            self.cleanup_submission(next_submission)
+            return
+
+        self.prepare_submission_files(next_submission)
+        self.schedule_submission(next_submission)
+        self.cleanup_submission(next_submission)
+
+    def prepare_submission_files(self, submission):
         # we COPY the files over to another directory for transfer
         # we'll DELETE them later if we are able to copy them all and then insert the entry into the database
-        target_dir = None
-        if next_submission.files:
-            target_dir = os.path.join(self.incoming_dir, next_submission.uuid)
+        if submission.files:
+            target_dir = self.get_submission_target_dir(submission)
             if os.path.exists(target_dir):
-                logging.error("target directory {} already exists".format(target_dir))
+                logging.warning(f"target directory {target_dir} already exists")
             else:
                 try:
                     os.mkdir(target_dir)
-                    for f in next_submission.files:
+                    for f in submission.files:
                         # this could be a tuple of (source_file, target_name)
                         if isinstance(f, tuple):
                             f = f[0]
@@ -819,24 +838,29 @@ HAVING
                         target_path = os.path.join(target_dir, os.path.basename(f))
                         # TODO use hard links instead of copies to reduce I/O
                         shutil.copy2(f, target_path)
-                        logging.debug("copied file from {} to {}".format(f, target_path))
+                        logging.debug(f"copied file from {f} to {target_path}")
+
                 except Exception as e:
-                    logging.error("I/O error moving files into {}: {}".format(target_dir, e))
+                    logging.error(f"I/O error moving files into {target_dir}: {e}")
                     report_exception()
+
+    @use_db
+    def schedule_submission(self, submission, db, c):
 
         # we don't really need to change the file paths that are stored in the Submission object
         # we just remember where we've moved them to (later)
 
         try:
             # add this as a workload item to the database queue
-            work_id = execute_with_retry(db, c, self.insert_workload, (next_submission,), commit=True)
+            work_id = execute_with_retry(db, c, self.insert_workload, (submission,), commit=True)
             assert isinstance(work_id, int)
 
-            logging.info("scheduled {} mode {}".format(next_submission.description, next_submission.analysis_mode))
+            logging.info(f"scheduled {submission.description} mode {submission.analysis_mode}")
             
         except Exception as e:
             # something went wrong -- delete our incoming directory if we created one
-            if target_dir:
+            target_dir = self.get_submission_target_dir(submission)
+            if os.path.exists(target_dir):
                 try:
                     shutil.rmtree(target_dir)
                 except Exception as e:
@@ -844,9 +868,13 @@ HAVING
 
             raise e
 
-        # all is well -- delete the files we've copied into our incoming directory
+        self.submission_count += 1
+
+    def cleanup_submission(self, submission):
+        """Cleans up the given submission."""
         if self.delete_files:
-            for f in next_submission.files:
+            # delete the files we've copied into our incoming directory
+            for f in submission.files:
                 # this could be a tuple of (source_file, target_name)
                 if isinstance(f, tuple):
                     f = f[0]
@@ -854,9 +882,7 @@ HAVING
                 try:
                     os.remove(f)
                 except Exception as e:
-                    logging.error("unable to delete file {}: {}".format(f, e))
-
-        self.submission_count += 1
+                    logging.error(f"unable to delete file {f}: {e}")
 
     def insert_workload(self, db, c, next_submission):
         c.execute("INSERT INTO incoming_workload ( type_id, mode, work ) VALUES ( %s, %s, %s )",
@@ -876,7 +902,7 @@ HAVING
 
             if not node_groups:
                 # default to all groups if we end up with an empty list
-                logging.error("group assignment {} does not map to any known groups".format(next_submission.group_assignments))
+                logging.error(f"group assignment {next_submission.group_assignments} does not map to any known groups")
                 node_groups = self.remote_node_groups
             
         for remote_node_group in node_groups:
@@ -884,6 +910,13 @@ HAVING
                      (work_id, remote_node_group.group_id))
 
         return work_id
+
+    def extended_collection_wrapper(self):
+        enable_cached_db_connections()
+        try:
+            self.extended_collection()
+        finally:
+            disable_cached_db_connections()
 
     # subclasses can override this function to provide additional functionality
     def extended_collection(self):
@@ -924,3 +957,4 @@ HAVING
             return self.submission_list.get(block=True, timeout=1)
         except queue.Empty:
             return None
+

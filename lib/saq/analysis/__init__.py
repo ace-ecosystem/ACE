@@ -2695,6 +2695,34 @@ class RootAnalysis(Analysis):
         self.set_modified()
 
     @property
+    def submission_json_path(self):
+        """Returns the path used to store the submission JSON data."""
+        return os.path.join(self.storage_dir, '.ace', 'submission.json')
+
+    def record_submission(self, analysis, files):
+        """Records the current submission data as it was received."""
+        assert isinstance(analysis, dict)
+        assert isinstance(files, list)
+
+        analysis['files'] = files
+        with open(self.submission_json_path, 'w') as fp:
+            json.dump(analysis, fp)
+
+    @property
+    def submission(self):
+        """Returns the submission data recorded for this analysis, or None if that data is not available."""
+        if hasattr(self, '_submission'):
+            return self._submission
+
+        if not os.path.exists(self.submission_json_path):
+            self._submission = None
+        else:
+            with open(self.submission_json_path, 'r') as fp:
+                self._submission = json.load(fp)
+
+        return self._submission
+
+    @property
     def delayed(self):
         """Returns True if any delayed analysis is outstanding."""
         for observable in self.all_observables:

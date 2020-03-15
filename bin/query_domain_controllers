@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 
-if [ -z "$SAQ_HOME" ]
-then
-    echo "missing env var SAQ_HOME"
-    exit 1
-fi
-
-cd $SAQ_HOME || { echo "cannot cd into $SAQ_HOME"; exit 1; }
+cd ${SAQ_HOME:=/opt/ace} || { echo "cannot cd into $SAQ_HOME"; exit 1; }
 
 result=$(ldap_query.py '&(objectCategory=computer)(userAccountControl:1.2.840.113556.1.4.803:=8192)' | jq -r '.[].dn' | sed -e 's/CN=\([^,]*\).*/\1/' | tr '[:lower:]' '[:upper:]' | sort )
 

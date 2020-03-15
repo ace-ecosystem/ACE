@@ -65,14 +65,14 @@
                         {% elif alert.is_approaching_sla %} class="warning"
                         {% endif %}>
                         <td>
-                            <button onclick="load_alert_observables('{{alert.uuid}}')" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-triangle-right"></span></button>
+                            <button onclick="load_alert_observables('{{alert.uuid}}'); toggle_chevron('alert_row_dropdown_{{alert.uuid}}')" type="button" class="btn btn-default btn-xs"><span id="alert_row_dropdown_{{alert.uuid}}" class="glyphicon glyphicon-chevron-down"></span></button>
                         </td>
                         <td>
                             <label><input type="checkbox" name="detail_{{alert.uuid}}" {% if alert.uuid in checked %}checked{% endif %}></input></label>
                         </td>
                         <td style="white-space: nowrap;" title="{{alert.insert_date}}">{{alert.display_insert_date}}</td>
                         <td>
-                            {% if alert.company %}<img src="{{url_for('static', filename='images/company_icons/{}.png'.format(alert.company.name))}}">{% endif %}
+                            <img src="{{url_for('static', filename='images/alert_icons/{}.png'.format(alert.icon))}}">
                             <a href="{{ url_for('analysis.index', direct=alert.uuid) }}">({{alert.detection_count}}) {{alert.description}}</a>
                             {% if alert.event_mapping %}
                                 {% for em in alert.event_mapping %}
@@ -87,6 +87,11 @@
                             {% if alert_tags[alert.uuid]|length != 0 %}
                                 {% for tag in alert_tags[alert.uuid] %}
                                     <span class="label {{tag.css_class}}" style="cursor:pointer" onmousedown="tag_link_clicked({{tag.id}})">{{tag.name}}</span>
+                                {% endfor %}
+                            {% endif %}
+                            {% if alert_remediations[alert.uuid]|length != 0 %}
+                                {% for remediation in alert_remediations[alert.uuid] %}
+                                <span class="label {{remediation['css_class']}}" style="cursor:pointer" >{{remediation['result']}}</span>
                                 {% endfor %}
                             {% endif %}
                             {% if comments[alert.uuid]|length != 0 %}

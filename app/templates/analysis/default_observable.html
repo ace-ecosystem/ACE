@@ -1,12 +1,28 @@
+{% set unique_reference = generate_unique_reference() %}
 {% block observable_display %}
-{% if _observable.display_time %}
-{{_observable.display_value}} @ {{_observable.display_time}}
-{% else %}
-{{_observable.display_value}}
-{% endif %}
+<span class="observable_display {{_observable.type}}" id="o_filter_{{unique_reference}}" title="">
+{% block observable_display_value %}{{ _observable.display_value }}{% endblock %}
+{% if _observable.display_time %} @ {{ _observable.display_time }} {% endif %}</span>
+<script type="text/javascript">
+    $('#o_filter_{{unique_reference}}').on('click', function() {
+        $('#frm-observable-filter-type').val(atob('{{_observable.type | s64encode}}'));
+        $('#frm-observable-filter-value').val(atob('{{_observable.value | s64encode}}'));
+        $('#frm-observable-filter').submit();
+    });
+</script>
 {% endblock %}
 
-{% set unique_reference = generate_unique_reference() %}
+<button class="btn btn-default btn-xs" type="button" id="copy_action_{{unique_reference}}" title="Copy to Clipboard"><span class="glyphicon glyphicon-copy"></span></button>
+<script type="text/javascript">
+    $('#copy_action_{{unique_reference}}').on('click', function() {
+        // avoid escaping issues going from python to javascript by using base64
+        var observable_value = atob('{{_observable.value | s64encode}}');
+        // see app/static/js/ace.js
+        copy_to_clipboard(observable_value);
+        // let the user know it was copied by flashing it a bit
+        $('#copy_action_{{unique_reference}}').effect("pulsate", { times:3 }, 500);
+    });
+</script>
 
 {% if _observable.jinja_available_actions %}
 
@@ -40,3 +56,7 @@
 {% endfor %}
 
 {% endif %}
+
+{# add any additional functionality for the observable to this block #}
+{% block observable_display_misc %}
+{% endblock %}
