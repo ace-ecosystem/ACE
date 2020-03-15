@@ -707,6 +707,8 @@ class ACEBasicTestCase(TestCase):
         c.execute("DELETE FROM events")
         c.execute("DELETE FROM remediation")
         c.execute("DELETE FROM messages")
+        c.execute("DELETE FROM persistence")
+        c.execute("DELETE FROM persistence_source")
         c.execute("DELETE FROM company WHERE name != 'default'")
         c.execute("DELETE FROM nodes WHERE is_local = 1")
         c.execute("UPDATE nodes SET is_primary = 0")

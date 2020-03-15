@@ -93,7 +93,13 @@
 
 <table class="table table-bordered table-condensed">
     {% if 'ldap' in analysis.jinja_details %}
-        {% if 'memberOf' in analysis.jinja_details['ldap'] %}
+        {% if 'entitlements' in analysis.jinja_details['ldap'] %}
+            {% for entitlement in analysis.jinja_details['ldap']['entitlements'] %}
+            <tr>
+                <td class="col-md-12" {% if entitlement['privileged'] %}style='background-color:#FFFFB0;'{% endif %}>{{entitlement['group']}}</td>
+            </tr>
+            {% endfor %}
+        {% elif 'memberOf' in analysis.jinja_details['ldap'] %}
             {% for group in analysis.jinja_details['ldap']['memberOf'] %}
             <tr>
                 <td class="col-md-12">{{group}}</td>

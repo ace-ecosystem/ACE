@@ -273,6 +273,12 @@ def redirect_to():
         flash("internal error")
         return redirect(url_for('analysis.index'))
 
+    if target == 'exabeam':
+        return redirect('{}/uba/#user/{}/timeline/{}'.format(
+            saq.CONFIG['exabeam']['base_uri'],
+            file_observable.value.split('-')[0],
+            file_observable.value))
+
     # both of these requests require the sha256 hash
     # as on 12/23/2015 the FileObservable stores these hashes as a part of the observable
     # so we use that if it exists, otherwise we compute it on-the-fly
@@ -288,6 +294,11 @@ def redirect_to():
             saq.CONFIG['vxstream']['gui_baseuri'],
             file_observable.sha256_hash,
             saq.CONFIG['vxstream']['environmentid']))
+    elif target == 'falcon_sandbox':
+        return redirect('{}/sample/{}?environmentId={}'.format(
+            saq.CONFIG['falcon_sandbox']['gui_baseuri'].strip('/'),
+            file_observable.sha256_hash,
+            saq.CONFIG['falcon_sandbox']['environmentid']))
 
     flash("invalid target {}".format(target))
     return redirect(url_for('analysis.index'))
@@ -434,6 +445,22 @@ def download_file():
         logging.error("file path {0} does not exist for alert {1} user {2}".format(full_path, alert, current_user))
         flash("internal error")
         return redirect(url_for('analysis.index'))
+
+    if request.method == "POST" and mode == "falcon_sandbox":
+        from saq.falcon_sandbox import FalconSandbox
+        falcon_sandbox = FalconSandbox(
+            saq.CONFIG['falcon_sandbox']['apikey'],
+            saq.CONFIG['falcon_sandbox']['server'],
+            proxies=saq.PROXIES,
+            verify=False) # XXX fix this
+
+        logging.debug(f"submitting {full_path} to falcon sandbox")
+        response = falcon_sandbox.submit_file(full_path, saq.CONFIG['falcon_sandbox']['environmentid'])
+        response.raise_for_status()
+
+        url = saq.CONFIG['falcon_sandbox']['gui_baseuri'].strip('/') + "/sample/" + file_observable.sha256_hash + "?environmentId=" + saq.CONFIG['falcon_sandbox']['environmentid']
+        logging.debug("got falcon sandbox url: {}".format(url))
+        return url
 
     if request.method == "POST" and mode == "vxstream":
         baseuri = saq.CONFIG.get("vxstream", "baseuri_v2")
@@ -697,13 +724,26 @@ def add_observable():
 
     for expected_form_item in ['alert_uuid', 'add_observable_type', 'add_observable_value', 'add_observable_time']:
         if expected_form_item not in request.form:
+            if expected_form_item == 'add_observable_value':
+                if {'add_observable_value_A', 'add_observable_value_B'}.issubset(set(request.form.keys())):
+                    continue
             logging.error("missing expected form item {0} for user {1}".format(expected_form_item, current_user))
             flash("internal error")
             return redirect(url_for('analysis.index'))
 
     uuid = request.form['alert_uuid']
     o_type = request.form['add_observable_type']
-    o_value = request.form['add_observable_value']
+    if o_type not in ['email_conversation', 'email_delivery', 'ipv4_conversation', 'ipv4_full_conversation']:
+        o_value = request.form['add_observable_value']
+    else:
+        o_value_A = request.form.get(f'add_observable_value_A')
+        o_value_B = request.form.get(f'add_observable_value_B')
+        if 'email' in o_type:
+            o_value = '|'.join([o_value_A, o_value_B])
+        elif 'ipv4_conversation' in o_type:
+            o_value = '_'.join([o_value_A, o_value_B])
+        elif 'ipv4_full_conversation' in o_type:
+            o_value = ':'.join([o_value_A, o_value_B])
 
     redirection_params = {'direct': uuid}
     redirection = redirect(url_for('analysis.index', **redirection_params))
@@ -1011,10 +1051,20 @@ def new_alert(db, c):
     try:
         for key in request.form.keys():
             if key.startswith("observables_types_"):
-                index = key[18:]
+                index = key.split('_')[2]
                 o_type = request.form.get(f'observables_types_{index}')
-                o_value = request.form.get(f'observables_values_{index}')
                 o_time = request.form.get(f'observables_times_{index}')
+                if o_type not in ['email_conversation', 'email_delivery', 'ipv4_conversation', 'ipv4_full_conversation']:
+                    o_value = request.form.get(f'observables_values_{index}')
+                else:
+                    o_value_A = request.form.get(f'observables_values_{index}_A')
+                    o_value_B = request.form.get(f'observables_values_{index}_B')
+                    if 'email' in o_type:
+                        o_value = '|'.join([o_value_A, o_value_B])
+                    elif 'ipv4_conversation' in o_type:
+                        o_value = '_'.join([o_value_A, o_value_B])
+                    elif 'ipv4_full_conversation' in o_type:
+                        o_value = ':'.join([o_value_A, o_value_B])
 
                 observable = {
                     'type': o_type,
@@ -1111,6 +1161,7 @@ def add_to_event():
     event_name = request.form.get('event_name', None).strip()
     event_type = request.form.get('event_type', None)
     event_vector = request.form.get('event_vector', None)
+    event_risk_level = request.form.get('event_risk_level', None)
     event_prevention = request.form.get('event_prevention', None)
     event_comment = request.form.get('event_comment', None)
     event_status = request.form.get('event_status', None)
@@ -1125,12 +1176,12 @@ def add_to_event():
     disposition_time = request.form.get('disposition_time', None)
     contain_time = request.form.get('contain_time', None)
     remediation_time = request.form.get('remediation_time', None)
-    event_time = None if event_time in ['', 'None'] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
-    alert_time = None if alert_time in ['', 'None'] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
-    ownership_time = None if ownership_time in ['', 'None'] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
-    disposition_time = None if disposition_time in ['', 'None'] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
-    contain_time = None if contain_time in ['', 'None'] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
-    remediation_time = None if remediation_time in ['', 'None'] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
+    event_time = None if event_time in ['', 'None', None] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
+    alert_time = None if alert_time in ['', 'None', None] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
+    ownership_time = None if ownership_time in ['', 'None', None] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
+    disposition_time = None if disposition_time in ['', 'None', None] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
+    contain_time = None if contain_time in ['', 'None', None] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
+    remediation_time = None if remediation_time in ['', 'None', None] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
 
     # Enforce logical chronoglogy
     dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if d is not None]
@@ -1180,10 +1231,10 @@ def add_to_event():
                 result = c.fetchone()
                 event_id = result[0]
             else:
-                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, 
+                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, risk_level, 
                 prevention_tool, comment, event_time, alert_time, ownership_time, disposition_time, 
-                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector,
+                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                        (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_risk_level,
                          event_prevention, event_comment, event_time, alert_time, ownership_time,
                          disposition_time, contain_time, remediation_time))
                 dbm.commit()
@@ -2300,6 +2351,17 @@ def manage():
         for alert in alerts:
             alert.display_timezone = display_timezone
 
+    _alert_remediations = db.session.query(GUIAlert.uuid, Remediation.result, Remediation.key).\
+        join(Observable, Remediation.key == func.replace(Observable.value, '|', ':')).filter(Observable.type == 'email_delivery').\
+        join(ObservableMapping, ObservableMapping.observable_id == Observable.id).\
+        join(GUIAlert, GUIAlert.id == ObservableMapping.alert_id).\
+        filter(GUIAlert.id.in_([a.id for a in alerts if len(alerts) > 0])).order_by(Remediation.id.desc()).all()
+
+    alert_remediations = {k[0]: [] for k in _alert_remediations}
+    for k in _alert_remediations:
+        alert_remediations[k[0]].extend([{'result': k[1] if k[1] in ['removed', 'restored'] else 'Remediation failed: not cleaned',
+                                          'css_class': 'label-success' if k[1] in ['removed', 'restored'] else 'label-danger'}])
+
     return render_template(
         'analysis/manage.html',
         alerts=alerts,
@@ -2325,7 +2387,8 @@ def manage():
         total_alerts=total_alerts,
         alert_limit=alert_limit,
         user_limit=session['limit'] if 'limit' in session else "50",
-        alert_offset=alert_offset)
+        alert_offset=alert_offset,
+        alert_remediations=alert_remediations)
 
 
 # begin helper functions for metrics
@@ -3067,6 +3130,7 @@ def events():
         'filter_event_type': SearchFilter('filter_event_type', FILTER_TYPE_SELECT, 'ANY'),
         'filter_event_vector': SearchFilter('filter_event_vector', FILTER_TYPE_SELECT, 'ANY'),
         'filter_event_prevention_tool': SearchFilter('filter_event_prevention_tool', FILTER_TYPE_SELECT, 'ANY'),
+        'filter_event_risk_level': SearchFilter('filter_event_risk_level', FILTER_TYPE_SELECT, 'ANY')
     }
 
     malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
@@ -3117,6 +3181,8 @@ def events():
         query = query.filter(Event.vector == filters['filter_event_vector'].value)
     if filters['filter_event_prevention_tool'].value != 'ANY':
         query = query.filter(Event.prevention_tool == filters['filter_event_prevention_tool'].value)
+    if filters['filter_event_risk_level'].value != 'ANY':
+        query = query.filter(Event.risk_level == filters['filter_event_risk_level'].value)
 
     mal_filters = []
     for filter_name in filters.keys():
@@ -3184,6 +3250,11 @@ def events():
             query = query.order_by(Event.status.desc())
         else:
             query = query.order_by(Event.status.asc())
+    elif session['event_sort_by'] == 'risk_level':
+        if session['event_sort_dir']:
+            query = query.order_by(Event.risk_level.desc())
+        else:
+            query = query.order_by(Event.risk_level.asc())
 
     events = query.all()
 
@@ -3256,6 +3327,7 @@ def edit_event():
     event_id = request.form.get('event_id', None)
     event_type = request.form.get('event_type', None)
     event_vector = request.form.get('event_vector', None)
+    event_risk_level = request.form.get('event_risk_level', None)
     event_prevention = request.form.get('event_prevention', None)
     event_comment = request.form.get('event_comment', None)
     event_status = request.form.get('event_status', None)
@@ -3264,27 +3336,6 @@ def edit_event():
     threats = request.form.getlist('threats', None)
     campaign_id = request.form.get('campaign_id', None)
     new_campaign = request.form.get('new_campaign', None)
-    event_time = request.form.get('event_time', None)
-    alert_time = request.form.get('alert_time', None)
-    ownership_time = request.form.get('ownership_time', None)
-    disposition_time = request.form.get('disposition_time', None)
-    contain_time = request.form.get('contain_time', None)
-    remediation_time = request.form.get('remediation_time', None)
-    event_time = None if event_time in ['', 'None', None] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
-    alert_time = None if alert_time in ['', 'None', None] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
-    ownership_time = None if ownership_time in ['', 'None', None] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
-    disposition_time = None if disposition_time in ['', 'None', None] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
-    contain_time = None if contain_time in ['', 'None', None] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
-    remediation_time = None if remediation_time in ['', 'None', None] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
-
-    # Enforce logical chronoglogy
-    dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if d is not None]
-    sorted_dates = sorted(dates)
-    if not dates == sorted_dates:
-        flash("One or more of your dates has been entered out of valid order. "
-              "Please ensure entered dates follow the scheme: "
-              "Event Time < Alert Time <= Ownership Time < Disposition Time <= Contain Time <= Remediation Time")
-        return redirect(url_for('analysis.events'))
 
     with get_db_connection() as db:
         c = db.cursor()
@@ -3296,17 +3347,48 @@ def edit_event():
                 campaign_id = result[0]
             else:
                 c.execute("""INSERT INTO campaign (name) VALUES (%s)""", (new_campaign))
-                db.commit()
                 c.execute("""SELECT LAST_INSERT_ID()""")
                 result = c.fetchone()
                 campaign_id = result[0]
 
-        c.execute("""UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, prevention_tool=%s, comment=%s, campaign_id=%s, event_time=%s, alert_time=%s, ownership_time=%s, disposition_time=%s, contain_time=%s, remediation_time=%s WHERE id=%s""",
-                (event_status, event_remediation, event_type, event_vector, event_prevention, event_comment, campaign_id, event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time, event_id))
-        db.commit()
+        c.execute("""SELECT status FROM events WHERE id = %s""", (event_id))
+        old_event_status = c.fetchone()[0]
+        if old_event_status == 'OPEN':
+            event_time = request.form.get('event_time', None)
+            alert_time = request.form.get('alert_time', None)
+            ownership_time = request.form.get('ownership_time', None)
+            disposition_time = request.form.get('disposition_time', None)
+            contain_time = request.form.get('contain_time', None)
+            remediation_time = request.form.get('remediation_time', None)
+            event_time = None if event_time in ['', 'None', None] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
+            alert_time = None if alert_time in ['', 'None', None] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
+            ownership_time = None if ownership_time in ['', 'None', None] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
+            disposition_time = None if disposition_time in ['', 'None', None] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
+            contain_time = None if contain_time in ['', 'None', None] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
+            remediation_time = None if remediation_time in ['', 'None', None] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
+
+            # Enforce logical chronoglogy
+            dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if
+                     d is not None]
+            sorted_dates = sorted(dates)
+            if not dates == sorted_dates:
+                flash("One or more of your dates has been entered out of valid order. "
+                      "Please ensure entered dates follow the scheme: "
+                      "Event Time < Alert Time <= Ownership Time < Disposition Time <= Contain Time <= Remediation Time")
+                return redirect(url_for('analysis.events'))
+
+            c.execute(
+                    """UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, risk_level=%s, prevention_tool=%s, comment=%s, campaign_id=%s, event_time=%s, alert_time=%s, ownership_time=%s, disposition_time=%s, contain_time=%s, remediation_time=%s WHERE id=%s""",
+                    (event_status, event_remediation, event_type, event_vector, event_risk_level, event_prevention, event_comment, campaign_id,
+                     event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time, event_id))
+
+        else:
+            c.execute(
+                    """UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, risk_level=%s, prevention_tool=%s, comment=%s, campaign_id=%s WHERE id=%s""",
+                    (event_status, event_remediation, event_type, event_vector, event_risk_level, event_prevention, event_comment, campaign_id,
+                     event_id))
 
         c.execute("""DELETE FROM malware_mapping WHERE event_id=%s""", (event_id))
-        db.commit()
 
         for key in request.form.keys():
             if key.startswith("malware_selection_"):
@@ -3321,7 +3403,7 @@ def edit_event():
                         mal_id = result[0]
                     else:
                         c.execute("""INSERT INTO malware (name) VALUES (%s)""", (mal_name))
-                        db.commit()
+
                         c.execute("""SELECT LAST_INSERT_ID()""")
                         result = c.fetchone()
                         mal_id = result[0]
@@ -3329,13 +3411,13 @@ def edit_event():
                     threats = request.form.getlist("threats_{}".format(index), None)
                     for threat in threats:
                         c.execute("""INSERT IGNORE INTO malware_threat_mapping (malware_id,type) VALUES (%s,%s)""", (mal_id, threat))
-                    db.commit()
 
                 c.execute("""INSERT IGNORE INTO malware_mapping (event_id, malware_id) VALUES (%s, %s)""", (event_id, mal_id))
-                db.commit()
 
         c.execute("""SELECT uuid FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE event_mapping.event_id = %s""", (event_id))
         rows = c.fetchall()
+
+        db.commit()
 
         alert_uuids = []
         for row in rows:

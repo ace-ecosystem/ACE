@@ -18,7 +18,8 @@ def manager_kwargs():
              'rule_dirs': [ 'hunts/test/splunk', ],
              'hunt_cls': SplunkHunt,
              'concurrency_limit': 1,
-             'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir'])}
+             'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir']),
+             'update_frequency': 60}
 
 class TestCase(HunterBaseTestCase):
     def setUp(self):

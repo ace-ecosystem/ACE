@@ -18,9 +18,10 @@ from saq.analysis import RootAnalysis, _JSONEncoder
 from saq.database import get_db_connection, ALERT
 from saq.error import report_exception
 from saq.constants import *
+from saq.submission import Submission, SubmissionFilter
 from saq.util import parse_event_time, storage_dir_from_uuid, validate_uuid, workload_storage_dir
 
-from flask import Blueprint, request, abort, Response, send_from_directory
+from flask import Blueprint, request, abort, Response, send_from_directory, g
 from werkzeug import secure_filename
 
 analysis_bp = Blueprint('analysis', __name__, url_prefix='/analysis')
@@ -118,6 +119,8 @@ def submit():
                                        o[KEY_O_TIME], event_time_format_json_tz), 400))
 
                 observable = root.add_observable(o_type, o_value, o_time=o_time)
+                if observable is None:
+                    continue
 
                 if KEY_O_TAGS in o:
                     for tag in o[KEY_O_TAGS]:
@@ -137,6 +140,7 @@ def submit():
                         observable.limit_analysis(module_name)
 
         # save the files to disk and add them as observables of type file
+        file_list = []
         for f in request.files.getlist('file'):
             logging.debug("recording file {}".format(f.filename))
             #temp_dir = tempfile.mkdtemp(dir=saq.CONFIG.get('api', 'incoming_dir'))
@@ -169,6 +173,7 @@ def submit():
 
                     # add this as a F_FILE type observable
                     root.add_observable(F_FILE, os.path.relpath(full_path, start=root.storage_dir))
+                    file_list.append(os.path.relpath(full_path, start=root.storage_dir))
 
                 except Exception as e:
                     logging.error("unable to copy file from {} to {} for root {}: {}".format(
@@ -186,6 +191,39 @@ def submit():
                 #except Exception as e:
                     #logging.error("unable to delete temp dir {}: {}".format(temp_dir, e))
 
+        # is this submission tuned out?
+        try:
+            if not hasattr(g, 'submission_filter'):
+                g.submission_filter = SubmissionFilter()
+                g.submission_filter.load_tuning_rules()
+
+            submission = Submission(
+                 description=r[KEY_DESCRIPTION],
+                 analysis_mode=r[KEY_ANALYSIS_MODE],
+                 tool=r[KEY_TOOL],
+                 tool_instance=r[KEY_TOOL_INSTANCE],
+                 type=r[KEY_TYPE],
+                 event_time=r[KEY_EVENT_TIME],
+                 details=r[KEY_DETAILS],
+                 observables=r[KEY_OBSERVABLES],
+                 tags=r[KEY_TAGS],
+                 files=[os.path.join(root.storage_dir, _) for _ in file_list])
+            
+            # does this submission match any tuning rules we have?
+            tuning_matches = g.submission_filter.get_tuning_matches(submission)
+            if tuning_matches:
+                g.submission_filter.log_tuning_matches(submission, tuning_matches)
+                try:
+                    shutil.rmtree(root.storage_dir)
+                except Exception as e:
+                    logging.error(f"unable to delete {root.storage_dir}: {e}")
+
+                return json_result({'result': {'uuid': root.uuid, 
+                                               'tuning_matches': tuning_matches }})
+            
+        except Exception as e:
+            logging.error(f"tuning failed: {e}")
+        
         try:
             if not root.save():
                 logging.error("unable to save analysis")
@@ -202,6 +240,11 @@ def submit():
             logging.error("unable to sync to database: {}".format(e))
             report_exception()
             abort(Response("an error occured trying to save the alert - review the logs", 400))
+
+        try:
+            root.record_submission(r, file_list)
+        except Exception as e:
+            logging.error(f"unable to record submission data for {root.uuid}: {e}")
 
         return json_result({'result': {'uuid': root.uuid}})
     
@@ -242,6 +285,22 @@ def get_analysis(uuid):
     root = RootAnalysis(storage_dir=storage_dir)
     root.load()
     return json_result({'result': root.json})
+
+@analysis_bp.route('/submission/<uuid>', methods=['GET'])
+def get_submission(uuid):
+
+    storage_dir = storage_dir_from_uuid(uuid)
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
+        storage_dir = workload_storage_dir(uuid)
+
+    if not os.path.exists(storage_dir):
+        abort(Response("invalid uuid {}".format(uuid), 400))
+
+    root = RootAnalysis(storage_dir=storage_dir)
+    if root.submission is None:
+        abort(Response("no submission data available", 404))
+
+    return json_result({'result': root.submission})
 
 @analysis_bp.route('/status/<uuid>', methods=['GET'])
 def get_status(uuid):

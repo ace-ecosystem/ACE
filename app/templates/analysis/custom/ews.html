@@ -1,0 +1,12 @@
+{% extends "analysis/alert.html" %}
+{% block alert_details %}
+
+{% if 'html_content' in analysis.details %}
+<pre>{{ analysis.details.html_content|safe }}</pre>
+
+{% else %}
+<pre>{{ analysis.jinja_details | pprint }}</pre>
+
+{% endif %}
+
+{% endblock %}

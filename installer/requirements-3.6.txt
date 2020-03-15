@@ -15,9 +15,11 @@ beautifulsoup4
 businesstime
 cbapi==1.4.4
 cbinterface
+dateparser
 dnspython
 exchangelib
 gglsbl-rest-client
+hexdump
 html2text
 iptools
 ldap3==2.5 
@@ -51,5 +53,6 @@ vxstreamlib
 yara_scanner==1.0.15
 python-whois
 gglsbl-rest-client
-argcomplete
+argcomplete==1.10.0
+msal
 ip-inspector

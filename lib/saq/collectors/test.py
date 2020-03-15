@@ -3,6 +3,7 @@
 import datetime
 import os
 import pickle
+import shutil
 import tempfile
 import threading
 
@@ -12,6 +13,7 @@ from saq.database import use_db, get_db_connection
 from saq.engine import Engine
 from saq.service import *
 from saq.test import *
+from saq.util import *
 from . import Collector, Submission, RemoteNode
 
 class TestCollector(Collector):
@@ -811,3 +813,75 @@ class TestCase(CollectorBaseTestCase):
         c.execute("""SELECT COUNT(*) FROM work_distribution JOIN work_distribution_groups ON work_distribution.group_id = work_distribution_groups.id
                      WHERE work_distribution_groups.name = %s""", ('test_group_2',))
         self.assertEquals(c.fetchone()[0], 1)
+
+    @use_db
+    def test_submission_filter(self, db, c):
+    
+        self.tuning_rule_dir = os.path.join(saq.DATA_DIR, 'tuning_rules')
+        if os.path.isdir(self.tuning_rule_dir):
+            shutil.rmtree(self.tuning_rule_dir)
+
+        os.mkdir(self.tuning_rule_dir)
+        saq.CONFIG['collection']['tuning_dir_default'] = self.tuning_rule_dir
+
+        with open(os.path.join(self.tuning_rule_dir, 'filter.yar'), 'w') as fp:
+            fp.write("""
+rule test_filter {
+    meta:
+        targets = "submission"
+    strings:
+        $ = "description = test_description"
+    condition:
+        all of them
+}
+""")
+
+        class _custom_collector(TestCollector):
+            def __init__(_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.available_work = [self.create_submission() for _ in range(1)]
+
+            def get_next_submission(_self):
+                if not self.available_work:
+                    return None
+
+                return self.available_work.pop()
+
+        # start an engine to get a node created
+        engine = Engine()
+        engine.start()
+        wait_for_log_count('updated node', 1, 5)
+        engine.controlled_stop()
+        engine.wait()
+
+        collector = _custom_collector()
+        tg1 = collector.add_group('test_group_1', 100, True, saq.COMPANY_ID, 'ace') # 100% coverage
+        collector.start()
+
+        # we should see 1 of these
+        wait_for_log_count('submission test_description matched 1 tuning rules', 1, 5)
+
+        collector.stop()
+        collector.wait()
+
+        # everything should be empty
+        c.execute("SELECT COUNT(*) FROM work_distribution WHERE group_id = %s", (tg1.group_id,))
+        self.assertEquals(c.fetchone()[0], 0)
+        c.execute("SELECT COUNT(*) FROM incoming_workload")
+        self.assertEquals(c.fetchone()[0], 0)
+        c.execute("SELECT COUNT(*) FROM workload ")
+        self.assertEquals(c.fetchone()[0], 0)
+
+    def test_persistence_source_created(self):
+        collector = get_service_class('test_collector')()
+        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace')
+        collector.start()
+
+        wait_for_log_count('no work available for', 1, 5)
+        collector.stop()
+        collector.wait()
+
+        # a persistence source should have been created for this collector service
+        from saq.database import PersistenceSource
+        self.assertIsNotNone(saq.db.query(PersistenceSource).filter(PersistenceSource.company_id == saq.COMPANY_ID, 
+                                                                    PersistenceSource.name == collector.service_name))

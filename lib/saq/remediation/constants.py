@@ -16,3 +16,21 @@ REMEDIATION_ACTION_RESTORE = 'restore'
 # possible remediation systems
 REMEDIATION_SYSTEM_LEGACY = 'legacy'
 REMEDIATION_SYSTEM_PHISHFRY = 'phishfry'
+
+# Outcomes from a remediation attempt
+class RemediationOutcome:
+    REMOVED: str = 'removed'
+    RESTORED: str = 'restored'
+    ERROR: str = 'error'
+
+# Mail-specific outcomes
+class MailOutcome(RemediationOutcome):
+    MESSAGE_NOT_FOUND = 'message not found'
+    MAILBOX_NOT_FOUND = 'mailbox not found'
+    AUTHENTICATION_FAILURE = 'authentication failure'
+    UNABLE_TO_MOVE_MESSAGE = 'unable to move email message'
+
+# Types of remediators
+class RemediatorType:
+    EWS: str = 'ews'
+    GRAPH: str = 'graph'

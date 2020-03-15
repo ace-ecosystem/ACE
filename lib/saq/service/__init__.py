@@ -80,7 +80,9 @@ SERVICE_STATUS_DISABLED = 'disabled'
 # but not so with deamon services
 
 class ACEService(object):
-    def __init__(self, service_config=None):
+    def __init__(self, service_config=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         if service_config is None:
             raise RuntimeError(f"missing service configuration for {self}")
 

@@ -31,6 +31,7 @@ class TestCase(ACEBasicTestCase):
         encrypt_password('proxy.password', 'unittest')
         saq.CONFIG['proxy']['password'] = 'encrypted:proxy.password'
         self.assertEquals(saq.CONFIG['proxy']['password'], 'unittest')
+        self.assertEquals(saq.CONFIG['proxy'].get('password'), 'unittest')
 
     @unittest.skip("no longer throws exception")
     def test_encrypted_password_config_no_decryption_key(self):

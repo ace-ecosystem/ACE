@@ -7,12 +7,23 @@ var current_alert_uuid = null;
 
 $(document).ready(function() {
 //$(window).load(function() {
-    //debugger; // FREAKING AWESOME
-    $("#add_observable_type").change(function(e) {
-        const observable_type=$("#add_observable_type option:selected").text();
-        if (observable_type!=="file") return;
-        $("#add_observable_modal").modal("hide");
-        $("#file_modal").modal("show");
+// debugger; // FREAKING AWESOME
+    $("#add_observable_type").change(function (e) {
+        const observable_type = $("#add_observable_type option:selected").text();
+        var add_observable_input = document.getElementById("add_observable_value");
+        if (!['email_conversation', 'email_delivery', 'ipv4_conversation', 'ipv4_full_conversation', 'file'].includes(observable_type)) {
+            add_observable_input.parentNode.removeChild(add_observable_input);
+            $("#add_observable_value_content").append('<input type="text" class="form-control" id="add_observable_value" name="add_observable_value" value="" placeholder="Enter Value"/>');
+        } else if (observable_type !== 'file') {
+            add_observable_input.parentNode.removeChild(add_observable_input);
+            let placeholder_src = JSON.parse(window.localStorage.getItem("placeholder_src"));
+            let placeholder_dst = JSON.parse(window.localStorage.getItem("placeholder_dst"));
+            $("#add_observable_value_content").append('<span id="add_observable_value"><input class="form-control" type="text" name="add_observable_value_A" id="add_observable_value_A" value="" placeholder="' + placeholder_src[observable_type] + '"> to ' +
+                '<input class="form-control" type="text" name="add_observable_value_B" id="add_observable_value_B" value="" placeholder="' + placeholder_dst[observable_type] + '"></span>');
+        } else {
+            $("#add_observable_modal").modal("hide");
+            $("#file_modal").modal("show");
+        }
     });
 
     $("#btn-submit-comment").click(function(e) {
@@ -73,6 +84,51 @@ $(document).ready(function() {
 
     // pull this out of the disposition form
     current_alert_uuid = $("#alert_uuid").prop("value");
+
+    document.getElementById("event_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("alert_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("ownership_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("disposition_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("contain_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+    document.getElementById("remediation_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
+
+    $('input[name="event_time"]').datetimepicker({
+        timezone: 0,
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="alert_time"]').datetimepicker({
+        timezone: 0,
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="ownership_time"]').datetimepicker({
+        timezone: 0,
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="disposition_time"]').datetimepicker({
+        timezone: 0,
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="contain_time"]').datetimepicker({
+        timezone: 0,
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+    $('input[name="remediation_time"]').datetimepicker({
+        timezone: 0,
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+
 });
 
 // attachment downloading

@@ -168,6 +168,14 @@ class ObservableActionUploadToVt(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/upload_to_vt.html'
         self.icon = 'export'
 
+class ObservableActionUploadToFalconSandbox(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_FILE_UPLOAD_FALCON_SANDBOX
+        self.description = "Upload To Falcon Sandbox"
+        self.jinja_action_path = 'analysis/observable_actions/upload_to_falcon_sandbox.html'
+        self.icon = 'export'
+
 class ObservableActionUploadToVx(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -182,6 +190,22 @@ class ObservableActionViewInVt(ObservableAction):
         self.name = ACTION_FILE_VIEW_VT
         self.description = "View In VirusTotal"
         self.jinja_action_path = 'analysis/observable_actions/view_in_vt.html'
+        self.icon = 'chevron-right'
+
+class ObservableActionViewInFalconSandbox(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_FILE_VIEW_FALCON_SANDBOX
+        self.description = "View In Falcon Sandbox"
+        self.jinja_action_path = 'analysis/observable_actions/view_in_falcon_sandbox.html'
+        self.icon = 'chevron-right'
+
+class ObservableActionViewInExabeam(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_EXABEAM_SESSION_VIEW_EXABEAM
+        self.description = "View In Exabeam"
+        self.jinja_action_path = 'analysis/observable_actions/view_in_exabeam.html'
         self.icon = 'chevron-right'
 
 class ObservableActionViewInVx(ObservableAction):

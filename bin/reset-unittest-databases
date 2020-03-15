@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+cd ${SAQ_HOME:=/opt/ace} || exit 1
+
 defaults_file=""
 if [ -f etc/mysql_defaults.root ]
 then

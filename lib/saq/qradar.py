@@ -259,3 +259,26 @@ class QRadarAPIClient(object):
             'reason': reason, },
             headers=self.headers,
             verify=False).json()
+
+class QRadarAPIClientTestStub(QRadarAPIClient):
+    def execute_aql_query(self, *args, **kwargs):
+        logging.debug(f"execute_aql_query({args}, {kwargs})")
+        return { 'events': [] }
+
+    def cancel_aql_query(self, *args, **kwargs):
+        pass
+
+    def delete_aql_query(self, *args, **kwargs):
+        pass
+
+    def get_siem_offenses(self, *args, **kwargs):
+        pass
+
+    def close_siem_offense(self, *args, **kwargs):
+        pass
+
+    def get_offense_closing_reasons(self, *args, **kwargs):
+        pass
+
+    def create_offense_closing_reason(self, *args, **kwargs):
+        pass

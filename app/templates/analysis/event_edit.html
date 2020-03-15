@@ -43,6 +43,7 @@
           <option value="cleaned manually" {% if event.remediation == "cleaned manually" %}SELECTED{% endif %}>cleaned manually</option>
           <option value="reimaged" {% if event.remediation == "reimaged" %}SELECTED{% endif %}>reimaged</option>
           <option value="credentials reset" {% if event.remediation == "credentials reset" %}SELECTED{% endif %}>credentials reset</option>
+          <option value="network block" {% if event.remediation == "network block" %}SELECTED{% endif %}>network block</option>
           <option value="NA" {% if event.remediation == "NA" %}SELECTED{% endif %}>NA</option>
         </select>
       </td>
@@ -68,6 +69,16 @@
           <option value="usb" {% if event.vector == "usb" %}SELECTED{% endif %}>usb</option>
           <option value="website" {% if event.vector == "website" %}SELECTED{% endif %}>website</option>
           <option value="unknown" {% if event.vector == "unknown" %}SELECTED{% endif %}>unknown</option>
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <th>Risk Level</th>
+      <td>
+        <select class="form-control" name="event_risk_level" id="event_risk_level">
+          <option value="1" {% if event.risk_level == "1" %}SELECTED{% endif %}>1</option>
+          <option value="2" {% if event.risk_level == "2" %}SELECTED{% endif %}>2</option>
+          <option value="3" {% if event.risk_level == "3" %}SELECTED{% endif %}>3</option>
         </select>
       </td>
     </tr>

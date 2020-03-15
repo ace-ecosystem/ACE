@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
+cd ${SAQ_HOME:=/opt/ace}
 source $(dirname "$0")/common.sh
-cd $SAQ_HOME
 
 source load_environment
 
@@ -26,9 +26,9 @@ do
     echo "starting $service"
     if [ "$service" == "ecs" ]; then
         echo "Assuming we want to provide-decryption-password for ECS service."
-        ace -p service start ecs -d
+        ace -p service start ecs
     else
-        ace service start $service -d
+        ace service start $service
     fi
 done
 

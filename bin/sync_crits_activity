@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-cd /opt/saq || exit 1
-source /opt/saq/load_environment
+cd ${SAQ_HOME:=/opt/ace} || exit 1
+source load_environment
 
-/opt/saq/saq crits-activity-sync -d 1 | grep -v DEBUG | grep -v INFO
+ace crits-activity-sync -d 1 | grep -v DEBUG | grep -v INFO
