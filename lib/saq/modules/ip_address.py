@@ -11,7 +11,7 @@ import saq
 from saq.constants import *
 from saq.analysis import Analysis
 from saq.modules import AnalysisModule
-
+from saq.proxy import proxies
 
 class IpInspectorAnalysis(Analysis):
     """What is the metadata associated to this IP address and is it whitelisted or blacklisted?
@@ -192,7 +192,7 @@ class IPIAnalyzer(AnalysisModule):
     def execute_analysis(self, observable):
         logging.debug("Inspecting {}".format(observable.value))
         try:
-            proxies = saq.PROXIES if self.use_proxy else None
+            proxies = proxies() if self.use_proxy else None
             # Create Inspector with MaxMind API
             mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=proxies),
                             blacklists=self.blacklist_maps,

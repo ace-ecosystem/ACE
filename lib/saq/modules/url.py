@@ -16,12 +16,13 @@ from werkzeug.utils import secure_filename
 import saq
 
 from saq.analysis import Analysis
-from saq.constants import *
 from saq.brocess import add_httplog
+from saq.constants import *
 from saq.crawlphish import CrawlphishURLFilter
 from saq.database import get_db_connection
 from saq.error import report_exception
 from saq.modules import AnalysisModule
+from saq.proxy import proxies
 from saq.util import is_ipv4
 
 import requests
@@ -754,7 +755,7 @@ class CrawlphishAnalyzer(AnalysisModule):
         proxy_configs = []
         for name in self.proxies.split(','):
             if name == 'GLOBAL':
-                proxy_configs.append(( name, saq.PROXIES ))
+                proxy_configs.append(( name, proxies() ))
             else:
                 proxy_configs.append(( name, saq.OTHER_PROXIES[name] ))
                 

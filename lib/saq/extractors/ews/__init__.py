@@ -13,6 +13,7 @@ from saq.extractors import (
     RESULT_MESSAGE_FOUND,
     RESULT_MESSAGE_NOT_FOUND,
 )
+from saq.proxy import proxies
 from saq.util import PreInitCustomSSLAdapter
 
 
@@ -41,7 +42,7 @@ class EWSExtractor(BaseExtractor):
         if not use_proxy:
             adapter.PROXIES = {}
         else:
-            adapter.PROXIES = saq.PROXIES
+            adapter.PROXIES = proxies()
 
         try:
             api_object = _api_class(

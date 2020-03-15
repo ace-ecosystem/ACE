@@ -7,7 +7,7 @@ import unittest
 import saq, saq.test
 from saq.constants import *
 from saq.test import *
-
+from saq.proxy import proxies
 
 class TestCase(ACEModuleTestCase):
 
@@ -132,7 +132,7 @@ class TestCase(ACEModuleTestCase):
         if not config['license_key']:
             self.skipTest("License key not defined.")
 
-        proxies = saq.PROXIES if 'use_proxy' in config and config.getboolean('use_proxy') else None
+        proxies = proxies() if 'use_proxy' in config and config.getboolean('use_proxy') else None
         license_key = config['license_key']
         self.assertTrue(maxmind.update_databases(license_key=license_key, proxies=proxies))
 

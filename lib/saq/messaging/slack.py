@@ -10,6 +10,7 @@ import logging
 import saq
 from saq.constants import *
 from saq.messaging import MessageDispatchSystem
+from saq.proxy import proxies
 
 import requests
 
@@ -24,7 +25,7 @@ class SlackMessageDispatchSystem(MessageDispatchSystem):
         
         logging.info(f"submitting message {message.id} to {slack_url}")
         result = requests.post(slack_url, 
-            proxies=saq.PROXIES,
+            proxies=proxies(),
             headers={'Content-Type': 'application/json'}, 
             json={'text': message.content})
 

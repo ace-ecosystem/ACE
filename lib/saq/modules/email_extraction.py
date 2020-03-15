@@ -13,7 +13,7 @@ from saq.constants import F_EMAIL_DELIVERY, F_FILE, DIRECTIVE_EXTRACT_EMAIL
 from saq.extractors.ews import EWSExtractor
 from saq.extractors.graph import GraphAPIExtractor
 from saq.modules import AnalysisModule
-
+from saq.proxy import proxies
 
 KEY_MESSAGE_ID = 'message_id'
 KEY_RECIPIENT = 'recipient'
@@ -101,7 +101,7 @@ def get_extractors(config_sections) -> list:
             _extractor = None
             if section['type'].lower() == ACCOUNT_TYPE_GRAPH:
                 logging.info(f'extractor type {ACCOUNT_TYPE_GRAPH} requires proxies. Passing in saq.PROXIES')
-                _extractor = extractor(section, proxies=saq.PROXIES)
+                _extractor = extractor(section, proxies=proxies())
             else:
                 logging.info(f'extractor is not type graph. no proxy will be added')
                 _extractor = extractor(section)
