@@ -10,6 +10,7 @@ import unittest
 import saq, saq.test
 from saq.constants import *
 from saq.test import *
+from saq.proxy import proxies
 
 LOCAL_PORT = 43124
 web_server = None
@@ -36,13 +37,16 @@ class TestCase(ACEModuleTestCase):
         
     def setUp(self):
         ACEModuleTestCase.setUp(self)
+
         # disable proxy for crawlphish
-        self.old_proxies = saq.PROXIES
-        saq.PROXIES = {}
+        saq.CONFIG['proxy']['transport'] = ''
+        saq.CONFIG['proxy']['host'] = ''
+        saq.CONFIG['proxy']['port'] = ''
+        saq.CONFIG['proxy']['user'] = ''
+        saq.CONFIG['proxy']['password'] = ''
 
     def tearDown(self):
         ACEModuleTestCase.tearDown(self)
-        saq.PROXIES = self.old_proxies
 
     def test_basic_download(self):
         from saq.modules.url import CrawlphishAnalysisV2

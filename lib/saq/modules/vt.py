@@ -7,10 +7,11 @@ import shutil
 
 import saq
 from saq.analysis import Analysis, Observable
-from saq.modules.file_analysis import FileHashAnalysis
+from saq.constants import *
 from saq.error import report_exception
 from saq.modules import AnalysisModule
-from saq.constants import *
+from saq.modules.file_analysis import FileHashAnalysis
+from saq.proxy import proxies
 
 import requests
 
@@ -121,7 +122,7 @@ class VTHashFileDownloader(AnalysisModule):
                 'apikey': self.api_key,
                 'hash': md5_hash }
 
-            r = requests.get(self.download_url, params=params, proxies=saq.PROXIES, verify=False)
+            r = requests.get(self.download_url, params=params, proxies=proxies(), verify=False)
             if r.status_code == 200:
                 file_content = r.content
                 # then save it to the cache
@@ -283,7 +284,7 @@ class VTHashAnalyzer(AnalysisModule):
 
         #self.api_key = saq.CONFIG['virus_total']['api_key']
         self.query_url = self.config['query_url']
-        self.proxies = saq.PROXIES if self.config.getboolean('use_proxy') else {}
+        self.proxies = proxies() if self.config.getboolean('use_proxy') else {}
         if 'ignored_vendors' in self.config:
             self.ignored_vendors = set([x.strip().lower() for x in self.config['ignored_vendors'].split(',')])
         else:

@@ -10,6 +10,7 @@ import requests
 
 import saq
 from saq.extractors import RESULT_MESSAGE_NOT_FOUND, RESULT_MESSAGE_FOUND
+from saq.proxy import proxies
 
 
 def read_private_key(key_path, **kwargs):
@@ -194,7 +195,7 @@ def get_graph_api_object(config_section: configparser.SectionProxy, **kwargs) ->
     _api_class = kwargs.get('api_class') or GraphAPI
     auth_ca_cert = config_section.get('auth_ca_cert_path', True)
     graph_ca_cert = config_section.get('graph_ca_cert_path', True)
-    proxies = kwargs.get('proxies') or saq.PROXIES
+    proxies = kwargs.get('proxies') or proxies()
 
     try:
         return _api_class(
