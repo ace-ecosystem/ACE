@@ -3812,7 +3812,7 @@ SELECT
     company.name
 FROM
     nodes LEFT JOIN node_modes ON nodes.id = node_modes.node_id
-    JOIN company ON company.id = nodes.company_id {}
+    JOIN company ON company.id = nodes.company_id OR company.id = %s
 WHERE
     nodes.is_local = 0
     AND ( nodes.any_mode OR node_modes.analysis_mode = %s )
@@ -3820,18 +3820,22 @@ ORDER BY
     company.name,
     nodes.location
 """
-    secondary_companies_query_string = ""
+
+    # get the available nodes for the default/primary company id
+    c.execute(sql, (None, ANALYSIS_MODE_CORRELATION,))
+    available_nodes = c.fetchall()
+
     secondary_companies = saq.CONFIG['global'].get('secondary_company_ids', None)
     if secondary_companies is not None:
-        # trusting that the admin configured this field with an appropriate company_id
-        secondary_companies_query_string = " OR company.id = "
         secondary_companies = secondary_companies.split(',')
-        secondary_companies_query_string += secondary_companies_query_string.join(secondary_companies)
-        logging.warning("secondary companies string: {}".format(secondary_companies_query_string))
-    sql = sql.format(secondary_companies_query_string)
+        for secondary_company_id in secondary_companies:
+            c.execute(sql, (secondary_company_id, ANALYSIS_MODE_CORRELATION,))
+            more_nodes = c.fetchall()
+            for node in more_nodes:
+                if node not in available_nodes:
+                    available_nodes = (node,) + available_nodes
+    logging.debug("Available Nodes: {}".format(available_nodes))
 
-    c.execute(sql, (ANALYSIS_MODE_CORRELATION,))
-    available_nodes = c.fetchall()
     date = datetime.datetime.now().strftime("%m-%d-%Y %H:%M:%S")
     return render_template('analysis/analyze_file.html', 
                            observable_types=VALID_OBSERVABLE_TYPES,
