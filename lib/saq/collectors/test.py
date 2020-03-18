@@ -88,7 +88,7 @@ class TestCase(CollectorBaseTestCase):
     @use_db
     def test_add_group(self, db, c):
         collector = get_service_class('test_collector')()
-        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace')
+        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace', same_node_as_company_id=None)
         
         c.execute("SELECT id, name FROM work_distribution_groups")
         result = c.fetchall()
@@ -99,7 +99,7 @@ class TestCase(CollectorBaseTestCase):
 
         # when we do it a second time, we should get the name group ID since we used the same name
         collector = get_service_class('test_collector')()
-        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace')
+        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace', same_node_as_company_id=None)
         
         c.execute("SELECT id, name FROM work_distribution_groups")
         result = c.fetchall()
