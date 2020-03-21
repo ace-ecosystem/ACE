@@ -19,9 +19,12 @@ SECTION_INTEGRATIONS = 'integrations'
 def integration_config_path():
     return os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.ini')
 
+def integration_config_default_path():
+    return os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.default.ini')
+
 def load_integration_config():
     if not os.path.exists(integration_config_path()):
-        initialize_integration_config()
+        shutil.copy(integration_config_default_path(), integration_config_path())
 
     config = ConfigParser(allow_no_value=True)
     config.read(integration_config_path())

@@ -5,6 +5,7 @@
 #
 
 import importlib
+from datetime import datetime
 import io
 import json
 import logging
@@ -958,3 +959,53 @@ HAVING
         except queue.Empty:
             return None
 
+def parse_schedule(schedule):
+    if schedule == "*":
+        return { "interval": True, "value": 1 }
+    elif schedule.startswith("*/"):
+        return { "interval": True, "value": int(schedule[2:]) }
+    else:
+        return { "interval": False, "value": int(schedule) }
+
+class ScheduledCollector(Collector):
+    def __init__(self, schedule_string="* * * * *", *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.schedule = [parse_schedule(p) for p in schedule_string.split(" ")]
+        self.last_executed_at = None
+
+    def should_execute(self):
+        # get current date and time
+        now = datetime.now()
+
+        # return false if same minute as last time
+        if self.last_executed_at is not None  and (now - self.last_executed_at).total_seconds() < 60 and now.minute == self.last_executed_at.minute:
+            return False
+
+        # create a handy structure
+        crontime = [now.minute, now.hour, now.day, now.month, now.weekday()]
+
+        # check if we should execute
+        for i in range(5):
+            if self.schedule[i]['interval']:
+                if crontime[i] % self.schedule[i]['value'] != 0:
+                    return False
+            elif crontime[i] != self.schedule[i]['value']:
+                return False
+        return True
+
+    def execute_in_loop(self, target):
+        while True:
+            if self.is_service_shutdown:
+                return
+
+            try:
+                if self.should_execute():
+                    target()
+                    self.last_executed_at = datetime.now()
+            except NotImplementedError:
+                return
+            except Exception as e:
+                logging.error(f"unable to execute {target}: {e}")
+                report_exception()
+
+            self.service_shutdown_event.wait(1)

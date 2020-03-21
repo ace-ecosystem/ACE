@@ -2,9 +2,14 @@
 # (and then stopped in reverse order)
 # comment out the services you don't want to use
 
-network-server
-network-semaphore
-carbon-black-engine
-correlation-engine
-email-scanning-engine
-http-scanning-engine
+#ecs
+network_semaphore
+yara
+engine
+#remediation
+#ews_collector
+#fireeye_collector
+#hunter
+#qradar_offense_collector
+#falcon_collector
+#exabeam_collector

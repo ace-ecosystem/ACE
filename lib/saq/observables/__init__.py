@@ -82,6 +82,7 @@ class IPv4Observable(Observable):
 
     def __init__(self, *args, **kwargs):
         super().__init__(F_IPV4, *args, **kwargs)
+        self.value = self.value.strip()
 
         # type check the value
         try:
@@ -125,6 +126,7 @@ class IPv4Observable(Observable):
 class IPv4ConversationObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_IPV4_CONVERSATION, *args, **kwargs)
+        self.value = self.value.strip()
         self._source, self._dest = parse_ipv4_conversation(self.value)
         
     @property
@@ -139,6 +141,7 @@ class IPv4FullConversationObservable(Observable):
     
     def __init__(self, *args, **kwargs):
         super().__init__(F_IPV4_FULL_CONVERSATION, *args, **kwargs)
+        self.value = self.value.strip()
         self._source, self._source_port, self._dest, self._dest_port = parse_ipv4_full_conversation(self.value)
 
     @property
@@ -160,6 +163,7 @@ class IPv4FullConversationObservable(Observable):
 class FQDNObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_FQDN, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -181,20 +185,22 @@ class FQDNObservable(CaselessObservable):
 class HostnameObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_HOSTNAME, *args, **kwargs)
+        self.value = self.value.strip()
 
 class AssetObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_ASSET, *args, **kwargs)
+        self.value = self.value.strip()
 
 class UserObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_USER, *args, **kwargs)
+        self.value = self.value.strip()
 
 class URLObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_URL, *args, **kwargs)
-
-        self.value = self.value.strip() # remove any leading/trailing whitespace
+        self.value = self.value.strip()
 
         try:
             # sometimes URL extraction pulls out invalid URLs
@@ -561,6 +567,7 @@ class FileLocationObservable(Observable):
 class EmailAddressObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_ADDRESS, *args, **kwargs)
+        self.value = self.value.strip()
 
         # normalize email addresses
         normalized = normalize_email_address(self.value)
@@ -578,7 +585,10 @@ class EmailAddressObservable(CaselessObservable):
 class EmailDeliveryObservable(CaselessObservable, RemediationTarget):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_DELIVERY, *args, **kwargs)
+        self.value = self.value.strip()
         self.message_id, self.email_address = parse_email_delivery(self.value)
+        self.message_id = normalize_message_id(self.message_id)
+        self.value = create_email_delivery(self.message_id, self.email_address)
 
     @property
     def jinja_available_actions(self):
@@ -601,6 +611,7 @@ class EmailDeliveryObservable(CaselessObservable, RemediationTarget):
 class YaraRuleObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_YARA_RULE, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -609,6 +620,7 @@ class YaraRuleObservable(Observable):
 class IndicatorObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_INDICATOR, *args, **kwargs)
+        self.value = self.value.strip()
         self._sip_details = None
 
     @property
@@ -660,6 +672,7 @@ class IndicatorObservable(Observable):
 class MD5Observable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_MD5, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -670,6 +683,7 @@ class MD5Observable(CaselessObservable):
 class SHA1Observable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SHA1, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -680,6 +694,7 @@ class SHA1Observable(CaselessObservable):
 class SHA256Observable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SHA256, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_template_path(self):
@@ -694,6 +709,7 @@ class SHA256Observable(Observable):
 class EmailConversationObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_CONVERSATION, *args, **kwargs)
+        self.value = self.value.strip()
         self._mail_from, self._rcpt_to = parse_email_conversation(self.value)
 
     @property
@@ -711,10 +727,12 @@ class EmailConversationObservable(Observable):
 class SnortSignatureObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SNORT_SIGNATURE, *args, **kwargs)
+        self.value = self.value.strip()
 
 class MessageIDObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_MESSAGE_ID, *args, **kwargs)
+        self.value = self.value.strip()
         self.value = normalize_message_id(self.value)
 
     @property
@@ -726,10 +744,12 @@ class MessageIDObservable(Observable):
 class ProcessGUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_PROCESS_GUID, *args, **kwargs)
+        self.value = self.value.strip()
 
 class ExternalUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_EXTERNAL_UID, *args, **kwargs)
+        self.value = self.value.strip()
         self._tool, self._uid = self.value.split(':', 1)
 
     @property
@@ -743,6 +763,7 @@ class ExternalUIDObservable(Observable):
 class ExabeamSessionObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_EXABEAM_SESSION, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -755,6 +776,7 @@ class ExabeamSessionObservable(Observable):
 class FireEyeUUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_FIREEYE_UUID, *args, **kwargs)
+        self.value = self.value.strip()
 
 class TestObservable(Observable):
     def __init__(self, *args, **kwargs): 
