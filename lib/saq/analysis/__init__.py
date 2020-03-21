@@ -568,7 +568,8 @@ class Analysis(TaggableObject, DetectableObject):
 
         # generate a summary before we go to disk
         # this gets stored in the main json data structure
-        self._summary = self.generate_summary()
+        if not self.delayed:
+            self._summary = self.generate_summary()
 
         # this is a thing now -- analysis modules are over-writing the details of the root analysis since we got rid of the "engines" 
         # try to catch a case where we set the data but forgot to load first

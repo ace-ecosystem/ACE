@@ -227,7 +227,8 @@ class FalconCollector(Collector):
             ioa = ""
         
         return Submission(
-            description = f'Falcon - {event["DetectName"]} - {event["DetectDescription"]}{ioa}',
+            description = f'Falcon - {event["DetectName"]} - {event["ComputerName"]} - '
+                          f'{event["DetectDescription"]}{ioa}',
             analysis_mode = ANALYSIS_MODE_CORRELATION,
             tool = 'Falcon',
             tool_instance = self.hostname,

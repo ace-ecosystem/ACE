@@ -45,7 +45,6 @@ import saq.intel
 import saq.remediation
 import saq.remediation.email
 import virustotal
-import splunklib
 
 from saq import SAQ_HOME
 from saq.constants import *
@@ -3980,6 +3979,7 @@ def upload_file():
 
     alert.add_observable(F_FILE, os.path.relpath(dest_path, start=os.path.join(SAQ_HOME, alert.storage_dir)))
     alert.sync()
+    alert.schedule()
     
     release_lock(alert.uuid, alert.lock_uuid)
     return redirect(url_for('analysis.index', direct=alert.uuid))

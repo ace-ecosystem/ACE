@@ -9,21 +9,23 @@ import os.path
 import pytz
 import requests
 import saq
-from saq.collectors import Collector, Submission
+from saq.database import Alert
+from saq.collectors import ScheduledCollector, Submission
 from saq.constants import *
 from saq.error import report_exception
 from saq.exabeam import ExabeamSession
 import traceback
 
-class ExabeamCollector(Collector):
+class ExabeamCollector(ScheduledCollector):
     def __init__(self, *args, **kwargs):
         super().__init__(service_config=saq.CONFIG['service_exabeam_collector'],
                          workload_type='exabeam_collector', 
                          delete_files=True, 
+                         schedule_string=saq.CONFIG['service_exabeam_collector']['schedule'],
                          *args, **kwargs)
 
     def initialize_collector(self):
-        self.exabeam_alert_cache = {}
+        #self.exabeam_alert_cache = {}
         self.watchlists = dict(saq.CONFIG['exabeam_watchlist_threshold'])
 
     def execute_extended_collection(self):
@@ -32,7 +34,7 @@ class ExabeamCollector(Collector):
                 # generate alerts for notable users
                 sessions = exabeam.get_notable_user_sessions()
                 for session in sessions:
-                    self.generate_alert(session, "Notable Users")
+                    self.generate_alert(session, "notable users")
 
                 # generate alerts for other watchlists
                 for watchlist in self.watchlists:
@@ -47,7 +49,7 @@ class ExabeamCollector(Collector):
 
     def generate_alert(self, session, watchlist):
         # skip sessions we have already alerted
-        if session['id'] in self.exabeam_alert_cache:
+        if len(saq.db.query(Alert).filter(Alert.description.like(f"exabeam {watchlist} - {session['id']}%")).all()) > 0:
             return
 
         # add observables
@@ -57,7 +59,7 @@ class ExabeamCollector(Collector):
 
         # create alert submission
         submission = Submission(
-            description = f"Exabeam {watchlist} - {session['user']} - {session['risk']:.0f}",
+            description = f"exabeam {watchlist} - {session['id']} - {session['risk']:.0f}",
             analysis_mode = ANALYSIS_MODE_CORRELATION,
             tool = 'exabeam',
             tool_instance = "",
@@ -70,6 +72,3 @@ class ExabeamCollector(Collector):
 
         # submit alert
         self.queue_submission(submission)
-        
-        # mark as alerted
-        self.exabeam_alert_cache[session['id']] = True 

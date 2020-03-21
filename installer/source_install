@@ -33,7 +33,7 @@ source installer/common.sh
 # check proxy situation
 # TODO maybe allow user to type username/password?
 echo "checking internet access..."
-if ! curl -m 5 'http://www.google.com' > /dev/null 2>&1
+if ! curl -m 5 'https://www.google.com' > /dev/null 2>&1
 then
     echo "unable to connect to google -- do you need to configure a proxy?"
     echo "set your http_proxy, https_proxy and ftp_proxy environment variables and try again"
