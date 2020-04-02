@@ -35,6 +35,7 @@ class QueryHunt(Hunt):
                        strip_comments=False,
                        max_result_count=None,
                        query_result_file=None,
+                       search_id=None,
                        *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -70,6 +71,9 @@ class QueryHunt(Hunt):
 
         # debugging utility to save the results of the query to a file
         self.query_result_file = query_result_file
+
+        # allows hyperlink to search results
+        self.search_id = search_id
 
     def execute_query(self, start_time, end_time, *args, **kwargs):
         """Called to execute the query over the time period given by the start_time and end_time parameters.
@@ -276,8 +280,13 @@ class QueryHunt(Hunt):
 
         finally:
             # if we're not manually hunting then record the last end time
-            if not self.manual_hunt:
+            if not self.manual_hunt and query_result is not None:
                 self.last_end_time = target_end_time
+
+    def formatted_query(self):
+        """Formats query to a readable string with the timestamps used at runtime properly substituted.
+           Return None if one cannot be extracted."""
+        return None
 
     def extract_event_timestamp(self, query_result):
         """Given a JSON object that represents a single row/entry from a query result, return a datetime.datetime
@@ -292,15 +301,16 @@ class QueryHunt(Hunt):
         submissions = [] # of Submission objects
 
         def _create_submission():
-            return Submission(description=self.description,
+            return Submission(description=self.name,
                               # TODO support other analysis modes!
                               analysis_mode=ANALYSIS_MODE_CORRELATION,
                               tool=f'hunter-{self.type}',
-                              #tool_instance=saq.CONFIG['qradar']['url'], # XXX <-- 
+                              #tool_instance=saq.CONFIG['qradar']['url'], # XXX <--
                               tool_instance=self.tool_instance,
                               type=self.type,
                               tags=self.tags,
-                              details=[],
+                              details=[{'search_id': self.search_id if self.search_id else None,
+                                        'query': self.formatted_query}],
                               observables=[],
                               event_time=None,
                               files=[])
@@ -319,7 +329,7 @@ class QueryHunt(Hunt):
             observables = []
             for field_name, observable_type in self.observable_mapping.items():
                 if field_name in event and event[field_name] is not None:
-                    observable = { 'type': observable_type, 
+                    observable = { 'type': observable_type,
                                    'value': event[field_name] }
 
                     if field_name in self.directives:
@@ -345,16 +355,16 @@ class QueryHunt(Hunt):
                     missing_group = _create_submission()
                     submissions.append(missing_group)
 
-                
+
                 missing_group.observables.extend([_ for _ in observables if _ not in missing_group.observables])
                 missing_group.details.append(event)
-                
+
                 # see below about grouped events and event_time
                 if missing_group.event_time is None:
                     missing_group.event_time = event_time
                 elif event_time < missing_group.event_time:
                     missing_group.event_time = event_time
-                
+
             # if we are grouping then we start pulling all the data into groups
             else:
                 if event[self.group_by] not in event_grouping:
@@ -362,7 +372,7 @@ class QueryHunt(Hunt):
                     event_grouping[event[self.group_by]].description += f': {event[self.group_by]}'
                     submissions.append(event_grouping[event[self.group_by]])
 
-                event_grouping[event[self.group_by]].observables.extend([_ for _ in observables if _ not in 
+                event_grouping[event[self.group_by]].observables.extend([_ for _ in observables if _ not in
                                                                         event_grouping[event[self.group_by]].observables])
                 event_grouping[event[self.group_by]].details.append(event)
 
@@ -376,6 +386,6 @@ class QueryHunt(Hunt):
         # update the descriptions of grouped alerts with the event counts
         if self.group_by is not None:
             for submission in submissions:
-                submission.description += f' ({len(submission.details)} events)'
+                submission.description += f' ({len(submission.details) - 1} events)'
 
         return submissions

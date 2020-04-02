@@ -79,10 +79,6 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
         return SoleraPcapExtractionAnalysis
 
     @property
-    def required_directives(self):
-        return [ DIRECTIVE_EXTRACT_PCAP ]
-
-    @property
     def valid_observable_types(self):
         return [ F_IPV4, F_IPV4_CONVERSATION, F_IPV4_FULL_CONVERSATION ]
 

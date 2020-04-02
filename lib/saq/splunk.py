@@ -200,7 +200,7 @@ class SplunkQueryObject(object):
                     verify = False, # XXX take this out!
                     timeout = self.network_timeout )
             if r.status_code != 200:
-                logging.fatal("unable to log into slunk: response code {0} reason {1}".format(
+                logging.error("unable to log into slunk: response code {0} reason {1}".format(
                     r.status_code, r.reason))
                 return False
 

@@ -15,8 +15,13 @@ from saq.test import *
 from saq.util import *
 
 class TestHunt(Hunt):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.executed = False
+
     def execute(self):
         logging.info(f"unit test execute marker: {self}")
+        self.executed = True
 
     def cancel(self):
         pass
@@ -160,6 +165,32 @@ class TestCase(HunterBaseTestCase):
         self.assertTrue(isinstance(hunter.hunts[0].frequency, datetime.timedelta))
         self.assertEquals(hunter.hunts[0].tags, ['tag1', 'tag2'])
 
+    def test_hunt_disabled(self):
+        hunter = HuntManager(**self.manager_kwargs())
+        hunter.load_hunts_from_config()
+        hunter.hunts[0].enabled = True
+        hunter.hunts[1].enabled = True
+
+        self.assertTrue(all([not hunt.executed for hunt in hunter.hunts]))
+        hunter.execute()
+        hunter.manager_control_event.set()
+        hunter.wait_control_event.set()
+        hunter.wait()
+        self.assertTrue(all([hunt.executed for hunt in hunter.hunts]))
+
+        hunter = HuntManager(**self.manager_kwargs())
+        hunter.load_hunts_from_config()
+        hunter.hunts[0].enabled = False
+        hunter.hunts[1].enabled = False
+
+        self.assertTrue(all([not hunt.executed for hunt in hunter.hunts]))
+        hunter.execute()
+        hunter.execute()
+        hunter.manager_control_event.set()
+        hunter.wait_control_event.set()
+        hunter.wait()
+        self.assertTrue(all([not hunt.executed for hunt in hunter.hunts]))
+
     def test_reload_hunts_on_sighup(self):
         collector = HunterCollector()
         collector.start_service(threaded=True)
@@ -224,3 +255,4 @@ tags = tag1, tag2""")
         collector.wait_service()
 
     # TODO test the semaphore locking
+

@@ -200,12 +200,12 @@ class ObservableActionViewInFalconSandbox(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/view_in_falcon_sandbox.html'
         self.icon = 'chevron-right'
 
-class ObservableActionViewInExabeam(ObservableAction):
+class ObservableActionViewInDLP(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.name = ACTION_EXABEAM_SESSION_VIEW_EXABEAM
-        self.description = "View In Exabeam"
-        self.jinja_action_path = 'analysis/observable_actions/view_in_exabeam.html'
+        self.name = ACTION_DLP_INCIDENT_VIEW_DLP
+        self.description = "View In DLP"
+        self.jinja_action_path = 'analysis/observable_actions/view_in_dlp.html'
         self.icon = 'chevron-right'
 
 class ObservableActionViewInVx(ObservableAction):

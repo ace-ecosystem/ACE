@@ -56,3 +56,4 @@ gglsbl-rest-client
 argcomplete==1.10.0
 msal
 ip-inspector
+croniter
