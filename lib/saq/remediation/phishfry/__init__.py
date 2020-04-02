@@ -11,6 +11,7 @@ from configparser import ConfigParser
 import saq
 from saq.database import Remediation
 
+from saq.proxy import proxies
 from saq.remediation import RemediationSystem
 from saq.remediation.constants import *
 from saq.util import CustomSSLAdapter
@@ -45,7 +46,7 @@ class PhishfryRemediationSystem(RemediationSystem):
                 adapter = CustomSSLAdapter()
                 adapter.add_cert(server, certificate)
 
-            proxies = saq.PROXIES if use_proxy else {}
+            proxies = proxies() if use_proxy else {}
 
             account = phishfry.Account(
                 user,
@@ -154,7 +155,7 @@ def load_phishfry_accounts():
         version = config[section].get("version", "Exchange2016")
         user = config[section]["user"]
         password = config[section]["pass"]
-        accounts.append(EWS.Account(user, password, server=server, version=version, timezone=timezone, proxies=saq.PROXIES))
+        accounts.append(EWS.Account(user, password, server=server, version=version, timezone=timezone, proxies=proxies()))
 
     return accounts
 

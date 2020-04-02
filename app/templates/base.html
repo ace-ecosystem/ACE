@@ -171,6 +171,8 @@
                                         <option value="COMMAND_AND_CONTROL">COMMAND_AND_CONTROL</option>
                                         <option value="EXFIL">EXFIL</option>
                                         <option value="DAMAGE">DAMAGE</option>
+                                        <option value="INSIDER_DATA_CONTROL">INSIDER_DATA_CONTROL</option>
+                                        <option value="INSIDER_DATA_EXFIL">INSIDER_DATA_EXFIL</option>
                                       </select>
                                     </td>
                                   </tr>
@@ -194,6 +196,7 @@
                                         <option value="cleaned manually">cleaned manually</option>
                                         <option value="reimaged">reimaged</option>
                                         <option value="credentials reset">credentials reset</option>
+                                          <option value="network block">network block</option>
                                         <option value="NA">NA</option>
                                       </select>
                                     </td>
@@ -219,6 +222,16 @@
                                         <option value="usb">usb</option>
                                         <option value="website">website</option>
                                         <option value="unknown">unknown</option>
+                                      </select>
+                                    </td>
+                                  </tr>
+                                    <tr>
+                                    <th>Risk Level</th>
+                                    <td>
+                                      <select class="form-control" name="event_risk_level" id="event_risk_level">
+                                        <option value="1" SELECTED>1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
                                       </select>
                                     </td>
                                   </tr>
@@ -309,10 +322,12 @@
                             <div class="radio"><label><input type="radio" name="disposition" value="COMMAND_AND_CONTROL" id="option_COMMAND_AND_CONTROL" autocomplete="off"> COMMAND_AND_CONTROL </label></div>
                             <div class="radio"><label><input type="radio" name="disposition" value="EXFIL" id="option_EXFIL" autocomplete="off"> EXFIL </label></div>
                             <div class="radio"><label><input type="radio" name="disposition" value="DAMAGE" id="option_DAMAGE" autocomplete="off"> DAMAGE </label></div>
+                            <div class="radio"><label><input type="radio" name="disposition" value="INSIDER_DATA_CONTROL" id="option_INSIDER_DATA_CONTROL" autocomplete="off"> INSIDER_DATA_CONTROL </label></div>
+                            <div class="radio"><label><input type="radio" name="disposition" value="INSIDER_DATA_EXFIL" id="option_INSIDER_DATA_EXFIL" autocomplete="off"> INSIDER_DATA_EXFIL </label></div>
                         </div>
                         <div class="col-md-8">
                             <textarea class="form-control" rows="4" name="comment"></textarea>
-                            <a target="_blank" href="https://wiki/w/index.php/ACE_Dispositions">Click here for help with dispositions.</a>
+                            <a href="/ace/docs/analyst-orientation.html#alert-dispositioning" target="_blank">Click here for help with dispositions.</a>
                         </div>
                     </div>
                 </div>
@@ -408,7 +423,7 @@
                     <div class="col-xs-12">
                         <select name="selected_user_id" class="form-control">
                             {% for user in all_users %}
-                            <option value="{{user.id}}">{{user.username}}</option>
+                            <option value="{{user.id}}">{{user.gui_display}}</option>
                             {% endfor %}
                         </select>
                     </div>

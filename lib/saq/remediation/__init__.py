@@ -35,6 +35,7 @@ from sqlalchemy import asc, func, and_, or_
 MESSAGE_TYPE_REMEDIATION_SUCCESS = 'remediation_success'
 MESSAGE_TYPE_REMEDIATION_FAILURE = 'remediation_failure'
 
+
 class RemediationSystemManager(ACEService):
     def __init__(self, *args, **kwargs):
         super().__init__(service_config=saq.CONFIG['service_remediation'], *args, **kwargs)
@@ -509,3 +510,108 @@ remediation action taken on this observable."""
             logging.error(f"unable to query remediation status of {self}: {e}")
             self._remediation_status = None
             return self._remediation_status
+
+    @property
+    def remediation_success(self):
+        """Returns True if a remediation was successful, False otherwise"""
+        if hasattr(self, '_remediation_success'):
+            return self._remediation_success
+
+        from saq.database import Remediation
+        try:
+            self._remediation_success = saq.db.query(Remediation.successful).filter(
+                                           Remediation.key == self.remediation_key,
+                                           Remediation.status == REMEDIATION_STATUS_COMPLETED)\
+                                       .order_by(Remediation.insert_date.desc())\
+                                       .first()
+
+            if self._remediation_success is not None:
+                self._remediation_success = self._remediation_success[0]
+
+            return self._remediation_success
+        except Exception as e:
+            logging.error(f"unable to query remediation success of {self}: {e}")
+            self._remediation_success = None
+            return self._remediation_success
+
+
+class RemediationResult(object):
+    def __init__(self, address, message_id, mailbox_type, action, success=True, message=None):
+        self.address = address
+        self.message_id = message_id
+        self.mailbox_type = mailbox_type
+        self.success = success
+        self.message = message
+        self.owner = None
+        self.members = []
+        self.forwards = []
+        self.action = action
+
+    def result(self, message, success=False):
+        logging.info(message)
+        self.success = success
+        self.message = message
+
+    def __eq__(self, other):
+        attributes = [
+            'address', 'message_id', 'mailbox_type', 'success',
+            'message', 'owner', 'members', 'forwards', 'action',
+        ]
+        for attr in attributes:
+            if getattr(self, attr) != getattr(other, attr):
+                return False
+        return True
+
+
+class BaseRemediator:
+    """Base class for remediators.
+
+    Each remediator should have the following methods:
+        - initialize: initializes the underlying API. All external
+            IO for the API (account setup, get token, etc.) should
+            be postponed until `initialize` is called.
+        - remediate: Only override this if you have more actions
+            that need to be handled by your particular remediation
+            type.
+        - remove: Override with logic to remove remediation artifact
+            with `self.api`.
+        - restore: Override with logic to restore remediation artifact
+            with `self.api`.
+
+    This allows for a dependable interface for the RemediationSystems
+    to use.
+    """
+
+    def __init__(self, api, remediator_type, config_name=None):
+        """ When initializing your subclass, you should allow any
+        exceptions through that are raised during the instantiation
+        of your api class. The remediation system uses this as a sign
+        that there was an error setting up the remediator."""
+
+        self.api = api
+        self.type = remediator_type
+        self.config_name = config_name or 'no_config_name_given'
+
+    def initialize(self):
+        self.api.initialize()
+
+    def remediate(self, action: str, *args, **kwargs):
+        """Returns result of remediation. Can be overridden if
+        more actions are needed for the particular remediation type."""
+
+        _remove = kwargs.get('remove') or self.remove
+        _restore = kwargs.get('restore') or self.restore
+
+        if action == REMEDIATION_ACTION_REMOVE:
+            return _remove(*args, **kwargs)
+        if action == REMEDIATION_ACTION_RESTORE:
+            return _restore(*args, **kwargs)
+        raise ValueError(f'remediate did not receive valid action: {action}')
+
+    def remove(self, *args, **kwargs):
+        """Override this method with logic to remove artifact using `self.api`"""
+        raise NotImplementedError('remove is not implemented')
+
+    def restore(self, *args, **kwargs):
+        """Override this method with logic to restore artifcat using `self.api`"""
+        raise NotImplementedError('restore is not implemented')

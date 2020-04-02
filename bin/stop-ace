@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
+cd ${SAQ_HOME:=/opt/ace}
 source $(dirname "$0")/common.sh
-cd $SAQ_HOME
 
 if [ ! -e etc/startup ]
 then

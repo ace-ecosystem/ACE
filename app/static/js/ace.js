@@ -13,6 +13,14 @@ function escape_html(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
+function copy_to_clipboard(str) {
+    var $temp = $("<input>");
+    $("body").append($temp);
+    $temp.val(str).select();
+    document.execCommand("copy");
+    $temp.remove();
+}
+
 $(document).ready(function() {
     $("#event-form").on("submit", function(e) {
         e.preventDefault();
@@ -74,4 +82,20 @@ function malware_selection_changed(index) {
     document.getElementById("new_malware_info_" + index).style.display = 'none';
   }
 }
+
+let placeholder_src = {
+    "email_conversation": "Sender@example.com",
+    "email_delivery": "<Message-ID>",
+    "ipv4_conversation": "ex. 1.1.1.1",
+    "ipv4_full_conversation": "ex. 1.1.1.1:1010"
+};
+let placeholder_dst = {
+    "email_conversation": "Recipient@example.com",
+    "email_delivery": "Recipient@example.com",
+    "ipv4_conversation": "ex. 2.2.2.2",
+    "ipv4_full_conversation": "ex. 2.2.2.2:2020"
+};
+
+window.localStorage.setItem('placeholder_src', JSON.stringify(placeholder_src));
+window.localStorage.setItem('placeholder_dst', JSON.stringify(placeholder_dst));
 

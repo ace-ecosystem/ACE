@@ -1,11 +1,11 @@
 {% extends "analysis/default_observable.html" %}
-{% block observable_display %}
-{{_observable.display_value}}
+{% block observable_display_value %}{{_observable.display_value}}
 {% if _observable.exists %} ({{_observable.human_readable_size}})
     {% if _observable.is_image %}<br><img width="{{_observable.scaled_width}}" height="{{_observable.scaled_height}}" src="{{ url_for('analysis.image', alert_uuid=alert.uuid, observable_uuid=observable_node.obj.id) }}" class="img-thumbnail"/><br>{% endif %}
 {% endif %}
 {% endblock %}
 
+{% block observable_display_misc %}
 <script type="text/javascript">
 $(document).ready(function() {
     $("#emaillist").change(function (e) {
@@ -38,3 +38,4 @@ $(document).ready(function() {
     });
 });
 </script>
+{% endblock %}

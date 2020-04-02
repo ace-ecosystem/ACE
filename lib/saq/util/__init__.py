@@ -6,6 +6,7 @@
 import collections
 import datetime
 import functools
+import itertools
 import json
 import logging
 import os, os.path
@@ -241,99 +242,6 @@ def fang(url):
             return f"http{url[4:]}"
     return url
 
-
-#
-# How this works:
-# Let's say we're watching a file that another system is writing to. At some point it decides to roll the file over
-# and start a new file. We don't want that to happen while we're in the middle of reading/process it.
-# So we create a HARD LINK to the file named file_name.monitor.
-# When the other system moves the file to the side, we still have the hard link to the original file.
-# And now we can tell that it rolled over since the inode for the hard link we have will be different than the 
-# inode for the new file.
-#
-
-class FileMonitorLink(object):
-    """Utility class to track when a file has been modified."""
-
-    FILE_NEW = 'new'
-    FILE_MODIFIED = 'modified'
-    FILE_UNMODIFIED = 'unmodified'
-    FILE_DELETED = 'deleted'
-    FILE_MOVED = 'moved'
-
-    def __init__(self, path):
-        self.path = path
-        self.link_path = None
-        self.create_link()
-        self.last_stat = None
-
-    def create_link(self):
-        if self.link_path is not None:
-            return
-
-        if os.path.exists(self.path):
-            count = 0
-            while True:
-                try:
-                    self.link_path = os.path.join(saq.TEMP_DIR, f'{os.path.basename(self.path)}.monitor-{count}')
-                    os.link(self.path, self.link_path)
-                    logging.debug(f"created file monitor for {self.path} linked to {self.link_path}")
-                    break
-                except FileExistsError:
-                    count += 1
-                    continue
-                except Exception as e:
-                    logging.error(f"unable to create link {self.link_path} for file monitor for {self.path}: {e}")
-                    report_exception()
-
-    def delete_link(self):
-        if self.link_path is not None:
-            try:
-                os.unlink(self.link_path)
-            except FileNotFoundError:
-                pass
-            except Exception as e:
-                logging.error(f"unable to delete monitor link {self.link_path} for {self.path}: {e}")
-
-    def close(self):
-        self.delete_link()
-
-    def status(self):
-        """Returns FileMonitorLink.FILE_NEW if this is the first call to status(),
-                   FileMonitorLink.FILE_MOVED if the path points to a different file than it was before,
-                   FileMonitorLink.FILE_MODIFIED if the file has been modified,
-                   FileMonitorLink.FILE_DELETED if the file has been deleted,
-                   FileMonitorLink.FILE_UNMODIFIED if the file has not changed."""
-
-        old_stat = self.last_stat
-
-        try:
-            self.last_stat = os.stat(self.path)
-        except FileNotFoundError:
-            return FileMonitorLink.FILE_DELETED
-
-        self.create_link()
-
-        # is this the first time we've called status() for this file?
-        if old_stat is None:
-            return FileMonitorLink.FILE_NEW
-
-        link_stat = os.stat(self.link_path)
-        # did the inode change?
-        if link_stat.st_ino != self.last_stat.st_ino:
-            return FileMonitorLink.FILE_MOVED
-
-        # same inode -- did the last modified timestamp change?
-        if old_stat.st_mtime != self.last_stat.st_mtime:
-            return FileMonitorLink.FILE_MODIFIED
-
-        # did the size of the file change?
-        if old_stat.st_size != self.last_stat.st_size:
-            return FileMonitorLink.FILE_MODIFIED
-
-        return FileMonitorLink.FILE_UNMODIFIED
-
-
 class RegexObservableParser:
     """Helper class to handle regex and observable mapping.
 
@@ -360,10 +268,15 @@ class RegexObservableParser:
         Used to join the capture groups.
         ex: delimeter of '_' might be used to join two email address
         like 'email1@email.com_email2@email2.com'.
+    split: str or None
+        Used to split the result into multiple values, such as when the
+        extraction results in a comma separated list of values.
+        ex: split of ',' would split '1.2.3.4,1.2.3.5' into two matches.
     """
     def __init__(self, regex, observable_type, 
                  capture_groups=None, 
                  delimiter='_', 
+                 split=None,
                  tags=None, 
                  directives=None,
                  re_compile_options=0):
@@ -372,6 +285,7 @@ class RegexObservableParser:
         self.matches = None
         self.capture_groups = capture_groups
         self.delimiter = delimiter
+        self.split = split
         self.tags = tags or []
         self.directives = directives or []
     
@@ -384,7 +298,12 @@ class RegexObservableParser:
         delimiters, you'll need to override this.
         """
         if self.capture_groups is None:
-            self.matches = self.regex.findall(text)
+            if self.split is None:
+                self.matches = self.regex.findall(text)
+            else:
+                self.matches = []
+                for match in self.regex.findall(text):
+                    self.matches.extend([_.strip() for _ in match.split(self.split)])
             return
 
         _matches = self.regex.search(text)
@@ -396,11 +315,22 @@ class RegexObservableParser:
         # Create the desired string from the capture groups.
         # Handy for conversation observables.
         # IndexError or AttributeError handled in parent method.
-        _formatted = self.delimiter.join(
-            [_matches.group(capture_group) for capture_group in self.capture_groups]
-        )
+        if self.split is None:
+            self.matches = [self.delimiter.join(
+                [_matches.group(capture_group) for capture_group in self.capture_groups]
+            )]
+        else:
+            # in the case of split, we create a list of a list of capture groups
+            # ex: [[a], [b, c]]
+            _buffer = []
+            for capture_group in self.capture_groups:
+                _buffer.append(_matches.group(capture_group).split(self.split))
 
-        self.matches = [_formatted]
+            # then use cartesian product to create all the permutations
+            # ex: smtp-from = joe@site.com, smtp-to = bob@local.com, jim@local.com
+            # [['joe@site.com'], ['bob@local.com', ['jim@local.com']]
+            # [['joe@site.com', 'bob@local.com'], ['joe@site.com', 'jim@local.com]]
+            self.matches = [self.delimiter.join(_) for _ in itertools.product(*_buffer)]
 
     def parse(self, text):
         """Get a list of non-overlapping matches."""
@@ -432,7 +362,7 @@ class RegexObservableParserGroup:
         self._observables = []
         self.tags = tags or []
 
-    def add(self, regex, observable_type, capture_groups=None, delimiter='_',
+    def add(self, regex, observable_type, capture_groups=None, delimiter='_', split=None,
             override_class=None, tags=None, directives=None, re_compile_options=0):
         """Add a parser to the list of parsers for this group.
             
@@ -448,6 +378,7 @@ class RegexObservableParserGroup:
             observable_type,
             capture_groups=capture_groups,
             delimiter=delimiter,
+            split=split,
             tags=_tags,
             directives=directives,
             re_compile_options=re_compile_options,
@@ -467,9 +398,7 @@ class RegexObservableParserGroup:
         
         for parser in self.parsers:
             parser.parse(content)
-            for match in parser.matches:
-                _match = match.strip()
-
+            for _match in parser.matches:
                 if parser.observable_type == F_URL:
                     # hxxp/hXXp to http for analysis
                     _match = fang(_match)

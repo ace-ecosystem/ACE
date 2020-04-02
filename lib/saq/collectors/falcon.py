@@ -2,6 +2,7 @@
 
 import collections
 import datetime
+import json
 import logging
 import os, os.path
 import socket
@@ -9,7 +10,7 @@ import socket
 import saq
 from saq.constants import *
 from saq.collectors import Collector, Submission
-from saq.util import abs_path, json_parse, FileMonitorLink
+from saq.util import abs_path
 from saq.error import report_exception
 
 KEY_METADATA = 'metadata'
@@ -39,7 +40,10 @@ SUPPORTED_EVENT_TYPES = [
 
 class FalconCollector(Collector):
     def __init__(self, *args, **kwargs):
-        super().__init__(workload_type='falcon', delete_files=True, *args, **kwargs)
+        super().__init__(service_config=saq.CONFIG['service_falcon_collector'],
+                         workload_type='falcon', 
+                         delete_files=True, 
+                         *args, **kwargs)
 
         # location of the falcon siem collector output file
         self.siem_collector_log_path = abs_path(saq.CONFIG['falcon']['siem_collector_log_path'])
@@ -50,7 +54,16 @@ class FalconCollector(Collector):
         self._last_offset = 0
         self.last_offset_path = os.path.join(self.persistence_dir, 'falcon_last_offset')
 
-        self.last_fp_offset = None
+        # the open file descriptor for the log file
+        self.siem_fp = None
+        # the inode of the file when we opened it
+        # when this changes it means the log file rotated
+        self.siem_inode = None
+        # if the file size is SMALLER then the file probably got over-written
+        self.siem_fs = None
+
+        # the current JSON buffer
+        self.json_buffer = []
 
         if os.path.exists(self.last_offset_path):
             with open(self.last_offset_path) as fp:
@@ -67,12 +80,6 @@ class FalconCollector(Collector):
         self.event_type_map = {
             EVENT_TYPE_DETECTION: self.process_detection_event,
         }
-
-        # TODO this probably needs to go into the base class
-        self.submission_list = collections.deque()
-
-        # the monitor we're using to track the log file
-        self.monitor = None
 
     @property
     def last_offset(self):
@@ -92,69 +99,76 @@ class FalconCollector(Collector):
     def stop(self, *args, **kwargs):
         super().stop(*args, **kwargs)
 
-        if self.monitor is not None:
-            self.monitor.close()
+        if self.siem_fp is not None:
+            self.siem_fp.close()
 
-    def get_next_submission(self):
-        if len(self.submission_list) > 0:
-            return self.submission_list.popleft()
-
+    def execute_extended_collection(self):
         # do we need to start monitoring the log file?
-        if self.monitor is None:
-            self.monitor = FileMonitorLink(self.siem_collector_log_path)
-            self.last_fp_offset = None
+        if self.siem_fp is None:
+            try:
+                self.siem_fp = open(self.siem_collector_log_path, 'r')
+                s = os.stat(self.siem_collector_log_path)
+                self.siem_inode = s.st_ino
+                self.siem_fs = s.st_size
+                self.json_buffer = []
+            except FileNotFoundError:
+                logging.debug(f"falcon siem file {self.siem_collector_log_path} not available")
+                return 1
+            except Exception as e:
+                logging.error(f"unable to open siem file {self.siem_collector_log_path}: {e}")
+                return 10
 
-        monitor_status = self.monitor.status()
-        logging.info(f"MARKER: status = {monitor_status}")
+        while not self.is_service_shutdown:
+            line = self.siem_fp.readline()
+            if line == '':
+                # has the file changed?
+                reset_fp = False
+                try:
+                    s = os.stat(self.siem_collector_log_path)
+                    if s.st_ino != self.siem_inode:
+                        logging.info(f"detected siem file rotation for {self.siem_collector_log_path}")
+                        reset_fp = True
 
-        # has the file changed?
-        if monitor_status == FileMonitorLink.FILE_UNMODIFIED:
-            return None
+                    if s.st_size < self.siem_fs:
+                        logging.info(f"detected siem file truncation for {self.siem_collector_log_path}")
+                        reset_fp = True
 
-        # has the file been deleted?
-        # OR has the file been renamed or moved to the side and replace with a different (possibly new file)?
-        # these are treated the same
-        elif monitor_status in [ FileMonitorLink.FILE_DELETED, FileMonitorLink.FILE_MOVED ]:
-            # have we seen the file yet (at all?)
-            # if we have NOT then we won't even have a hard link created to it
-            if self.monitor.link_path is None:
-                return None
+                    self.siem_fs = s.st_size
+    
+                except FileNotFoundError:
+                    logging.info(f"detected siem file rotation for {self.siem_collector_log_path}")
+                    reset_fp = True
+                except Exception as e:
+                    logging.error(f"error reading siem file {self.siem_collector_log_path}: {e}")
+                    reset_fp = True
 
-            # so we are tracking the log file but it's been deleted
-            # have we completed reading the entire file (using the link)
-            #logging.info(f"MARKER: last_fp_offset: {self.last_fp_offset}")
-            #logging.info(f"MARKER: os.path.getsize: {os.path.getsize(self.monitor.link_path)}")
-            # XXX this isn't right
-            #if self.last_fp_offset == os.path.getsize(self.monitor.link_path):
-                # we're done until the file comes back -- then we'll start another monitor to track it
-                #self.monitor = None
-                #return None
+                if reset_fp:
+                    self.siem_fp.close()
+                    self.siem_fp = None
+                    self.siem_inode = None
+                    return 0
 
-        # at this point we know that the file has been modified in some way
-        # note that we reference the file by the link we create (to support finishing reading after delete or move)
-        with open(self.monitor.link_path, 'r') as fp:
-            # seek to where we left off last time
-            if self.last_fp_offset is not None:
-                fp.seek(self.last_fp_offset)
+                # otherwise we're just at the end for now
+                return 1
 
-            for json_result, next_fp_position in json_parse(fp):
-                submission = self.parse_json_result(json_result)
-                if isinstance(submission, Submission):
-                    self.submission_list.append(submission)
+            # if this is the start of a new JSON object then reset the buffer
+            if line == '{\n':
+                self.json_buffer = []
 
-            # if we are finishing up a file that has since been moved or deleted, then close the monitor
-            if monitor_status in [ FileMonitorLink.FILE_DELETED, FileMonitorLink.FILE_MOVED ]:
-                self.monitor.close()
-                self.monitor = None # this will cause a new monitor to get created next time
-            else:
-                self.last_fp_offset = next_fp_position
+            self.json_buffer.append(line)
 
-            logging.info(f"MARKER: last_fp_offset = {self.last_fp_offset}")
+            # if this is the end of a JSON object then we try to parse it
+            if line == '}\n':
+                try:
+                    json_result = json.loads(''.join(self.json_buffer))
+                    submission = self.parse_json_result(json_result)
+                    if isinstance(submission, Submission):
+                        self.queue_submission(submission)
 
-        if len(self.submission_list) == 0:
-            return None
-
-        return self.submission_list.popleft()
+                except Exception as e:
+                    logging.error(f"unable to parse json from crowdstrike: {e}")
+                finally:
+                    self.json_buffer = []
 
     def parse_json_result(self, json_result):
         for key in [ KEY_METADATA, KEY_EVENT ]:
@@ -206,9 +220,15 @@ class FalconCollector(Collector):
             { 'type': F_FILE_PATH, 'value': event['ParentImageFileName'], },
             { 'type': F_FILE_PATH, 'value': event['GrandparentImageFileName'], },
         ]
+
+        if "custom rule" in event["DetectDescription"] and "IOARuleName" in event:
+            ioa = f": {event['IOARuleName']}"
+        else:
+            ioa = ""
         
         return Submission(
-            description = f'Falcon - {event["DetectName"]} - {event["DetectDescription"]}',
+            description = f'Falcon - {event["DetectName"]} - {event["ComputerName"]} - '
+                          f'{event["DetectDescription"]}{ioa}',
             analysis_mode = ANALYSIS_MODE_CORRELATION,
             tool = 'Falcon',
             tool_instance = self.hostname,

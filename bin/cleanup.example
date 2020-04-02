@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-cd /opt/ace || exit 1
+cd ${SAQ_HOME:=/opt/ace} || exit 1
 source load_environment
 
 DATA_DIR="$SAQ_HOME/$(ace config -v global.data_dir)"
@@ -60,11 +60,6 @@ then
     find -L "$CB_BINARY_ARCHIVE_DIR" -maxdepth 2 -mindepth 2 -type f -mtime +15 -delete
 fi
 
-# delete backups older than 30 days
-if [ -d "$DATA_DIR/backups" ]
-then
-    find -L "$DATA_DIR/backups" -type f -name '*.sql.gz' -mtime +30 -delete
-fi
 
 SPLUNK_LOG_DIR="$DATA_DIR/$(ace config -v splunk_logging.splunk_log_dir)"
 if [ -e "$SPLUNK_LOG_DIR" ]

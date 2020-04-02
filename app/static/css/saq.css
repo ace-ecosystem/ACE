@@ -25,14 +25,25 @@ html, body {
     flex: 1;
 }
 
+.link:hover {
+    text-decoration: underline;
+    text-shadow: 1px 1px 1px #555;
+}
+
 .voffset5 { margin-top : 5px; }
 .voffset10 { margin-top : 10px; }
 
 /* observable type highlights */
 
 .observable_display {
+    cursor: pointer;
     font-weight: bold;
     text-shadow: 1px 1px 1px lightgray;
+}
+
+.observable_display:hover {
+    cursor: pointer;
+    text-decoration: underline;
 }
 
 .observable-preview {
@@ -195,4 +206,41 @@ html, body {
 .raw-log {
   font-family : monospace;
   font-size : smaller;
+}
+
+.pre {
+  white-space: pre;
+}
+
+ul.tree, ul.tree ul {
+list-style: none;
+ margin: 0;
+ padding: 0;
+}
+ul.tree ul {
+ margin-left: 10px;
+}
+ul.tree li {
+ margin: 0;
+ padding: 0 7px;
+ line-height: 20px;
+ border-left:1px solid rgb(100,100,100);
+
+}
+ul.tree li:last-child {
+   border-left:none;
+}
+ul.tree li:before {
+  position:relative;
+  top:-0.3em;
+  height:1em;
+  width:12px;
+  color:white;
+  border-bottom:1px solid rgb(100,100,100);
+  content:"";
+  display:inline-block;
+  left:-7px;
+}
+ul.tree li:last-child:before {
+  border-left:1px solid rgb(100,100,100);
 }

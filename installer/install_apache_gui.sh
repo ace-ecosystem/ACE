@@ -11,6 +11,11 @@ then
 	exit 1
 fi
 
+# make sure the correct locale is set for supporting unicode characters
+sudo update-locale LANG=en_US.utf8
+# uncomment the following for apache2 to use the system locale 
+sudo sed -i '/^#. \/etc\/default\/locale/s/^#//' /etc/apache2/envvars 
+
 # have we already configured apache for ace?
 if [ -L /etc/apache2/sites-available/ace.conf ]; then exit 0; fi
 
@@ -25,8 +30,8 @@ rm ~/.mod_wsgi-express.output
 sudo a2enmod wsgi_express
 sudo a2enmod ssl
 sudo a2ensite default-ssl
-cp /opt/ace/etc/saq_apache.example.conf /opt/ace/etc/saq_apache.conf
-sudo ln -s /opt/ace/etc/saq_apache.conf /etc/apache2/sites-available/ace.conf && \
+cp "$SAQ_HOME/etc/saq_apache.example.conf" "$SAQ_HOME/etc/saq_apache.conf"
+sudo ln -s "$SAQ_HOME/etc/saq_apache.conf" /etc/apache2/sites-available/ace.conf && \
 sudo a2ensite ace && \
 sudo systemctl restart apache2.service
 

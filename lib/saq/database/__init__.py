@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 import warnings
+import re
 
 from contextlib import closing, contextmanager
 
@@ -391,7 +392,7 @@ import logging
 import os.path
 from sqlalchemy import Column, Integer, BigInteger, String, ForeignKey, DateTime, TIMESTAMP, DATE, DATETIME, text, create_engine, Text, Enum, func
 from sqlalchemy.dialects.mysql import BOOLEAN, VARBINARY, BLOB
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship, reconstructor, backref, validates, scoped_session
 from sqlalchemy.orm.exc import NoResultFound, DetachedInstanceError
 from sqlalchemy.sql.expression import Executable
@@ -552,9 +553,10 @@ class Event(Base):
     creation_date = Column(DATE, nullable=False)
     name = Column(String(128), nullable=False)
     status = Column(Enum('OPEN','CLOSED','IGNORE'), nullable=False)
-    remediation = Column(Enum('not remediated','cleaned with antivirus','cleaned manually','reimaged','credentials reset','removed from mailbox','NA'), nullable=False)
+    remediation = Column(Enum('not remediated','cleaned with antivirus','cleaned manually','reimaged','credentials reset','removed from mailbox','network block','NA'), nullable=False)
     comment = Column(Text)
     vector = Column(Enum('corporate email','webmail','usb','website','unknown'), nullable=False)
+    risk_level = Column(Enum('1','2','3'), nullable=False)
     prevention_tool = Column(Enum('response team','ips','fw','proxy','antivirus','email filter','application whitelisting','user'), nullable=False)
     campaign_id = Column(Integer, ForeignKey('campaign.id'), nullable=False)
     campaign = relationship('saq.database.Campaign', foreign_keys=[campaign_id])
@@ -590,6 +592,7 @@ class Event(Base):
             'name': self.name,
             'prevention_tool': self.prevention_tool,
             'remediation': self.remediation,
+            'risk_level': self.risk_level,
             'status': self.status,
             'tags': self.sorted_tags,
             'type': self.type,
@@ -634,52 +637,19 @@ class Event(Base):
 
     @property
     def disposition(self):
-        dis_rank = {
-                'FALSE_POSITIVE':0,
-                'IGNORE':-1,
-                'UNKNOWN':1,
-                'REVIEWED':2,
-                'POLICY_VIOLATION':3,
-                'GRAYWARE':3,
-                'RECONNAISSANCE':4,
-                'WEAPONIZATION':5,
-                'DELIVERY':6,
-                'EXPLOITATION':7,
-                'INSTALLATION':8,
-                'COMMAND_AND_CONTROL':9,
-                'EXFIL':10,
-                'DAMAGE':11}
         disposition = None
         for alert_mapping in self.alert_mappings:
             if alert_mapping.alert.disposition is None:
                 logging.warning(f"alert {alert_mapping.alert} added to event without disposition {alert_mapping.event_id}")
                 continue
 
-            if disposition is None or dis_rank[alert_mapping.alert.disposition] > dis_rank[disposition]:
+            if disposition is None or saq.constants.DISPOSITION_RANK[alert_mapping.alert.disposition] > saq.constants.DISPOSITION_RANK[disposition]:
                 disposition = alert_mapping.alert.disposition
         return disposition
 
     @property
     def disposition_rank(self):
-        if self.disposition is None:
-            return -2
-
-        dis_rank = {
-                'FALSE_POSITIVE':0,
-                'IGNORE':-1,
-                'UNKNOWN':1,
-                'REVIEWED':2,
-                'POLICY_VIOLATION':3,
-                'GRAYWARE':3,
-                'RECONNAISSANCE':4,
-                'WEAPONIZATION':5,
-                'DELIVERY':6,
-                'EXPLOITATION':7,
-                'INSTALLATION':8,
-                'COMMAND_AND_CONTROL':9,
-                'EXFIL':10,
-                'DAMAGE':11}
-        return dis_rank[self.disposition]
+        return saq.constants.DISPOSITION_RANK[self.disposition]
 
     @property
     def sorted_tags(self):
@@ -871,6 +841,10 @@ class Alert(RootAnalysis, Base):
         nullable=False, 
         server_default=text('CURRENT_TIMESTAMP'))
 
+    event_time = Column(
+        TIMESTAMP,
+        nullable=True)
+
     def _datetime_to_sla_time_zone(self, dt=None):
         """Returns a datetime.datetime object to it's equivalent in the SLA time zone."""
         if dt is not None:
@@ -1005,6 +979,27 @@ class Alert(RootAnalysis, Base):
         String(1024),
         nullable=False)
 
+    @property
+    def icon(self):
+        """Returns appropriate icon name by attempting to match on self.description or self.tool."""
+        description_tokens = {token.lower() for token in re.split('[ _]', self.description)}
+        tool_tokens = {token.lower() for token in self.tool.split(' ')}
+        type_tokens = {token.lower() for token in self.alert_type.split(' ')}
+
+        available_favicons = set(saq.CONFIG['gui']['alert_favicons'].split(','))
+
+        result = available_favicons.intersection(description_tokens)
+        if not result:
+            result = available_favicons.intersection(tool_tokens)
+            if not result:
+                result = available_favicons.intersection(type_tokens)
+
+        if not result:
+            return 'default'
+        else:
+            return result.pop()
+
+
     @validates('description')
     def validate_description(self, key, value):
         max_length = getattr(self.__class__, key).prop.columns[0].type.length
@@ -1019,20 +1014,22 @@ class Alert(RootAnalysis, Base):
 
     disposition = Column(
         Enum(
-            'FALSE_POSITIVE',
-            'IGNORE',
-            'UNKNOWN',
-            'REVIEWED',
-            'GRAYWARE',
-            'POLICY_VIOLATION',
-            'RECONNAISSANCE',
-            'WEAPONIZATION',
-            'DELIVERY',
-            'EXPLOITATION',
-            'INSTALLATION',
-            'COMMAND_AND_CONTROL',
-            'EXFIL',
-            'DAMAGE'),
+            saq.constants.DISPOSITION_FALSE_POSITIVE,
+            saq.constants.DISPOSITION_IGNORE,
+            saq.constants.DISPOSITION_UNKNOWN,
+            saq.constants.DISPOSITION_REVIEWED,
+            saq.constants.DISPOSITION_GRAYWARE,
+            saq.constants.DISPOSITION_POLICY_VIOLATION,
+            saq.constants.DISPOSITION_RECONNAISSANCE,
+            saq.constants.DISPOSITION_WEAPONIZATION,
+            saq.constants.DISPOSITION_DELIVERY,
+            saq.constants.DISPOSITION_EXPLOITATION,
+            saq.constants.DISPOSITION_INSTALLATION,
+            saq.constants.DISPOSITION_COMMAND_AND_CONTROL,
+            saq.constants.DISPOSITION_EXFIL,
+            saq.constants.DISPOSITION_DAMAGE,
+            saq.constants.DISPOSITION_INSIDER_DATA_CONTROL,
+            saq.constants.DISPOSITION_INSIDER_DATA_EXFIL),
         nullable=True)
 
     disposition_user_id = Column(
@@ -1633,49 +1630,6 @@ WHERE
         db.commit()
         db.close()
 
-    # TODO - I don't think this should be here
-    # we probably need custom Alert classes, based on the alert type, with overloaded functions
-    from saq.phishme import submit_response
-        
-    for alert in saq.db.query(Alert).filter(and_(Alert.uuid.in_(alert_uuids), 
-                                                 Alert.alert_type == 'mailbox', 
-                                                 Alert.description.like('ACE Mailbox Scanner Detection - [POTENTIAL PHISH]%'))):
-        try:
-            alert.load()
-        except Exception as e:
-            logging.error(f"unable to load alert {alert}: {e}")
-            continue
-
-        if 'email' not in alert.details:
-            logging.error(f"phishme report alert {alert} missing email property in alert details")
-            continue
-
-        if 'from' not in alert.details['email']:
-            logging.error(f"phishme report alert {alert} missing from property in alert email details")
-            continue
-
-        if 'subject' not in alert.details['email']:
-            logging.error(f"phishme report alert {alert} missing subject property in alert email details")
-            continue
-
-        email_from = alert.details['email']['from'].replace('\r', '').replace('\n', '')
-        if 'decoded_subject' in alert.details['email']:
-            email_subject = alert.details['email']['decoded_subject'].replace('\r', '').replace('\n', '')
-        else:
-            email_subject = alert.details['email']['subject'].replace('\r', '').replace('\n', '')
-        email_subject = email_subject.replace('[POTENTIAL_PHISH]_', '').replace('[POTENTIAL PHISH] ', '')
-
-        try:
-            # Has this alert already been dispositioned? Try not to spam users when an event is updated. 
-            if alert.disposition == disposition:
-                logging.warning(f"Not sending phishme response to {email_from} for subject:'{email_subject}' because the disposition was not updated.")
-            else:
-                submit_response(email_from, email_subject, disposition, user_comment)
-        except Exception as e:
-            logging.error(f"unable to submit response to phishme report to {email_from}: {e}")
-            report_exception()
-            continue
-
 class Similarity:
     def __init__(self, uuid, disposition, percent):
         self.uuid = uuid
@@ -1867,6 +1821,57 @@ def remove_observable_tag_mapping(o_type, o_value, o_md5, tag):
                                                                  ObservableTagMapping.tag_id == tag.id)))
     saq.db.commit()
     return True
+
+class PersistenceSource(Base):
+
+    __tablename__ = 'persistence_source'
+    
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True)
+
+    company_id = Column(
+        Integer,
+        ForeignKey('company.id'),
+        primary_key=True)
+
+    name = Column(
+        String(256),
+        nullable=False)
+
+class Persistence(Base):
+
+    __tablename__ = 'persistence'
+
+    id = Column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True)
+
+    source_id = Column(
+        Integer,
+        ForeignKey('persistence_source.id'),
+        primary_key=True)
+
+    permanent = Column(
+        Integer,
+        nullable=False,
+        server_default=text('0'))
+
+    uuid = Column(
+        String(512),
+        nullable=False)
+
+    value = Column(
+        BLOB(),
+        nullable=True)
+
+    last_update = Column(
+        TIMESTAMP, 
+        nullable=False, 
+        index=True,
+        server_default=text('CURRENT_TIMESTAMP'))
 
 # this is used to map what observables had what tags in what alerts
 # not to be confused with ObservableTagMapping (see above)
@@ -2394,6 +2399,10 @@ def initialize_database():
     global DatabaseSession
     from config import config
     import saq
+
+    # see https://github.com/PyMySQL/PyMySQL/issues/644
+    # /usr/local/lib/python3.6/dist-packages/pymysql/cursors.py:170: Warning: (1300, "Invalid utf8mb4 character string: '800363'")
+    warnings.filterwarnings(action='ignore', message='.*Invalid utf8mb4 character string.*')
 
     engine = create_engine(
         config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 

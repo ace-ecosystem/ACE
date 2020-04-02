@@ -56,6 +56,8 @@ def _api_command(parser):
         help="The remote host to connect to in host[:port] format.")
     parser.add_argument('--ssl-verification', required=False, default=None, dest='ssl_verification',
         help="Optional path to root CA ssl to load. Defaults to system installed CA.")
+    parser.add_argument('-S', '--disable-ssl-verification', required=False, default=False, dest='disable_ssl_verification', action='store_true',
+        help="Do not perform SSL verification.")
     parser.add_argument('--disable-proxy', required=False, default=False, action='store_true',
         help="Disables proxy usage by removing the environment variables http_proxy, https_proxy and ftp_proxy.")
     return parser
@@ -119,6 +121,7 @@ def _execute_api_call(command,
                       method=METHOD_GET, 
                       remote_host=None, 
                       ssl_verification=None, 
+                      disable_ssl_verification=False,
                       stream=False, 
                       data=None, 
                       files=None, 
@@ -131,6 +134,9 @@ def _execute_api_call(command,
 
     if ssl_verification is None:
         ssl_verification = default_ssl_verification
+
+    if disable_ssl_verification:
+        ssl_verification = False
 
     if method == METHOD_GET:
         func = requests.get
@@ -391,7 +397,7 @@ def _cli_submit(args):
 
     f_args = [ args.description ]
     f_kwargs = { 'remote_host': args.remote_host }
-    for prop in [ 'ssl_verification', 'analysis_mode', 'tool', 'tool_instance', 
+    for prop in [ 'ssl_verification', 'disable_ssl_verification', 'analysis_mode', 'tool', 'tool_instance', 
                   'type', 'event_time', 'details', 'observables',
                   'tags', 'files' ]:
 

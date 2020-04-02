@@ -19,6 +19,7 @@ from saq.constants import *
 from saq.database import use_db, execute_with_retry
 from saq.error import report_exception
 from saq.modules import AnalysisModule
+from saq.proxy import proxies
 
 import requests
 
@@ -319,13 +320,13 @@ class CloudphishAnalyzer(AnalysisModule):
         # start the clock XXX isn't this built-in to the delay analysis system?
         if analysis.query_start is None:
             analysis.query_start = int(time.time())
-        #else:
-            ## or has the clock expired?
-            #if int(time.time()) - analysis.query_start > self.query_timeout:
-                #logging.warning("cloudphish query for {} has timed out".format(url.value))
-                #analysis.result = RESULT_ERROR
-                #analysis.result_details = 'QUERY TIMED OUT'
-                #return
+        else:
+            # or has the clock expired?
+            if int(time.time()) - analysis.query_start > self.query_timeout:
+                logging.warning("cloudphish query for {} has timed out".format(url.value))
+                analysis.result = RESULT_ERROR
+                analysis.result_details = 'QUERY TIMED OUT'
+                return True
 
         # do we have a local cache result for this url?
         sha256_url = hash_url(url.value)
@@ -360,7 +361,7 @@ class CloudphishAnalyzer(AnalysisModule):
                                                  context=context, 
                                                  remote_host=cloudphish_server,
                                                  ssl_verification=saq.CA_CHAIN_PATH,
-                                                 proxies=saq.PROXIES if self.use_proxy else None,
+                                                 proxies=proxies() if self.use_proxy else None,
                                                  timeout=self.timeout)
 
             logging.debug("got result {} for cloudphish query @ {} for {}".format(response, cloudphish_server, url.value))
@@ -416,13 +417,13 @@ class CloudphishAnalyzer(AnalysisModule):
                                  temp_dir, 
                                  remote_host=cloudphish_server,
                                  ssl_verification=saq.CA_CHAIN_PATH,
-                                 proxies=saq.PROXIES if self.use_proxy else None,
+                                 proxies=proxies() if self.use_proxy else None,
                                  timeout=self.timeout)
 
                 #response = requests.request('GET', self.get_download_alert_url(), 
                                             #params={ 's': analysis.sha256_content },
                                             #timeout=self.timeout,
-                                            #proxies=saq.PROXIES if self.use_proxy else {},
+                                            #proxies=proxies() if self.use_proxy else {},
                                             #verify=saq.CA_CHAIN_PATH,
                                             #stream=True)
 
@@ -461,13 +462,13 @@ class CloudphishAnalyzer(AnalysisModule):
                                             output_path=target_file,
                                             remote_host=cloudphish_server,
                                             ssl_verification=saq.CA_CHAIN_PATH,
-                                            proxies=saq.PROXIES if self.use_proxy else None,
+                                            proxies=proxies() if self.use_proxy else None,
                                             timeout=self.timeout)
 
                 #response = requests.request('GET', self.get_download_url(), 
                                             #params={ 's': analysis.sha256_content },
                                             #timeout=self.timeout,
-                                            #proxies=saq.PROXIES if self.use_proxy else {},
+                                            #proxies=proxies() if self.use_proxy else {},
                                             #verify=saq.CA_CHAIN_PATH,
                                             #stream=True)
 

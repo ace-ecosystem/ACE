@@ -1,0 +1,19 @@
+The etc/site_tags.csv contains a mapping of observable type and value to tags
+to append to it automatically. The format of the csv file is as follows.
+
+o_types, match_type, ignore_case, value, tags
+
+o_types: a pipe (|) separated list of observable types
+match_type: one of the following (see the below python constants)
+
+    MATCH_TYPE_DEFAULT = 'default'
+    MATCH_TYPE_GLOB = 'glob'
+    MATCH_TYPE_REGEX = 'regex'
+    MATCH_TYPE_CIDR = 'cidr'
+    MATCH_TYPE_SUBDOMAIN = 'subdomain'
+
+ignore_case: True or False if case should be ignored when matching
+value: the pattern to use to match
+tags: a pipe (|) separated list of tags to add to the observable
+
+The csv file is monitored and automatically reloaded when it is modified.

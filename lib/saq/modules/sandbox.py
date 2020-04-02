@@ -8,6 +8,7 @@ import logging
 import saq
 from saq.constants import *
 from saq.modules import AnalysisModule
+from saq.proxy import proxies
 
 class SandboxAnalysisModule(AnalysisModule):
 
@@ -30,7 +31,7 @@ class SandboxAnalysisModule(AnalysisModule):
         if not self.use_proxy:
             return {}
 
-        return saq.PROXIES
+        return proxies()
 
     @property
     def verify_ssl(self):

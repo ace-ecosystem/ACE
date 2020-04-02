@@ -31,6 +31,7 @@ import os, os.path
 import signal
 import threading
 import sqlite3
+from croniter import croniter
 
 import pytz
 
@@ -60,6 +61,7 @@ class Hunt(object):
         self.type = type
         self.frequency = frequency
         self.tags = tags
+        self.cron_schedule = None
 
         # the last time the hunt was executed
         # see the last_executed_time property
@@ -80,6 +82,10 @@ class Hunt(object):
         # by default we use localhost
         # subclasses might use the address or url they are hitting for their queries
         self.tool_instance = 'localhost'
+
+        # when we load from an ini file we record the last modified time of the file
+        self.ini_path = None
+        self.last_mtime = None
 
     @property
     def last_executed_time(self):
@@ -191,8 +197,22 @@ class Hunt(object):
         self.type = section_rule['type']
         self.frequency = create_timedelta(section_rule['frequency'])
         self.tags = [_.strip() for _ in section_rule['tags'].split(',') if _]
+        self.cron_schedule = section_rule['cron_schedule'] if 'cron_schedule' in section_rule else None
 
+        self.ini_path = path
+        self.last_mtime = os.path.getmtime(path)
         return config
+
+    @property
+    def ini_is_modified(self):
+        """Returns True if this hunt was loaded from an ini file and that file has been modified since we loaded it."""
+        try:
+            return self.last_mtime != os.path.getmtime(self.ini_path)
+        except FileNotFoundError:
+            return True
+        except:
+            logging.error(f"unable to check last modified time of {self.ini_path}: {e}")
+            return False
 
     @property
     def ready(self):
@@ -211,11 +231,20 @@ class Hunt(object):
     @property
     def next_execution_time(self):
         """Returns the next time this hunt should execute."""
-        # if it hasn't executed at all yet, then execute it now
-        if self.last_executed_time is None:
-            return local_time()
+        # if using cron schedule instead of frequency
+        if self.cron_schedule is not None:
+            if self.last_executed_time is None:
+                self.last_executed_time = local_time()
+            cron_parser = croniter(self.cron_schedule, self.last_executed_time)
+            return cron_parser.get_next(datetime.datetime)
 
-        return self.last_executed_time + self.frequency
+        # if using frequency instead of cron shedule
+        else:
+            # if it hasn't executed at all yet, then execute it now
+            if self.last_executed_time is None:
+                return local_time()
+
+            return self.last_executed_time + self.frequency
 
     def record_execution_time(self, time_delta):
         """Record the amount of time it took to execute this hunt."""
@@ -230,19 +259,31 @@ CONCURRENCY_TYPE_LOCAL_SEMAPHORE = 'local_semaphore'
 
 class HuntManager(object):
     """Manages the hunting for a single hunt type."""
-    def __init__(self, collector, hunt_type, rule_dirs, hunt_cls, concurrency_limit, persistence_dir):
+    def __init__(self,
+                 collector,
+                 hunt_type,
+                 rule_dirs,
+                 hunt_cls,
+                 concurrency_limit,
+                 persistence_dir,
+                 update_frequency):
+
         assert isinstance(collector, Collector)
         assert isinstance(hunt_type, str)
         assert isinstance(rule_dirs, list)
         assert issubclass(hunt_cls, Hunt)
         assert concurrency_limit is None or isinstance(concurrency_limit, int) or isinstance(concurrency_limit, str)
         assert isinstance(persistence_dir, str)
+        assert isinstance(update_frequency, int)
 
         # reference to the collector (used to send the Submission objects)
         self.collector = collector
 
         # primary execution thread
         self.manager_thread = None
+
+        # thread that handles tracking changes made to the hunts loaded from ini
+        self.update_manager_thread = None
 
         # shutdown valve
         self.manager_control_event = threading.Event()
@@ -278,6 +319,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         # the list of Hunt objects that are being managed
         self._hunts = []
 
+        # acquire this lock before making any modifications to the hunts
+        self.hunt_lock = threading.RLock()
+
         # the type of concurrency contraint this type of hunt uses (can be None)
         # use the set_concurrency_limit() function to change it
         self.concurrency_type = None
@@ -293,6 +337,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         # and used when reload_hunts_flag is set
         self.hunts_loaded_from_config = False
 
+        # how often do we check to see if the hunts have been modified?
+        self.update_frequency = update_frequency
+
     def __str__(self):
         return f"Hunt Manager({self.hunt_type})"
 
@@ -300,6 +347,21 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
     def hunts(self):
         """Returns a sorted copy of the list of hunts in execution order."""
         return sorted(self._hunts, key=operator.attrgetter('next_execution_time'))
+
+    def get_hunts(self, spec):
+        """Returns the hunts that match the given specification, where spec is a function that takes a Hunt
+           as it's single parameter and return True or False if it should be included in the results."""
+        return [hunt for hunt in self._hunts if spec(hunt)]
+
+    def get_hunt(self, spec):
+        """Returns the first hunt that matches the given specification, where spec is a function that takes a Hunt
+          as it's single parameter and return True or False if it should be included in the results.
+          Returns None if no hunts are matched."""
+        result = self.get_hunts(spec)
+        if not result:
+            return None
+
+        return result[0]
 
     def get_hunt_by_name(self, name):
         """Returns the Hunt with the given name, or None if the hunt does not exist."""
@@ -331,9 +393,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
 
         # first cancel any currently executing hunts
         self.cancel_hunts()
-        
-        # then release all the hunts and load the new ones
-        self._hunts = []
+        self.clear_hunts()
         self.load_hunts_from_config()
 
     def start(self):
@@ -341,6 +401,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         self.load_hunts_from_config()
         self.manager_thread = threading.Thread(target=self.loop, name=f"Hunt Manager {self.hunt_type}")
         self.manager_thread.start()
+        self.update_manager_thread = threading.Thread(target=self.update_loop, 
+                                                      name=f"Hunt Manager Updater {self.hunt_type}")
+        self.update_manager_thread.start()
 
     def debug(self):
         self.manager_control_event.clear()
@@ -364,6 +427,46 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         for hunt in self._hunts:
             hunt.wait(*args, **kwargs)
 
+        if self.manager_thread:
+            self.manager_thread.join()
+
+        if self.update_manager_thread:
+            self.update_manager_thread.join()
+
+    def update_loop(self):
+        logging.debug(f"started update manager for {self}")
+        while not self.manager_control_event.is_set():
+            try:
+                self.manager_control_event.wait(timeout=self.update_frequency)
+                if not self.manager_control_event.is_set():
+                    self.check_hunts()
+            except Exception as e:
+                logging.error(f"uncaught exception {e}")
+                report_exception()
+
+        logging.debug(f"stopped update manager for {self}")
+
+    def check_hunts(self):
+        """Checks to see if any existing hunts have been modified, created or deleted."""
+        logging.debug("checking for hunt modifications")
+        trigger_reload = False
+        with self.hunt_lock:
+            # have any hunts been modified?
+            for hunt in self._hunts:
+                if hunt.ini_is_modified:
+                    logging.info(f"detected modification to {hunt}")
+                    trigger_reload = True
+
+            # are there any new hunts?
+            existing_ini_paths = set([hunt.ini_path for hunt in self._hunts])
+            for ini_path in self._list_hunt_ini():
+                if ini_path not in existing_ini_paths:
+                    logging.info(f"detected new hunt ini {ini_path}")
+                    trigger_reload = True
+
+        if trigger_reload:
+            self.signal_reload()
+
     def loop(self):
         logging.debug(f"started {self}")
         while not self.manager_control_event.is_set():
@@ -382,6 +485,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
     def execute(self):
         # the next one to run should be the first in our list
         for hunt in self.hunts:
+            if not hunt.enabled:
+                continue
+
             if hunt.ready:
                 self.execute_hunt(hunt)
                 continue
@@ -508,6 +614,74 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
            The hunt_filter paramter defines an optional lambda function that takes the Hunt object
            after it is loaded and returns True if the Hunt should be added, False otherwise.
            This is useful for unit testing."""
+        for hunt_config in self._list_hunt_ini():
+            hunt = self.hunt_cls()
+            logging.debug(f"loading hunt from {hunt_config}")
+            hunt.load_from_ini(hunt_config)
+            hunt.type = self.hunt_type
+
+            if hunt_filter(hunt):
+                logging.info(f"loaded {hunt} from {hunt_config}")
+                self.add_hunt(hunt)
+            else:
+                logging.debug(f"not loading {hunt} (hunt_filter returned False)")
+
+        # remember that we loaded the hunts from the configuration file
+        # this is used when we receive the signal to reload the hunts
+        self.hunts_loaded_from_config = True
+
+    def add_hunt(self, hunt):
+        assert isinstance(hunt, Hunt)
+        if hunt.type != self.hunt_type:
+            raise ValueError(f"hunt {hunt} has wrong type for {self}")
+
+        with self.hunt_lock:
+            # make sure this hunt doesn't already exist
+            for _hunt in self._hunts:
+                if _hunt.name == hunt.name:
+                    raise KeyError(f"duplicate hunt {hunt.name}")
+
+            with open_hunt_db(self.hunt_type) as db:
+                c = db.cursor()
+                c.execute("INSERT OR IGNORE INTO hunt(hunt_name) VALUES ( ? )",
+                         (hunt.name,))
+                db.commit()
+
+            self._hunts.append(hunt)
+
+        self.wait_control_event.set()
+        return hunt
+
+    def clear_hunts(self):
+        """Removes all hunts."""
+        with self.hunt_lock:
+            with open_hunt_db(self.hunt_type) as db:
+                c = db.cursor()
+                c.execute("DELETE FROM hunt")
+                db.commit()
+
+            self._hunts = []
+
+        self.wait_control_event.set()
+
+    def remove_hunt(self, hunt):
+        assert isinstance(hunt, Hunt)
+
+        with self.hunt_lock:
+            with open_hunt_db(hunt.type) as db:
+                c = db.cursor()
+                c.execute("DELETE FROM hunt WHERE hunt_name = ?",
+                         (hunt.name,))
+                db.commit()
+
+            self._hunts.remove(hunt)
+
+        self.wait_control_event.set()
+        return hunt
+
+    def _list_hunt_ini(self):
+        """Returns the list of ini files for hunts in self.rule_dirs."""
+        result = []
         for rule_dir in self.rule_dirs:
             rule_dir = abs_path(rule_dir)
             if not os.path.isdir(rule_dir):
@@ -521,66 +695,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                     if not hunt_config.endswith('.ini'):
                         continue
 
-                    hunt_config = os.path.join(root, hunt_config)
-                    hunt = self.hunt_cls()
-                    logging.debug(f"loading hunt from {hunt_config}")
-                    hunt.load_from_ini(hunt_config)
-                    hunt.type = self.hunt_type
-                    if hunt_filter(hunt):
-                        logging.info(f"loaded {hunt} from {hunt_config}")
-                        self.add_hunt(hunt)
-                    else:
-                        logging.debug(f"not loading {hunt} (hunt_filter returned False)")
+                    result.append(os.path.join(root, hunt_config))
 
-        # remember that we loaded the hunts from the configuration file
-        # this is used when we receive the signal to reload the hunts
-        self.hunts_loaded_from_config = True
-
-    def add_hunt(self, hunt):
-        assert isinstance(hunt, Hunt)
-        if hunt.type != self.hunt_type:
-            raise ValueError(f"hunt {hunt} has wrong type for {self}")
-
-        # make sure this hunt doesn't already exist
-        for _hunt in self._hunts:
-            if _hunt.name == hunt.name:
-                raise KeyError(f"duplicate hunt {hunt.name}")
-
-        with open_hunt_db(self.hunt_type) as db:
-            c = db.cursor()
-            c.execute("INSERT OR IGNORE INTO hunt(hunt_name) VALUES ( ? )",
-                     (hunt.name,))
-            db.commit()
-
-        self._hunts.append(hunt)
-        self.wait_control_event.set()
-        return hunt
-
-    def remove_hunt(self, hunt):
-        assert isinstance(hunt, Hunt)
-
-        with open_hunt_db(hunt.type) as db:
-            c = db.cursor()
-            c.execute("DELETE FROM hunt WHERE hunt_name = ?",
-                     (hunt.name,))
-            db.commit()
-
-        self._hunts.remove(hunt)
-        self.wait_control_event.set()
-        return hunt
-
-    #def update_hunt(self, hunt):
-        #assert isinstance(hunt, Hunt)
-        #if hunt.type != self.hunt_type:
-            #raise ValueError(f"hunt {hunt} has wrong type for {self}")
-
-        #for index, hunt in enumerate(self.hunts):
-            #old_hunt = self.hunts[index]
-            #self.hunts[index] = hunt
-            #self.wait_control_event.set()
-            #return old_hunt
-
-        #raise KeyError(f"unknown hunt {hunt.name}")
+        return result
 
     def record_semaphore_acquire_time(self, time_delta):
         pass
@@ -642,7 +759,8 @@ class HunterCollector(Collector):
                             rule_dirs=[_.strip() for _ in section['rule_dirs'].split(',')],
                             hunt_cls=class_definition,
                             concurrency_limit=section.get('concurrency_limit', fallback=None),
-                            persistence_dir=self.persistence_dir)
+                            persistence_dir=self.persistence_dir,
+                            update_frequency=self.service_config.getint('update_frequency'))
 
     def extended_collection(self):
         # load each type of hunt from the configuration settings

@@ -166,7 +166,6 @@ def initialize(saq_home=None,
     global NODE_COMPANIES
     global OTHER_PROXIES 
     global OTHER_SLA_SETTINGS
-    global PROXIES
     global SAQ_HOME
     global SAQ_NODE
     global SAQ_NODE_ID
@@ -188,7 +187,6 @@ def initialize(saq_home=None,
     TEMP_DIR = None
     DEFAULT_ENCODING = None
     SEMAPHORES_ENABLED = False
-    PROXIES = {}
     OTHER_PROXIES = {}
     TOR_PROXY = None
     # list of iptools.IpRange objects defined in [network_configuration]
@@ -535,21 +533,6 @@ def initialize(saq_home=None,
         if proxy_key in os.environ:
             logging.debug("removing proxy environment variable for {}".format(proxy_key))
             del os.environ[proxy_key]
-
-    # set up the PROXY global dict (to be used with the requests library)
-    for proxy_key in [ 'http', 'https' ]:
-        if CONFIG['proxy']['host'] and CONFIG['proxy']['port'] and CONFIG['proxy']['transport']:
-            if CONFIG['proxy']['user'] and CONFIG['proxy']['password']:
-                PROXIES[proxy_key] = '{}://{}:{}@{}:{}'.format(
-                CONFIG['proxy']['transport'], 
-                urllib.parse.quote_plus(CONFIG['proxy']['user']), 
-                urllib.parse.quote_plus(CONFIG['proxy']['password']), 
-                CONFIG['proxy']['host'], 
-                CONFIG['proxy']['port'])
-            else:
-                PROXIES[proxy_key] = '{}://{}:{}'.format(CONFIG['proxy']['transport'], CONFIG['proxy']['host'], CONFIG['proxy']['port'])
-
-            logging.debug("proxy for {} set to {}".format(proxy_key, PROXIES[proxy_key]))
 
     # load any additional proxies specified in the config sections proxy_*
     for section in CONFIG.keys():

@@ -59,7 +59,7 @@ def sha256sum(filename):
 
 
 class VirusTotal(object):
-    def __init__(self, apikey="", public=True, verbose=False):
+    def __init__(self, apikey="", public=True, verbose=False, **requests_kwargs):
         self.apikey = apikey
         self.URL_BASE = "https://www.virustotal.com/vtapi/v2/"
         self.HTTP_OK = 200
@@ -72,6 +72,8 @@ class VirusTotal(object):
         self.has_sent_retrieve_req = False
         # if needed (public API), sleep this amount of time between requests
         self.PUBLIC_API_SLEEP_TIME = 20
+        # user-supplied dict of kwargs supplied to requests calls
+        self.requests_kwargs = requests_kwargs
 
         self.logger = logging.getLogger("virt-log")
         self.logger.setLevel(logging.INFO)
@@ -91,7 +93,7 @@ class VirusTotal(object):
 
         for filename in filenames:
             files = {"file": open(filename, 'rb')}
-            res = requests.post(url, data=attr, files=files)
+            res = requests.post(url, data=attr, files=files, **self.requests_kwargs)
 
             if res.status_code == self.HTTP_OK:
                 resmap = json.loads(res.text)
@@ -116,7 +118,7 @@ class VirusTotal(object):
         url = self.URL_BASE + "file/scan"
         attr = {"apikey": self.apikey}
         files = {"file": open(filename, 'rb')}
-        res = requests.post(url, data=attr, files=files)
+        res = requests.post(url, data=attr, files=files, **self.requests_kwargs)
         if res.status_code == self.HTTP_OK:
             return json.loads(res.text)
         return None
@@ -175,7 +177,7 @@ class VirusTotal(object):
 
         url = self.URL_BASE + "file/report"
         params = {"apikey": self.apikey, "resource": chksum}
-        res = requests.post(url, data=params)
+        res = requests.post(url, data=params, **self.requests_kwargs)
         self.has_sent_retrieve_req = True
         return res
 

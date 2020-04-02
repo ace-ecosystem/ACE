@@ -15,9 +15,10 @@ from subprocess import Popen, PIPE
 import saq
 from saq.analysis import Observable, DetectionPoint
 from saq.constants import *
-from saq.email import normalize_email_address
+from saq.email import normalize_email_address, normalize_message_id
 from saq.error import report_exception
 from saq.gui import *
+from saq.integration import integration_enabled
 from saq.intel import query_sip_indicator
 from saq.remediation import RemediationTarget
 from saq.remediation.constants import *
@@ -81,6 +82,7 @@ class IPv4Observable(Observable):
 
     def __init__(self, *args, **kwargs):
         super().__init__(F_IPV4, *args, **kwargs)
+        self.value = self.value.strip()
 
         # type check the value
         try:
@@ -124,6 +126,7 @@ class IPv4Observable(Observable):
 class IPv4ConversationObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_IPV4_CONVERSATION, *args, **kwargs)
+        self.value = self.value.strip()
         self._source, self._dest = parse_ipv4_conversation(self.value)
         
     @property
@@ -138,6 +141,7 @@ class IPv4FullConversationObservable(Observable):
     
     def __init__(self, *args, **kwargs):
         super().__init__(F_IPV4_FULL_CONVERSATION, *args, **kwargs)
+        self.value = self.value.strip()
         self._source, self._source_port, self._dest, self._dest_port = parse_ipv4_full_conversation(self.value)
 
     @property
@@ -159,6 +163,7 @@ class IPv4FullConversationObservable(Observable):
 class FQDNObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_FQDN, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -180,20 +185,22 @@ class FQDNObservable(CaselessObservable):
 class HostnameObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_HOSTNAME, *args, **kwargs)
+        self.value = self.value.strip()
 
 class AssetObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_ASSET, *args, **kwargs)
+        self.value = self.value.strip()
 
 class UserObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_USER, *args, **kwargs)
+        self.value = self.value.strip()
 
 class URLObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_URL, *args, **kwargs)
-
-        self.value = self.value.strip() # remove any leading/trailing whitespace
+        self.value = self.value.strip()
 
         try:
             # sometimes URL extraction pulls out invalid URLs
@@ -227,6 +234,10 @@ class FileObservable(Observable):
 
     def __init__(self, *args, **kwargs):
         super().__init__(F_FILE, *args, **kwargs)
+
+        # do not allow empty file names
+        if self.value == '':
+            raise ObservableValueError("empty file name")
 
         self._md5_hash = None
         self._sha1_hash = None
@@ -430,12 +441,22 @@ class FileObservable(Observable):
             result.append(ObservableActionSeparator())
             result.append(ObservableActionViewAsHex())
             result.append(ObservableActionViewAsText())
-            result.append(ObservableActionSeparator())
-            result.append(ObservableActionUploadToVt())
-            result.append(ObservableActionUploadToVx())
+            if integration_enabled('vt') or integration_enabled('vx') or integration_enabled('falcon_sandbox'):
+                result.append(ObservableActionSeparator())
+                if integration_enabled('vt'):
+                    result.append(ObservableActionUploadToVt())
+                if integration_enabled('vx'):
+                    result.append(ObservableActionUploadToVx())
+                if integration_enabled('falcon_sandbox'):
+                    result.append(ObservableActionUploadToFalconSandbox())
+
             result.append(ObservableActionSeparator())
             result.append(ObservableActionViewInVt())
-            result.append(ObservableActionViewInVx())
+            if integration_enabled('vx'):
+                result.append(ObservableActionViewInVx())
+            if integration_enabled('falcon_sandbox'):
+                result.append(ObservableActionViewInFalconSandbox())
+
             result.append(ObservableActionSeparator())
         result.extend(super().jinja_available_actions)
         return result
@@ -546,6 +567,7 @@ class FileLocationObservable(Observable):
 class EmailAddressObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_ADDRESS, *args, **kwargs)
+        self.value = self.value.strip()
 
         # normalize email addresses
         normalized = normalize_email_address(self.value)
@@ -563,7 +585,10 @@ class EmailAddressObservable(CaselessObservable):
 class EmailDeliveryObservable(CaselessObservable, RemediationTarget):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_DELIVERY, *args, **kwargs)
+        self.value = self.value.strip()
         self.message_id, self.email_address = parse_email_delivery(self.value)
+        self.message_id = normalize_message_id(self.message_id)
+        self.value = create_email_delivery(self.message_id, self.email_address)
 
     @property
     def jinja_available_actions(self):
@@ -586,6 +611,7 @@ class EmailDeliveryObservable(CaselessObservable, RemediationTarget):
 class YaraRuleObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_YARA_RULE, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -594,6 +620,7 @@ class YaraRuleObservable(Observable):
 class IndicatorObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_INDICATOR, *args, **kwargs)
+        self.value = self.value.strip()
         self._sip_details = None
 
     @property
@@ -645,6 +672,7 @@ class IndicatorObservable(Observable):
 class MD5Observable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_MD5, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -655,6 +683,7 @@ class MD5Observable(CaselessObservable):
 class SHA1Observable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SHA1, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -665,6 +694,7 @@ class SHA1Observable(CaselessObservable):
 class SHA256Observable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SHA256, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
     def jinja_template_path(self):
@@ -679,6 +709,7 @@ class SHA256Observable(Observable):
 class EmailConversationObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_CONVERSATION, *args, **kwargs)
+        self.value = self.value.strip()
         self._mail_from, self._rcpt_to = parse_email_conversation(self.value)
 
     @property
@@ -696,10 +727,13 @@ class EmailConversationObservable(Observable):
 class SnortSignatureObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SNORT_SIGNATURE, *args, **kwargs)
+        self.value = self.value.strip()
 
 class MessageIDObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_MESSAGE_ID, *args, **kwargs)
+        self.value = self.value.strip()
+        self.value = normalize_message_id(self.value)
 
     @property
     def jinja_available_actions(self):
@@ -710,10 +744,38 @@ class MessageIDObservable(Observable):
 class ProcessGUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_PROCESS_GUID, *args, **kwargs)
+        self.value = self.value.strip()
+
+class ExternalUIDObservable(Observable): 
+    def __init__(self, *args, **kwargs): 
+        super().__init__(F_EXTERNAL_UID, *args, **kwargs)
+        self.value = self.value.strip()
+        self._tool, self._uid = self.value.split(':', 1)
+
+    @property
+    def tool(self):
+        return self._tool
+
+    @property
+    def uid(self):
+        return self._uid
+
+class DLPIncidentObservable(Observable): 
+    def __init__(self, *args, **kwargs): 
+        super().__init__(F_DLP_INCIDENT, *args, **kwargs)
+
+    @property
+    def jinja_available_actions(self):
+        result = []
+        result.append(ObservableActionViewInDLP())
+        result.append(ObservableActionSeparator())
+        result.extend(super().jinja_available_actions)
+        return result
 
 class FireEyeUUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_FIREEYE_UUID, *args, **kwargs)
+        self.value = self.value.strip()
 
 class TestObservable(Observable):
     def __init__(self, *args, **kwargs): 
@@ -739,9 +801,11 @@ class TestObservable(Observable):
 
 _OBSERVABLE_TYPE_MAPPING = {
     F_ASSET: AssetObservable,
+    F_DLP_INCIDENT: DLPIncidentObservable,
     F_EMAIL_ADDRESS: EmailAddressObservable,
     F_EMAIL_CONVERSATION: EmailConversationObservable,
     F_EMAIL_DELIVERY: EmailDeliveryObservable,
+    F_EXTERNAL_UID: ExternalUIDObservable,
     F_FILE: FileObservable,
     F_FILE_LOCATION: FileLocationObservable,
     F_FILE_NAME: FileNameObservable,

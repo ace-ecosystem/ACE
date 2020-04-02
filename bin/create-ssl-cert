@@ -24,6 +24,7 @@ done
 
 # create the SSL certificates for $hostname
 ( 
+    cd ${SAQ_HOME:=/opt/ace} && \
     cd ssl/root/ca && \
     cat intermediate/openssl.cnf > intermediate/openssl.temp.cnf && \
     echo "DNS.1 = ${hostname}" >> intermediate/openssl.temp.cnf && \

@@ -1,0 +1,37 @@
+{% extends "analysis/alert.html" %}
+{% block alert_details %}
+<div class="panel panel-default">
+    <div class="panel-heading">Alert Summary <a role="button" data-toggle="collapse" data-target="#collapse_qradar_summary" aria-expanded="true" aria-controls="collapse_qradar_summary">(hide/show)</a></div>
+    <div class="panel-body" id="collapse_qradar_summary">
+    <table class="table">
+    <tr>
+        <td><b>Time</b></td>
+        <td><b>Name</b></td>
+        <td><b>Src</b></td>
+        <td><b>Dst</b></td>
+    </tr>
+    {% for alert in analysis.details['alerts'] %}
+    <tr>
+        <td><a href="{{alert['external_url']}}" target="_new">{{alert['timestamp']}}</a></td>
+        <td><a href="{{alert['external_url']}}" target="_new">{{alert['data']['alert']['signature']}}</a></td>
+        <td>{{alert['data']['src_ip']}}:{{alert['data']['src_port']}}</td>
+        <td>{{alert['data']['dest_ip']}}:{{alert['data']['dest_port']}}</td>
+    </tr>
+    <tr>
+        <td colspan="4"><div class="well raw-log">{{alert['data']['alert']['rule']['header']}}<br>
+                                                  {{alert['data']['alert']['rule']['options']}}</div></td>
+    </tr>
+    <tr>
+        <td colspan="4"><div class="well raw-log pre">{{alert['data']['payload'] | b64decode | hexdump('return') }}</div></td>
+    </tr>
+    {% endfor %}
+    </table>
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading">Raw JSON <a role="button" data-toggle="collapse" data-target="#collapse_raw_json" aria-expanded="true" aria-controls="collapse_raw_json">(hide/show)</a></div>
+    <div class="panel-body collapse" id="collapse_raw_json">
+        <pre>{{analysis.jinja_details | pprint}}</pre>
+    </div>
+</div>
+{% endblock %}

@@ -9,6 +9,7 @@ import requests
 
 import saq
 from saq.database import get_db_connection, execute_with_retry, enable_cached_db_connections
+from saq.proxy import proxies
 from saq.error import report_exception
 
 from app.vt_hash_cache import *
@@ -94,11 +95,15 @@ def query():
             if not row:
                 # if we don't have it in the database then we perform a query here
                 try:
-                    logging.info("vt api request for {}".format(_hash))
+                    logging.info(f"vt api request for {_hash}")
                     r = requests.get(saq.CONFIG['virus_total']['query_url'], params={
                         'resource': _hash,
-                        'apikey': saq.CONFIG['virus_total']['api_key']}, proxies=saq.PROXIES, timeout=5)
+                        'apikey': saq.CONFIG['virus_total']['api_key']}, 
+                        proxies=proxies(),
+                        timeout=5,
+                        verify=False)
                 except Exception as e:
+                    logging.error(f"unable to query VT: {e}")
                     return "unable to query VT: {}".format(e), 500
 
                 if r.status_code == 403:

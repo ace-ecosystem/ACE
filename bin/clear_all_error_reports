@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-if [ -z "$SAQ_HOME" ]
-then
-    echo "missing env var SAQ_HOME"
-    exit 1
-fi
-
-( cd $SAQ_HOME && \
+( cd ${SAQ_HOME:=/opt/ace} && \
     mv data/error_reports data/error_reports.delete && \
     mkdir data/error_reports && \
     rm -rf data/error_reports.delete & )

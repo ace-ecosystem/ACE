@@ -34,6 +34,7 @@
                         <th><span id='sort_by_event' style="cursor:pointer">Event{% if sort_by == "event" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
                         <th><span>Threat Type</span></th>
                         <th><span>Threat Name</span></th>
+                        <th><span id='sort_by_risk_level' style="cursor:pointer">Risk Level{% if sort_by == "risk_level" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
                         <th><span id='sort_by_campaign' style="cursor:pointer">Campaign{% if sort_by == "campaign" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
                         <th><span id='sort_by_disposition' style="cursor:pointer">Disposition{% if sort_by == "disposition" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
                         <th><span id='sort_by_prevention' style="cursor:pointer">Prevention{% if sort_by == "prevention" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
@@ -69,6 +70,7 @@
                             <span class="label label-danger">{{mal.name}}</span>
                             {% endfor %}
                         </td>
+                        <td class="event-cell">{{event.risk_level}}</td>
                         <td class="event-cell">{{event.campaign.name}}</td>
                         <td class="event-cell">{{event.disposition}}</td>
                         <td class="event-cell">{{event.prevention_tool}}</td>
@@ -158,6 +160,17 @@
                             <option value="email filter" {% if filter_state['filter_event_prevention_tool'] == 'email filter' %}SELECTED{% endif %}>email filter</option>
                             <option value="application whitelisting" {% if filter_state['filter_event_prevention_tool'] == 'application whitelisting' %}SELECTED{% endif %}>application whitelisting</option>
                             <option value="user" {% if filter_state['filter_event_prevention_tool'] == 'user' %}SELECTED{% endif %}>user</option>
+                        </select>
+                      </td>
+                    </tr>
+                    <tr>
+                      <th>Risk Level</th>
+                      <td>
+                        <select class="form-control" name="filter_event_risk_level" >
+                            <option value="ANY" {% if filter_state['filter_event_risk_level'] == 'ANY' %}SELECTED{% endif %}>ANY</option>
+                            <option value="1" {% if filter_state['filter_event_risk_level'] == '1' %}SELECTED{% endif %}>1</option>
+                            <option value="2" {% if filter_state['filter_event_risk_level'] == '2' %}SELECTED{% endif %}>2</option>
+                            <option value="3" {% if filter_state['filter_event_risk_level'] == '3' %}SELECTED{% endif %}>3</option>
                         </select>
                       </td>
                     </tr>

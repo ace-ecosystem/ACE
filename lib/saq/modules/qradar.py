@@ -12,6 +12,8 @@ from saq.modules import AnalysisModule
 from saq.constants import *
 from saq.util import abs_path, create_timedelta
 from saq.qradar import QRadarAPIClient
+from urllib.parse import urlparse
+from operator import itemgetter
 
 #
 # Requirements for QRadar queries
@@ -87,7 +89,7 @@ class QRadarAPIAnalysis(Analysis):
         self.details[KEY_QUERY_SUMMARY] = value
 
     def generate_summary(self):
-        result = f'{self.query_summary} '
+        result = f'{self.query_summary}: '
         if self.query_error is not None:
             result += f'ERROR: {self.query_error}'
             return result
@@ -108,7 +110,7 @@ class QRadarAPIAnalyzer(AnalysisModule):
     def generated_analysis_type(self):
         return QRadarAPIAnalysis
 
-    def process_qradar_event(self, analysis, event, event_time):
+    def process_qradar_event(self, analysis, observable, event, event_time):
         """Called for each event processed by the module. Can be overridden by subclasses."""
         pass
 
@@ -125,6 +127,12 @@ class QRadarAPIAnalyzer(AnalysisModule):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # the API class we use to communicate with QRadar
+        # this can also be a unit testing class
+        self.api_class = QRadarAPIClient
+        if 'api_class' in kwargs:
+            self.api_class = kwargs['api_class']
 
         # load the AQL query for this instance
         with open(abs_path(self.config['aql_path']), 'r') as fp:
@@ -163,13 +171,24 @@ class QRadarAPIAnalyzer(AnalysisModule):
         # the special value TIMESTAMP_MILLISECONDS indicates a unix timestamp in milliseconds
         self.time_event_field_format = self.config.get('time_event_field_format', 'TIMESTAMP')
 
+        # are we delaying QRadar correlational queries?
+        self.correlation_delay = None
+        if 'correlation_delay' in saq.CONFIG['qradar']:
+            self.correlation_delay = create_timedelta(saq.CONFIG['qradar']['correlation_delay'])
+
     def execute_analysis(self, observable):
-        analysis = self.create_analysis(observable)
-        analysis.question = self.config['question']
-        analysis.query_summary = self.config['summary']
+        analysis = observable.get_analysis(self.generated_analysis_type, instance=self.instance)
+
+        if analysis is None:
+            analysis = self.create_analysis(observable)
+            analysis.question = self.config['question']
+            analysis.query_summary = self.config['summary']
+
+            if self.correlation_delay is not None:
+                return self.delay_analysis(observable, analysis, seconds=self.correlation_delay.total_seconds())
         
-        client = QRadarAPIClient(saq.CONFIG['qradar']['url'], 
-                                 saq.CONFIG['qradar']['token'])
+        client = self.api_class(saq.CONFIG['qradar']['url'], 
+                                saq.CONFIG['qradar']['token'])
 
         # interpolate the observable value as needed
         target_query = self.aql_query.replace('<O_TYPE>', observable.type)\
@@ -189,9 +208,9 @@ class QRadarAPIAnalyzer(AnalysisModule):
         target_query = target_query.replace('<O_START>', start_time_str)\
                                    .replace('<O_STOP>', stop_time_str)
 
-        analysis.query = target_query
 
         try:
+            logging.info(f"executing qradar query: {target_query}")
             analysis.query_results = client.execute_aql_query(target_query, 
                                                               continue_check_callback=lambda x: not self.engine.shutdown)
         except Exception as e:
@@ -209,8 +228,12 @@ class QRadarAPIAnalyzer(AnalysisModule):
             if 'deviceTimeFormatted' in event:
                 event_time = datetime.datetime.strptime(event['deviceTimeFormatted'], '%Y-%m-%d %H:%M:%S.%f %z')
                 event_time = event_time.astimezone(pytz.UTC)
+            elif 'deviceTime' in event:
+                event_time = event['deviceTime']
+            else:
+                event_time = None
 
-            self.process_qradar_event(analysis, event, event_time)
+            self.process_qradar_event(analysis, observable, event, event_time)
 
             for event_field in event.keys():
                 if event[event_field] is None:
@@ -227,3 +250,191 @@ class QRadarAPIAnalyzer(AnalysisModule):
                 self.process_qradar_field_mapping(analysis, event, event_time, observable, event_field)
 
         return True
+
+KEY_METHOD_MAP = 'method_map'
+KEY_CATEGORIES = 'categories'
+
+class QRadarProxyDomainMethodAnalysis(QRadarAPIAnalysis):
+    def initialize_details(self, *args, **kwargs):
+        super().initialize_details(*args, **kwargs)
+        self.details.update({
+            KEY_METHOD_MAP: {}, # key = http method, value = [(count, set of policies)]
+            KEY_CATEGORIES: [], # list of categories
+        })
+
+    @property
+    def method_map(self):
+        return self.details[KEY_METHOD_MAP]
+
+    @property
+    def categories(self):
+        return self.details[KEY_CATEGORIES]
+
+    def generate_summary(self):
+        result = f'{self.query_summary}: '
+
+        if self.query_error is not None:
+            return result + f'ERROR: {self.query_error}'
+        elif self.categories or self.method_map:
+            if self.categories:
+                result += 'Categories: ({}) '.format(', '.join(self.categories))
+
+            for method in self.method_map.keys():
+                buffer = []
+                for count, policy in sorted(self.method_map[method], key=itemgetter(1)):
+                    buffer.append(f'{count} {policy}')
+
+                result += 'Methods: {}[{}] '.format(method, ', '.join(buffer))
+
+            return result
+
+        else:
+            return result + "No activity was observed."
+
+class QRadarProxyDomainMethodAnalyzer(QRadarAPIAnalyzer):
+    def verify_environment(self):
+        self.verify_config_exists('field_request_method')
+        self.verify_config_exists('field_applied_policy')
+        self.verify_config_exists('field_url_category')
+        self.verify_config_exists('field_count')
+
+    @property
+    def generated_analysis_type(self):
+        return QRadarProxyDomainMethodAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_FQDN
+
+    @property
+    def field_request_method(self):
+        """Returns the name of the field that contains the HTTP request method."""
+        return self.config['field_request_method']
+
+    @property
+    def field_applied_policy(self):
+        """Returns the name of the field that contains the policy (or action) that was applied to the request."""
+        return self.config['field_applied_policy']
+
+    @property
+    def field_url_category(self):
+        """Returns the name of the field that contains the categorization the proxy gave the url."""
+        return self.config['field_url_category']
+
+    @property
+    def field_count(self):
+        """Returns the name of the field that contains the count aggregation value."""
+        return self.config['field_count']
+
+    def process_qradar_event(self, analysis, observable, event, event_time):
+        if event[self.field_request_method] not in analysis.method_map:
+            analysis.method_map[event[self.field_request_method]] = []
+
+        analysis.method_map[event[self.field_request_method]].append([int(event[self.field_count]), 
+                                                                      event[self.field_applied_policy]])
+        if event[self.field_url_category] not in analysis.categories:
+            analysis.categories.append(event[self.field_url_category])
+
+KEY_TOTAL = 'total'
+KEY_USER_ACTIVITY_MAP = 'user_activity_map'
+
+class QRadarProxyDomainTrafficAnalysis(QRadarAPIAnalysis):
+    def initialize_details(self, *args, **kwargs):
+        super().initialize_details(*args, **kwargs)
+        self.details.update({
+            KEY_TOTAL: 0,
+            KEY_USER_ACTIVITY_MAP: {}, # key = user, value = [successful http method]
+        })
+
+    @property
+    def user_activity_map(self):
+        return self.details[KEY_USER_ACTIVITY_MAP]
+
+    @property
+    def total(self):
+        return self.details[KEY_TOTAL]
+
+    @total.setter
+    def total(self, value):
+        self.details[KEY_TOTAL] = value
+
+    def generate_summary(self):
+        result = f'{self.query_summary}: '
+
+        if self.query_error is not None:
+            return f'{result}ERROR: {self.query_error}'
+        elif self.user_activity_map:
+            return f"{result}{len(self.user_activity_map.keys())} users were allowed to this domain"
+        elif self.total > 0:
+            return f"{result}All user activity was BLOCKED."
+        else:
+            return f"{result}No activity was observed."
+
+class QRadarProxyDomainTrafficAnalyzer(QRadarAPIAnalyzer):
+    @property
+    def generated_analysis_type(self):
+        return QRadarProxyDomainTrafficAnalysis
+
+    def verify_environment(self):
+        self.verify_config_exists('field_request_method')
+        self.verify_config_exists('field_applied_policy')
+
+    @property
+    def field_request_method(self):
+        """Returns the name of the field that contains the HTTP request method."""
+        return self.config['field_request_method']
+
+    @property
+    def field_applied_policy(self):
+        """Returns the name of the field that contains the policy (or action) that was applied to the request."""
+        return self.config['field_applied_policy']
+
+    @property
+    def allowed_policy_list(self):
+        """Returns a list of policies (or actions) that represent allowed activity."""
+        return self.config['allowed_policy_list'].split(',')
+
+    #
+    # NOTE - QRadar does have a common set of field names
+    # NOTE - username, sourceip and destinationip are among those
+    # NOTE - so we don't need to map those in the configuration
+
+    def process_qradar_event(self, analysis, observable, event, event_time):
+        # did a user POST data to the malicious URL?
+        # XXX revisit is_suspect here
+
+        analysis.total += 1
+        if event[self.field_applied_policy] in self.allowed_policy_list:
+            if not event['username']:
+                return
+
+            # track this user's activity
+            if event['username'] not in analysis.user_activity_map:
+                analysis.user_activity_map[event['username']] = []
+
+            # have we already tracked this user to this http method?
+            if event[self.field_request_method] in analysis.user_activity_map[event['username']]:
+                return
+
+            analysis.user_activity_map[event['username']].append(event[self.field_request_method])
+
+            if observable.has_tag('malicious'):
+                analysis.add_detection_point(f"user {event['username']} performed http "
+                                             f"{event[self.field_request_method]} to suspect domain {observable.value}")
+
+                # then let's get the PCAP
+                ipv4_conversation = analysis.add_observable(F_IPV4_CONVERSATION, 
+                                    create_ipv4_conversation(event['sourceip'], event['destinationip']),
+                                    o_time=event_time)
+
+                if ipv4_conversation:
+                    ipv4_conversation.add_directive(DIRECTIVE_EXTRACT_PCAP)
+
+                # who did it?
+                user = analysis.add_observable(F_USER, event['username'], o_time=event_time)
+                if user:
+                    user.add_tag('clicker')
+
+                source_ipv4 = analysis.add_observable(F_IPV4, event['sourceip'], o_time=event_time)
+                if source_ipv4:
+                    source_ipv4.add_directive(DIRECTIVE_RESOLVE_ASSET)

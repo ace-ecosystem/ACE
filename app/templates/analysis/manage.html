@@ -9,7 +9,7 @@
             <button id="btn-take-ownership" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-lock"></span> Take Ownership</button>
             <button id="btn-assign-ownership-dialog" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#assign_ownership_modal" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %} ><span class="glyphicon glyphicon-user"></span> Assign Ownership</button>
             <button id="btn-show-add-tag" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#tag_modal" uuid=""><span class="glyphicon glyphicon-tags"></span> Add Tag(s)</button>
-            <button id="btn-remediate-alerts" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('email_remediation') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-envelope"></span> Email Remediation</button>
+            <!--<button id="btn-remediate-alerts" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('email_remediation') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-envelope"></span> Email Remediation</button>-->
             <button id="btn-mass-remediation" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-remove"></span> Remediation</button>
             <!--<button id="btn-unremediate-alerts" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-ok"></span> Un-Remediate Email(s)</button>-->
             <button id="btn-add-to-event" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#event_modal" {%if not ace_config['gui'].getboolean('event_management') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add To Event</button>
@@ -65,14 +65,14 @@
                         {% elif alert.is_approaching_sla %} class="warning"
                         {% endif %}>
                         <td>
-                            <button onclick="load_alert_observables('{{alert.uuid}}')" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-triangle-right"></span></button>
+                            <button onclick="load_alert_observables('{{alert.uuid}}'); toggle_chevron('alert_row_dropdown_{{alert.uuid}}')" type="button" class="btn btn-default btn-xs"><span id="alert_row_dropdown_{{alert.uuid}}" class="glyphicon glyphicon-chevron-down"></span></button>
                         </td>
                         <td>
                             <label><input type="checkbox" name="detail_{{alert.uuid}}" {% if alert.uuid in checked %}checked{% endif %}></input></label>
                         </td>
                         <td style="white-space: nowrap;" title="{{alert.insert_date}}">{{alert.display_insert_date}}</td>
                         <td>
-                            {% if alert.company %}<img src="{{url_for('static', filename='images/company_icons/{}.png'.format(alert.company.name))}}">{% endif %}
+                            <img src="{{url_for('static', filename='images/alert_icons/{}.png'.format(alert.icon))}}">
                             <a href="{{ url_for('analysis.index', direct=alert.uuid) }}">({{alert.detection_count}}) {{alert.description}}</a>
                             {% if alert.event_mapping %}
                                 {% for em in alert.event_mapping %}
@@ -87,6 +87,11 @@
                             {% if alert_tags[alert.uuid]|length != 0 %}
                                 {% for tag in alert_tags[alert.uuid] %}
                                     <span class="label {{tag.css_class}}" style="cursor:pointer" onmousedown="tag_link_clicked({{tag.id}})">{{tag.name}}</span>
+                                {% endfor %}
+                            {% endif %}
+                            {% if alert_remediations[alert.uuid]|length != 0 %}
+                                {% for remediation in alert_remediations[alert.uuid] %}
+                                <span class="label {{remediation['css_class']}}" style="cursor:pointer" >{{remediation['result']}}</span>
                                 {% endfor %}
                             {% endif %}
                             {% if comments[alert.uuid]|length != 0 %}
@@ -181,6 +186,8 @@
                             <li><input type="checkbox" name="dis_command_and_control" {{filter_state['dis_command_and_control']}}> COMMAND_AND_CONTROL</li>
                             <li><input type="checkbox" name="dis_exfil" {{filter_state['dis_exfil']}}> EXFIL</li>
                             <li><input type="checkbox" name="dis_damage" {{filter_state['dis_damage']}}> DAMAGE</li>
+                            <li><input type="checkbox" name="dis_insider_data_control" {{filter_state['dis_insider_data_control']}}> INSIDER_DATA_CONTROL</li>
+                            <li><input type="checkbox" name="dis_insider_data_exfil" {{filter_state['dis_insider_data_exfil']}}> INSIDER_DATA_EXFIL</li>
                         </ul>
                     </div>
                 </div>

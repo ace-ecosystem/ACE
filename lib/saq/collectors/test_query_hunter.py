@@ -22,6 +22,7 @@ class TestQueryHunt(QueryHunt):
         logging.info(f"executing query {self.query} {start_time} {end_time}")
         self.exec_start_time = start_time
         self.exec_end_time = end_time
+        return []
 
     def cancel(self):
         pass
@@ -32,7 +33,8 @@ def manager_kwargs():
              'rule_dirs': [ 'hunts/test/query', ],
              'hunt_cls': TestQueryHunt,
              'concurrency_limit': 1,
-             'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir'])}
+             'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir']),
+             'update_frequency': 60 }
 
 def default_hunt(enabled=True, 
                  name='test_hunt', 

@@ -130,6 +130,40 @@ class APIAnalysisTestCase(APIBasicTestCase):
         self.assertEquals(result['workload']['analysis_mode'], 'analysis')
         self.assertTrue(isinstance(parse_event_time(result['workload']['insert_date']), datetime.datetime))
 
+        result = self.client.get(url_for('analysis.get_submission', uuid=uuid))
+        self.assertEquals(result.status_code, 200)
+        result = result.get_json()
+        self.assertIsNotNone(result)
+        result = result['result']
+
+        self.assertEquals(result['analysis_mode'], 'analysis')
+        self.assertEquals(result['tool'], 'unittest')
+        self.assertEquals(result['tool_instance'], 'unittest_instance')
+        self.assertEquals(result['type'], 'unittest')
+        self.assertEquals(result['description'], 'testing')
+        self.assertEquals(result['event_time'], '2017-11-11T07:36:01.000001+0000')
+        self.assertTrue('alert_tag_1' in result['tags'])
+        self.assertTrue('alert_tag_2' in result['tags'])
+        self.assertEquals(len(result['observables']), 2)
+
+        file_uuid = None
+
+        for o in result['observables']:
+            if o['type'] == F_IPV4:
+                self.assertEquals(o['type'], F_IPV4)
+                self.assertEquals(o['value'], '1.2.3.4')
+                self.assertEquals(o['time'], '2017-11-11T07:36:01.000001+0000')
+                self.assertEquals(o['tags'][0], 'tag_1')
+                self.assertEquals(o['tags'][1], 'tag_2')
+                self.assertEquals(o['directives'][0], DIRECTIVE_NO_SCAN)
+                self.assertEquals(o['limited_analysis'][0], 'basic_test')
+            elif o['type'] == F_USER:
+                self.assertEquals(o['type'], F_USER)
+                self.assertEquals(o['value'], 'test_user')
+                self.assertEquals(o['time'], '2017-11-11T07:36:01.000001+0000')
+
+        self.assertTrue('sample.dat' in result['files'])
+
     def test_api_analysis_submit_invalid(self):
         result = self.client.post(url_for('analysis.submit'), data={}, content_type='multipart/form-data')
         self.assertEquals(result.status_code, 400)
@@ -320,3 +354,128 @@ class APIAnalysisTestCase(APIBasicTestCase):
         result = self.client.get(url_for('analysis.get_status', uuid=test_uuid))
         self.assertEquals(result.status_code, 400)
         self.assertEquals(result.data.decode(), 'invalid uuid {}'.format(test_uuid))
+
+    def test_api_analysis_submission_tuning(self):
+
+        tuning_rule_dir = os.path.join(saq.DATA_DIR, 'tuning_rules')
+        if os.path.isdir(tuning_rule_dir):
+            shutil.rmtree(tuning_rule_dir)
+
+        os.mkdir(tuning_rule_dir)
+        saq.CONFIG['collection']['tuning_dir_default'] = tuning_rule_dir
+        saq.CONFIG['collection']['tuning_update_frequency'] = '00:00:00'
+
+        with open(os.path.join(tuning_rule_dir, 'filter.yar'), 'w') as fp:
+            fp.write("""
+rule test_filter {
+    meta:
+        targets = "submission"
+    strings:
+        $ = "description = testing"
+    condition:
+        all of them
+}
+""")
+
+        t = saq.LOCAL_TIMEZONE.localize(datetime.datetime(2017, 11, 11, hour=7, minute=36, second=1, microsecond=1)).astimezone(pytz.UTC).strftime(event_time_format_json_tz)
+        result = self.client.post(url_for('analysis.submit'), data={
+            'analysis': json.dumps({
+                'analysis_mode': 'analysis',
+                'tool': 'unittest',
+                'tool_instance': 'unittest_instance',
+                'type': 'unittest',
+                'description': 'testing',
+                'event_time': t,
+                'details': { 'hello': 'world' },
+                'observables': [
+                    { 'type': F_IPV4, 'value': '1.2.3.4', 'time': t, 'tags': [ 'tag_1', 'tag_2' ], 'directives': [ DIRECTIVE_NO_SCAN ], 'limited_analysis': ['basic_test'] },
+                    { 'type': F_USER, 'value': 'test_user', 'time': t },
+                ],
+                'tags': [ 'alert_tag_1', 'alert_tag_2' ],
+            }, cls=_JSONEncoder),
+            'file': (io.BytesIO(b'Hello, world!'), 'sample.dat'),
+        }, content_type='multipart/form-data')
+
+        result = result.get_json()
+        self.assertIsNotNone(result)
+        self.assertTrue('result' in result)
+        result = result['result']
+        self.assertIsNotNone(result['uuid'])
+        self.assertTrue('tuning_matches' in result)
+
+        result = self.client.get(url_for('analysis.get_analysis', uuid=result['uuid']))
+        self.assertTrue(result.status_code == 400)
+
+        # remove the tuning rule
+        os.remove(os.path.join(tuning_rule_dir, 'filter.yar'))
+
+        t = saq.LOCAL_TIMEZONE.localize(datetime.datetime(2017, 11, 11, hour=7, minute=36, second=1, microsecond=1)).astimezone(pytz.UTC).strftime(event_time_format_json_tz)
+        result = self.client.post(url_for('analysis.submit'), data={
+            'analysis': json.dumps({
+                'analysis_mode': 'analysis',
+                'tool': 'unittest',
+                'tool_instance': 'unittest_instance',
+                'type': 'unittest',
+                'description': 'testing',
+                'event_time': t,
+                'details': { 'hello': 'world' },
+                'observables': [
+                    { 'type': F_IPV4, 'value': '1.2.3.4', 'time': t, 'tags': [ 'tag_1', 'tag_2' ], 'directives': [ DIRECTIVE_NO_SCAN ], 'limited_analysis': ['basic_test'] },
+                    { 'type': F_USER, 'value': 'test_user', 'time': t },
+                ],
+                'tags': [ 'alert_tag_1', 'alert_tag_2' ],
+            }, cls=_JSONEncoder),
+            'file': (io.BytesIO(b'Hello, world!'), 'sample.dat'),
+        }, content_type='multipart/form-data')
+
+        result = result.get_json()
+        self.assertIsNotNone(result)
+        self.assertTrue('result' in result)
+        result = result['result']
+        self.assertIsNotNone(result['uuid'])
+        self.assertFalse('tuning_matches' in result)
+
+        result = self.client.get(url_for('analysis.get_analysis', uuid=result['uuid']))
+        self.assertTrue(result.status_code == 200)
+
+        # test tuning by file
+        with open(os.path.join(tuning_rule_dir, 'file_filter.yar'), 'w') as fp:
+            fp.write("""
+rule test_files {
+    meta:
+        targets = "files"
+    strings:
+        $ = "Hello, world!"
+    condition:
+        all of them
+}
+""")
+
+        t = saq.LOCAL_TIMEZONE.localize(datetime.datetime(2017, 11, 11, hour=7, minute=36, second=1, microsecond=1)).astimezone(pytz.UTC).strftime(event_time_format_json_tz)
+        result = self.client.post(url_for('analysis.submit'), data={
+            'analysis': json.dumps({
+                'analysis_mode': 'analysis',
+                'tool': 'unittest',
+                'tool_instance': 'unittest_instance',
+                'type': 'unittest',
+                'description': 'testing',
+                'event_time': t,
+                'details': { 'hello': 'world' },
+                'observables': [
+                    { 'type': F_IPV4, 'value': '1.2.3.4', 'time': t, 'tags': [ 'tag_1', 'tag_2' ], 'directives': [ DIRECTIVE_NO_SCAN ], 'limited_analysis': ['basic_test'] },
+                    { 'type': F_USER, 'value': 'test_user', 'time': t },
+                ],
+                'tags': [ 'alert_tag_1', 'alert_tag_2' ],
+            }, cls=_JSONEncoder),
+            'file': (io.BytesIO(b'Hello, world!'), 'sample.dat'),
+        }, content_type='multipart/form-data')
+
+        result = result.get_json()
+        self.assertIsNotNone(result)
+        self.assertTrue('result' in result)
+        result = result['result']
+        self.assertIsNotNone(result['uuid'])
+        self.assertTrue('tuning_matches' in result)
+
+        result = self.client.get(url_for('analysis.get_analysis', uuid=result['uuid']))
+        self.assertTrue(result.status_code == 400)

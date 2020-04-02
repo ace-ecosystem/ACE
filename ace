@@ -141,7 +141,7 @@ def execute_hunt(args):
         sys.exit(1)
 
     collector.hunt_managers[hunt_type].load_hunts_from_config()
-    hunt = collector.hunt_managers[hunt_type].get_hunt_by_name(hunt_name)
+    hunt = collector.hunt_managers[hunt_type].get_hunt(lambda hunt: hunt_name in hunt.ini_path)
     if hunt is None:
         logging.error(f"unknown hunt {hunt_name} for type {hunt_type}")
         sys.exit(1)
@@ -249,6 +249,103 @@ execute_hunt_parser.add_argument('--query-result-file', required=False, default=
     help="Valid only for query hunts. Save the raw query results to the given file.")
     
 execute_hunt_parser.set_defaults(func=execute_hunt)
+
+# ============================================================================
+# persistence data
+#
+
+persistence_parser = subparsers.add_parser('persistence', aliases=['per'])
+persistence_sp = persistence_parser.add_subparsers(dest='persistence_cmd')
+
+def list_persistence(args):
+    from saq.database import Persistence, PersistenceSource
+    source_query = saq.db.query(PersistenceSource)
+    if args.source:
+        source_query = source_query.filter(PersistenceSource.name.like('%{}%'.format(args.source)))
+
+    for source in source_query.order_by(PersistenceSource.name):
+        if args.keys or args.name:
+            query = saq.db.query(Persistence).filter(Persistence.source_id == source.id)
+            if args.name:
+                 query = query.filter(Persistence.uuid.like(f'%{args.name}%'))
+            if not args.temporal:
+                query = query.filter(Persistence.permanent == 1)
+
+            for persistence in query.order_by(Persistence.uuid):
+                print(f"{source.name} {persistence.uuid}")
+        else:
+            print(source.name)
+
+    sys.exit(0)
+
+list_persistence_parser = persistence_sp.add_parser('list',
+    help="List all persistence sources.")
+list_persistence_parser.add_argument('-k', '--keys', action='store_true', default=False,
+    help="Also display permanent keys. Use --search to narrow down results.")
+list_persistence_parser.add_argument('-s', '--source',
+    help="Search for keys from the given source.")
+list_persistence_parser.add_argument('-n', '--name',
+    help="Search for key names matching the given pattern.")
+list_persistence_parser.add_argument('-t', '--temporal', action='store_true', default=False,
+    help="Also display temporal (non-permanent) keys.")
+list_persistence_parser.set_defaults(func=list_persistence)
+
+def clear_persistence(args):
+    import dateparser
+    from saq.database import Persistence, PersistenceSource, and_
+
+    source = saq.db.query(PersistenceSource).filter(PersistenceSource.name == args.source).first()
+    if source is None:
+        logging.error(f"unknown persistence source {args.source}")
+        sys.exit(1)
+
+    if args.all:
+        result = saq.db.execute(Persistence.__table__.delete().where(Persistence.source_id == source.id))
+        logging.info(f"persistence group {args.source} cleared {result.rowcount} items")
+
+        if not args.dry_run:
+            saq.db.commit()
+
+        sys.exit(0)
+
+    elif args.older_than:
+        target_date = dateparser.parse(args.older_than)
+        result = saq.db.execute(Persistence.__table__.delete().where(and_(Persistence.source_id == source.id,
+                                                                          Persistence.permanent == 0,
+                                                                          Persistence.last_update < target_date)))
+
+        logging.info(f"persistence group {args.source} cleared {result.rowcount} items")
+
+        if not args.dry_run:
+            saq.db.commit()
+
+        sys.exit(0)
+        
+    for key in args.keys:
+        result = saq.db.execute(Persistence.__table__.delete().where(and_(Persistence.source_id == source.id,
+                                                                          Persistence.uuid == key)))
+
+        logging.info(f"persistence group {args.source} key {key} cleared {result.rowcount} items")
+
+    if not args.dry_run:
+        saq.db.commit()
+
+    sys.exit(0)
+
+clear_persistence_parser = persistence_sp.add_parser('clear',
+    help="Clears persistence data for the given source.")
+clear_persistence_parser.add_argument('source',
+    help="The name of the source to clear.")
+clear_persistence_parser.add_argument('keys', nargs="*",
+    help="One or more keys to clear.")
+clear_persistence_parser.add_argument('--all', action='store_true', default=False,
+    help="Clear all persistence data for this source.")
+clear_persistence_parser.add_argument('--older-than',
+    help="Clear all non-permanent persistence data that is older than a given time.")
+clear_persistence_parser.add_argument('--dry-run', action='store_true', default=False,
+    help="Do no commit the changes, only report how many would be cleared out.")
+    
+clear_persistence_parser.set_defaults(func=clear_persistence)
 
 # ============================================================================
 # configuration settings
@@ -1864,6 +1961,78 @@ display_alert_parser = alert_sp.add_parser('display',
 display_alert_parser.add_argument('dir', 
     help="The directory of the alert to display")
 display_alert_parser.set_defaults(func=display_alert)
+
+
+def print_file_contents(uuid, submission):
+    for file in submission.files:
+        file_path = os.path.join(saq.SAQ_HOME, saq.CONFIG['global']['data_dir'], saq.CONFIG['global']['node'], uuid[0:3],
+                                 uuid, file)
+        if not os.path.exists(file_path):
+            logging.warning("storage directory {0} does not exist".format(file_path))
+        with open(file_path, 'rb') as f:
+            print(repr(f.read()))
+
+
+def display_submission(args):
+    import saq
+    from saq.analysis import _JSONEncoder, RootAnalysis
+    from saq.submission import Submission, get_submission_target_buffer
+
+    root = RootAnalysis(storage_dir=args.storage_dir)
+    root.load()
+
+    submission = Submission(**root.submission)
+
+    if args.submission_cmd == 'submission':
+        print(get_submission_target_buffer(submission).decode('utf8'))
+    elif args.submission_cmd == 'observable':
+        observables_json = json.dumps(submission.observables, indent=True, sort_keys=True, cls=_JSONEncoder)
+        print(f'{observables_json}'.encode('utf8', errors='backslashreplace').decode('utf8'))
+    elif args.submission_cmd == 'file':
+        print_file_contents(args.uuid, submission)
+    elif args.submission_cmd == 'all':
+        print(get_submission_target_buffer(submission).decode('utf8'))
+        print_file_contents(args.uuid, submission)
+
+    sys.exit(0)
+
+# submission parser
+submission_parser = subparsers.add_parser('submission',
+    help="Submission management commands.")
+
+# submission subparser
+submission_sp = submission_parser.add_subparsers(dest='submission_cmd')
+
+# display submission parser
+display_submission_parser = submission_sp.add_parser('display',
+    help="Displays the contents for all components (submission, observables, files) within a given submission as bytes objects.")
+# display submission subparsers
+display_submission_sp = display_submission_parser.add_subparsers(dest='submission_cmd')
+
+display_submission_all_parser = display_submission_sp.add_parser('all',
+    help="Displays the contents for all components (submission, observables, files) within a given submission as bytes objects.")
+display_submission_all_parser.add_argument('storage_dir',
+    help="The storage directory of the submission to display")
+display_submission_all_parser.set_defaults(func=display_submission)
+
+display_submission_submission_parser = display_submission_sp.add_parser('submission',
+    help='Displays the buffer used for scanning a given file submission as a bytes object.')
+display_submission_submission_parser.add_argument('storage_dir',
+    help="The storage directory of the submission to display")
+display_submission_submission_parser.set_defaults(func=display_submission)
+
+display_submission_observable_parser = display_submission_sp.add_parser('observable',
+    help="Displays the buffer used for scanning a given observable submission as a bytes object.")
+display_submission_observable_parser.add_argument('storage_dir',
+    help="The storage directory of the submission to display")
+display_submission_observable_parser.set_defaults(func=display_submission)
+
+display_submission_file_parser = display_submission_sp.add_parser('file',
+    help="Displays the buffer (raw content) used for scanning a given file submission.")
+display_submission_file_parser.add_argument('storage_dir',
+    help="The storage directory of the submission to display")
+display_submission_file_parser.set_defaults(func=display_submission)
+
 
 # ============================================================================
 # general utility commands
