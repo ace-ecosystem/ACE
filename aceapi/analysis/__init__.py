@@ -118,7 +118,13 @@ def submit():
                         abort(Response("an observable has an invalid time format {} (use {} format)".format(
                                        o[KEY_O_TIME], event_time_format_json_tz), 400))
 
-                observable = root.add_observable(o_type, o_value, o_time=o_time)
+                try:
+                    observable = root.add_observable(o_type, o_value, o_time=o_time)
+                except Exception as e:
+                    logging.error(f"unable to add observable type {o_type} value {o_value} time {o_time} from alert {root.description}")
+                    report_exception()
+                    continue
+
                 if observable is None:
                     continue
 

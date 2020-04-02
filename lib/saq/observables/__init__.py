@@ -760,15 +760,14 @@ class ExternalUIDObservable(Observable):
     def uid(self):
         return self._uid
 
-class ExabeamSessionObservable(Observable): 
+class DLPIncidentObservable(Observable): 
     def __init__(self, *args, **kwargs): 
-        super().__init__(F_EXABEAM_SESSION, *args, **kwargs)
-        self.value = self.value.strip()
+        super().__init__(F_DLP_INCIDENT, *args, **kwargs)
 
     @property
     def jinja_available_actions(self):
         result = []
-        result.append(ObservableActionViewInExabeam())
+        result.append(ObservableActionViewInDLP())
         result.append(ObservableActionSeparator())
         result.extend(super().jinja_available_actions)
         return result
@@ -802,11 +801,11 @@ class TestObservable(Observable):
 
 _OBSERVABLE_TYPE_MAPPING = {
     F_ASSET: AssetObservable,
+    F_DLP_INCIDENT: DLPIncidentObservable,
     F_EMAIL_ADDRESS: EmailAddressObservable,
     F_EMAIL_CONVERSATION: EmailConversationObservable,
     F_EMAIL_DELIVERY: EmailDeliveryObservable,
     F_EXTERNAL_UID: ExternalUIDObservable,
-    F_EXABEAM_SESSION: ExabeamSessionObservable,
     F_FILE: FileObservable,
     F_FILE_LOCATION: FileLocationObservable,
     F_FILE_NAME: FileNameObservable,

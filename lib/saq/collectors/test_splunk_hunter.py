@@ -79,9 +79,9 @@ class TestCase(HunterBaseTestCase):
 
     def test_splunk_query(self):
         manager = HuntManager(**manager_kwargs())
-        manager.load_hunts_from_config(hunt_filter=lambda hunt: hunt.name == 'test_query')
+        manager.load_hunts_from_config(hunt_filter=lambda hunt: hunt.name == 'Test Splunk Query')
         self.assertEquals(len(manager.hunts), 1)
-        hunt = manager.get_hunt_by_name('test_query')
+        hunt = manager.get_hunt_by_name('Test Splunk Query')
         self.assertIsNotNone(hunt)
 
         with open('test_data/hunts/splunk/test_output.json', 'r') as fp:
@@ -114,4 +114,4 @@ class TestCase(HunterBaseTestCase):
                     self.assertEquals(submission.event_time, datetime.datetime(2019, 12, 23, 16, 5, 22))
                     self.assertEquals(submission.observables, [ {'type': 'file_name', 'value': '__init__.py'} ])
                 else:
-                    self.fail("invalid description")
+                    self.fail(f"invalid description: {submission.description}")

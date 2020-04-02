@@ -282,7 +282,7 @@ class VTHashAnalyzer(AnalysisModule):
     def __init__(self, *args, **kwargs):
         super(VTHashAnalyzer, self).__init__(*args, **kwargs)
 
-        #self.api_key = saq.CONFIG['virus_total']['api_key']
+        self.api_key = saq.CONFIG['virus_total']['api_key']
         self.query_url = self.config['query_url']
         self.proxies = proxies() if self.config.getboolean('use_proxy') else {}
         if 'ignored_vendors' in self.config:
@@ -319,12 +319,9 @@ class VTHashAnalyzer(AnalysisModule):
         logging.debug("looking up VT report for {}".format(_hash))
 
         try:
-            #r = requests.get(self.query_url, params={
-                #'resource': _hash.value,
-                #'apikey': self.api_key}, proxies=saq.PROXIES, timeout=5)
-
-            r = requests.get(self.query_url, params={ 'h': _hash.value }, proxies=self.proxies, timeout=5, verify=False)
-
+            r = requests.get(self.query_url, params={
+                'resource': _hash.value,
+                'apikey': self.api_key}, proxies=self.proxies, timeout=5, verify=False)
         except Exception as e:
             logging.error("unable to query VT: {}".format(e))
             return False

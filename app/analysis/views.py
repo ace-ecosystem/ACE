@@ -62,6 +62,7 @@ from saq.email import search_archive, get_email_archive_sections
 from saq.error import report_exception
 from saq.gui import GUIAlert
 from saq.performance import record_execution_time
+from saq.proxy import proxies
 from saq.util import abs_path
 from saq.remediation import execute_remediation, execute_restoration, request_remediation, request_restoration
 import saq.remediation
@@ -272,10 +273,9 @@ def redirect_to():
         flash("internal error")
         return redirect(url_for('analysis.index'))
 
-    if target == 'exabeam':
-        return redirect('{}/uba/#user/{}/timeline/{}'.format(
-            saq.CONFIG['exabeam']['base_uri'],
-            file_observable.value.split('-')[0],
+    if target == 'dlp':
+        return redirect('{}/ProtectManager/IncidentDetail.do?value(variable_1)=incident.id&value(operator_1)=incident.id_in&value(operand_1)={}'.format(
+            saq.CONFIG['dlp']['base_uri'],
             file_observable.value))
 
     # both of these requests require the sha256 hash
@@ -450,7 +450,7 @@ def download_file():
         falcon_sandbox = FalconSandbox(
             saq.CONFIG['falcon_sandbox']['apikey'],
             saq.CONFIG['falcon_sandbox']['server'],
-            proxies=saq.PROXIES,
+            proxies=saq.proxy.proxies() if saq.CONFIG.getboolean('analysis_module_falcon_sandbox_analyzer', 'use_proxy') else {},
             verify=False) # XXX fix this
 
         logging.debug(f"submitting {full_path} to falcon sandbox")
@@ -469,7 +469,7 @@ def download_file():
         environmentid = saq.CONFIG.get("vxstream", "environmentid")
         apikey = saq.CONFIG.get("vxstream", "apikey")
         secret = saq.CONFIG.get("vxstream", "secret")
-        proxies = saq.PROXIES if saq.CONFIG.getboolean('vxstream', 'use_proxy') else {}
+        proxies = saq.proxy.proxies() if saq.CONFIG.getboolean('vxstream', 'use_proxy') else {}
         logging.debug("Uploading file to falcon sandbox")
         falcon = FalconAPI(apikey, url=baseuri, proxies=proxies, env=environmentid)
         job_id = None
@@ -486,8 +486,10 @@ def download_file():
         return url
 
     if request.method == "POST" and mode == "virustotal":
-        apikey = saq.CONFIG.get("virus_total","api_key")
-        vt = virustotal.VirusTotal(apikey)
+        vt = virustotal.VirusTotal(
+                saq.CONFIG.get("virus_total","api_key"),
+                proxies=saq.proxy.proxies() if saq.CONFIG.getboolean('analysis_module_vt_hash_analyzer', 'use_proxy') else {},
+                verify=False)
         res = vt.send_file(full_path)
         if res:
             logging.debug("VT result for {}: {}".format(full_path, str(res)))
@@ -748,6 +750,12 @@ def add_observable():
     redirection = redirect(url_for('analysis.index', **redirection_params))
 
     o_time = request.form['add_observable_time']
+    try:
+        if o_time != '':
+            o_time = datetime.datetime.strptime(o_time, '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        flash("invalid observable time format")
+        return redirection
 
     if o_type not in VALID_OBSERVABLE_TYPES:
         flash("invalid observable type {0}".format(o_type))
@@ -755,10 +763,6 @@ def add_observable():
 
     if o_value == '':
         flash("missing observable value")
-        return redirection
-
-    if o_time != '' and not validate_time_format(o_time):
-        flash("invalid observable time format")
         return redirection
 
     try:
@@ -1608,6 +1612,8 @@ FILTER_CB_DIS_INSTALLATION = 'dis_installation'
 FILTER_CB_DIS_COMMAND_AND_CONTROL = 'dis_command_and_control'
 FILTER_CB_DIS_EXFIL = 'dis_exfil'
 FILTER_CB_DIS_DAMAGE = 'dis_damage'
+FILTER_CB_DIS_INSIDER_DATA_CONTROL = 'dis_insider_data_control'
+FILTER_CB_DIS_INSIDER_DATA_EXFIL = 'dis_insider_data_exfil'
 FILTER_CB_USE_DIS_DATERANGE = 'use_disposition_daterange'
 FILTER_TXT_DIS_DATERANGE = 'disposition_daterange'
 FILTER_CB_USE_SEARCH_COMPANY = 'use_search_company'
@@ -1702,6 +1708,8 @@ def manage():
         FILTER_CB_DIS_COMMAND_AND_CONTROL: SearchFilter('dis_command_and_control', FILTER_TYPE_CHECKBOX, False),
         FILTER_CB_DIS_EXFIL: SearchFilter('dis_exfil', FILTER_TYPE_CHECKBOX, False),
         FILTER_CB_DIS_DAMAGE: SearchFilter('dis_damage', FILTER_TYPE_CHECKBOX, False),
+        FILTER_CB_DIS_INSIDER_DATA_CONTROL: SearchFilter('dis_insider_data_control', FILTER_TYPE_CHECKBOX, False),
+        FILTER_CB_DIS_INSIDER_DATA_EXFIL: SearchFilter('dis_insider_data_exfil', FILTER_TYPE_CHECKBOX, False),
         FILTER_CB_USE_DIS_DATERANGE: SearchFilter('use_disposition_daterange', FILTER_TYPE_CHECKBOX, False),
         FILTER_CB_USE_SEARCH_COMPANY: SearchFilter('use_search_company', FILTER_TYPE_CHECKBOX, False),
         FILTER_S_SEARCH_COMPANY: SearchFilter('search_company', FILTER_TYPE_SELECT, False),
@@ -1894,7 +1902,10 @@ def manage():
             DISPOSITION_INSTALLATION: FILTER_CB_DIS_INSTALLATION,
             DISPOSITION_COMMAND_AND_CONTROL: FILTER_CB_DIS_COMMAND_AND_CONTROL,
             DISPOSITION_EXFIL: FILTER_CB_DIS_EXFIL,
-            DISPOSITION_DAMAGE: FILTER_CB_DIS_DAMAGE }
+            DISPOSITION_DAMAGE: FILTER_CB_DIS_DAMAGE,
+            DISPOSITION_INSIDER_DATA_CONTROL: FILTER_CB_DIS_INSIDER_DATA_CONTROL,
+            DISPOSITION_INSIDER_DATA_CONTROL: FILTER_CB_DIS_INSIDER_DATA_EXFIL
+            }
 
         if odh_d not in disp_map:
             logging.error(f"invalid disposition {odh_d}")
@@ -2054,6 +2065,12 @@ def manage():
     if filters[FILTER_CB_DIS_DAMAGE].value:
         dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_DAMAGE)
         dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_DAMAGE))
+    if filters[FILTER_CB_DIS_INSIDER_DATA_CONTROL].value:
+        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_INSIDER_DATA_CONTROL)
+        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_INSIDER_DATA_CONTROL))
+    if filters[FILTER_CB_DIS_INSIDER_DATA_EXFIL].value:
+        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_INSIDER_DATA_EXFIL)
+        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_INSIDER_DATA_EXFIL))
 
     if len(dis_filters) > 0:
         query = query.filter(or_(*dis_filters))

@@ -20,6 +20,8 @@
           <option value="COMMAND_AND_CONTROL" {% if event.disposition == "COMMAND_AND_CONTROL" %}SELECTED{% endif %}>COMMAND_AND_CONTROL</option>
           <option value="EXFIL" {% if event.disposition == "EXFIL" %}SELECTED{% endif %}>EXFIL</option>
           <option value="DAMAGE" {% if event.disposition == "DAMAGE" %}SELECTED{% endif %}>DAMAGE</option>
+          <option value="INSIDER_DATA_CONTROL" {% if event.disposition == "INSIDER_DATA_CONTROL" %}SELECTED{% endif %}>INSIDER_DATA_CONTROL</option>
+          <option value="INSIDER_DATA_EXFIL" {% if event.disposition == "INSIDER_DATA_EXFIL" %}SELECTED{% endif %}>INSIDER_DATA_EXFIL</option>
         </select>
       </td>
     </tr>

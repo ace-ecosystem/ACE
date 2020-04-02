@@ -90,10 +90,11 @@ class TestCase(ACEEngineTestCase):
             self.assertEquals(DIRECTIVE_DESCRIPTIONS[r['name']], r['description'])
 
     def _get_submit_time(self):
-        return datetime.datetime(2017, 11, 11, hour=7, minute=36, second=1, microsecond=1)
+        return datetime.datetime(2017, 11, 11, hour=7, minute=36, second=1)
 
     def _get_localized_submit_time(self):
-        return ace_api.LOCAL_TIMEZONE.localize(self._get_submit_time()).astimezone(pytz.UTC)
+        #return ace_api.LOCAL_TIMEZONE.localize(self._get_submit_time()).astimezone(pytz.UTC)
+        return ace_api.LOCAL_TIMEZONE.localize(self._get_submit_time()).astimezone(pytz.timezone('Etc/UTC'))
 
     def _submit(self, analysis_mode=None,
                       tool=None,
@@ -289,7 +290,7 @@ class TestCase(ACEEngineTestCase):
         self.assertEquals(result['tool_instance'], 'unittest_tool_instance')
         self.assertEquals(result['type'], 'unittest_type')
         self.assertEquals(result['description'], 'testing')
-        self.assertEquals(result['event_time'], '2017-11-11T07:36:01.000001+0000')
+        self.assertEquals(result['event_time'], '2017-11-11T07:36:01.000000+0000')
         self.assertEquals(result['tags'][0], 'alert_tag_1')
         self.assertEquals(result['tags'][1], 'alert_tag_2')
         self.assertEquals(len(result['observable_store']), 4)

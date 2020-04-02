@@ -511,6 +511,29 @@ remediation action taken on this observable."""
             self._remediation_status = None
             return self._remediation_status
 
+    @property
+    def remediation_success(self):
+        """Returns True if a remediation was successful, False otherwise"""
+        if hasattr(self, '_remediation_success'):
+            return self._remediation_success
+
+        from saq.database import Remediation
+        try:
+            self._remediation_success = saq.db.query(Remediation.successful).filter(
+                                           Remediation.key == self.remediation_key,
+                                           Remediation.status == REMEDIATION_STATUS_COMPLETED)\
+                                       .order_by(Remediation.insert_date.desc())\
+                                       .first()
+
+            if self._remediation_success is not None:
+                self._remediation_success = self._remediation_success[0]
+
+            return self._remediation_success
+        except Exception as e:
+            logging.error(f"unable to query remediation success of {self}: {e}")
+            self._remediation_success = None
+            return self._remediation_success
+
 
 class RemediationResult(object):
     def __init__(self, address, message_id, mailbox_type, action, success=True, message=None):

@@ -1,7 +1,9 @@
+{% extends "analysis/alert.html" %}
+{% block alert_details %}
 <div class="panel panel-default">
     <table class="table table-bordered table-condensed" style="background-color:#f5f5f5;">
         <tr>
-            <td style="width:23.5%;padding:10px;">{{analysis.details['sessionInfo']['sessionId']}}</td>
+            <td style="width:23.5%;padding:10px;"><a target="_blank" href="{{analysis.details['timeline_link']}}">{{analysis.details['sessionInfo']['sessionId']}}</a></td>
             <td style="width:70%;;padding:10px;">{{analysis.details['sessionInfo']['startTime']}} - {{analysis.details['sessionInfo']['endTime']}}</td>
             <td style="width:6.5%;padding:0px;text-align:center;vertical-align:middle">{{'%0.0f' % analysis.details['sessionInfo']['riskScore']|float}}</td>
         </tr>
@@ -37,3 +39,4 @@
     </div>
 </div>
 {% endfor %}
+{% endblock %}

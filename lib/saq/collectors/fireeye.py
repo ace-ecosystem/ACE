@@ -155,7 +155,8 @@ CREATE INDEX artifact_status_index ON uuid_tracking(artifact_status)
             logging.debug(f"last_api_call is empty so defaulting to 48 hours ago: {self.last_api_call}")
 
         now = local_time()
-        duration = self.get_duration()
+        #duration = self.get_duration()
+        duration = 48
         start_time = format_iso8601(self.last_api_call)
 
         try:

@@ -85,6 +85,7 @@ $(document).ready(function() {
     // pull this out of the disposition form
     current_alert_uuid = $("#alert_uuid").prop("value");
 
+    // event times setup
     document.getElementById("event_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
     document.getElementById("alert_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
     document.getElementById("ownership_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
@@ -123,6 +124,14 @@ $(document).ready(function() {
         timeFormat: 'HH:mm:ss'
     });
     $('input[name="remediation_time"]').datetimepicker({
+        timezone: 0,
+        showSecond: false,
+        dateFormat: 'yy-mm-dd',
+        timeFormat: 'HH:mm:ss'
+    });
+
+    // add observable time setup
+    $('input[name="add_observable_time"]').datetimepicker({
         timezone: 0,
         showSecond: false,
         dateFormat: 'yy-mm-dd',

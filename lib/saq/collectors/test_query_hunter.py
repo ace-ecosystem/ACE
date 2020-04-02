@@ -22,6 +22,7 @@ class TestQueryHunt(QueryHunt):
         logging.info(f"executing query {self.query} {start_time} {end_time}")
         self.exec_start_time = start_time
         self.exec_end_time = end_time
+        return []
 
     def cancel(self):
         pass

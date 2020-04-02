@@ -1,0 +1,79 @@
+{% extends "analysis/alert.html" %}
+{% block alert_details %}
+    <h4><b>{{ analysis.details['DetectName'] }}
+        - {{ analysis.details['UserName'] }} - {{ analysis.details['ComputerName'] }}</b>
+        <br>
+    </h4>
+    <h5>
+        <b><a
+                href="{{ analysis.details['FalconHostLink'] }}">View in CrowdStrike</a></b>
+    </h5>
+    <b>Process Tree</b>
+    <ul class="tree">
+        <span style="color: darkred"><b>Grandparent Proc</b></span>
+        <li>{{ analysis.details['GrandparentImageFileName'] }} <br> <span
+                style="color: darkred">{{ analysis.details['GrandparentCommandLine'] }}</span>
+            <ul>
+                <span style="color: red"><b>Parent Proc</b></span>
+                <li> {{ analysis.details['ParentImageFileName'] }} <br> <span
+                        style="color: red">{{ analysis.details['ParentCommandLine'] }}</span>
+                    <ul>
+                        <span style="color: darkorange"><b>Command Line</b></span>
+                        <li> {{ analysis.details['FileName'] }} <br> <span
+                                style="color: darkorange">{{ analysis.details['CommandLine'] }}</span>
+                            {% if analysis.details['DocumentsAccessed'] %}
+                                <ul>
+                                    <li><i>Documents Accessed</i>
+                                        <ul>{% for doc in analysis.details['DocumentsAccessed'] %}
+                                            <li>
+                                                {{ doc['FilePath'] }} - {{ doc['FileName'] }}
+                                            </li>
+                                        {% endfor %}</ul>
+                                    </li>
+
+                                </ul>
+                            {% endif %}
+                            {% if analysis.details['ExecutablesWritten'] %}
+                                <ul>
+                                    <li><i>Executables Written</i>
+                                        <ul>{% for exe in analysis.details['ExecutablesWritten'] %}
+                                            <li>
+                                                {{ exe['FilePath'] }} - {{ exe['FileName'] }}
+                                            </li>
+                                        {% endfor %}</ul>
+                                    </li>
+
+                                </ul>
+                            {% endif %}
+                            {% if analysis.details['NetworkAccesses'] %}
+                                <ul>
+                                    <li><i>Network Accesses</i>
+                                        <ul>{% for access in analysis.details['NetworkAccesses'] %}
+                                            <li>
+                                                {{ access['Protocol'] }} - {{ access['RemoteAddress'] }}:{{ access['RemotePort'] }}
+                                            </li>
+                                        {% endfor %}</ul>
+                                    </li>
+
+                                </ul>
+                            {% endif %}
+                            {% if analysis.details['DnsRequests'] %}
+                                <ul>
+                                    <li><i>DNS Requests</i>
+                                        <ul>{% for domain in analysis.details['DnsRequests'] %}
+                                            <li>
+                                                {{ domain['DomainName'] }}
+                                            </li>
+                                        {% endfor %}</ul>
+                                    </li>
+
+                                </ul>
+                            {% endif %}
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </li>
+
+    </ul>
+{% endblock %}
