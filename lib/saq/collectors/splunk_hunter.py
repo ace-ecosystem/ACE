@@ -47,7 +47,6 @@ class SplunkHunt(QueryHunt):
                 m.group(5),
                 m.group(6)), '%Y-%m-%d %H:%M:%S')
 
-    @property
     def formatted_query(self):
         result = self.query.format(time_spec=self.time_spec)
         return result

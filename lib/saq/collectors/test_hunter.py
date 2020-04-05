@@ -203,7 +203,7 @@ class TestCase(HunterBaseTestCase):
         collector.stop_service()
         collector.wait_service()
 
-    def test_reload_hunts_on_modified(self):
+    def test_reload_hunts_on_ini_modified(self):
         saq.CONFIG['service_hunter']['update_frequency'] = '1'
         collector = HunterCollector()
         collector.start_service(threaded=True)

@@ -69,8 +69,14 @@ class DevelopmentConfig(Config):
     DEBUG = True
     TEMPLATES_AUTO_RELOAD = True
 
+class UnitTestConfig(Config):
+
+    DEBUG = True
+    TEMPLATES_AUTO_RELOAD = True
+
 # the keys for this dict match the instance_type config setting in global section of etc/saq.ini
 config = {
+    'UNITTEST': UnitTestConfig(),
     'DEV': DevelopmentConfig(),
     'QA': ProductionConfig(),
     'PRODUCTION': ProductionConfig(),
