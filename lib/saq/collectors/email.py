@@ -94,6 +94,10 @@ class EmailCollector(Collector):
 
                     group_assignments = []
 
+                    if self.yara_context is None:
+                        # not sure why this isn't getting called correctly by the service manager
+                        self.initialize_collector()
+
                     if self.yara_context is not None:
                         # yara rules can control what groups the email actually gets sent to
                         yara_matches = self.yara_context.match(email_path)
