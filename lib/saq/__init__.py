@@ -223,7 +223,7 @@ def initialize(saq_home=None,
     CA_CHAIN_PATH = None
 
     # what type of instance is this?
-    INSTANCE_TYPE = INSTANCE_TYPE_PRODUCTION
+    INSTANCE_TYPE = None
 
     # SLA settings
     GLOBAL_SLA_SETTINGS = None
@@ -438,13 +438,10 @@ def initialize(saq_home=None,
         sys.exit(1)
 
     # what type of instance is this?
-    if 'instance_type' in CONFIG['global']:
-        INSTANCE_TYPE = CONFIG['global']['instance_type']
-        if INSTANCE_TYPE not in [ INSTANCE_TYPE_PRODUCTION, INSTANCE_TYPE_QA, INSTANCE_TYPE_DEV ]:
-            logging.warning("invalid instance type {}: defaulting to {}".format(INSTANCE_TYPE, INSTANCE_TYPE_PRODUCTION))
-            INSTANCE_TYPE = INSTANCE_TYPE_PRODUCTION
-    else:
-        logging.warning("missing configuration instance_type in global section (defaulting to instance type {})".format(INSTANCE_TYPE_PRODUCTION))
+    INSTANCE_TYPE = CONFIG['global']['instance_type']
+    if INSTANCE_TYPE not in [ INSTANCE_TYPE_PRODUCTION, INSTANCE_TYPE_QA, INSTANCE_TYPE_DEV, INSTANCE_TYPE_UNITTEST ]:
+        logging.fatal("invalid instance type {}".format(INSTANCE_TYPE))
+        sys.exit(1)
 
     if FORCED_ALERTS: # lol
         logging.warning(" ****************************************************************** ")
