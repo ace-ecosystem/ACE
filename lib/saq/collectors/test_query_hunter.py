@@ -27,14 +27,6 @@ class TestQueryHunt(QueryHunt):
     def cancel(self):
         pass
 
-def manager_kwargs():
-    return { 'collector': HunterCollector(),
-             'hunt_type': 'test_query',
-             'rule_dirs': [ 'hunts/test/query', ],
-             'hunt_cls': TestQueryHunt,
-             'concurrency_limit': 1,
-             'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir']),
-             'update_frequency': 60 }
 
 def default_hunt(enabled=True, 
                  name='test_hunt', 
@@ -73,10 +65,55 @@ class TestCase(HunterBaseTestCase):
         s = saq.CONFIG['hunt_type_test_query']
         s['module'] = 'saq.collectors.test_query_hunter'
         s['class'] = 'TestQueryHunt'
-        s['rule_dirs'] = 'hunts/test/query'
+
+        self.temp_rules_dir = tempfile.mkdtemp(dir=saq.TEMP_DIR)
+        self.temp_rules_dir = os.path.join(self.temp_rules_dir, 'rules')
+        os.mkdir(self.temp_rules_dir)
+        s['rule_dirs'] = self.temp_rules_dir
+
+        with open(os.path.join(self.temp_rules_dir, 'test_1.ini'), 'w') as fp:
+            fp.write(f"""
+[rule]
+enabled = yes
+name = query_test_1
+description = Query Test Description 1
+type = query_test
+frequency = 00:01:00
+tags = tag1, tag2
+
+time_range = 00:01:00
+max_time_range = 01:00:00
+offset = 00:05:00
+full_coverage = yes
+group_by = field1
+search = {self.temp_rules_dir}/test_1.query
+use_index_time = yes
+
+[observable_mapping]
+src_ip = ipv4
+dst_ip = ipv4
+
+[temporal_fields]
+src_ip = yes
+dst_ip = yes
+
+[directives]
+""")
+
+        with open(os.path.join(self.temp_rules_dir, 'test_1.query'), 'w') as fp:
+            fp.write('Test query.')
+
+    def manager_kwargs(self):
+        return { 'collector': HunterCollector(),
+                 'hunt_type': 'test_query',
+                 'rule_dirs': [ self.temp_rules_dir ],
+                 'hunt_cls': TestQueryHunt,
+                 'concurrency_limit': 1,
+                 'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir']),
+                 'update_frequency': 60 }
 
     def test_load_hunt_ini(self):
-        manager = HuntManager(**manager_kwargs())
+        manager = HuntManager(**self.manager_kwargs())
         manager.load_hunts_from_config()
         self.assertEquals(len(manager.hunts), 1)
         hunt = manager.hunts[0]
@@ -95,6 +132,19 @@ class TestCase(HunterBaseTestCase):
         self.assertTrue(hunt.use_index_time)
         self.assertEquals(hunt.observable_mapping, { 'src_ip': 'ipv4', 'dst_ip': 'ipv4' })
         self.assertEquals(hunt.temporal_fields, { 'src_ip': True, 'dst_ip': True })
+
+    def test_reload_hunts_on_search_modified(self):
+        saq.CONFIG['service_hunter']['update_frequency'] = '1'
+        collector = HunterCollector()
+        collector.start_service(threaded=True)
+        wait_for_log_count('loaded Hunt(query_test_1[test_query]) from', 1)
+        with open(os.path.join(self.temp_rules_dir, 'test_1.query'), 'a') as fp:
+            fp.write('\n\n; modified')
+
+        wait_for_log_count('detected modification to', 1, 5)
+        wait_for_log_count('loaded Hunt(query_test_1[test_query]) from', 2)
+        collector.stop_service()
+        collector.wait_service()
 
     def test_start_stop(self):
         collector = HunterCollector()
@@ -122,7 +172,7 @@ class TestCase(HunterBaseTestCase):
         collector.wait_service()
 
     def test_full_coverage(self):
-        manager = HuntManager(**manager_kwargs())
+        manager = HuntManager(**self.manager_kwargs())
         hunt = default_hunt(time_range=create_timedelta('01:00:00'), 
                             frequency=create_timedelta('01:00:00'))
         manager.add_hunt(hunt)
@@ -150,7 +200,6 @@ class TestCase(HunterBaseTestCase):
         self.assertTrue(hunt.ready)
         self.assertEquals(hunt.start_time, hunt.last_end_time)
         self.assertEquals(hunt.end_time, hunt.last_end_time + hunt.time_range)
-        #logging.info(f"MARKER: start {hunt.start_time} end {hunt.end_time} comp {hunt.end_time - hunt.start_time} >= {hunt.time_range}")
 
         # now let's pretend that we just executed that
         # at this point, the last_end_time becomes the end_time
@@ -167,7 +216,6 @@ class TestCase(HunterBaseTestCase):
         # and the last end date to 2 hours ago
         hunt.last_end_time = local_time() - datetime.timedelta(hours=2)
         # now the difference between the stop and stop should be 2 hours instead of one
-        #logging.info(f"MARKER: start {hunt.start_time} end {hunt.end_time} comp {hunt.end_time - hunt.start_time} >= {hunt.time_range}")
         self.assertTrue(hunt.end_time - hunt.start_time >= hunt.max_time_range)
 
         # set the last time we executed to 3 hours ago
@@ -181,7 +229,7 @@ class TestCase(HunterBaseTestCase):
         # and the start time should be now - time_range
 
     def test_offset(self):
-        manager = HuntManager(**manager_kwargs())
+        manager = HuntManager(**self.manager_kwargs())
         hunt = default_hunt(time_range=create_timedelta('01:00:00'), 
                             frequency=create_timedelta('01:00:00'),
                             offset=create_timedelta('00:30:00'))

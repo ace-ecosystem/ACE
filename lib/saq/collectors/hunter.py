@@ -204,6 +204,11 @@ class Hunt(object):
         return config
 
     @property
+    def is_modified(self):
+        """"Returns True if this hunt has been modified since it has been loaded."""
+        return self.ini_is_modified
+
+    @property
     def ini_is_modified(self):
         """Returns True if this hunt was loaded from an ini file and that file has been modified since we loaded it."""
         try:
@@ -453,7 +458,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         with self.hunt_lock:
             # have any hunts been modified?
             for hunt in self._hunts:
-                if hunt.ini_is_modified:
+                if hunt.is_modified:
                     logging.info(f"detected modification to {hunt}")
                     trigger_reload = True
 

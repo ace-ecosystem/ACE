@@ -7,6 +7,7 @@ import datetime
 import logging
 import re
 import json
+import os, os.path
 
 COMMENT_REGEX = re.compile(r'^\s*#.*?$', re.M)
 
@@ -74,6 +75,9 @@ class QueryHunt(Hunt):
 
         # allows hyperlink to search results
         self.search_id = search_id
+
+        # when the query is loaded from a file this trackes the last time the file was modified
+        self.query_last_mtime = None
 
     def execute_query(self, start_time, end_time, *args, **kwargs):
         """Called to execute the query over the time period given by the start_time and end_time parameters.
@@ -253,7 +257,23 @@ class QueryHunt(Hunt):
                 self.directives[key].append(directive)
 
         self.query = self.load_query_from_file(self.search_query_path)
+        self.query_last_mtime = os.path.getmtime(self.search_query_path)
         return config
+
+    @property
+    def is_modified(self):
+        return self.ini_is_modified or self.query_is_modified
+
+    @property
+    def query_is_modified(self):
+        """Returns True if this query was loaded from file and that file has been modified since we loaded it."""
+        try:
+            return self.query_last_mtime != os.path.getmtime(self.search_query_path)
+        except FileNotFoundError:
+            return True
+        except:
+            logging.error(f"unable to check last modified time of {self.search_query_path}: {e}")
+            return False
 
     # start_time and end_time are optionally arguments
     # to allow manual command line hunting (for research purposes)
@@ -310,7 +330,7 @@ class QueryHunt(Hunt):
                               type=self.type,
                               tags=self.tags,
                               details=[{'search_id': self.search_id if self.search_id else None,
-                                        'query': self.formatted_query}],
+                                        'query': self.formatted_query()}],
                               observables=[],
                               event_time=None,
                               files=[])
