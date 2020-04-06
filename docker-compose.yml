@@ -1,0 +1,44 @@
+version: '3.4'
+services:
+    ace-db:
+        image: mysql:5.7
+        command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_520_ci
+        restart: always
+        environment:
+            MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+        ports:
+            - '3306:3306'
+        expose:
+            - '3306'
+        volumes:
+            - ace-db-volume:/var/lib/mysql
+            - ./docker/provision/mysql/init:/docker-entrypoint-initdb.d
+
+    ace:
+        image: ace:latest
+        depends_on:
+            - ace-db
+        command: installer/docker_ace_setup
+        restart: always
+        volumes:
+            - ace-data-volume:/opt/ace/data
+
+    ace-http:
+        image: ace_http:latest
+        depends_on:
+            - ace
+            - ace-db
+        ports:
+            - '9443:443'
+        expose:
+            - '443'
+        command: installer/docker_ace_http_setup
+        restart: always
+        volumes:
+            - ace-data-volume:/opt/ace/data
+volumes:
+    ace-db-volume:
+        name: ace-db
+
+    ace-data-volume:
+        name: ace-data

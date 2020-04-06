@@ -1,0 +1,11 @@
+FROM ace:latest
+USER root
+ARG DEBIAN_FRONTEND=noninteractive
+ENV SAQ_HOME /opt/ace
+ENV SAQ_USER ace
+ENV SAQ_GROUP ace
+ENV TERM xterm
+ENV TZ UTC
+COPY ./docker/provision/http/install /opt/ace/docker/provision/http/install
+RUN ./docker/provision/http/install
+USER ace

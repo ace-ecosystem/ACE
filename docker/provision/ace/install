@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#
+# this scripts configures a source installation of ACE
+# which is just ACE running directly from a clone of the repository
+# instead of being "installed" into some other directory
+#
+
+source installer/common.sh
+
+for d in \
+    archive/email \
+    archive/smtp_stream \
+    archive/office \
+    archive/ole \
+    data \
+    data/error_reports \
+    data/logs \
+    data/var \
+    data/scan_failures \
+    data/storage \
+    data/vt_cache \
+    data/stats \
+    etc/snort \
+    malicious \
+    ssl/web \
+    work 
+do
+    if [ ! -d "$d" ]
+    then
+        echo "creating directory $d"
+        ( mkdir -p "$d" && chown $SAQ_USER:$SAQ_GROUP "$d" ) || fail "cannot create directory $d"
+    fi
+done
+
+# set up environment
+echo -e "\\nsource $SAQ_HOME/load_environment" >> ~ace/.bashrc
+
+#cp -a etc/saq.example.ini etc/saq.ini || fail "unable to configure saq.local.ini"
+cp -a etc/brotex.whitelist.sample etc/brotex.whitelist || fail "unable to configure brotex.whitelist"
+cp -a etc/startup.example etc/startup || fail "unable to configure startup"
+cp etc/remote_assignments.example.yar etc/remote_assignments.yar
+cp etc/blacklist.example.yar etc/blacklist.yar
+cp etc/amc_mda.example.ini etc/amc_mda.ini
+cp etc/amc_client.example.ini etc/amc_client.ini
+
+echo "generating random secret key for flask"
+tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1 > .gui_secret_key.sed
+sed -i -e 's;^;s/ACE_SECRET_KEY/;' -e 's;$;/g;' .gui_secret_key.sed
+sed -i -f .gui_secret_key.sed --follow-symlinks etc/saq.ini
+rm .gui_secret_key.sed
+
+# create various directories and files
+# XXX clean this up
+for path in etc/site_tags.csv etc/ssdeep_hashes
+do
+	if [ ! -e "${path}" ]; then touch "${path}"; fi
+done
+
+if [ ! -e etc/organization.json ]; then echo '{}' > etc/organization.json; fi
+if [ ! -e etc/local_networks.csv ]; then echo 'Indicator,Indicator_Type' > etc/local_networks.csv; fi
+
+# create our ssl certs
+./installer/install_ssl_certs.sh
+
+# build the documentation
+( cd docs && make html )
+
+#activate-global-python-argcomplete
+ln -s /opt/signatures /opt/ace/etc/yara
