@@ -72,10 +72,41 @@ then
     done
 fi
 
+function create_ace_dirs() {
+	# creates any required ACE directories we need
+	# this function assumes you are already in SAQ_HOME
+    for d in \
+        archive/email \
+        archive/smtp_stream \
+        archive/office \
+        archive/ole \
+        data \
+        error_reports \
+        etc/snort \
+        logs \
+        malicious \
+        scan_failures \
+		ssl/web \
+        stats \
+        storage \
+        var \
+        vt_cache \
+        work 
+	do
+		if [ ! -d "$d" ]
+		then
+			echo "creating directory $d"
+			mkdir -p "$d" && chown $SAQ_USER:$SAQ_GROUP "$d"
+		fi
+	done
+
+	return 0
+}
+
 create_ace_dirs || fail "cannot create required directories"
 
 # install the required packages
-sudo -E installer/install_packages.sh || fail "package installation failed"
+sudo -H -E installer/install_packages.sh || fail "package installation failed"
 sudo -H -E python3 -m pip install -r installer/requirements-3.6.txt -U || fail "python3.6 package installation failed"
 sudo -H -E python2 -m pip install -r installer/requirements-2.7.txt -U || fail "python2.7 package installation failed"
 if [ "${use_local_mysql}" == "Yes" ]
