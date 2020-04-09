@@ -674,6 +674,7 @@ class TestCase(CollectorBaseTestCase):
         collector.wait()
 
         # now these should be empty
+        db.commit()
         c.execute("SELECT COUNT(*) FROM work_distribution WHERE group_id = %s", (tg1.group_id,))
         self.assertEquals(c.fetchone()[0], 0)
         c.execute("SELECT COUNT(*) FROM incoming_workload")

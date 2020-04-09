@@ -30,6 +30,9 @@ from businesstime.holidays import Holidays
 # this provides a way for a process + thread to re-use the same database connection
 _global_db_cache = {} # key = current_process_id:current_thread_id:config_name, value = database connection
 _global_db_cache_lock = threading.RLock()
+_global_db_cache_maintenance_thread = None
+_global_db_cache_event = threading.Event()
+_global_db_cache_event_control = threading.Event()
 
 # used to determine if cached db connections are enabled for this process + thread
 _use_cache_flags = set() # key = current_process_id:current_thread_id
@@ -144,34 +147,101 @@ def _get_cached_db_identifier(name):
     """Returns the key for _global_db_cache"""
     return '{}:{}:{}'.format(str(os.getpid()), str(threading.get_ident()), name)
 
-def enable_cached_db_connections():
-    """Enables cached database connections for this process and thread."""
-    with _use_cache_flags_lock:
-        _use_cache_flags.add(_get_cache_identifier())
-    logging.debug("using cached database connections for {}".format(_get_cache_identifier()))
-
-def disable_cached_db_connections():
-    """Disables cached database connections for this process and thread.
-       This function also removes any existing database connections that have been cached."""
+def _reset_cache_db():
     with _global_db_cache_lock:
-        keys = list(_global_db_cache.keys())
-        for key in keys:
-            if key.startswith(_get_cache_identifier()):
-                name = key.split(':')[2]
-                logging.debug("requesting release of {} for {}".format(name, _get_cache_identifier()))
-                release_cached_db_connection(name)
+        _stop_cache_db_maintenance()
+        for key, db in _global_db_cache.items():
+            try:
+                db.close()
+            except:
+                pass
 
-    with _use_cache_flags_lock:
-        if _get_cache_identifier() in _use_cache_flags:
-            _use_cache_flags.remove(_get_cache_identifier())
+        _global_db_cache.clear()
 
-def _cached_db_connections_enabled():
-    """Returns True if cached database connections are enabled for this process and thread."""
-    with _use_cache_flags_lock:
-        return _get_cache_identifier() in _use_cache_flags
+def _start_cache_db_maintenance():
+    global _global_db_cache_maintenance_thread
+    if _global_db_cache_maintenance_thread:
+        if _global_db_cache_maintenance_thread.is_alive():
+            return
+
+    _global_db_cache_event_control.clear()
+    _global_db_cache_event.clear()
+    logging.debug("starting cache db maintenance")
+    _global_db_cache_maintenance_thread = threading.Thread(
+            target=_cache_db_maintenance_loop,
+            name="Cache DB Maintenance Loop")
+    _global_db_cache_maintenance_thread.daemon = True
+    _global_db_cache_maintenance_thread.start()
+
+def _stop_cache_db_maintenance():
+    global _global_db_cache_maintenance_thread
+    logging.debug("stopping cache db maintenance")
+    _global_db_cache_event_control.set()
+    _global_db_cache_event.set()
+    if _global_db_cache_maintenance_thread:
+        _global_db_cache_maintenance_thread.join()
+    _global_db_cache_maintenance_thread = None
+
+def _cache_db_maintenance_loop():
+    while not _global_db_cache_event_control.is_set():
+        try:
+            _maintain_cached_db_connections()
+        except Exception as e:
+            logging.error(f"unable to maintain db connection cache: {e}")
+
+        _global_db_cache_event.wait(60)
+        _global_db_cache_event.clear()
+
+    logging.info("cache db maintenance thread exited")
+
+def _trigger_cache_db_cleanup():
+    _global_db_cache_event.set()
+
+def _maintain_cached_db_connections():
+    with _global_db_cache_lock:
+        pid_targets = set()
+        tid_targets = set()
+
+        for key in _global_db_cache.keys():
+            logging.debug(f"checking cached database connection {key}")
+            pid, tid, name = key.split(':')
+
+            # first check to see if we are operating on a different process now
+            pid = int(pid)
+            if os.getpid() != pid:
+                pid_targets.add(key)
+                continue
+
+            # is this thread still running?
+            tid = int(tid)
+            active = False
+            for t in threading.enumerate():
+                if t.ident == tid:
+                    active = True
+                    break
+
+            if not active:
+                logging.debug(f"found cached db connection {key} on dead thread")
+                tid_targets.add(key)
+
+        # for connections open in other processes, we just want to let those go
+        for key in pid_targets:
+            del _global_db_cache[key]
+
+        # for connections open in terminated threads, we also close them
+        for key in tid_targets:
+            try:
+                _global_db_cache[key].close()
+            except Exception as e:
+                logging.debug(f"unable to close cached mysql connection {key}: {e}")
+
+            del _global_db_cache[key]
 
 def _get_cached_db_connection(name='ace'):
     """Returns the database connection by the given name.  Defaults to the ACE db config."""
+    # make sure a maintenance thread is running
+    _start_cache_db_maintenance()
+
     if name is None:
         name = 'ace'
 
@@ -193,29 +263,28 @@ def _get_cached_db_connection(name='ace'):
 
         except Exception as e:
             logging.info("possibly lost cached connection to database {}: {} ({})".format(name, e, type(e)))
-            try:
-                db.close()
-            except Exception as e:
-                logging.error("unable to close cached database connection to {}: {}".format(name, e))
 
-            try:
-                with _global_db_cache_lock:
+            with _global_db_cache_lock:
+                try:
+                    db.close()
+                except Exception as e:
+                    logging.error("unable to close cached database connection to {}: {}".format(name, e))
+
+                try:
                     del _global_db_cache[db_identifier]
-            except Exception as e:
-                logging.error("unable to delete cached db {}: {}".format(db_identifier, e))
-
-            #return _get_db_connection(name)
+                except Exception as e:
+                    logging.error("unable to delete cached db {}: {}".format(db_identifier, e))
 
     except KeyError:
         pass
 
     try:
-        logging.debug("opening new cached database connection to {}".format(name))
+        logging.debug(f"opening new cached database connection to {name} with key {db_identifier}")
+        _trigger_cache_db_cleanup()
 
         with _global_db_cache_lock:
             _global_db_cache[db_identifier] = _get_db_connection(name)
 
-        logging.debug("opened cached database connection {}".format(db_identifier))
         return _global_db_cache[db_identifier]
 
     except Exception as e:
@@ -223,162 +292,70 @@ def _get_cached_db_connection(name='ace'):
         report_exception()
         raise e
 
-def release_cached_db_connection(name='ace'):
-
-    if name is None:
-        name = 'ace'
-
-    # make sure this process + thread is using cached connections
-    if not _cached_db_connections_enabled():
-        return
-
-    db_identifier = _get_cached_db_identifier(name)
-
-    try:
-        with _global_db_cache_lock:
-            db = _global_db_cache[db_identifier]
-
-        try:
-            db.close()
-        except Exception as e:
-            logging.debug("unable to close database connect to {}: {}".format(name, e))
-
-        with _global_db_cache_lock:
-            del _global_db_cache[db_identifier]
-
-        logging.debug("released cached database connection {}".format(db_identifier))
-
-    except KeyError:
-        pass
-
 def _get_db_connection(name='ace'):
     """Returns the database connection by the given name.  Defaults to the ACE db config."""
 
     if name is None:
         name = 'ace'
 
-    #if _cached_db_connections_enabled():
-        #return _get_cached_db_connection(name)
-
     config_section = 'ace'
     if name:
         config_section = 'database_{}'.format(name)
 
-    if saq.CONFIG is None or config_section not in saq.CONFIG:
-        # try using environment variables
-        if name == 'ace' and 'ACE_DB_NAME' in os.environ:
-            kwargs = {
-                'db': os.environ['ACE_DB_NAME'],
-                'user': os.environ['ACE_DB_USER'],
-                'passwd': os.environ['ACE_DB_PASSWORD'],
-                'charset': 'utf8mb4',
-            }
+    _section = saq.CONFIG[config_section]
+    kwargs = {
+        'db': _section['database'],
+        'user': _section['username'],
+        'passwd': _section['password'],
+        'charset': 'utf8mb4',
+    }
 
-            if 'ACE_DB_HOSTNAME' in os.environ:
-                kwargs['host'] = os.environ['ACE_DB_HOSTNAME']
+    if 'hostname' in _section:
+        kwargs['host'] = _section['hostname']
 
-            if 'ACE_DB_PORT' in os.environ:
-                kwargs['port'] = int(os.environ['ACE_DB_PORT'])
-            
-            if 'ACE_DB_UNIX_SOCKET' in os.environ:
-                kwargs['unix_socket'] = os.environ['ACE_DB_UNIX_SOCKET']
+    if 'port' in _section:
+        kwargs['port'] = _section.getint('port')
+    
+    if 'unix_socket' in _section:
+        kwargs['unix_socket'] = _section['unix_socket']
 
-            kwargs['init_command'] = 'SET NAMES utf8mb4'
+    kwargs['init_command'] = 'SET NAMES utf8mb4'
 
-            if 'ACE_DB_SSL_CA' in os.environ or 'ACE_DB_SSL_KEY' in os.environ or 'ACE_DB_SSL_CERT' in os.environ:
-                kwargs['ssl'] = {}
+    if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
+        kwargs['ssl'] = {}
 
-                if 'ACE_DB_SSL_CA' in os.environ:
-                    path = abs_path(os.environ['ACE_DB_SSL_CA'])
-                    if not os.path.exists(path):
-                        logging.error("ssl_ca file {} does not exist".format(path))
-                    else:
-                        kwargs['ssl']['ca'] = path
+        if 'ssl_ca' in _section and _section['ssl_ca']:
+            path = abs_path(_section['ssl_ca'])
+            if not os.path.exists(path):
+                logging.error("ssl_ca file {} does not exist (specified in {})".format(path, config_section))
+            else:
+                kwargs['ssl']['ca'] = path
 
-                if 'ACE_DB_SSL_KEY' in os.environ:
-                    path = abs_path(os.environ['ACE_DB_SSL_KEY'])
-                    if not os.path.exists(path):
-                        logging.error("ssl_key file {} does not exist".format(path))
-                    else:
-                        kwargs['ssl']['key'] = path
+        if 'ssl_key' in _section and _section['ssl_key']:
+            path = abs_path(_section['ssl_key'])
+            if not os.path.exists(path):
+                logging.error("ssl_key file {} does not exist (specified in {})".format(path, config_section))
+            else:
+                kwargs['ssl']['key'] = path
 
-                if 'ACE_DB_SSL_CERT' in os.environ:
-                    path = abs_path(os.environ['ACE_DB_SSL_CERT'])
-                    if not os.path.exists(path):
-                        logging.error("ssl_cert file {} does not exist".format(path))
-                    else:
-                        kwargs['ssl']['cert'] = path
-        else:
-            raise ValueError("invalid database {}".format(name))
-    else:
-        _section = saq.CONFIG[config_section]
-        kwargs = {
-            'db': _section['database'],
-            'user': _section['username'],
-            'passwd': _section['password'],
-            'charset': 'utf8mb4',
-        }
+        if 'ssl_cert' in _section and _section['ssl_cert']:
+            path = _section['ssl_cert']
+            if not os.path.exists(path):
+                logging.error("ssl_cert file {} does not exist (specified in {})".format(path, config_section))
+            else:
+                kwargs['ssl']['cert'] = path
 
-        if 'hostname' in _section:
-            kwargs['host'] = _section['hostname']
-
-        if 'port' in _section:
-            kwargs['port'] = _section.getint('port')
-        
-        if 'unix_socket' in _section:
-            kwargs['unix_socket'] = _section['unix_socket']
-
-        kwargs['init_command'] = 'SET NAMES utf8mb4'
-
-        if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
-            kwargs['ssl'] = {}
-
-            if 'ssl_ca' in _section and _section['ssl_ca']:
-                path = abs_path(_section['ssl_ca'])
-                if not os.path.exists(path):
-                    logging.error("ssl_ca file {} does not exist (specified in {})".format(path, config_section))
-                else:
-                    kwargs['ssl']['ca'] = path
-
-            if 'ssl_key' in _section and _section['ssl_key']:
-                path = abs_path(_section['ssl_key'])
-                if not os.path.exists(path):
-                    logging.error("ssl_key file {} does not exist (specified in {})".format(path, config_section))
-                else:
-                    kwargs['ssl']['key'] = path
-
-            if 'ssl_cert' in _section and _section['ssl_cert']:
-                path = _section['ssl_cert']
-                if not os.path.exists(path):
-                    logging.error("ssl_cert file {} does not exist (specified in {})".format(path, config_section))
-                else:
-                    kwargs['ssl']['cert'] = path
-
-    logging.debug("opening database connection {}".format(name))
     return pymysql.connect(**kwargs)
-    #return pymysql.connect(host=_section['hostname'] if 'hostname' in _section else None,
-                           #port=3306 if 'port' not in _section else _section.getint('port'),
-                           #unix_socket=_section['unix_socket'] if 'unix_socket' in _section else None,
-                           #db=_section['database'],
-                           #user=_section['username'],
-                           #passwd=_section['password'],
-                           #charset='utf8')
 
 @contextmanager
 def get_db_connection(*args, **kwargs):
-    if _cached_db_connections_enabled():
-        db = _get_cached_db_connection(*args, **kwargs)
-    else:
-        db = _get_db_connection(*args, **kwargs)
+    db = _get_cached_db_connection(*args, **kwargs)
 
     try:
         yield db
     except Exception as e:
         try:
-            if _cached_db_connections_enabled():
-                db.rollback()
-            else:
-                db.close()
+            db.rollback()
         except Exception as failure_error:
             logging.error("unable to roll back or close transaction: {}".format(failure_error))
             report_exception()
@@ -2423,16 +2400,19 @@ def initialize_database():
     from config import config
     import saq
 
-    # see https://github.com/PyMySQL/PyMySQL/issues/644
-    # /usr/local/lib/python3.6/dist-packages/pymysql/cursors.py:170: Warning: (1300, "Invalid utf8mb4 character string: '800363'")
-    warnings.filterwarnings(action='ignore', message='.*Invalid utf8mb4 character string.*')
+    if DatabaseSession is None:
+        # see https://github.com/PyMySQL/PyMySQL/issues/644
+        # /usr/local/lib/python3.6/dist-packages/pymysql/cursors.py:170: Warning: (1300, "Invalid utf8mb4 character string: '800363'")
+        warnings.filterwarnings(action='ignore', message='.*Invalid utf8mb4 character string.*')
 
-    engine = create_engine(
-        config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
-        **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
+        engine = create_engine(
+            config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
+            **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
 
-    DatabaseSession = sessionmaker(bind=engine)
-    saq.db = scoped_session(DatabaseSession)
+        DatabaseSession = sessionmaker(bind=engine)
+
+    if saq.db is None:
+        saq.db = scoped_session(DatabaseSession)
 
 def initialize_automation_user():
     # get the id of the ace automation account

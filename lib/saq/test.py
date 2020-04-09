@@ -304,9 +304,12 @@ def initialize_test_environment():
 
     # initialize saq
     import saq
-    saq.initialize(saq_home=saq_home, config_paths=[], 
-                   logging_config_path=os.path.join(saq_home, 'etc', 'unittest_logging.ini'), 
-                   args=None, relative_dir=None)
+    saq.initialize(
+            saq_home=saq_home, 
+            config_paths=[], 
+            logging_config_path=os.path.join(saq_home, 'etc', 'unittest_logging.ini'), 
+            args=None, 
+            relative_dir=None)
 
     if saq.CONFIG['global']['instance_type'] not in [ 'PRODUCTION', 'QA', 'DEV' ]:
         sys.stderr.write('\n\n *** CRITICAL ERROR *** \n\ninvalid instance_type setting in configuration\n')
@@ -333,7 +336,7 @@ def initialize_test_environment():
     except Exception as e:
         logging.error("unable to create temp dir {}: {}".format(test_dir, e))
 
-    #initialize_database()
+    initialize_database()
     initialized = True
 
 # expected values
@@ -519,9 +522,15 @@ class ACEBasicTestCase(TestCase):
         import saq.service
         saq.service._registered_services = []
 
+        # reset database cached connections
+        import saq.database
+        saq.database._reset_cache_db()
+
         thread_count_difference = threading.active_count() - self.starting_thread_count
         if thread_count_difference != 0:
             logging.warning(f"thread count difference after {self.id()} is {thread_count_difference}")
+            for t in threading.enumerate():
+                logging.warning(f"running thread: {t}")
 
     def create_test_file(self, file_path='.unittest_test_data', file_content=None, root_analysis=None):
         """Creates a test file and returns the path to the newly created file.
@@ -716,6 +725,7 @@ class ACEBasicTestCase(TestCase):
         c.execute("DELETE FROM delayed_analysis")
         c.execute("DELETE FROM users")
         c.execute("DELETE FROM malware")
+        c.execute("DELETE FROM `config`")
 
         from app.models import User
         u = User()

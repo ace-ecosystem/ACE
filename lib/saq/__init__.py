@@ -380,9 +380,17 @@ def initialize(saq_home=None,
                 break
 
         elif saq.crypto.encryption_key_set():
-            # if we're not prompting for it, are we running the encryption cache service yet?
-            logging.debug("reading encryption password from ecs")
-            ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
+            # if we're not prompting for it then we can do one of two things
+            # 1) pass it in via an environment variable SAQ_ENC
+            # 2) run the encryption cache service 
+            if 'SAQ_ENC' in os.environ:
+                logging.debug("reading encryption password from environment variable")
+                ENCRYPTION_PASSWORD_PLAINTEXT = os.environ['SAQ_ENC']
+                del os.environ['SAQ_ENC']
+            else:
+                logging.debug("reading encryption password from ecs")
+                ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
+
             if ENCRYPTION_PASSWORD_PLAINTEXT is not None:
                 try:
                     ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)

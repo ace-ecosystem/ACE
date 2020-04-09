@@ -18,7 +18,7 @@ services:
         image: ace:latest
         depends_on:
             - ace-db
-        command: installer/docker_ace_setup
+        command: docker/provision/ace/setup
         restart: always
         volumes:
             - ace-data-volume:/opt/ace/data
@@ -32,7 +32,7 @@ services:
             - '9443:443'
         expose:
             - '443'
-        command: installer/docker_ace_http_setup
+        command: docker/provision/http/setup
         restart: always
         volumes:
             - ace-data-volume:/opt/ace/data

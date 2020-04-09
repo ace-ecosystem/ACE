@@ -6,6 +6,7 @@ ENV SAQ_USER ace
 ENV SAQ_GROUP ace
 ENV TERM xterm
 ENV TZ UTC
+ENV SAQ_ENC password
 COPY ./docker/provision/http/install /opt/ace/docker/provision/http/install
 RUN ./docker/provision/http/install
-USER ace
+RUN echo 'EXPORT SAQ_ENC=password' >> /etc/apache2/envvars

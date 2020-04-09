@@ -32,7 +32,7 @@ import saq.database
 
 from saq.analysis import Observable, Analysis, RootAnalysis
 from saq.constants import *
-from saq.database import Alert, use_db, release_cached_db_connection, enable_cached_db_connections, \
+from saq.database import Alert, use_db, \
                          get_db_connection, add_workload, acquire_lock, release_lock, execute_with_retry, \
                          add_delayed_analysis_request, clear_expired_locks, clear_expired_local_nodes, \
                          initialize_node, ALERT
@@ -243,7 +243,6 @@ class Worker(object):
                 time.sleep(1)
 
         logging.debug("worker {} exiting".format(os.getpid()))
-        release_cached_db_connection()
 
     def __str__(self):
         return '{}{}'.format(str(self.process), ' (PID {})'.format(self.process.pid) if self.process else '')
@@ -1677,8 +1676,6 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
     def setup(self, mode):
         """Called to setup the engine for execution. Typically this is called on the worker
            process just before the execution loop begins."""
-
-        enable_cached_db_connections()
 
         # this determines what kind of work we look for first
         self.analysis_mode_priority = mode

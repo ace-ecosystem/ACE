@@ -21,11 +21,11 @@ import uuid
 import ace_api
 
 import saq
-from saq.database import use_db, \
-                         execute_with_retry, \
-                         get_db_connection, \
-                         enable_cached_db_connections, \
-                         disable_cached_db_connections
+from saq.database import (
+        use_db,
+        execute_with_retry,
+        get_db_connection
+)
 
 from saq.error import report_exception
 from saq.persistence import Persistable
@@ -217,8 +217,6 @@ class RemoteNodeGroup(object):
         self.thread.join()
 
     def loop(self):
-        enable_cached_db_connections()
-
         while True:
             try:
                 result = self.execute()
@@ -244,8 +242,6 @@ class RemoteNodeGroup(object):
                 report_exception()
                 if self.shutdown_event.wait(1):
                     break
-
-        disable_cached_db_connections()
 
     @use_db
     def execute(self, db, c):
@@ -638,8 +634,6 @@ class Collector(ACEService, Persistable):
         if not self.remote_node_groups:
             self.load_groups()
 
-        enable_cached_db_connections()
-
         try:
             self.debug_extended_collection()
         except NotImplementedError:
@@ -647,7 +641,6 @@ class Collector(ACEService, Persistable):
 
         self.execute()
         self.execute_workload_cleanup()
-        disable_cached_db_connections()
 
         # start the node groups
         #for group in self.remote_node_groups:
@@ -711,7 +704,6 @@ class Collector(ACEService, Persistable):
 
     def cleanup_loop(self):
         logging.debug("starting cleanup loop")
-        enable_cached_db_connections()
 
         while True:
             wait_time = 1
@@ -725,7 +717,6 @@ class Collector(ACEService, Persistable):
             if self.service_shutdown_event.wait(wait_time):
                 break
 
-        disable_cached_db_connections()
         logging.debug("exited cleanup loop")
 
     @use_db
@@ -773,8 +764,6 @@ HAVING
         return submission_count
 
     def loop(self):
-        enable_cached_db_connections()
-
         while True:
             try:
                 self.execute()
@@ -786,8 +775,6 @@ HAVING
 
             if self.is_service_shutdown:
                 break
-
-        disable_cached_db_connections()
 
     def execute(self):
 
@@ -913,11 +900,7 @@ HAVING
         return work_id
 
     def extended_collection_wrapper(self):
-        enable_cached_db_connections()
-        try:
-            self.extended_collection()
-        finally:
-            disable_cached_db_connections()
+        self.extended_collection()
 
     # subclasses can override this function to provide additional functionality
     def extended_collection(self):

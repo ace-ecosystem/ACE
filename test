@@ -57,7 +57,7 @@ then
         saq.extractors.graph.test \
         saq.test_email \
         saq.test_crawlphish \
-        saq.test_configuration \
+        saq.configuration.test \
         saq.test_crypto \
         saq.test_util \
         saq.test_locks \
