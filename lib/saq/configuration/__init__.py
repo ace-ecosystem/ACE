@@ -78,7 +78,7 @@ def load_configuration():
 def _load_configuration():
     default_config = ExtendedConfigParser(allow_no_value=True, interpolation=EncryptedPasswordInterpolation())
 
-    # XXX HACK
+    # XXX HACK <-- get rid of these dude
     # optionally when unit testing, the local site passwords can be saved in etc/unittest.passwords.json
     # this will automatically load these passwords, not requiring ecs running
     if saq.UNIT_TESTING:

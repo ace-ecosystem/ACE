@@ -31,6 +31,9 @@ fallback_semaphores = {}
 def initialize_fallback_semaphores():
     """This needs to be called once at the very beginning of starting ACE."""
 
+    if fallback_semaphores:
+        return
+
     # we need some fallback functionality for when the network semaphore server is down
     # these semaphores serve that purpose
     global_engine_instance_count = saq.CONFIG['global'].getint('global_engine_instance_count')

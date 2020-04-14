@@ -239,11 +239,14 @@ def initialize_unittest_logging():
     global memory_log_handler
 
     test_log_manager = Manager()
-    atexit.register(_atexit_callback)
+    #atexit.register(_atexit_callback)
     test_log_sync = RLock()
     test_log_messages = test_log_manager.list()
 
     log_format = logging.Formatter(datefmt='%(asctime)s')
+
+    if memory_log_handler is not None:
+        logging.getLogger().removeHandler(memory_log_handler)
 
     memory_log_handler = MemoryLogHandler()
     memory_log_handler.setLevel(logging.DEBUG)
@@ -335,9 +338,6 @@ def initialize_test_environment():
         os.makedirs(test_dir)
     except Exception as e:
         logging.error("unable to create temp dir {}: {}".format(test_dir, e))
-
-    initialize_database()
-    initialized = True
 
 # expected values
 EV_TEST_DATE = datetime.datetime(2017, 11, 11, hour=7, minute=36, second=1, microsecond=1)
@@ -470,9 +470,9 @@ class ACEBasicTestCase(TestCase):
     def setUp(self):
         #saq.DUMP_TRACEBACKS = True
         self.starting_thread_count = threading.active_count()
-        logging.info("TEST: {}".format(self.id()))
         self.save_signal_handlers()
         initialize_test_environment()
+        logging.info("TEST: {}".format(self.id()))
 
         self.reset()
         import saq
@@ -522,15 +522,16 @@ class ACEBasicTestCase(TestCase):
         import saq.service
         saq.service._registered_services = []
 
-        # reset database cached connections
-        import saq.database
-        saq.database._reset_cache_db()
-
         thread_count_difference = threading.active_count() - self.starting_thread_count
         if thread_count_difference != 0:
             logging.warning(f"thread count difference after {self.id()} is {thread_count_difference}")
             for t in threading.enumerate():
                 logging.warning(f"running thread: {t}")
+
+        import saq.database
+        saq.database.reset_pools()
+
+        test_log_manager.shutdown()
 
     def create_test_file(self, file_path='.unittest_test_data', file_content=None, root_analysis=None):
         """Creates a test file and returns the path to the newly created file.
@@ -726,6 +727,8 @@ class ACEBasicTestCase(TestCase):
         c.execute("DELETE FROM users")
         c.execute("DELETE FROM malware")
         c.execute("DELETE FROM `config`")
+        c.execute("DELETE FROM incoming_workload")
+        c.execute("DELETE FROM work_distribution")
 
         from app.models import User
         u = User()

@@ -2345,12 +2345,16 @@ def initialize_database():
     warnings.filterwarnings(action='ignore', message='.*Invalid utf8mb4 character string.*')
 
     import saq
-    engine = create_engine(
-        config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
-        **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
+    if saq.db is None:
+        engine = create_engine(
+            config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
+            **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
 
-    DatabaseSession = sessionmaker(bind=engine)
-    saq.db = scoped_session(DatabaseSession)
+        DatabaseSession = sessionmaker(bind=engine)
+        saq.db = scoped_session(DatabaseSession)
+    else:
+        from sqlalchemy.orm.session import close_all_sessions
+        close_all_sessions()
 
 def initialize_automation_user():
     # get the id of the ace automation account

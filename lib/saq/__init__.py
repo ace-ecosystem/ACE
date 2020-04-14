@@ -105,7 +105,7 @@ LOGGING_BASE_CONFIG = {
 
 def initialize_logging(logging_config_path):
     try:
-        logging.config.fileConfig(logging_config_path, disable_existing_loggers=False)
+        logging.config.fileConfig(logging_config_path, disable_existing_loggers=True)
     except Exception as e:
         sys.stderr.write("unable to load logging configuration: {}".format(e))
         raise e
@@ -363,6 +363,7 @@ def initialize(saq_home=None,
     import saq.crypto
     from saq.crypto import get_aes_key, InvalidPasswordError
 
+    # XXX get rid of these checks for UNIT_TESTING
     if not saq.UNIT_TESTING:
         # are we prompting for the decryption password?
         if args and args.set_decryption_password:
@@ -511,7 +512,6 @@ def initialize(saq_home=None,
         os.path.join(TEMP_DIR),
         SERVICES_DIR,
         DAEMON_DIR, ]: 
-        #os.path.join(SAQ_HOME, maliciousdir) ]: # XXX remove
         try:
             create_directory(dir_path)
         except Exception as e:
@@ -562,6 +562,6 @@ def initialize(saq_home=None,
     initialize_automation_user()
 
     # initialize other systems
-    initialize_message_system()
+    #initialize_message_system()
 
     logging.debug("SAQ initialized")
