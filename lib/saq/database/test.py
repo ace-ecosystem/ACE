@@ -16,13 +16,12 @@ import saq.test
 from saq.constants import *
 from saq.database import (
         get_db_connection, 
+        get_pool,
         Alert, 
         use_db,
         acquire_lock, 
         release_lock,
-        execute_with_retry,
-        _trigger_cache_db_cleanup,
-        _reset_cache_db, )
+        execute_with_retry )
 
 from saq.test import *
 
@@ -298,81 +297,171 @@ class TestCase(ACEBasicTestCase):
         lock_uuid = acquire_lock(alert.uuid)
         self.assertTrue(lock_uuid)
 
-    def test_caching(self):
-        _reset_cache_db()
+    def test_pooling(self):
+        get_pool().clear()
         with get_db_connection() as db_1:
             # we should have one database connection ready
-            self.assertEquals(len(saq.database._global_db_cache), 1)
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
             with get_db_connection() as db_2:
-                # should still be 1
-                self.assertEquals(len(saq.database._global_db_cache), 1)
-                # and should be the same as db_1
-                self.assertTrue(db_1 is db_2)
+                self.assertEquals(get_pool().in_use_count, 2)
+                self.assertEquals(get_pool().available_count, 0)
+                self.assertFalse(db_1 is db_2)
 
-    def test_caching_threaded(self):
-        _reset_cache_db()
-        e = threading.Event()
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 1)
+
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 2)
+
+    def test_pooling_without_contextmanager(self):
+        get_pool().clear()
+        db = get_pool().get_connection()
+
+        self.assertEquals(get_pool().in_use_count, 1)
+        self.assertEquals(get_pool().available_count, 0)
+
+        c = db.cursor()
+        c.execute("SELECT 1")
+        db.commit()
+        get_pool().return_connection(db)
+
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 1)
+
+    def test_pooling_bad_sql(self):
+        get_pool().clear()
+        with get_db_connection() as db_1:
+
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
+
+            with self.assertRaises(Exception):
+                c = db_1.cursor()
+                c.execute("INVALID SQL")
+
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 1)
+
+        with get_db_connection() as db_1:
+
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
+
+            c = db_1.cursor()
+            c.execute("SELECT 1")
+            c.fetchone()
+            db_1.commit()
+
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 1)
+
+    def test_pooling_broken_connection(self):
+        get_pool().clear()
+        with get_db_connection() as db_1:
+
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
+            db_1.close()
+
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 0)
+
+        with get_db_connection() as db_1:
+
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
+
+            c = db_1.cursor()
+            c.execute("SELECT 1")
+            c.fetchone()
+            db_1.commit()
+
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 1)
+
+    def test_pooling_threaded(self):
+        get_pool().clear()
+
         with get_db_connection() as conn_1:
-            self.assertEquals(len(saq.database._global_db_cache), 1)
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
 
             def f():
-                # this connection should be different than conn_1
                 with get_db_connection() as conn_2:
                     self.assertFalse(conn_1 is conn_2)
-                    self.assertEquals(len(saq.database._global_db_cache), 2)
+                    self.assertEquals(get_pool().in_use_count, 2)
+                    self.assertEquals(get_pool().available_count, 0)
 
                 # but asked a second time this should be the same as before
                 with get_db_connection() as conn_3:
-                    self.assertEquals(len(saq.database._global_db_cache), 2)
-                    self.assertTrue(conn_2 is conn_3)
-
-                e.set()
+                    self.assertTrue(conn_3 is conn_2)
+                    self.assertEquals(get_pool().in_use_count, 2)
+                    self.assertEquals(get_pool().available_count, 0)
                 
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
             t = threading.Thread(target=f)
             t.start()
-            e.wait()
             t.join()
+                    
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 2)
 
-        _trigger_cache_db_cleanup()
-        self.wait_for_condition(lambda: len(saq.database._global_db_cache) == 1)
+        # make sure we can get, and use, the connection created in the other thread
 
-        with get_db_connection() as conn_4:
-            self.assertTrue(conn_1 is conn_4)
+        conn_1 = get_pool().get_connection()
+        conn_2 = get_pool().get_connection()
 
-    def test_caching_processes(self):
-        _reset_cache_db()
+        self.assertEquals(get_pool().in_use_count, 2)
+        self.assertEquals(get_pool().available_count, 0)
+
+        c = conn_2.cursor()
+        c.execute("SELECT 1")
+        c.fetchone()
+
+        get_pool().return_connection(conn_1)
+        get_pool().return_connection(conn_2)
+
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 2)
+
+    def test_pooling_multi_process(self):
+        get_pool().clear()
         with get_db_connection() as conn_1:
-            self.assertEquals(len(saq.database._global_db_cache), 1)
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
 
             def f():
-                # should start with the one connection we copied over
-                send_test_message(len(saq.database._global_db_cache) == 1)
+                # once we've entered into the new process, the pool changes
+                send_test_message(get_pool().in_use_count == 0)
+                send_test_message(get_pool().available_count == 0)
 
-                # this connection should be different than conn_1
+                # so this connection should be different than conn_1
                 with get_db_connection() as conn_2:
                     send_test_message(not (conn_1 is conn_2))
+                    send_test_message(get_pool().in_use_count == 1)
+                    send_test_message(get_pool().available_count == 0)
 
-                # after a cleanup we should have no open connections
-                _trigger_cache_db_cleanup()
-                self.wait_for_condition(lambda: len(saq.database._global_db_cache) == 1, delay=0.01)
+                send_test_message(get_pool().in_use_count == 0)
+                send_test_message(get_pool().available_count == 1)
 
-                # but asked a second time this should be the same as before
-                with get_db_connection() as conn_3:
-                    send_test_message(len(saq.database._global_db_cache) == 1)
-                    send_test_message(conn_2 is conn_3)
-                
             p = multiprocessing.Process(target=f)
             p.start()
 
-            self.assertTrue(recv_test_message()) # len(saq.database._global_db_cache) == 1
-            self.assertTrue(recv_test_message()) # not (conn_1 is conn_2)
-            self.assertTrue(recv_test_message()) # len(saq.database._global_db_cache) == 1
-            self.assertTrue(recv_test_message()) # conn_2 is conn_3
+            self.assertTrue(recv_test_message()) 
+            self.assertTrue(recv_test_message()) 
+            self.assertTrue(recv_test_message()) 
+            self.assertTrue(recv_test_message())
 
             p.join()
 
+        self.assertEquals(get_pool().in_use_count, 0)
+        self.assertEquals(get_pool().available_count, 1)
+
         with get_db_connection() as conn_4:
-            self.assertEquals(len(saq.database._global_db_cache), 1)
+            self.assertEquals(get_pool().in_use_count, 1)
+            self.assertEquals(get_pool().available_count, 0)
             self.assertTrue(conn_1 is conn_4)
 
     def test_insert_alert(self):
