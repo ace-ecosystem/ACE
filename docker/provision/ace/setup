@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 
 cd /opt/ace
+rm -f data/var/services/*
 source load_environment
 ace enc set -o -p ace
 ace -P ace service start ecs
 ace -L etc/debug_logging.ini service start network_semaphore
 ace -L etc/debug_logging.ini service start yara
 ace -L etc/debug_logging.ini service start engine --foreground
+ace service status

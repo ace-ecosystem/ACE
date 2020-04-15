@@ -93,7 +93,7 @@ class _database_pool(object):
         with self.lock:
             try:
                 connection = self.available.pop()
-                logging.debug(f"got pooled database connection to {self.name}")
+                #logging.debug(f"got pooled database connection to {self.name}")
             except IndexError:
                 connection = self.open_new_connection()
                 logging.debug(f"got new database connection to {self.name}")
@@ -101,7 +101,7 @@ class _database_pool(object):
             self.in_use.append(connection)
             connection.acquired = datetime.datetime.now()
 
-        logging.debug(f"pool size for {self.name} available {self.available_count} in_use {self.in_use_count}")
+        #logging.debug(f"pool size for {self.name} available {self.available_count} in_use {self.in_use_count}")
         return connection
 
     def return_connection(self, connection):

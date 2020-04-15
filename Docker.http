@@ -8,5 +8,8 @@ ENV TERM xterm
 ENV TZ UTC
 ENV SAQ_ENC password
 COPY ./docker/provision/http/install /opt/ace/docker/provision/http/install
+COPY ./docker/provision/http/install_ubuntu_packages.sh  /opt/ace/docker/provision/http/install_ubuntu_packages.sh
+RUN ./docker/provision/http/install_ubuntu_packages.sh
 RUN ./docker/provision/http/install
-RUN echo 'EXPORT SAQ_ENC=password' >> /etc/apache2/envvars
+COPY ./api.wsgi /opt/ace/api.wsgi
+COPY ./ace.wsgi /opt/ace/ace.wsgi
