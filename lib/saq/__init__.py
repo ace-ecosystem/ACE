@@ -105,7 +105,7 @@ LOGGING_BASE_CONFIG = {
 
 def initialize_logging(logging_config_path):
     try:
-        logging.config.fileConfig(logging_config_path, disable_existing_loggers=True)
+        logging.config.fileConfig(logging_config_path, disable_existing_loggers=False)
     except Exception as e:
         sys.stderr.write("unable to load logging configuration: {}".format(e))
         raise e

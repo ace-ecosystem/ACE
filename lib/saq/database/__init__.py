@@ -126,7 +126,12 @@ class _database_pool(object):
             self.in_use.remove(connection)
 
     def open_new_connection(self):
-        return pymysql.connect(**self.kwargs)
+        connection = pymysql.connect(**self.kwargs)
+        cursor = connection.cursor()
+        cursor.execute('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED')
+        cursor.close()
+        connection.commit()
+        return connection
 
     def start(self):
         pass
@@ -2348,6 +2353,7 @@ def initialize_database():
     if saq.db is None:
         engine = create_engine(
             config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
+            isolation_level='READ COMMITTED',
             **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
 
         DatabaseSession = sessionmaker(bind=engine)
