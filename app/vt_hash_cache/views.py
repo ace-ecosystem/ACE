@@ -8,7 +8,7 @@ import memcache
 import requests
 
 import saq
-from saq.database import get_db_connection, execute_with_retry, enable_cached_db_connections
+from saq.database import get_db_connection, execute_with_retry
 from saq.error import report_exception
 
 from app.vt_hash_cache import *

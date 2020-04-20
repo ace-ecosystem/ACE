@@ -14,25 +14,18 @@ services:
             - ace-db-volume:/var/lib/mysql
             - ./docker/provision/mysql/init:/docker-entrypoint-initdb.d
 
+    ace-http:
+        image: ace-http:latest
+        restart: always
+        ports:
+            - '8080:80'
+        expose:
+            - '80'
     ace:
-        image: ace:latest
+        image: ace-alpine:latest
         depends_on:
             - ace-db
         command: docker/provision/ace/setup
-        restart: always
-        volumes:
-            - ace-data-volume:/opt/ace/data
-
-    ace-http:
-        image: ace_http:latest
-        depends_on:
-            - ace
-            - ace-db
-        ports:
-            - '9443:443'
-        expose:
-            - '443'
-        command: docker/provision/http/setup
         restart: always
         volumes:
             - ace-data-volume:/opt/ace/data

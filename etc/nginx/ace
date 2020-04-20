@@ -1,0 +1,9 @@
+server {
+    listen 80 default_server;
+    server_name ubunut-dev;
+
+    location / {
+        include uwsgi_params;
+        uwsgi_pass ace:3031;
+    }
+}

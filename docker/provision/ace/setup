@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 
 cd /opt/ace
-rm -f data/var/services/*
 source load_environment
+source venv/bin/activate
 ace enc set -o -p ace
-ace -P ace service start ecs
+ace -L etc/debug_logging.ini -P ace service start ecs
 ace -L etc/debug_logging.ini service start network_semaphore
 ace -L etc/debug_logging.ini service start yara
-ace -L etc/debug_logging.ini service start engine --foreground
-ace service status
+ace -L etc/debug_logging.ini service start engine 
+uwsgi --ini etc/uwsgi.ini 
+ace -L etc/debug_logging.ini service stop engine
+ace -L etc/debug_logging.ini service stop yara
+ace -L etc/debug_logging.ini service stop network_semaphore
+ace -L etc/debug_logging.ini service stop ecs

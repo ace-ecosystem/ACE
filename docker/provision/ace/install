@@ -33,7 +33,13 @@ do
 done
 
 # set up environment
-echo -e "\\nsource $SAQ_HOME/load_environment" >> ~ace/.bashrc
+cat >> ~ace/.profile<<EOF
+source venv/bin/activate
+source $SAQ_HOME/load_environment
+EOF
+
+source venv/bin/activate
+source $SAQ_HOME/load_environment
 
 #cp -a etc/saq.example.ini etc/saq.ini || fail "unable to configure saq.local.ini"
 cp -a etc/brotex.whitelist.sample etc/brotex.whitelist || fail "unable to configure brotex.whitelist"
@@ -46,7 +52,7 @@ cp etc/amc_client.example.ini etc/amc_client.ini
 echo "generating random secret key for flask"
 tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1 > .gui_secret_key.sed
 sed -i -e 's;^;s/ACE_SECRET_KEY/;' -e 's;$;/g;' .gui_secret_key.sed
-sed -i -f .gui_secret_key.sed --follow-symlinks etc/saq.ini
+sed -i -f .gui_secret_key.sed etc/saq.ini
 rm .gui_secret_key.sed
 
 # create various directories and files
