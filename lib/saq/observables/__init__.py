@@ -351,8 +351,12 @@ class FileObservable(Observable):
 
     @property
     def display_preview(self):
-        with open(self.path, 'rb') as fp:
-            return fp.read(saq.CONFIG['gui'].getint('file_preview_bytes')).decode('utf8', errors='replace')
+        try:
+            with open(self.path, 'rb') as fp:
+                return fp.read(saq.CONFIG['gui'].getint('file_preview_bytes')).decode('utf8', errors='replace')
+        except FileNotFoundError:
+            logging.error(f"file does not exist for display_preview: {self.path}")
+            return None
 
     @property
     def jinja_template_path(self):
