@@ -8,21 +8,8 @@
 source installer/common.sh
 
 for d in \
-    archive/email \
-    archive/smtp_stream \
-    archive/office \
-    archive/ole \
     data \
-    data/error_reports \
-    data/logs \
-    data/var \
-    data/scan_failures \
-    data/storage \
-    data/vt_cache \
-    data/stats \
     etc/snort \
-    malicious \
-    ssl/web \
     work 
 do
     if [ ! -d "$d" ]
@@ -42,12 +29,35 @@ source venv/bin/activate
 source $SAQ_HOME/load_environment
 
 #cp -a etc/saq.example.ini etc/saq.ini || fail "unable to configure saq.local.ini"
-cp -a etc/brotex.whitelist.sample etc/brotex.whitelist || fail "unable to configure brotex.whitelist"
-cp -a etc/startup.example etc/startup || fail "unable to configure startup"
-cp etc/remote_assignments.example.yar etc/remote_assignments.yar
-cp etc/blacklist.example.yar etc/blacklist.yar
-cp etc/amc_mda.example.ini etc/amc_mda.ini
-cp etc/amc_client.example.ini etc/amc_client.ini
+if [ ! -e etc/brotex.whitelist ]
+then
+    cp -a etc/brotex.whitelist.sample etc/brotex.whitelist || fail "unable to configure brotex.whitelist"
+fi
+
+if [ ! -e etc/startup ]
+then
+    cp -a etc/startup.example etc/startup || fail "unable to configure startup"
+fi
+
+if [ ! -e etc/remote_assignments.yar ]
+then
+    cp etc/remote_assignments.example.yar etc/remote_assignments.yar
+fi
+
+if [ ! -e etc/blacklist.yar ]
+then
+    cp etc/blacklist.example.yar etc/blacklist.yar
+fi
+
+if [ ! -e etc/amc_mda.ini ]
+then
+    cp etc/amc_mda.example.ini etc/amc_mda.ini
+fi
+
+if [ ! -e etc/amc_client.ini ]
+then
+    cp etc/amc_client.example.ini etc/amc_client.ini
+fi
 
 echo "generating random secret key for flask"
 tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1 > .gui_secret_key.sed
@@ -66,7 +76,7 @@ if [ ! -e etc/organization.json ]; then echo '{}' > etc/organization.json; fi
 if [ ! -e etc/local_networks.csv ]; then echo 'Indicator,Indicator_Type' > etc/local_networks.csv; fi
 
 # create our ssl certs
-./installer/install_ssl_certs.sh
+./docker/provision/ace/install_ssl_certs.sh
 
 # build the documentation
 ( cd docs && make html )

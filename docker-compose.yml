@@ -15,13 +15,23 @@ services:
             - ./docker/provision/mysql/init:/docker-entrypoint-initdb.d
 
     ace-http:
-        image: ace-http:latest
+        build:
+            context: .
+            dockerfile: Dockerfile.nginx
+        image: ace-nginx:latest
         restart: always
         ports:
-            - '8080:80'
+            - '8443:443'
         expose:
-            - '80'
+            - '443'
+        depends_on:
+            - ace
+        volumes:
+            - ace-data-volume:/opt/ace/data
     ace:
+        build:
+            context: .
+            dockerfile: Dockerfile
         image: ace-alpine:latest
         depends_on:
             - ace-db

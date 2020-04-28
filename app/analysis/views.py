@@ -35,7 +35,12 @@ from urllib.parse import urlparse
 from sandboxapi.falcon import FalconAPI
 
 import businesstime
-import pandas as pd
+
+try:
+    import pandas as pd
+except ImportError:
+    pass
+
 import requests
 from pymongo import MongoClient
 

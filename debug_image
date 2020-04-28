@@ -1,0 +1,1 @@
+docker run -it -u ace --rm --network=ace_default ace-debian:latest /bin/bash -il
