@@ -1022,6 +1022,7 @@ def unremediate():
 @login_required
 @use_db
 def new_alert(db, c):
+    from saq.engine import translate_node
                      
     # get submitted data
     insert_date = request.form.get('new_alert_insert_date', None)
@@ -1107,7 +1108,7 @@ def new_alert(db, c):
             
         try:
             result = ace_api.submit(
-                remote_host = node_location,
+                remote_host = translate_node(node_location),
                 ssl_verification = abs_path(saq.CONFIG['SSL']['ca_chain_path']),
                 description = description,
                 analysis_mode = ANALYSIS_MODE_CORRELATION,

@@ -79,9 +79,11 @@ tags = {','.join(tags)}
 
 class RemoteNode(object):
     def __init__(self, id, name, location, any_mode, last_update, analysis_mode, workload_count):
+        from saq.engine import translate_node
+
         self.id = id
         self.name = name
-        self.location = location
+        self.location = translate_node(location)
         self.any_mode = any_mode
         self.last_update = last_update
         self.analysis_mode = analysis_mode
@@ -89,14 +91,6 @@ class RemoteNode(object):
 
         # the directory that contains any files that to be transfered along with submissions
         self.incoming_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['incoming_dir'])
-
-        # apply any node translations that need to take effect
-        for key in saq.CONFIG['node_translation'].keys():
-            src, target = saq.CONFIG['node_translation'][key].split(',')
-            if self.location == src:
-                logging.debug("translating node {} to {}".format(self.location, target))
-                self.location = target
-                break
 
     def __str__(self):
         return "RemoteNode(id={},name={},location={})".format(self.id, self.name, self.location)

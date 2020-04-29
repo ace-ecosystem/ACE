@@ -4,32 +4,39 @@ cd /opt/ace
 source load_environment
 source venv/bin/activate
 
-for dir in \
-    error_reports \
-    logs \
-    var \
-    scan_failures \
-    storage \
-    vt_cache \
-    stats \
-    archive/email \
-    archive/smtp_stream \
-    archive/office \
-    archive/ole
-do
-    if [ ! -d data/$dir ]
-    then
-        mkdir -p data/$dir
-    fi
-done
+if [ ! -d data/.provisioned ]
+then
+    for dir in \
+        error_reports \
+        logs \
+        var \
+        scan_failures \
+        storage \
+        vt_cache \
+        stats \
+        archive/email \
+        archive/smtp_stream \
+        archive/office \
+        archive/ole
+    do
+        if [ ! -d data/$dir ]
+        then
+            mkdir -p data/$dir
+        fi
+    done
 
-ace enc set -o -p ace
+    ace enc set -o -p ace
+    ace user add --password=ace analyst analyst@ace
+    touch data/.provisioned
+fi
+
 ace -L etc/debug_logging.ini -P ace service start ecs
 ace -L etc/debug_logging.ini service start network_semaphore
 ace -L etc/debug_logging.ini service start yara
 ace -L etc/debug_logging.ini service start engine 
-uwsgi --ini etc/web_uwsgi.ini
-#uwsgi --ini etc/api_uwsgi.ini 
+uwsgi --ini etc/web_uwsgi.ini -d /opt/ace/data/logs/web_uwsgi.log
+uwsgi --ini etc/api_uwsgi.ini -d /opt/ace/data/logs/api_uwsgi.log
+tail -F /opt/ace/data/logs/*.log
 ace -L etc/debug_logging.ini service stop engine
 ace -L etc/debug_logging.ini service stop yara
 ace -L etc/debug_logging.ini service stop network_semaphore

@@ -1,6 +1,6 @@
 server {
     listen 443 ssl default_server;
-    server_name ace;
+    server_name ace-http;
     ssl_certificate /opt/ace/ssl/ace.cert.pem;
     ssl_certificate_key /opt/ace/ssl/ace.key.pem;
 

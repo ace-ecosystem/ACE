@@ -4,14 +4,6 @@
 # installs and configures SSL certificates for ACE
 #
 
-source installer/common.sh
-
-if [ -z "$SAQ_HOME" ]
-then
-    echo "missing SAQ_HOME environment variable"
-    exit 1
-fi
-
 cd "$SAQ_HOME" || { echo "cannot cd to $SAQ_HOME"; exit 1; }
 
 if [ -e ssl/root/ca/openssl.cnf ]
@@ -95,6 +87,8 @@ chmod 400 ssl/root/ca/.intermediate_ca.pwd
     cp intermediate/openssl.cnf intermediate/ace.openssl.cnf && \
     echo 'DNS.1 = localhost' >> intermediate/ace.openssl.cnf && \
     echo "DNS.2 = ace" >> intermediate/ace.openssl.cnf && \ 
+    echo "DNS.3 = ace-http" >> intermediate/ace.openssl.cnf && \
+    echo "DNS.4 = ace-db" >> intermediate/ace.openssl.cnf && \
     echo 'IP.1 = 127.0.0.1' >> intermediate/ace.openssl.cnf && \
     openssl genrsa -out intermediate/private/ace.key.pem 2048 && \
     chmod 400 intermediate/private/ace.key.pem && \

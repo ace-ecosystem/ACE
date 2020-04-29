@@ -76,7 +76,7 @@ if [ ! -e etc/organization.json ]; then echo '{}' > etc/organization.json; fi
 if [ ! -e etc/local_networks.csv ]; then echo 'Indicator,Indicator_Type' > etc/local_networks.csv; fi
 
 # create our ssl certs
-./docker/provision/ace/install_ssl_certs.sh
+#./docker/provision/ace/install_ssl_certs.sh
 
 # build the documentation
 ( cd docs && make html )

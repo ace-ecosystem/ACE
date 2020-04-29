@@ -58,6 +58,18 @@ CURRENT_ENGINE = None
 STATE_PRE_ANALYSIS_EXECUTED = 'pre_analysis_executed'
 STATE_POST_ANALYSIS_EXECUTED = 'post_analysis_executed'
 
+def translate_node(node: str) -> str:
+    """Return the correct node taking node transaction into account."""
+    for key in saq.CONFIG['node_translation'].keys():
+        src, target = saq.CONFIG['node_translation'][key].split(',')
+        if node == src:
+            logging.info("translating node {} to {}".format(node, target))
+            return target
+
+    logging.info(f"no translation for {node}")
+    return node
+
+
 class AnalysisTimeoutError(RuntimeError):
     pass
 

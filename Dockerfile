@@ -40,4 +40,5 @@ RUN python3 -m virtualenv --python=/usr/bin/python3 /opt/ace/venv \
     && source /opt/ace/venv/bin/activate \
     && python3 -m pip install -r docker/provision/ace/python-requirements-3.6.txt
 COPY --chown=ace:ace . /opt/ace
+COPY --from=ace-ssl:latest --chown=ace:ace /ssl /opt/ace/ssl
 RUN docker/provision/ace/install

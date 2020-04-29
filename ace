@@ -1317,11 +1317,14 @@ def add_user(args):
         print(f"ERROR: invalid timezone {u.timezone}")
         sys.exit(1)
 
-    password = getpass("Enter password for {}: ".format(u.username))
-    confirm = getpass("Confirm password for {}: ".format(u.username))
-    if password != confirm:
-        logging.error("passwords do not match")
-        sys.exit(1)
+    if args.password:
+        password = args.password
+    else:
+        password = getpass("Enter password for {}: ".format(u.username))
+        confirm = getpass("Confirm password for {}: ".format(u.username))
+        if password != confirm:
+            logging.error("passwords do not match")
+            sys.exit(1)
 
     u.password = password
 
@@ -1345,6 +1348,9 @@ add_user_parser.add_argument('-z', '--timezone', required=False, default=None,
     help="The timezone the user is in. Defaults to UTC.")
 add_user_parser.add_argument('-d', '--display-name', required=False, default=None,
     help="The (optional) display name for the user.")
+add_user_parser.add_argument('--password', required=False, default=None,
+    help="""Provide the password for the user on the command line. 
+    Don't do this unless it's a part of automation.""")
 add_user_parser.set_defaults(func=add_user)
 
 # XXX DEPRECATED
