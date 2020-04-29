@@ -13,4 +13,8 @@ server {
         include uwsgi_params;
         uwsgi_pass ace:3031;
     }
+
+    location /ace/static {
+        alias /opt/ace/app/static;
+    }
 }
