@@ -34,9 +34,10 @@ ace -L etc/debug_logging.ini -P ace service start ecs
 ace -L etc/debug_logging.ini service start network_semaphore
 ace -L etc/debug_logging.ini service start yara
 ace -L etc/debug_logging.ini service start engine 
-uwsgi --ini etc/web_uwsgi.ini -d /opt/ace/data/logs/web_uwsgi.log
-uwsgi --ini etc/api_uwsgi.ini -d /opt/ace/data/logs/api_uwsgi.log
-tail -F /opt/ace/data/logs/*.log
+#uwsgi --ini etc/web_uwsgi.ini -d /opt/ace/data/logs/web_uwsgi.log
+#uwsgi --ini etc/api_uwsgi.ini -d /opt/ace/data/logs/api_uwsgi.log
+uwsgi --ini etc/uwsgi.ini 
+#tail -F /opt/ace/data/logs/*.log
 ace -L etc/debug_logging.ini service stop engine
 ace -L etc/debug_logging.ini service stop yara
 ace -L etc/debug_logging.ini service stop network_semaphore

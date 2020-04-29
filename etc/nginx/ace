@@ -4,13 +4,13 @@ server {
     ssl_certificate /opt/ace/ssl/ace.cert.pem;
     ssl_certificate_key /opt/ace/ssl/ace.key.pem;
 
-    location / {
+    location /ace {
         include uwsgi_params;
         uwsgi_pass ace:3031;
     }
 
     location /api {
         include uwsgi_params;
-        uwsgi_pass ace:3032;
+        uwsgi_pass ace:3031;
     }
 }

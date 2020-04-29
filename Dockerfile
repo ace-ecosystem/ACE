@@ -7,6 +7,7 @@ RUN addgroup -S $SAQ_GROUP \
     && adduser -G $SAQ_GROUP -S $SAQ_USER -s /bin/bash \
     && apk add \
         bash \
+        file \
         git \
         curl \ 
         nmap \
