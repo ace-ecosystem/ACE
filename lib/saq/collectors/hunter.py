@@ -31,6 +31,7 @@ import os, os.path
 import signal
 import threading
 import sqlite3
+from croniter import croniter
 
 import pytz
 
@@ -60,6 +61,7 @@ class Hunt(object):
         self.type = type
         self.frequency = frequency
         self.tags = tags
+        self.cron_schedule = None
 
         # the last time the hunt was executed
         # see the last_executed_time property
@@ -195,10 +197,16 @@ class Hunt(object):
         self.type = section_rule['type']
         self.frequency = create_timedelta(section_rule['frequency'])
         self.tags = [_.strip() for _ in section_rule['tags'].split(',') if _]
+        self.cron_schedule = section_rule['cron_schedule'] if 'cron_schedule' in section_rule else None
 
         self.ini_path = path
         self.last_mtime = os.path.getmtime(path)
         return config
+
+    @property
+    def is_modified(self):
+        """"Returns True if this hunt has been modified since it has been loaded."""
+        return self.ini_is_modified
 
     @property
     def ini_is_modified(self):
@@ -228,11 +236,20 @@ class Hunt(object):
     @property
     def next_execution_time(self):
         """Returns the next time this hunt should execute."""
-        # if it hasn't executed at all yet, then execute it now
-        if self.last_executed_time is None:
-            return local_time()
+        # if using cron schedule instead of frequency
+        if self.cron_schedule is not None:
+            if self.last_executed_time is None:
+                self.last_executed_time = local_time()
+            cron_parser = croniter(self.cron_schedule, self.last_executed_time)
+            return cron_parser.get_next(datetime.datetime)
 
-        return self.last_executed_time + self.frequency
+        # if using frequency instead of cron shedule
+        else:
+            # if it hasn't executed at all yet, then execute it now
+            if self.last_executed_time is None:
+                return local_time()
+
+            return self.last_executed_time + self.frequency
 
     def record_execution_time(self, time_delta):
         """Record the amount of time it took to execute this hunt."""
@@ -269,6 +286,9 @@ class HuntManager(object):
 
         # primary execution thread
         self.manager_thread = None
+
+        # thread that handles tracking changes made to the hunts loaded from ini
+        self.update_manager_thread = None
 
         # shutdown valve
         self.manager_control_event = threading.Event()
@@ -332,6 +352,21 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
     def hunts(self):
         """Returns a sorted copy of the list of hunts in execution order."""
         return sorted(self._hunts, key=operator.attrgetter('next_execution_time'))
+
+    def get_hunts(self, spec):
+        """Returns the hunts that match the given specification, where spec is a function that takes a Hunt
+           as it's single parameter and return True or False if it should be included in the results."""
+        return [hunt for hunt in self._hunts if spec(hunt)]
+
+    def get_hunt(self, spec):
+        """Returns the first hunt that matches the given specification, where spec is a function that takes a Hunt
+          as it's single parameter and return True or False if it should be included in the results.
+          Returns None if no hunts are matched."""
+        result = self.get_hunts(spec)
+        if not result:
+            return None
+
+        return result[0]
 
     def get_hunt_by_name(self, name):
         """Returns the Hunt with the given name, or None if the hunt does not exist."""
@@ -397,8 +432,11 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         for hunt in self._hunts:
             hunt.wait(*args, **kwargs)
 
-        self.manager_thread.join()
-        self.update_manager_thread.join()
+        if self.manager_thread:
+            self.manager_thread.join()
+
+        if self.update_manager_thread:
+            self.update_manager_thread.join()
 
     def update_loop(self):
         logging.debug(f"started update manager for {self}")
@@ -420,7 +458,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         with self.hunt_lock:
             # have any hunts been modified?
             for hunt in self._hunts:
-                if hunt.ini_is_modified:
+                if hunt.is_modified:
                     logging.info(f"detected modification to {hunt}")
                     trigger_reload = True
 
@@ -452,6 +490,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
     def execute(self):
         # the next one to run should be the first in our list
         for hunt in self.hunts:
+            if not hunt.enabled:
+                continue
+
             if hunt.ready:
                 self.execute_hunt(hunt)
                 continue
@@ -583,9 +624,6 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
             logging.debug(f"loading hunt from {hunt_config}")
             hunt.load_from_ini(hunt_config)
             hunt.type = self.hunt_type
-            if not hunt.enabled:
-                logging.info(f"skipping disabled hunt {hunt} from {hunt_config}")
-                continue
 
             if hunt_filter(hunt):
                 logging.info(f"loaded {hunt} from {hunt_config}")

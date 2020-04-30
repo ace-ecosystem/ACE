@@ -210,6 +210,7 @@ class QRadarAPIAnalyzer(AnalysisModule):
 
 
         try:
+            logging.info(f"executing qradar query: {target_query}")
             analysis.query_results = client.execute_aql_query(target_query, 
                                                               continue_check_callback=lambda x: not self.engine.shutdown)
         except Exception as e:

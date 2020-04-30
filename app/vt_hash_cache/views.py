@@ -9,6 +9,7 @@ import requests
 
 import saq
 from saq.database import get_db_connection, execute_with_retry
+from saq.proxy import proxies
 from saq.error import report_exception
 
 from app.vt_hash_cache import *
@@ -98,7 +99,7 @@ def query():
                     r = requests.get(saq.CONFIG['virus_total']['query_url'], params={
                         'resource': _hash,
                         'apikey': saq.CONFIG['virus_total']['api_key']}, 
-                        proxies=saq.PROXIES, 
+                        proxies=proxies(),
                         timeout=5,
                         verify=False)
                 except Exception as e:

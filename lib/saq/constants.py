@@ -7,6 +7,7 @@
 INSTANCE_TYPE_PRODUCTION = 'PRODUCTION'
 INSTANCE_TYPE_QA = 'QA'
 INSTANCE_TYPE_DEV = 'DEV'
+INSTANCE_TYPE_UNITTEST = 'UNITTEST'
 
 #
 # required fields for every alert
@@ -35,11 +36,11 @@ F_DISPOSITION = 'disposition'
 
 F_ASSET = 'asset'
 F_CIDR = 'cidr'
+F_DLP_INCIDENT = 'dlp_incident'
 F_EMAIL_ADDRESS = 'email_address'
 F_EMAIL_CONVERSATION = 'email_conversation'
 F_EMAIL_DELIVERY = 'email_delivery'
 F_EXTERNAL_UID = 'external_uid'
-F_EXABEAM_SESSION = 'exabeam_session'
 F_FILE = 'file'
 F_FILE_LOCATION = 'file_location'
 F_FILE_NAME = 'file_name'
@@ -69,11 +70,11 @@ F_YARA_RULE = 'yara_rule'
 OBSERVABLE_DESCRIPTIONS = {
     F_ASSET: 'a F_IPV4 identified to be a managed asset',
     F_CIDR: 'IPv4 range in CIDR notation',
+    F_DLP_INCIDENT: 'id of a symantec dlp incident',
     F_EMAIL_ADDRESS: 'email address',
     F_EMAIL_CONVERSATION: 'a conversation between a source email address (MAIL FROM) and a destination email address (RCPT TO)',
     F_EMAIL_DELIVERY: 'a delivery of a an email to a target mailbox',
     F_EXTERNAL_UID: 'unique identifier for something that is stored in an external tool. Format: tool_name:uid',
-    F_EXABEAM_SESSION: 'session id of an exabeam session',
     F_FILE: 'path to an attached file',
     F_FILE_LOCATION: 'the location of file with format hostname@full_path',
     F_FILE_NAME: 'a file name (no directory path)',
@@ -104,11 +105,11 @@ OBSERVABLE_DESCRIPTIONS = {
 VALID_OBSERVABLE_TYPES = sorted([
     F_ASSET,
     F_CIDR,
+    F_DLP_INCIDENT,
     F_EMAIL_ADDRESS,
     F_EMAIL_CONVERSATION,
     F_EMAIL_DELIVERY,
     F_EXTERNAL_UID,
-    F_EXABEAM_SESSION,
     F_FILE,
     F_FILE_LOCATION,
     F_FILE_NAME,
@@ -208,6 +209,8 @@ DISPOSITION_INSTALLATION = 'INSTALLATION'
 DISPOSITION_COMMAND_AND_CONTROL = 'COMMAND_AND_CONTROL'
 DISPOSITION_EXFIL = 'EXFIL'
 DISPOSITION_DAMAGE = 'DAMAGE'
+DISPOSITION_INSIDER_DATA_CONTROL = 'INSIDER_DATA_CONTROL'
+DISPOSITION_INSIDER_DATA_EXFIL = 'INSIDER_DATA_EXFIL'
 
 # disposition to label mapping
 # each disposition has a specific CSS class assigned to it
@@ -227,6 +230,8 @@ DISPOSITION_CSS_MAPPING = {
     DISPOSITION_COMMAND_AND_CONTROL: 'danger',
     DISPOSITION_EXFIL: 'danger',
     DISPOSITION_DAMAGE: 'danger',
+    DISPOSITION_INSIDER_DATA_CONTROL: 'warning',
+    DISPOSITION_INSIDER_DATA_EXFIL: 'danger',
 }
 
 VALID_ALERT_DISPOSITIONS = [
@@ -243,7 +248,9 @@ VALID_ALERT_DISPOSITIONS = [
     DISPOSITION_INSTALLATION,
     DISPOSITION_COMMAND_AND_CONTROL,
     DISPOSITION_EXFIL,
-    DISPOSITION_DAMAGE
+    DISPOSITION_DAMAGE,
+    DISPOSITION_INSIDER_DATA_CONTROL,
+    DISPOSITION_INSIDER_DATA_EXFIL
 ]
 
 IGNORE_ALERT_DISPOSITIONS = [
@@ -266,8 +273,30 @@ MAL_ALERT_DISPOSITIONS = [
     DISPOSITION_INSTALLATION,
     DISPOSITION_COMMAND_AND_CONTROL,
     DISPOSITION_EXFIL,
-    DISPOSITION_DAMAGE
+    DISPOSITION_DAMAGE,
+    DISPOSITION_INSIDER_DATA_CONTROL,
+    DISPOSITION_INSIDER_DATA_EXFIL
 ]
+
+DISPOSITION_RANK = {
+    None: -2,
+    DISPOSITION_IGNORE: -1,
+    DISPOSITION_FALSE_POSITIVE: 0,
+    DISPOSITION_UNKNOWN: 1,
+    DISPOSITION_REVIEWED: 2,
+    DISPOSITION_GRAYWARE: 3,
+    DISPOSITION_POLICY_VIOLATION: 4,
+    DISPOSITION_RECONNAISSANCE: 5,
+    DISPOSITION_WEAPONIZATION: 6,
+    DISPOSITION_INSIDER_DATA_CONTROL: 7,
+    DISPOSITION_DELIVERY: 8,
+    DISPOSITION_EXPLOITATION: 9,
+    DISPOSITION_INSTALLATION: 10,
+    DISPOSITION_COMMAND_AND_CONTROL: 11,
+    DISPOSITION_INSIDER_DATA_EXFIL: 12,
+    DISPOSITION_EXFIL: 13,
+    DISPOSITION_DAMAGE: 14
+}
 
 # --- DIRECTIVES
 # archive the file
@@ -407,7 +436,7 @@ VALID_EVENTS = [
 # available actions for observables
 ACTION_CLEAR_CLOUDPHISH_ALERT = 'clear_cloudphish_alert'
 ACTION_COLLECT_FILE = 'collect_file'
-ACTION_EXABEAM_SESSION_VIEW_EXABEAM = 'exabeam_session_view_exabeam'
+ACTION_DLP_INCIDENT_VIEW_DLP = 'dlp_incident_view_dlp'
 ACTION_FILE_DOWNLOAD = 'file_download'
 ACTION_FILE_DOWNLOAD_AS_ZIP = 'file_download_as_zip'
 ACTION_FILE_UPLOAD_VT = 'file_upload_vt'

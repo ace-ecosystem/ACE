@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 import warnings
+import re
 
 from contextlib import closing, contextmanager
 
@@ -560,52 +561,19 @@ class Event(Base):
 
     @property
     def disposition(self):
-        dis_rank = {
-                'FALSE_POSITIVE':0,
-                'IGNORE':-1,
-                'UNKNOWN':1,
-                'REVIEWED':2,
-                'POLICY_VIOLATION':3,
-                'GRAYWARE':3,
-                'RECONNAISSANCE':4,
-                'WEAPONIZATION':5,
-                'DELIVERY':6,
-                'EXPLOITATION':7,
-                'INSTALLATION':8,
-                'COMMAND_AND_CONTROL':9,
-                'EXFIL':10,
-                'DAMAGE':11}
         disposition = None
         for alert_mapping in self.alert_mappings:
             if alert_mapping.alert.disposition is None:
                 logging.warning(f"alert {alert_mapping.alert} added to event without disposition {alert_mapping.event_id}")
                 continue
 
-            if disposition is None or dis_rank[alert_mapping.alert.disposition] > dis_rank[disposition]:
+            if disposition is None or saq.constants.DISPOSITION_RANK[alert_mapping.alert.disposition] > saq.constants.DISPOSITION_RANK[disposition]:
                 disposition = alert_mapping.alert.disposition
         return disposition
 
     @property
     def disposition_rank(self):
-        if self.disposition is None:
-            return -2
-
-        dis_rank = {
-                'FALSE_POSITIVE':0,
-                'IGNORE':-1,
-                'UNKNOWN':1,
-                'REVIEWED':2,
-                'POLICY_VIOLATION':3,
-                'GRAYWARE':3,
-                'RECONNAISSANCE':4,
-                'WEAPONIZATION':5,
-                'DELIVERY':6,
-                'EXPLOITATION':7,
-                'INSTALLATION':8,
-                'COMMAND_AND_CONTROL':9,
-                'EXFIL':10,
-                'DAMAGE':11}
-        return dis_rank[self.disposition]
+        return saq.constants.DISPOSITION_RANK[self.disposition]
 
     @property
     def sorted_tags(self):
@@ -797,6 +765,10 @@ class Alert(RootAnalysis, Base):
         nullable=False, 
         server_default=text('CURRENT_TIMESTAMP'))
 
+    event_time = Column(
+        TIMESTAMP,
+        nullable=True)
+
     def _datetime_to_sla_time_zone(self, dt=None):
         """Returns a datetime.datetime object to it's equivalent in the SLA time zone."""
         if dt is not None:
@@ -934,14 +906,17 @@ class Alert(RootAnalysis, Base):
     @property
     def icon(self):
         """Returns appropriate icon name by attempting to match on self.description or self.tool."""
-        description_tokens = {token.lower() for token in self.description.split(' ')}
+        description_tokens = {token.lower() for token in re.split('[ _]', self.description)}
         tool_tokens = {token.lower() for token in self.tool.split(' ')}
+        type_tokens = {token.lower() for token in self.alert_type.split(' ')}
 
         available_favicons = set(saq.CONFIG['gui']['alert_favicons'].split(','))
 
         result = available_favicons.intersection(description_tokens)
         if not result:
             result = available_favicons.intersection(tool_tokens)
+            if not result:
+                result = available_favicons.intersection(type_tokens)
 
         if not result:
             return 'default'
@@ -963,20 +938,22 @@ class Alert(RootAnalysis, Base):
 
     disposition = Column(
         Enum(
-            'FALSE_POSITIVE',
-            'IGNORE',
-            'UNKNOWN',
-            'REVIEWED',
-            'GRAYWARE',
-            'POLICY_VIOLATION',
-            'RECONNAISSANCE',
-            'WEAPONIZATION',
-            'DELIVERY',
-            'EXPLOITATION',
-            'INSTALLATION',
-            'COMMAND_AND_CONTROL',
-            'EXFIL',
-            'DAMAGE'),
+            saq.constants.DISPOSITION_FALSE_POSITIVE,
+            saq.constants.DISPOSITION_IGNORE,
+            saq.constants.DISPOSITION_UNKNOWN,
+            saq.constants.DISPOSITION_REVIEWED,
+            saq.constants.DISPOSITION_GRAYWARE,
+            saq.constants.DISPOSITION_POLICY_VIOLATION,
+            saq.constants.DISPOSITION_RECONNAISSANCE,
+            saq.constants.DISPOSITION_WEAPONIZATION,
+            saq.constants.DISPOSITION_DELIVERY,
+            saq.constants.DISPOSITION_EXPLOITATION,
+            saq.constants.DISPOSITION_INSTALLATION,
+            saq.constants.DISPOSITION_COMMAND_AND_CONTROL,
+            saq.constants.DISPOSITION_EXFIL,
+            saq.constants.DISPOSITION_DAMAGE,
+            saq.constants.DISPOSITION_INSIDER_DATA_CONTROL,
+            saq.constants.DISPOSITION_INSIDER_DATA_EXFIL),
         nullable=True)
 
     disposition_user_id = Column(

@@ -23,6 +23,7 @@ def get_supported_api_version():
 
 @common.route('/get_valid_companies', methods=['GET'])
 def get_valid_companies():
+    # XXX Does it make more sense for this to return saq.NODE_COMPANIES?
     result = []
     for company in db.session.query(Company):
         result.append(company.json)

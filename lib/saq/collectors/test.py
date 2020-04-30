@@ -90,7 +90,7 @@ class TestCase(CollectorBaseTestCase):
     @use_db
     def test_add_group(self, db, c):
         collector = get_service_class('test_collector')()
-        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace')
+        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace', target_node_as_company_id=None)
         
         c.execute("SELECT id, name FROM work_distribution_groups")
         result = c.fetchall()
@@ -101,7 +101,7 @@ class TestCase(CollectorBaseTestCase):
 
         # when we do it a second time, we should get the name group ID since we used the same name
         collector = get_service_class('test_collector')()
-        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace')
+        collector.add_group('test', 100, True, saq.COMPANY_ID, 'ace', target_node_as_company_id=None)
         
         c.execute("SELECT id, name FROM work_distribution_groups")
         result = c.fetchall()
@@ -120,6 +120,15 @@ class TestCase(CollectorBaseTestCase):
         self.assertEquals(collector.remote_node_groups[0].coverage, 100)
         self.assertEquals(collector.remote_node_groups[0].full_delivery, True)
         self.assertEquals(collector.remote_node_groups[0].database, 'ace')
+
+    def test_load_disabled_groups(self):
+
+        saq.CONFIG['collection_group_unittest']['enabled'] = 'no'
+
+        collector = get_service_class('test_collector')()
+        collector.load_groups()
+        
+        self.assertEquals(len(collector.remote_node_groups), 0)
 
     def test_missing_groups(self):
         # a collector cannot be started without adding at least one group

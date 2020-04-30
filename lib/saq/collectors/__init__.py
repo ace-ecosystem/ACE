@@ -78,7 +78,7 @@ tags = {','.join(tags)}
 """.encode('utf8', errors='backslashreplace')
 
 class RemoteNode(object):
-    def __init__(self, id, name, location, any_mode, last_update, analysis_mode, workload_count):
+    def __init__(self, id, name, location, any_mode, last_update, analysis_mode, workload_count, company_id=None):
         from saq.engine import translate_node
 
         self.id = id
@@ -88,6 +88,7 @@ class RemoteNode(object):
         self.last_update = last_update
         self.analysis_mode = analysis_mode
         self.workload_count = workload_count
+        self.company_id = company_id
 
         # the directory that contains any files that to be transfered along with submissions
         self.incoming_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['incoming_dir'])
@@ -120,6 +121,7 @@ class RemoteNode(object):
             details=submission.details,
             observables=submission.observables,
             tags=submission.tags,
+            company_id=self.company_id,
             files=_files)
 
         try:
@@ -141,7 +143,7 @@ class RemoteNodeGroup(object):
     """Represents a collection of one or more RemoteNode objects that share the
        same group configuration property."""
 
-    def __init__(self, name, coverage, full_delivery, company_id, database, group_id, workload_type_id, shutdown_event, batch_size=32):
+    def __init__(self, name, coverage, full_delivery, company_id, database, group_id, workload_type_id, shutdown_event, batch_size=32, target_node_as_company_id=None):
         assert isinstance(name, str) and name
         assert isinstance(coverage, int) and coverage > 0 and coverage <= 100
         assert isinstance(full_delivery, bool)
@@ -164,6 +166,9 @@ class RemoteNodeGroup(object):
 
         # the company this node group belongs to
         self.company_id = company_id
+
+        # A company id for the primary node sharing this company data
+        self.target_node_as_company_id = target_node_as_company_id
 
         # the name of the database to query for node status
         self.database = database
@@ -292,7 +297,10 @@ ORDER BY
     WORKLOAD_COUNT ASC,
     nodes.last_update ASC
 """.format(','.join(['%s' for _ in available_modes]))
-            params = [ self.company_id, self.node_status_update_frequency * 2 ]
+            if self.target_node_as_company_id is not None:
+                params = [ self.target_node_as_company_id, self.node_status_update_frequency * 2 ]
+            else:
+                params = [ self.company_id, self.node_status_update_frequency * 2 ]
             params.extend(available_modes)
             node_c.execute(sql, tuple(params))
             node_status = node_c.fetchall()
@@ -315,7 +323,7 @@ ORDER BY
         any_mode_nodes = [] # list of nodes with any_mode set to True
         
         for node_id, name, location, any_mode, last_update, analysis_mode, workload_count in node_status:
-            remote_node = RemoteNode(node_id, name, location, any_mode, last_update, analysis_mode, workload_count)
+            remote_node = RemoteNode(node_id, name, location, any_mode, last_update, analysis_mode, workload_count, company_id=self.company_id)
             if any_mode:
                 any_mode_nodes.append(remote_node)
 
@@ -658,26 +666,48 @@ class Collector(ACEService, Persistable):
 
         logging.info("collection ended")
 
-    @use_db
-    def add_group(self, name, coverage, full_delivery, company_id, database, db, c):
-        c.execute("SELECT id FROM work_distribution_groups WHERE name = %s", (name,))
-        row = c.fetchone()
-        if row is None:
-            c.execute("INSERT INTO work_distribution_groups ( name ) VALUES ( %s )", (name,))
-            group_id = c.lastrowid
-            db.commit()
-        else:
-            group_id = row[0]
+    def add_group(
+        self, 
+        name, 
+        coverage, 
+        full_delivery, 
+        company_id, 
+        database, 
+        target_node_as_company_id=None):
 
-        remote_node_group = RemoteNodeGroup(name, coverage, full_delivery, company_id, database, group_id, self.workload_type_id, self.service_shutdown_event)
-        self.remote_node_groups.append(remote_node_group)
-        logging.info("added {}".format(remote_node_group))
-        return remote_node_group
+        with get_db_connection() as db:
+            c = db.cursor()
+            c.execute("SELECT id FROM work_distribution_groups WHERE name = %s", (name,))
+            row = c.fetchone()
+            if row is None:
+                c.execute("INSERT INTO work_distribution_groups ( name ) VALUES ( %s )", (name,))
+                group_id = c.lastrowid
+                db.commit()
+            else:
+                group_id = row[0]
+
+            remote_node_group = RemoteNodeGroup(
+                name, 
+                coverage, 
+                full_delivery, 
+                company_id, 
+                database, 
+                group_id, 
+                self.workload_type_id, 
+                self.service_shutdown_event, 
+                target_node_as_company_id=target_node_as_company_id)
+            self.remote_node_groups.append(remote_node_group)
+            logging.info("added {}".format(remote_node_group))
+            return remote_node_group
 
     def load_groups(self):
         """Loads groups from the ACE configuration file."""
         for section in saq.CONFIG.keys():
             if not section.startswith('collection_group_'):
+                continue
+
+            if not saq.CONFIG[section].getboolean('enabled', fallback=True):
+                logging.debug(f"collection group {section} disabled")
                 continue
 
             group_name = section[len('collection_group_'):]
@@ -686,9 +716,14 @@ class Collector(ACEService, Persistable):
             company_id = saq.CONFIG[section].getint('company_id')
             database = saq.CONFIG[section]['database']
             
-            logging.info("loaded group {} coverage {} full_delivery {} company_id {} database {}".format(
-                         group_name, coverage, full_delivery, company_id, database))
-            self.add_group(group_name, coverage, full_delivery, company_id, database)
+            target_node_as_company_id = None
+            if 'target_node_as_company_id' in saq.CONFIG[section]:
+                target_node_as_company_id = saq.CONFIG[section]['target_node_as_company_id']
+
+            logging.info("loaded group {} coverage {} full_delivery {} company_id {} database {} target_node_as_company_id {}".format(
+                         group_name, coverage, full_delivery, company_id, database, target_node_as_company_id))
+            self.add_group(group_name, coverage, full_delivery, company_id, database, target_node_as_company_id)
+
 
     def _signal_handler(self, signum, frame):
         self.stop()

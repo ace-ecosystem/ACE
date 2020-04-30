@@ -184,6 +184,10 @@ When investigating an alert, there is a categorization model for analysts to fol
 |                     | + Process Control Systems are tampered with and a facility must shutdown until repairs are made              |
 |                     | + A public facing website is compromised and defaced or serves malware to other victums                      |
 +---------------------+--------------------------------------------------------------------------------------------------------------+
+| INSIDER_DATA_CONTROL| Employee has the data and is attempting to send it out of the bank.                                          |
++---------------------+--------------------------------------------------------------------------------------------------------------+
+| INSIDER_DATA_EXFIL  | Sensitive data leaves the bank below privacy impact threshold.                                               |
++---------------------+--------------------------------------------------------------------------------------------------------------+
 
 GUI Overview
 ------------

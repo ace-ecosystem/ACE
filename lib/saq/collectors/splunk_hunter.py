@@ -18,9 +18,6 @@ class SplunkHunt(QueryHunt):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.use_index_time = bool()
-        self.earliest = None
-        self.latest = None
-
         self.tool_instance = saq.CONFIG['splunk']['uri']
 
         # supports hash-style comments
@@ -28,6 +25,8 @@ class SplunkHunt(QueryHunt):
 
         # splunk queries can optionally have <include:> directives
         self._query = None
+        self.search_id = None
+        self.time_spec = None
 
     def extract_event_timestamp(self, event):
         if '_time' not in event:
@@ -47,6 +46,10 @@ class SplunkHunt(QueryHunt):
                 m.group(4),
                 m.group(5),
                 m.group(6)), '%Y-%m-%d %H:%M:%S')
+
+    def formatted_query(self):
+        result = self.query.format(time_spec=self.time_spec)
+        return result
 
     @property
     def query(self):
@@ -79,10 +82,6 @@ class SplunkHunt(QueryHunt):
         section_rule = config['rule']
         self.use_index_time = section_rule.getboolean('use_index_time')
 
-        # earliest and latest are deprecated
-        self.earliest = section_rule['earliest']
-        self.latest = section_rule['latest']
-
         # make sure the time spec formatter is available
         # this should really be done at load time...
         if '{time_spec}' not in self.query:
@@ -93,11 +92,11 @@ class SplunkHunt(QueryHunt):
         latest = end_time.strftime('%m/%d/%Y:%H:%M:%S')
 
         if self.use_index_time:
-            time_spec = f'_index_earliest = {earliest} _index_latest = {latest}'
+            self.time_spec = f'_index_earliest = {earliest} _index_latest = {latest}'
         else:
-            time_spec = f'earliest = {earliest} latest = {latest}'
+            self.time_spec = f'earliest = {earliest} latest = {latest}'
 
-        query = self.query.format(time_spec=time_spec)
+        query = self.query.format(time_spec=self.time_spec)
 
         logging.info(f"executing hunt {self.name} with start time {earliest} end time {latest}")
 
@@ -112,6 +111,7 @@ class SplunkHunt(QueryHunt):
             query_timeout=self.query_timeout)
 
         search_result = searcher.query(query)
+        self.search_id = searcher.search_id
 
         if not search_result:
             logging.error(f"search failed for {self}")

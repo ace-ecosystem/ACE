@@ -143,7 +143,7 @@ def execute_hunt(args):
         sys.exit(1)
 
     collector.hunt_managers[hunt_type].load_hunts_from_config()
-    hunt = collector.hunt_managers[hunt_type].get_hunt_by_name(hunt_name)
+    hunt = collector.hunt_managers[hunt_type].get_hunt(lambda hunt: hunt_name in hunt.ini_path)
     if hunt is None:
         logging.error(f"unknown hunt {hunt_name} for type {hunt_type}")
         sys.exit(1)
@@ -1983,13 +1983,13 @@ def print_file_contents(uuid, submission):
 
 def display_submission(args):
     import saq
-    from saq.analysis import _JSONEncoder
-    from saq.database import Alert
+    from saq.analysis import _JSONEncoder, RootAnalysis
     from saq.submission import Submission, get_submission_target_buffer
 
-    # grab alert's submission data by uuid
-    alert = saq.db.query(Alert).filter(Alert.uuid == args.uuid).one()
-    submission = Submission(**alert.submission)
+    root = RootAnalysis(storage_dir=args.storage_dir)
+    root.load()
+
+    submission = Submission(**root.submission)
 
     if args.submission_cmd == 'submission':
         print(get_submission_target_buffer(submission).decode('utf8'))
@@ -2019,26 +2019,26 @@ display_submission_sp = display_submission_parser.add_subparsers(dest='submissio
 
 display_submission_all_parser = display_submission_sp.add_parser('all',
     help="Displays the contents for all components (submission, observables, files) within a given submission as bytes objects.")
-display_submission_all_parser.add_argument('uuid',
-    help="The uuid of the submission to display")
+display_submission_all_parser.add_argument('storage_dir',
+    help="The storage directory of the submission to display")
 display_submission_all_parser.set_defaults(func=display_submission)
 
 display_submission_submission_parser = display_submission_sp.add_parser('submission',
     help='Displays the buffer used for scanning a given file submission as a bytes object.')
-display_submission_submission_parser.add_argument('uuid',
-    help="The uuid of the submission to display")
+display_submission_submission_parser.add_argument('storage_dir',
+    help="The storage directory of the submission to display")
 display_submission_submission_parser.set_defaults(func=display_submission)
 
 display_submission_observable_parser = display_submission_sp.add_parser('observable',
     help="Displays the buffer used for scanning a given observable submission as a bytes object.")
-display_submission_observable_parser.add_argument('uuid',
-    help="The uuid of the submission to display")
+display_submission_observable_parser.add_argument('storage_dir',
+    help="The storage directory of the submission to display")
 display_submission_observable_parser.set_defaults(func=display_submission)
 
 display_submission_file_parser = display_submission_sp.add_parser('file',
     help="Displays the buffer (raw content) used for scanning a given file submission.")
-display_submission_file_parser.add_argument('uuid',
-    help="The uuid of the submission to display")
+display_submission_file_parser.add_argument('storage_dir',
+    help="The storage directory of the submission to display")
 display_submission_file_parser.set_defaults(func=display_submission)
 
 

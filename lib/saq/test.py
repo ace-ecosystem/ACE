@@ -1,39 +1,5 @@
 # vim: sw=4:ts=4:et
 
-#__all__ = [
-    #'EV_TEST_DATE',
-    #'EV_ROOT_ANALYSIS_TOOL',
-    #'EV_ROOT_ANALYSIS_TOOL_INSTANCE',
-    #'EV_ROOT_ANALYSIS_ALERT_TYPE',
-    #'EV_ROOT_ANALYSIS_DESCRIPTION',
-    #'EV_ROOT_ANALYSIS_EVENT_TIME',
-    #'EV_ROOT_ANALYSIS_NAME',
-    #'EV_ROOT_ANALYSIS_UUID',
-    #'create_root_analysis',
-    #'ACEBasicTestCase',
-    #'ACEEngineTestCase',
-    #'ACEModuleTestCase',
-    #'reset_alerts',
-    #'log_count',
-    #'wait_for_log_count',
-    #'WaitTimedOutError',
-    #'wait_for_log_entry',
-    #'track_io',
-    #'send_test_message',
-    #'recv_test_message',
-    #'splunk_query',
-    #'wait_for',
-    #'enable_module',
-    #'force_alerts',
-    #'GUIServer',
-    #'search_log',
-    #'search_log_regex',
-    #'search_log_condition',
-    #'TestEngine',
-    #'UNITTEST_USER_NAME',
-    #'UNITTEST_USER_ID',
-#]
-
 import atexit
 import datetime
 import logging
@@ -52,6 +18,7 @@ from subprocess import Popen, PIPE
 import saq
 import saq.engine
 from saq.analysis import RootAnalysis, _enable_io_tracker, _disable_io_tracker
+from saq.constants import *
 from saq.crypto import get_aes_key
 from saq.database import initialize_database, get_db_connection, use_db
 from saq.engine import Engine
@@ -89,11 +56,22 @@ def force_alerts(target_function):
 def reset_alerts(target_function):
     """Deletes all alerts in the database."""
     def wrapper(*args, **kwargs):
+        if saq.INSTANCE_TYPE != INSTANCE_TYPE_UNITTEST:
+            raise RuntimeError("invalid instance type")
+
         with get_db_connection() as db:
             c = db.cursor()
             c.execute("""DELETE FROM alerts""")
             db.commit()
 
+        return target_function(*args, **kwargs)
+    return wrapper
+
+def verify_instance_type(target_function):
+    """Raises a RuntimeError if the current INSTANCE_TYPE is not UNITTEST."""
+    def wrapper(*args, **kwargs):
+        if saq.INSTANCE_TYPE != INSTANCE_TYPE_UNITTEST:
+            raise RuntimeError(f"invalid instance type {saq.INSTANCE_TYPE}")
         return target_function(*args, **kwargs)
     return wrapper
 
@@ -314,12 +292,8 @@ def initialize_test_environment():
             args=None, 
             relative_dir=None)
 
-    if saq.CONFIG['global']['instance_type'] not in [ 'PRODUCTION', 'QA', 'DEV' ]:
+    if saq.CONFIG['global']['instance_type'] != INSTANCE_TYPE_UNITTEST:
         sys.stderr.write('\n\n *** CRITICAL ERROR *** \n\ninvalid instance_type setting in configuration\n')
-        sys.exit(1)
-
-    if saq.CONFIG['global']['instance_type'] == 'PRODUCTION':
-        sys.stderr.write('\n\n *** PROTECT PRODUCTION *** \ndo not execute this in production, idiot\n')
         sys.exit(1)
 
     # additional logging required for testing
@@ -587,6 +561,7 @@ class ACEBasicTestCase(TestCase):
 
             time.sleep(delay)
 
+    @verify_instance_type
     def reset(self):
         """Resets everything back to the default state."""
         self.reset_config()
@@ -602,6 +577,7 @@ class ACEBasicTestCase(TestCase):
         # re-enable encryption in case we disabled it
         #saq.ENCRYPTION_PASSWORD = get_aes_key('password')
 
+    @verify_instance_type
     def reset_var_dir(self):
         # clears out the var directory
         shutil.rmtree(os.path.join(saq.DATA_DIR, 'var'))
@@ -610,6 +586,7 @@ class ACEBasicTestCase(TestCase):
         os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'daemon'))
         os.mkdir(os.path.join(saq.DATA_DIR, 'var', 'services'))
 
+    @verify_instance_type
     def reset_log_exports(self):
         # reset splunk export logs
         splunk_log_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['splunk_logging']['splunk_log_dir'])
@@ -623,6 +600,7 @@ class ACEBasicTestCase(TestCase):
             shutil.rmtree(es_log_dir)
             os.mkdir(es_log_dir)
 
+    @verify_instance_type
     def reset_crawlphish(self):
         self.whitelist_path = saq.CONFIG['analysis_module_crawlphish']['whitelist_path'] \
                             = os.path.join('etc', 'crawlphish.unittest.whitelist')
@@ -653,15 +631,18 @@ class ACEBasicTestCase(TestCase):
         with open(self.whitelist_path, 'w') as fp:
             fp.write('anonfile.xyz\n')
 
+    @verify_instance_type
     def reset_config(self):
         """Resets saq.CONFIG."""
         saq.load_configuration()
 
+    @verify_instance_type
     @use_db(name='hal9000')
     def reset_hal9000(self, db, c):
         c.execute("DELETE FROM observables")
         db.commit()
 
+    @verify_instance_type
     @use_db(name='brocess')
     def reset_brocess(self, db, c):
         # clear the brocess db
@@ -676,6 +657,7 @@ class ACEBasicTestCase(TestCase):
                             ( 'test2.local', 69, UNIX_TIMESTAMP(NOW()) )""")
         db.commit()
 
+    @verify_instance_type
     @use_db
     def reset_cloudphish(self, db, c):
         # clear cloudphish db
@@ -689,6 +671,7 @@ class ACEBasicTestCase(TestCase):
                 shutil.rmtree(cache_dir)
                 os.makedirs(cache_dir)
 
+    @verify_instance_type
     @use_db
     def reset_correlation(self, db, c):
         global UNITTEST_USER_ID
@@ -746,6 +729,7 @@ class ACEBasicTestCase(TestCase):
         import saq.database
         saq.database.initialize_automation_user()
 
+    @verify_instance_type
     def reset_email_archive(self):
         import socket
         archive_subdir = os.path.join(saq.DATA_DIR, saq.CONFIG['analysis_module_email_archiver']['archive_dir'], 

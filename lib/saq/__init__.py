@@ -163,6 +163,7 @@ def initialize(saq_home=None,
     global LOG_LEVEL
     global MANAGED_NETWORKS
     global MODULE_STATS_DIR
+    global NODE_COMPANIES
     global OTHER_PROXIES 
     global OTHER_SLA_SETTINGS
     global SAQ_HOME
@@ -223,7 +224,7 @@ def initialize(saq_home=None,
     CA_CHAIN_PATH = None
 
     # what type of instance is this?
-    INSTANCE_TYPE = INSTANCE_TYPE_PRODUCTION
+    INSTANCE_TYPE = None
 
     # SLA settings
     GLOBAL_SLA_SETTINGS = None
@@ -243,6 +244,9 @@ def initialize(saq_home=None,
     # the company/custom this node belongs to
     COMPANY_NAME = None
     COMPANY_ID = None
+
+    # A list of company names and IDs this node will work for
+    NODE_COMPANIES = []
 
     # go ahead and try to figure out what text encoding we're using
     DEFAULT_ENCODING = locale.getpreferredencoding()
@@ -454,13 +458,10 @@ def initialize(saq_home=None,
         sys.exit(1)
 
     # what type of instance is this?
-    if 'instance_type' in CONFIG['global']:
-        INSTANCE_TYPE = CONFIG['global']['instance_type']
-        if INSTANCE_TYPE not in [ INSTANCE_TYPE_PRODUCTION, INSTANCE_TYPE_QA, INSTANCE_TYPE_DEV ]:
-            logging.warning("invalid instance type {}: defaulting to {}".format(INSTANCE_TYPE, INSTANCE_TYPE_PRODUCTION))
-            INSTANCE_TYPE = INSTANCE_TYPE_PRODUCTION
-    else:
-        logging.warning("missing configuration instance_type in global section (defaulting to instance type {})".format(INSTANCE_TYPE_PRODUCTION))
+    INSTANCE_TYPE = CONFIG['global']['instance_type']
+    if INSTANCE_TYPE not in [ INSTANCE_TYPE_PRODUCTION, INSTANCE_TYPE_QA, INSTANCE_TYPE_DEV, INSTANCE_TYPE_UNITTEST ]:
+        logging.fatal("invalid instance type {}".format(INSTANCE_TYPE))
+        sys.exit(1)
 
     if FORCED_ALERTS: # lol
         logging.warning(" ****************************************************************** ")
@@ -488,6 +489,23 @@ def initialize(saq_home=None,
 
     # initialize the database connection
     initialize_database()
+
+    # Store validated list of companies this node can work with
+    # Assume configued defaults are already valid
+    NODE_COMPANIES.append({'name': COMPANY_NAME, 'id': COMPANY_ID})
+    _secondary_company_ids = CONFIG['global'].get('secondary_company_ids', None)
+    if _secondary_company_ids is not None:
+        _secondary_company_ids = [int(_) for _ in _secondary_company_ids.split(',')]
+        from saq.database import get_db_connection
+        try:
+            with get_db_connection() as db:
+                c = db.cursor()
+                c.execute("SELECT name,id FROM company")
+                for row in c:
+                    if row[1] in _secondary_company_ids:
+                        NODE_COMPANIES.append({'name': row[0], 'id': row[1]})
+        except Exception as e:
+            logging.error(f"problem querying database {e}")
 
     # initialize fallback semaphores
     initialize_fallback_semaphores()
