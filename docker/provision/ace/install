@@ -5,7 +5,10 @@
 # instead of being "installed" into some other directory
 #
 
-source installer/common.sh
+function fail() {
+    echo "installation failed: $1"
+    exit 1
+}
 
 for d in \
     data \

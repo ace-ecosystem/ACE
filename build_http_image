@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-
-#docker image build -f Docker.ace -t ace:latest .
-docker image build -f Docker.http -t ace_http:latest .
-docker rmi $(docker images -f "dangling=true" -q)

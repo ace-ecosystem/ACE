@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-
-#cd /opt/ace
-#source load_environment
-#ace enc set -p ace
-#ace -P ace service start ecs
-
-service apache2 start
-tail -F /var/log/apache2/error.log
