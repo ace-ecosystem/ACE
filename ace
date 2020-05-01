@@ -56,6 +56,8 @@ parser.add_argument('--relative-dir', required=False, dest='relative_dir', defau
     help="Assume all storage paths are relative to the given directory.  Defaults to current work directory.")
 parser.add_argument('-p', '--provide-decryption-password', required=False, action='store_true', dest='provide_decryption_password', default=False,
     help="Prompt for the decryption password. Read README.CRYPTO for details.")
+parser.add_argument('-P', '--set-decryption-password', dest='set_decryption_password', default=None,
+    help="Provide the decryption password on the command line. Not secure at all. Don't do it.")
 parser.add_argument('--trace', required=False, action='store_true', dest='trace', default=False,
     help="Enable execution tracing (debugging option).")
 parser.add_argument('-D', required=False, action='store_true', dest='debug_on_error', default=False,
@@ -1315,11 +1317,14 @@ def add_user(args):
         print(f"ERROR: invalid timezone {u.timezone}")
         sys.exit(1)
 
-    password = getpass("Enter password for {}: ".format(u.username))
-    confirm = getpass("Confirm password for {}: ".format(u.username))
-    if password != confirm:
-        logging.error("passwords do not match")
-        sys.exit(1)
+    if args.password:
+        password = args.password
+    else:
+        password = getpass("Enter password for {}: ".format(u.username))
+        confirm = getpass("Confirm password for {}: ".format(u.username))
+        if password != confirm:
+            logging.error("passwords do not match")
+            sys.exit(1)
 
     u.password = password
 
@@ -1343,6 +1348,9 @@ add_user_parser.add_argument('-z', '--timezone', required=False, default=None,
     help="The timezone the user is in. Defaults to UTC.")
 add_user_parser.add_argument('-d', '--display-name', required=False, default=None,
     help="The (optional) display name for the user.")
+add_user_parser.add_argument('--password', required=False, default=None,
+    help="""Provide the password for the user on the command line. 
+    Don't do this unless it's a part of automation.""")
 add_user_parser.set_defaults(func=add_user)
 
 # XXX DEPRECATED
@@ -3388,8 +3396,11 @@ def set_encryption_password(args):
                 print("but then you won't be able to access anything you've already encrypted")
                 continue
             
-        password = getpass.getpass("enter the new encryption password:")
-        password_2 = getpass.getpass("enter the new encryption password again for verification:")
+        if args.password is None:
+            password = getpass.getpass("enter the new encryption password:")
+            password_2 = getpass.getpass("enter the new encryption password again for verification:")
+        else:
+            password = password_2 = args.password
 
         if password != password_2:
             logging.error("passwords do not match")
@@ -3431,6 +3442,8 @@ set_encryption_password_parser.add_argument('-o', '--overwrite', default=False, 
     help="Overwrites an existing password without prompting.")
 set_encryption_password_parser.add_argument('-k', '--key', default=False, action='store_true',
     help="Use the sha256 hash of a string as the primary encryption key. The input is prompted for.")
+set_encryption_password_parser.add_argument('-p', '--password',
+    help="Use this for the password instead of prompting. Don't use this option unless you have a good reason to.")
 set_encryption_password_parser.set_defaults(func=set_encryption_password)
 
 def test_encryption_password(args):

@@ -146,8 +146,13 @@ class TestCase(ACEBasicTestCase):
         self.wait_for_condition(lambda: service.service_status == SERVICE_STATUS_RUNNING)
         service_pid = get_service_pid(service.service_name)
         os.kill(service_pid, signal.SIGKILL)
-        process = psutil.Process(service_pid)
-        process.wait(5)
+
+        try:
+            process = psutil.Process(service_pid)
+            process.wait(5)
+        except psutil.NoSuchProcess:
+            pass
+
         service = TestService()
         self.assertEquals(service.service_status, SERVICE_STATUS_STALE)
         service.start_service(daemon=True)

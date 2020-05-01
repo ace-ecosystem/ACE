@@ -22,6 +22,11 @@ from saq.util import create_directory
 
 CHUNK_SIZE = 64 * 1024
 
+CONFIG_KEY_ENCRYPTION_KEY = 'encryption-key'
+CONFIG_KEY_ENCRYPTION_SALT = 'encryption-salt'
+CONFIG_KEY_ENCRYPTION_VERIFICATION = 'encryption-verification'
+CONFIG_KEY_ENCRYPTION_ITERATIONS = 'encryption-iterations'
+
 class PasswordNotSetError(Exception):
     """Thrown when an attempt is made to load the encryption key but it has not been set."""
     pass
@@ -46,37 +51,37 @@ def read_ecs():
         except:
             pass
 
-def get_encryption_store_path():
-    """Returns the path to the directory that contains the encryption keys and meta data."""
-    return os.path.join(saq.DATA_DIR, saq.CONFIG['encryption']['encryption_store_path'])
-
 def encryption_key_set():
     """Returns True if the encryption key has been set, False otherwise."""
-    if not os.path.isdir(get_encryption_store_path()):
-        return False
+    from saq.configuration import get_database_config_value
+    for key in [ 
+        CONFIG_KEY_ENCRYPTION_KEY, 
+        CONFIG_KEY_ENCRYPTION_SALT,
+        CONFIG_KEY_ENCRYPTION_VERIFICATION,
+        CONFIG_KEY_ENCRYPTION_ITERATIONS ]:
+        if get_database_config_value(key) is None:
+            return False
 
-    return os.path.exists(os.path.join(get_encryption_store_path(), 'key')) \
-           and os.path.exists(os.path.join(get_encryption_store_path(), 'salt')) \
-           and os.path.exists(os.path.join(get_encryption_store_path(), 'verification')) \
-           and os.path.exists(os.path.join(get_encryption_store_path(), 'iterations'))
+    return True
+
+    #return os.path.exists(os.path.join(get_encryption_store_path(), 'key')) \
+           #and os.path.exists(os.path.join(get_encryption_store_path(), 'salt')) \
+           #and os.path.exists(os.path.join(get_encryption_store_path(), 'verification')) \
+           #and os.path.exists(os.path.join(get_encryption_store_path(), 'iterations'))
 
 def get_decryption_key(password):
     """Returns the 32 byte key used to decrypt the encryption key.
        Raises InvalidPasswordError if the password is incorrect.
        Raises PasswordNotSetError if the password has not been set."""
+    from saq.configuration import get_database_config_value
 
     if not encryption_key_set():
         raise PasswordNotSetError()
 
     # the salt and iterations used are stored when we set the password
-    with open(os.path.join(get_encryption_store_path(), 'salt'), 'rb') as fp:
-        salt = fp.read()
-
-    with open(os.path.join(get_encryption_store_path(), 'iterations'), 'r') as fp:
-        iterations = int(fp.read())
-
-    with open(os.path.join(get_encryption_store_path(), 'verification'), 'rb') as fp:
-        target_verification = fp.read()
+    salt = get_database_config_value(CONFIG_KEY_ENCRYPTION_SALT, bytes)
+    iterations = get_database_config_value(CONFIG_KEY_ENCRYPTION_ITERATIONS, int)
+    target_verification = get_database_config_value(CONFIG_KEY_ENCRYPTION_VERIFICATION, bytes)
 
     result = PBKDF2(password, salt, 64, iterations)
     if target_verification != result[32:]:
@@ -86,10 +91,9 @@ def get_decryption_key(password):
 
 def get_aes_key(password):
     """Returns the 32 byte system encryption key."""
+    from saq.configuration import get_database_config_value
     decryption_key = get_decryption_key(password)
-    with open(os.path.join(get_encryption_store_path(), 'key'), 'rb') as fp:
-        encrypted_key = fp.read()
-
+    encrypted_key = get_database_config_value(CONFIG_KEY_ENCRYPTION_KEY, bytes)
     return decrypt_chunk(encrypted_key, decryption_key)
 
 def set_encryption_password(password, old_password=None, key=None):
@@ -101,6 +105,7 @@ def set_encryption_password(password, old_password=None, key=None):
     assert isinstance(password, str)
     assert old_password is None or isinstance(old_password, str)
     assert key is None or (isinstance(key, bytes) and len(key) == 32)
+    from saq.configuration import set_database_config_value
 
     # has the encryption password been set yet?
     if encryption_key_set():
@@ -123,20 +128,24 @@ def set_encryption_password(password, old_password=None, key=None):
     user_encryption_key = result[:32] # the first 32 bytes is the user encryption key
     verification_key = result[32:] # and the second 32 bytes is used for password verification
 
-    create_directory(get_encryption_store_path())
+    #create_directory(get_encryption_store_path())
 
-    with open(os.path.join(get_encryption_store_path(), 'verification'), 'wb') as fp:
-        fp.write(verification_key)
+    set_database_config_value(CONFIG_KEY_ENCRYPTION_VERIFICATION, verification_key)
+    #with open(os.path.join(get_encryption_store_path(), 'verification'), 'wb') as fp:
+        #fp.write(verification_key)
 
     encrypted_encryption_key = encrypt_chunk(saq.ENCRYPTION_PASSWORD, password=user_encryption_key)
-    with open(os.path.join(get_encryption_store_path(), 'key'), 'wb') as fp:
-        fp.write(encrypted_encryption_key)
+    set_database_config_value(CONFIG_KEY_ENCRYPTION_KEY, encrypted_encryption_key)
+    #with open(os.path.join(get_encryption_store_path(), 'key'), 'wb') as fp:
+        #fp.write(encrypted_encryption_key)
 
-    with open(os.path.join(get_encryption_store_path(), 'salt'), 'wb') as fp:
-        fp.write(salt)
+    set_database_config_value(CONFIG_KEY_ENCRYPTION_SALT, salt)
+    #with open(os.path.join(get_encryption_store_path(), 'salt'), 'wb') as fp:
+        #fp.write(salt)
 
-    with open(os.path.join(get_encryption_store_path(), 'iterations'), 'w') as fp:
-        fp.write(str(iterations))
+    set_database_config_value(CONFIG_KEY_ENCRYPTION_ITERATIONS, iterations)
+    #with open(os.path.join(get_encryption_store_path(), 'iterations'), 'w') as fp:
+        #fp.write(str(iterations))
 
 # https://eli.thegreenplace.net/2010/06/25/aes-encryption-of-files-in-python-with-pycrypto
 def encrypt(source_path, target_path, password=None):

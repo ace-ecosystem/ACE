@@ -1,0 +1,5 @@
+FROM alpine:latest
+RUN apk add bash openssl 
+COPY ssl/ /ssl
+COPY docker/provision/ace/install_ssl_certs.sh .
+RUN ./install_ssl_certs.sh

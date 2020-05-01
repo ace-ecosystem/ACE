@@ -367,29 +367,45 @@ def initialize(saq_home=None,
     import saq.crypto
     from saq.crypto import get_aes_key, InvalidPasswordError
 
+    # XXX get rid of these checks for UNIT_TESTING
     if not saq.UNIT_TESTING:
-        # are we prompting for the decryption password?
-        if args and args.provide_decryption_password:
-            while True:
-                ENCRYPTION_PASSWORD_PLAINTEXT = getpass("Enter the decryption password:")
-                try:
-                    ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)
-                except InvalidPasswordError:
-                    logging.error("invalid encryption password")
-                    continue
+        try:
+            # are we prompting for the decryption password?
+            if args and args.set_decryption_password:
+                ENCRYPTION_PASSWORD_PLAINTEXT = args.set_decryption_password
+                ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)
+            elif args and args.provide_decryption_password:
+                while True:
+                    ENCRYPTION_PASSWORD_PLAINTEXT = getpass("Enter the decryption password:")
+                    try:
+                        ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)
+                    except InvalidPasswordError:
+                        logging.error("invalid encryption password")
+                        continue
 
-                break
+                    break
 
-        elif saq.crypto.encryption_key_set():
-            # if we're not prompting for it, are we running the encryption cache service yet?
-            logging.debug("reading encryption password from ecs")
-            ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
-            if ENCRYPTION_PASSWORD_PLAINTEXT is not None:
-                try:
-                    ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)
-                except InvalidPasswordError:
-                    logging.error("read password from ecs but the password is wrong")
-                    ENCRYPTION_PASSWORD_PLAINTEXT = None
+            elif saq.crypto.encryption_key_set():
+                # if we're not prompting for it then we can do one of two things
+                # 1) pass it in via an environment variable SAQ_ENC
+                # 2) run the encryption cache service 
+                if 'SAQ_ENC' in os.environ:
+                    logging.debug("reading encryption password from environment variable")
+                    ENCRYPTION_PASSWORD_PLAINTEXT = os.environ['SAQ_ENC']
+                    del os.environ['SAQ_ENC']
+                else:
+                    logging.debug("reading encryption password from ecs")
+                    ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
+
+                if ENCRYPTION_PASSWORD_PLAINTEXT is not None:
+                    try:
+                        ENCRYPTION_PASSWORD = get_aes_key(ENCRYPTION_PASSWORD_PLAINTEXT)
+                    except InvalidPasswordError:
+                        logging.error("read password from ecs but the password is wrong")
+                        ENCRYPTION_PASSWORD_PLAINTEXT = None
+
+        except Exception as e:
+            logging.error(f"unable to get encryption key: {e}")
 
     ENCRYPTION_INITIALIZED = True
 
@@ -518,7 +534,6 @@ def initialize(saq_home=None,
         os.path.join(TEMP_DIR),
         SERVICES_DIR,
         DAEMON_DIR, ]: 
-        #os.path.join(SAQ_HOME, maliciousdir) ]: # XXX remove
         try:
             create_directory(dir_path)
         except Exception as e:
@@ -566,9 +581,9 @@ def initialize(saq_home=None,
         DAEMON_MODE = args.daemon
 
     # make sure we've got the automation user set up
-    initialize_automation_user()
+    #initialize_automation_user()
 
     # initialize other systems
-    initialize_message_system()
+    #initialize_message_system()
 
     logging.debug("SAQ initialized")

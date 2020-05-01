@@ -1,0 +1,5 @@
+data/
+data_unittest/
+error_reports/
+logs/
+scan_failures/

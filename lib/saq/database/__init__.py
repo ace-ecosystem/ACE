@@ -1,3 +1,4 @@
+import collections
 import datetime
 import functools
 import logging
@@ -28,13 +29,186 @@ import pymysql.err
 
 from businesstime.holidays import Holidays
 
-# this provides a way for a process + thread to re-use the same database connection
-_global_db_cache = {} # key = current_process_id:current_thread_id:config_name, value = database connection
-_global_db_cache_lock = threading.RLock()
+class _database_pool(object):
+    def __init__(self, name):
+        # the name of the database this is a pool for
+        self.name = name
+        # all the database connections that are available
+        self.available = collections.deque()
+        # all the database connections that are currently in use
+        self.in_use = collections.deque()
+        # the thread and process that created the pool
+        self.tid = threading.get_ident()
+        self.pid = os.getpid()
+        # lock used to make changes to the queues
+        self.lock = threading.RLock()
 
-# used to determine if cached db connections are enabled for this process + thread
-_use_cache_flags = set() # key = current_process_id:current_thread_id
-_use_cache_flags_lock = threading.RLock()
+        config_section = f'database_{name}'
+        section = saq.CONFIG[config_section]
+        kwargs = {
+            'db': section['database'],
+            'user': section['username'],
+            'passwd': section['password'],
+            'charset': 'utf8mb4',
+        }
+
+        if 'hostname' in section:
+            kwargs['host'] = section['hostname']
+
+        if 'port' in section:
+            kwargs['port'] = section.getint('port')
+        
+        if 'unix_socket' in section:
+            kwargs['unix_socket'] = section['unix_socket']
+
+        kwargs['init_command'] = 'SET NAMES utf8mb4'
+
+        if 'ssl_ca' in section or 'ssl_key' in section or 'ssl_cert' in section:
+            kwargs['ssl'] = {}
+
+            if 'ssl_ca' in section and section['ssl_ca']:
+                path = abs_path(section['ssl_ca'])
+                if not os.path.exists(path):
+                    logging.error("ssl_ca file {} does not exist (specified in {})".format(path, configsection))
+                else:
+                    kwargs['ssl']['ca'] = path
+
+            if 'ssl_key' in section and section['ssl_key']:
+                path = abs_path(section['ssl_key'])
+                if not os.path.exists(path):
+                    logging.error("ssl_key file {} does not exist (specified in {})".format(path, configsection))
+                else:
+                    kwargs['ssl']['key'] = path
+
+            if 'ssl_cert' in section and section['ssl_cert']:
+                path = section['ssl_cert']
+                if not os.path.exists(path):
+                    logging.error("ssl_cert file {} does not exist (specified in {})".format(path, configsection))
+                else:
+                    kwargs['ssl']['cert'] = path
+
+        self.kwargs = kwargs
+
+    def get_connection(self):
+        connection = None
+        with self.lock:
+            try:
+                connection = self.available.pop()
+                #logging.debug(f"got pooled database connection to {self.name}")
+            except IndexError:
+                connection = self.open_new_connection()
+                logging.debug(f"got new database connection to {self.name}")
+
+            self.in_use.append(connection)
+            connection.acquired = datetime.datetime.now()
+
+        #logging.debug(f"pool size for {self.name} available {self.available_count} in_use {self.in_use_count}")
+        return connection
+
+    def return_connection(self, connection):
+        try:
+            connection.rollback()
+        except Exception as e:
+            logging.warning(f"unable to rollback connection on return to pool: {e}")
+            self.destroy_connection(connection)
+            return
+
+        with self.lock:
+            self.in_use.remove(connection)
+            self.available.append(connection)
+
+    def destroy_connection(self, connection):
+        try:
+            connection.close()
+        except Exception as e:
+            logging.debug(f"unable to close database connection: {e}")
+
+        with self.lock:
+            self.in_use.remove(connection)
+
+    def open_new_connection(self):
+        connection = pymysql.connect(**self.kwargs)
+        cursor = connection.cursor()
+        cursor.execute('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED')
+        cursor.close()
+        connection.commit()
+        return connection
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def clear(self):
+        with self.lock:
+            for c in self.available:
+                try:
+                    c.close()
+                except Exception as e:
+                    logging.error(f"unable to close database connection: {e}")
+
+            self.available.clear()
+
+            for c in self.in_use:
+                try:
+                    c.close()
+                except Exception as e:
+                    logging.error(f"unable to close database connection: {e}")
+
+            self.in_use.clear()
+
+    @property
+    def available_count(self):
+        with self.lock:
+            return len(self.available)
+
+    @property
+    def in_use_count(self):
+        with self.lock:
+            return len(self.in_use)
+
+
+# the global queue of database connections available for use
+_global_db_pools = {} # key = database name, value = _database_pool
+_global_db_pools_lock = threading.RLock()
+
+def get_pool(name='ace'):
+    if name is None:
+        name = 'ace'
+
+    with _global_db_pools_lock:
+        try:
+            result = _global_db_pools[name]
+        except KeyError:
+            result =_global_db_pools[name] = _database_pool(name)
+            logging.debug(f"created new pool {name}")
+
+        # if the pool was created on another process then we just creat another pool to use
+        # and ignore the old one (which may be used by the previous process)
+        if result.pid != os.getpid():
+            result = _global_db_pools[name] = _database_pool(name)
+            logging.debug(f"created new pool {name} under pid {result.pid}")
+
+        return result
+
+def reset_pools():
+    for name, pool in _global_db_pools.items():
+        pool.clear()
+
+    _global_db_pools.clear()
+
+@contextmanager
+def get_db_connection(name='ace'):
+    if name is None:
+        name = 'ace'
+
+    connection = None
+    try:
+        connection = get_pool(name).get_connection()
+        yield connection
+    finally:
+        get_pool(name).return_connection(connection)
 
 def use_db(method=None, name=None):
     """Utility decorator to pass an opened database connection and cursor object as keyword
@@ -136,209 +310,6 @@ def execute_with_retry(db, cursor, sql_or_func, params=(), attempts=2, commit=Fa
 
                     # TODO log innodb lock status
                     raise e
-
-def _get_cache_identifier():
-    """Returns the key for _use_cache_flags"""
-    return '{}:{}'.format(os.getpid(), threading.get_ident())
-
-def _get_cached_db_identifier(name):
-    """Returns the key for _global_db_cache"""
-    return '{}:{}:{}'.format(str(os.getpid()), str(threading.get_ident()), name)
-
-def enable_cached_db_connections():
-    """Enables cached database connections for this process and thread."""
-    with _use_cache_flags_lock:
-        _use_cache_flags.add(_get_cache_identifier())
-    logging.debug("using cached database connections for {}".format(_get_cache_identifier()))
-
-def disable_cached_db_connections():
-    """Disables cached database connections for this process and thread.
-       This function also removes any existing database connections that have been cached."""
-    with _global_db_cache_lock:
-        keys = list(_global_db_cache.keys())
-        for key in keys:
-            if key.startswith(_get_cache_identifier()):
-                name = key.split(':')[2]
-                logging.debug("requesting release of {} for {}".format(name, _get_cache_identifier()))
-                release_cached_db_connection(name)
-
-    with _use_cache_flags_lock:
-        if _get_cache_identifier() in _use_cache_flags:
-            _use_cache_flags.remove(_get_cache_identifier())
-
-def _cached_db_connections_enabled():
-    """Returns True if cached database connections are enabled for this process and thread."""
-    with _use_cache_flags_lock:
-        return _get_cache_identifier() in _use_cache_flags
-
-def _get_cached_db_connection(name='ace'):
-    """Returns the database connection by the given name.  Defaults to the ACE db config."""
-    if name is None:
-        name = 'ace'
-
-    config_section = 'database_{}'.format(name)
-
-    if config_section not in saq.CONFIG:
-        raise ValueError("invalid database {}".format(name))
-
-    try:
-        db_identifier = _get_cached_db_identifier(name)
-        with _global_db_cache_lock:
-            #logging.debug("acquiring existing cached database connection {}".format(db_identifier))
-            db = _global_db_cache[db_identifier]
-
-        try:
-            db.rollback()
-            #logging.debug("acquired cached database connection to {}".format(name))
-            return db
-
-        except Exception as e:
-            logging.info("possibly lost cached connection to database {}: {} ({})".format(name, e, type(e)))
-            try:
-                db.close()
-            except Exception as e:
-                logging.error("unable to close cached database connection to {}: {}".format(name, e))
-
-            try:
-                with _global_db_cache_lock:
-                    del _global_db_cache[db_identifier]
-            except Exception as e:
-                logging.error("unable to delete cached db {}: {}".format(db_identifier, e))
-
-            #return _get_db_connection(name)
-
-    except KeyError:
-        pass
-
-    try:
-        logging.debug("opening new cached database connection to {}".format(name))
-
-        with _global_db_cache_lock:
-            _global_db_cache[db_identifier] = _get_db_connection(name)
-
-        logging.debug("opened cached database connection {}".format(db_identifier))
-        return _global_db_cache[db_identifier]
-
-    except Exception as e:
-        logging.error("unable to connect to database {}: {}".format(name, e))
-        report_exception()
-        raise e
-
-def release_cached_db_connection(name='ace'):
-
-    if name is None:
-        name = 'ace'
-
-    # make sure this process + thread is using cached connections
-    if not _cached_db_connections_enabled():
-        return
-
-    db_identifier = _get_cached_db_identifier(name)
-
-    try:
-        with _global_db_cache_lock:
-            db = _global_db_cache[db_identifier]
-
-        try:
-            db.close()
-        except Exception as e:
-            logging.debug("unable to close database connect to {}: {}".format(name, e))
-
-        with _global_db_cache_lock:
-            del _global_db_cache[db_identifier]
-
-        logging.debug("released cached database connection {}".format(db_identifier))
-
-    except KeyError:
-        pass
-
-def _get_db_connection(name='ace'):
-    """Returns the database connection by the given name.  Defaults to the ACE db config."""
-
-    if name is None:
-        name = 'ace'
-
-    #if _cached_db_connections_enabled():
-        #return _get_cached_db_connection(name)
-
-    config_section = 'ace'
-    if name:
-        config_section = 'database_{}'.format(name)
-
-    _section = saq.CONFIG[config_section]
-    kwargs = {
-        'db': _section['database'],
-        'user': _section['username'],
-        'passwd': _section['password'],
-        'charset': 'utf8mb4',
-    }
-
-    if 'hostname' in _section:
-        kwargs['host'] = _section['hostname']
-
-    if 'port' in _section:
-        kwargs['port'] = _section.getint('port')
-    
-    if 'unix_socket' in _section:
-        kwargs['unix_socket'] = _section['unix_socket']
-
-    kwargs['init_command'] = 'SET NAMES utf8mb4'
-
-    if 'ssl_ca' in _section or 'ssl_key' in _section or 'ssl_cert' in _section:
-        kwargs['ssl'] = {}
-
-        if 'ssl_ca' in _section and _section['ssl_ca']:
-            path = abs_path(_section['ssl_ca'])
-            if not os.path.exists(path):
-                logging.error("ssl_ca file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['ca'] = path
-
-        if 'ssl_key' in _section and _section['ssl_key']:
-            path = abs_path(_section['ssl_key'])
-            if not os.path.exists(path):
-                logging.error("ssl_key file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['key'] = path
-
-        if 'ssl_cert' in _section and _section['ssl_cert']:
-            path = _section['ssl_cert']
-            if not os.path.exists(path):
-                logging.error("ssl_cert file {} does not exist (specified in {})".format(path, config_section))
-            else:
-                kwargs['ssl']['cert'] = path
-
-    logging.debug("opening database connection {}".format(name))
-    return pymysql.connect(**kwargs)
-    #return pymysql.connect(host=_section['hostname'] if 'hostname' in _section else None,
-                           #port=3306 if 'port' not in _section else _section.getint('port'),
-                           #unix_socket=_section['unix_socket'] if 'unix_socket' in _section else None,
-                           #db=_section['database'],
-                           #user=_section['username'],
-                           #passwd=_section['password'],
-                           #charset='utf8')
-
-@contextmanager
-def get_db_connection(*args, **kwargs):
-    if _cached_db_connections_enabled():
-        db = _get_cached_db_connection(*args, **kwargs)
-    else:
-        db = _get_db_connection(*args, **kwargs)
-
-    try:
-        yield db
-    except Exception as e:
-        try:
-            if _cached_db_connections_enabled():
-                db.rollback()
-            else:
-                db.close()
-        except Exception as failure_error:
-            logging.error("unable to roll back or close transaction: {}".format(failure_error))
-            report_exception()
-            raise e
-
-        raise e
 
 # new school database connections
 import logging
@@ -1581,7 +1552,6 @@ WHERE
         params.extend(alert_uuids)
         c.execute(sql, tuple(params))
         db.commit()
-        db.close()
 
 class Similarity:
     def __init__(self, uuid, disposition, percent):
@@ -2351,18 +2321,23 @@ def initialize_database():
 
     global DatabaseSession
     from config import config
-    import saq
 
     # see https://github.com/PyMySQL/PyMySQL/issues/644
     # /usr/local/lib/python3.6/dist-packages/pymysql/cursors.py:170: Warning: (1300, "Invalid utf8mb4 character string: '800363'")
     warnings.filterwarnings(action='ignore', message='.*Invalid utf8mb4 character string.*')
 
-    engine = create_engine(
-        config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
-        **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
+    import saq
+    if saq.db is None:
+        engine = create_engine(
+            config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
+            isolation_level='READ COMMITTED',
+            **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
 
-    DatabaseSession = sessionmaker(bind=engine)
-    saq.db = scoped_session(DatabaseSession)
+        DatabaseSession = sessionmaker(bind=engine)
+        saq.db = scoped_session(DatabaseSession)
+    else:
+        from sqlalchemy.orm.session import close_all_sessions
+        close_all_sessions()
 
 def initialize_automation_user():
     # get the id of the ace automation account

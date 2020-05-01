@@ -21,11 +21,11 @@ import uuid
 import ace_api
 
 import saq
-from saq.database import use_db, \
-                         execute_with_retry, \
-                         get_db_connection, \
-                         enable_cached_db_connections, \
-                         disable_cached_db_connections
+from saq.database import (
+        use_db,
+        execute_with_retry,
+        get_db_connection
+)
 
 from saq.error import report_exception
 from saq.persistence import Persistable
@@ -79,9 +79,11 @@ tags = {','.join(tags)}
 
 class RemoteNode(object):
     def __init__(self, id, name, location, any_mode, last_update, analysis_mode, workload_count, company_id=None):
+        from saq.engine import translate_node
+
         self.id = id
         self.name = name
-        self.location = location
+        self.location = translate_node(location)
         self.any_mode = any_mode
         self.last_update = last_update
         self.analysis_mode = analysis_mode
@@ -90,14 +92,6 @@ class RemoteNode(object):
 
         # the directory that contains any files that to be transfered along with submissions
         self.incoming_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['incoming_dir'])
-
-        # apply any node translations that need to take effect
-        for key in saq.CONFIG['node_translation'].keys():
-            src, target = saq.CONFIG['node_translation'][key].split(',')
-            if self.location == src:
-                logging.debug("translating node {} to {}".format(self.location, target))
-                self.location = target
-                break
 
     def __str__(self):
         return "RemoteNode(id={},name={},location={})".format(self.id, self.name, self.location)
@@ -222,8 +216,6 @@ class RemoteNodeGroup(object):
         self.thread.join()
 
     def loop(self):
-        enable_cached_db_connections()
-
         while True:
             try:
                 result = self.execute()
@@ -249,8 +241,6 @@ class RemoteNodeGroup(object):
                 report_exception()
                 if self.shutdown_event.wait(1):
                     break
-
-        disable_cached_db_connections()
 
     @use_db
     def execute(self, db, c):
@@ -646,8 +636,6 @@ class Collector(ACEService, Persistable):
         if not self.remote_node_groups:
             self.load_groups()
 
-        enable_cached_db_connections()
-
         try:
             self.debug_extended_collection()
         except NotImplementedError:
@@ -655,7 +643,6 @@ class Collector(ACEService, Persistable):
 
         self.execute()
         self.execute_workload_cleanup()
-        disable_cached_db_connections()
 
         # start the node groups
         #for group in self.remote_node_groups:
@@ -746,7 +733,6 @@ class Collector(ACEService, Persistable):
 
     def cleanup_loop(self):
         logging.debug("starting cleanup loop")
-        enable_cached_db_connections()
 
         while True:
             wait_time = 1
@@ -760,7 +746,6 @@ class Collector(ACEService, Persistable):
             if self.service_shutdown_event.wait(wait_time):
                 break
 
-        disable_cached_db_connections()
         logging.debug("exited cleanup loop")
 
     @use_db
@@ -808,8 +793,6 @@ HAVING
         return submission_count
 
     def loop(self):
-        enable_cached_db_connections()
-
         while True:
             try:
                 self.execute()
@@ -821,8 +804,6 @@ HAVING
 
             if self.is_service_shutdown:
                 break
-
-        disable_cached_db_connections()
 
     def execute(self):
 
@@ -948,11 +929,7 @@ HAVING
         return work_id
 
     def extended_collection_wrapper(self):
-        enable_cached_db_connections()
-        try:
-            self.extended_collection()
-        finally:
-            disable_cached_db_connections()
+        self.extended_collection()
 
     # subclasses can override this function to provide additional functionality
     def extended_collection(self):

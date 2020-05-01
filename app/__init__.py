@@ -95,4 +95,7 @@ def create_app():
     app.jinja_env.filters['s64encode'] = s64encode
     app.jinja_env.filters['hexdump'] = hexdump
 
+    # add the "do" template command
+    app.jinja_env.add_extension('jinja2.ext.do')
+
     return app

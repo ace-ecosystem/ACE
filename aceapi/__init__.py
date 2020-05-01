@@ -6,7 +6,6 @@ import time
 
 import saq
 from saq.analysis import _JSONEncoder
-from saq.database import enable_cached_db_connections
 
 from flask import Flask, make_response, abort, Response, request
 from flask_sqlalchemy import SQLAlchemy
@@ -107,9 +106,6 @@ def create_app(testing=False):
 
     from .events import events_bp as events_blueprint
     app.register_blueprint(events_blueprint)
-
-    # turn on database connection caching
-    app.before_request(enable_cached_db_connections)
 
     return app
 

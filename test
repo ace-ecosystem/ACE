@@ -57,7 +57,7 @@ then
         saq.extractors.graph.test \
         saq.test_email \
         saq.test_crawlphish \
-        saq.test_configuration \
+        saq.configuration.test \
         saq.test_crypto \
         saq.test_util \
         saq.test_locks \
@@ -66,7 +66,6 @@ then
         saq.remediation.mail.test \
         saq.remediation.mail.ews.test \
         saq.remediation.mail.graph.test \
-        saq.messaging.test \
         saq.persistence.test \
         saq.engine.test \
         saq.modules.test_alerts \
@@ -90,6 +89,7 @@ then
         # TODO reintroduce these next two somehow
         #saq.engine.test_cloudphish \
         #saq.test_detection \
+        #saq.messaging.test \
 
         #saq.test_pds \
         #saq.modules.test_pds \
@@ -110,7 +110,7 @@ then
 fi
 
 # otherwise we run whatever test is specified on the command line
-PYTHONPATH=lib python3 -W ignore -m unittest -f -v $1
+PYTHONPATH=lib python3 -W ignore -m unittest -f -v "$@"
 
 #PYTHONPATH=lib python3 -W ignore -m unittest -v saq.engine.test_cloudphish.CloudPhishEngineTestCase.test_cloudphish_engine_007_http_clear_alert
 #PYTHONPATH=lib python3 -W ignore -m unittest -v saq.modules.test_asset.AssetAnalysisModuleTestCase.test_carbon_black_asset_ident_000

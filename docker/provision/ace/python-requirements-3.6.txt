@@ -17,7 +17,7 @@ cbapi==1.4.4
 cbinterface
 dateparser
 dnspython
-exchangelib==3.1.1
+exchangelib
 gglsbl-rest-client
 hexdump
 html2text
@@ -56,4 +56,3 @@ gglsbl-rest-client
 argcomplete==1.10.0
 msal
 ip-inspector
-croniter
