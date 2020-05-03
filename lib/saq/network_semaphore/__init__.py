@@ -26,17 +26,41 @@ from saq.performance import record_metric
 from saq.service import *
 
 # this is a fall back device to be used if the network semaphore is unavailable
-fallback_semaphores = {}
+# semaphores defined in the configuration file
+defined_fallback_semaphores = {} # key = semaphore name, value = LoggingSemaphore(count)
+# semaphores defined during runtime (these are deleted after release to 0)
+undefined_fallback_semaphores = {} # key = semaphore name, value = LoggingSemaphore(count)
+undefined_fallback_semaphores_lock = threading.RLock()
+
+def add_undefined_fallback_semaphore(name, count=1):
+    """Adds the given semaphore as an undefined fallback semaphore. Returns the added semaphore object."""
+    with undefined_fallback_semaphores_lock:
+        undefined_fallback_semaphores[name] = LoggingSemaphore(count)
+        logging.info(f"added undefined fallback semaphore {name} with limit {count}")
+        return undefined_fallback_semaphores[name]
+
+def maintain_undefined_semaphores():
+    with undefined_fallback_semaphores_lock:
+        targets = []
+        for semaphore_name in undefined_fallback_semaphores.keys():
+            if undefined_fallback_semaphores[semaphore_name].count == 0:
+                targets.append(semaphore_name)
+
+        for target in targets:
+            logging.debug(f"finished with undefined semaphore {target}")
+            del undefined_fallback_semaphores[target]
+
+        if undefined_fallback_semaphores:
+            logging.info(f"tracking {len(undefined_fallback_semaphores)} undefined semaphores")
 
 def initialize_fallback_semaphores():
     """This needs to be called once at the very beginning of starting ACE."""
 
-    if fallback_semaphores:
-        return
+    global defined_fallback_semaphores
+    defined_fallback_semaphores = {}
 
     # we need some fallback functionality for when the network semaphore server is down
     # these semaphores serve that purpose
-    global_engine_instance_count = saq.CONFIG['global'].getint('global_engine_instance_count')
     for key in saq.CONFIG['service_network_semaphore'].keys():
         if key.startswith('semaphore_'):
             semaphore_name = key[len('semaphore_'):]
@@ -45,13 +69,11 @@ def initialize_fallback_semaphores():
             # so if we unable to coordinate globally, the fall back is to divide the available
             # number of resources between all the engines evenly
             # that's what this next equation is for
-            fallback_limit = int(floor(saq.CONFIG['service_network_semaphore'].getfloat(key) / float(global_engine_instance_count)))
-            # we allow a minimum of one per engine
+            fallback_limit = saq.CONFIG['service_network_semaphore'].getint(key)
             if fallback_limit < 1:
                 fallback_limit = 1
 
-            logging.debug(f"fallback semaphore count for {semaphore_name} is {fallback_limit}")
-            fallback_semaphores[semaphore_name] = LoggingSemaphore(fallback_limit)
+            defined_fallback_semaphores[semaphore_name] = LoggingSemaphore(fallback_limit)
 
 class LoggingSemaphore(Semaphore):
     def __init__(self, *args, **kwargs):
@@ -85,6 +107,8 @@ class NetworkSemaphoreClient(object):
         self.semaphore_name = None
         # a failsafe thread to make sure we end up releasing the semaphore
         self.failsafe_thread = None
+        # set when the semaphore is released (causing the failsafe thread to exit)
+        self.release_event = None
         # reference to the relavent configuration section
         self.config = saq.CONFIG['service_network_semaphore']
         # if we ended up using a fallback semaphore
@@ -104,10 +128,14 @@ class NetworkSemaphoreClient(object):
         return self.cancel_request_flag or ( self.cancel_request_callback is not None
                                              and self.cancel_request_callback() )
 
-    def acquire(self, semaphore_name):
+    def acquire(self, semaphore_name, timeout=None):
         if self.semaphore_acquired:
             logging.warning(f"semaphore {self.semaphore_name} already acquired")
             return True
+
+        deadline = None
+        if timeout is not None:
+            deadline = datetime.datetime.now() + datetime.timedelta(seconds=timeout)
 
         try:
             self.socket = socket.socket()
@@ -136,16 +164,34 @@ class NetworkSemaphoreClient(object):
                     logging.debug(f"semaphore {semaphore_name} locked")
                     self.semaphore_acquired = True
                     self.semaphore_name = semaphore_name
+                    self.release_event = threading.Event()
                     self.start_failsafe_monitor()
                     return True
 
                 elif all([x == 'wait' for x in commands]):
-                    continue
+                    pass
 
                 else:
                     raise ValueError(f"received invalid command {command}")
 
+                # have we timed out waiting?
+                if deadline and datetime.datetime.now() >= deadline:
+                    logging.error(f"attempt to acquire semaphore {semaphore_name} timed out")
+
+                    try:
+                        self.socket.close()
+                    except Exception as e:
+                        pass
+
+                    return False
+
             logging.debug(f"semaphore request for {semaphore_name} cancelled")
+
+            try:
+                self.socket.close()
+            except Exception as e:
+                pass
+
             return False
 
         except Exception as e:
@@ -160,13 +206,27 @@ class NetworkSemaphoreClient(object):
             try:
                 logging.warning(f"acquiring fallback semaphore {semaphore_name}")
                 while not self.request_is_cancelled:
-                    if fallback_semaphores[semaphore_name].acquire(blocking=True, timeout=1):
+                    try:
+                        semaphore = defined_fallback_semaphores[semaphore_name]
+                    except KeyError:
+                        try:
+                            with undefined_fallback_semaphores_lock:
+                                semaphore = undefined_fallback_semaphores[semaphore_name]
+                        except KeyError:
+                            semaphore = add_undefined_fallback_semaphore(semaphore_name)
+
+                    if semaphore.acquire(blocking=True, timeout=0.1):
                         logging.debug(f"fallback semaphore {semaphore_name} acquired")
-                        self.fallback_semaphore = fallback_semaphores[semaphore_name]
+                        self.fallback_semaphore = semaphore
                         self.semaphore_acquired = True
                         self.semaphore_name = semaphore_name
+                        self.release_event = threading.Event()
                         self.start_failsafe_monitor()
                         return True
+
+                    if deadline and datetime.datetime.now() >= deadline:
+                        logging.error(f"attempt to acquire semaphore {semaphore_name} timed out")
+                        return False
                 
                 return False
                     
@@ -185,15 +245,13 @@ class NetworkSemaphoreClient(object):
         # see that when we are debugging
         try:
             acquire_time = datetime.datetime.now()
-            while self.semaphore_acquired:
+            while not self.release_event.wait(3):
                 logging.debug("semaphore {} lock time {}".format(
                     self.semaphore_name, datetime.datetime.now() - acquire_time))
 
                 # if we are still in network mode then send a keep-alive message to the server
                 if self.fallback_semaphore is None:
                     self.socket.sendall('wait|'.encode('ascii'))
-
-                time.sleep(3)
 
             logging.debug(f"detected release of semaphore {self.semaphore_name}")
                 
@@ -224,7 +282,9 @@ class NetworkSemaphoreClient(object):
 
             # make sure we set this so that the monitor thread exits
             self.semaphore_acquired = False
-
+            self.release_event.set()
+            self.failsafe_thread.join()
+            maintain_undefined_semaphores()
             return
 
         try:
@@ -256,11 +316,15 @@ class NetworkSemaphoreClient(object):
 
             # make sure we set this so that the monitor thread exits
             self.semaphore_acquired = False
+            self.release_event.set()
+            self.failsafe_thread.join()
 
 class NetworkSemaphoreServer(ACEService):
     def __init__(self, *args, **kwargs):
-        super().__init__(service_config=saq.CONFIG['service_network_semaphore'], 
-                         *args, **kwargs)
+        super().__init__(
+            service_config=saq.CONFIG['service_network_semaphore'], 
+            *args, 
+            **kwargs)
 
         # the main thread that listens for new connections
         self.server_thread = None
@@ -281,14 +345,9 @@ class NetworkSemaphoreServer(ACEService):
         self.allowed_ipv4 = [ipaddress.ip_network(x.strip()) for x in self.service_config['allowed_ipv4'].split(',')]
 
         # load and initialize all the semaphores we're going to use
-        self.semaphores = {} # key = semaphore_name, value = Semaphore
-        for key in self.service_config.keys():
-            if key.startswith('semaphore_'):
-                semaphore_name = key[len('semaphore_'):]
-                count = self.service_config.getint(key)
-                self.semaphores[semaphore_name] = LoggingSemaphore(count)
-                self.semaphores[semaphore_name].semaphore_name = semaphore_name # lol
-                logging.debug(f"loaded semaphore {semaphore_name} with capacity {count}")
+        self.defined_semaphores = {} # key = semaphore_name, value = LoggingSemaphore
+        self.undefined_semaphores = {} # key = semaphore_name, value = LoggingSemaphore
+        self.undefined_semaphores_lock = threading.RLock()
 
         # we keep some stats and metrics on semaphores in this directory
         self.stats_dir = os.path.join(saq.DATA_DIR, self.service_config['stats_dir'])
@@ -301,6 +360,38 @@ class NetworkSemaphoreServer(ACEService):
 
         # a thread monitors and records statistics
         self.monitor_thread = None
+
+    def add_undefined_semaphore(self, name, count=1):
+        """Adds a new undefined network semaphore with the given name and optional count.
+           Returns the created semaphore."""
+        with self.undefined_semaphores_lock:
+            self.undefined_semaphores[name] = LoggingSemaphore(count)
+            self.undefined_semaphores[name].semaphore_name = name 
+            logging.info(f"adding undefined semaphore {name}")
+            return self.undefined_semaphores[name]
+
+    def maintain_undefined_semaphores(self):
+        with self.undefined_semaphores_lock:
+            targets = []
+            for semaphore_name in self.undefined_semaphores.keys():
+                if self.undefined_semaphores[semaphore_name].count == 0:
+                    targets.append(semaphore_name)
+
+            for target in targets:
+                logging.debug(f"finished with undefined semaphore {target}")
+                del self.undefined_semaphores[target]
+
+            if self.undefined_semaphores:
+                logging.info(f"tracking {len(self.undefined_semaphores)} undefined semaphores")
+
+    def load_configured_semaphores(self):
+        """Loads all network semaphores defined in the configuration."""
+        for key in self.service_config.keys():
+            if key.startswith('semaphore_'):
+                semaphore_name = key[len('semaphore_'):]
+                count = self.service_config.getint(key)
+                self.defined_semaphores[semaphore_name] = LoggingSemaphore(count)
+                self.defined_semaphores[semaphore_name].semaphore_name = semaphore_name 
 
     def execute_service(self):
         if self.service_is_debug:
@@ -335,12 +426,13 @@ class NetworkSemaphoreServer(ACEService):
         semaphore_status_path = os.path.join(self.stats_dir, 'semaphore.status')
         while not self.is_service_shutdown:
             with open(semaphore_status_path, 'w') as fp:
-                for semaphore in self.semaphores.values():
+                for semaphore in self.defined_semaphores.values():
                     fp.write(f'{semaphore.semaphore_name}: {semaphore.count}')
 
             time.sleep(1)
 
     def server_loop(self):
+        self.load_configured_semaphores()
         while not self.is_service_shutdown:
             try:
                 self.server_socket = socket.socket() # defaults to AF_INET, SOCK_STREAM
@@ -414,11 +506,16 @@ class NetworkSemaphoreServer(ACEService):
                 return
 
             semaphore_name = m.group(1)
-            if semaphore_name not in self.semaphores:
-                logging.error(f"invalid semaphore {semaphore_name} requested from {remote_connection}")
-                return
 
-            semaphore = self.semaphores[semaphore_name]
+            try:
+                semaphore = self.defined_semaphores[semaphore_name]
+            except KeyError:
+                with self.undefined_semaphores_lock:
+                    try:
+                        semaphore = self.undefined_semaphores[semaphore_name]
+                    except KeyError:
+                        semaphore = self.add_undefined_semaphore(semaphore_name, 1)
+
             semaphore_acquired = False
             request_time = datetime.datetime.now()
             try:
@@ -426,7 +523,7 @@ class NetworkSemaphoreServer(ACEService):
                     logging.debug(f"attempting to acquire semaphore {semaphore_name}")
                     semaphore_acquired = semaphore.acquire(blocking=True, timeout=1)
                     if not semaphore_acquired:
-                        logging.warning("{} waiting for semaphore {} cumulative waiting time {}".format(
+                        logging.info("{} waiting for semaphore {} cumulative waiting time {}".format(
                             remote_connection, semaphore_name, datetime.datetime.now() - request_time))
                         # send a heartbeat message back to the client
                         client_socket.sendall("wait|".encode('ascii'))
@@ -473,6 +570,7 @@ class NetworkSemaphoreServer(ACEService):
                     if semaphore_acquired:
                         semaphore.release()
                         logging.info(f"released semaphore {semaphore_name}")
+                        self.maintain_undefined_semaphores()
                 except Exception as e:
                     logging.error(f"error releasing semaphore {semaphore_name}: {e}")
 
