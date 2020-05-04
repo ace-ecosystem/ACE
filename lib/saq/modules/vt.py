@@ -368,3 +368,78 @@ class VTHashAnalyzer(AnalysisModule):
         logging.debug("nothing malicious in vt report for {}".format(_hash.value))
         return True
         
+class VirusTotalURLAnalysis(Analysis):
+    def initialize_details(self):
+        self.details = {
+        }
+
+    def generate_summary(self):
+        if self.details is not None:
+            if 'positives' in self.details and 'total' in self.details:
+                return f"VT Analysis - {self.details['positives']}/{self.details['total']}"
+            elif 'verbose_msg' in self.details:
+                return f"VT Analysis - {self.details['verbose_msg']}"
+        return None
+
+class VirusTotalURLAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return VirusTotalURLAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_URL
+
+    def __init__(self, *args, **kwargs):
+        super(VirusTotalURLAnalyzer, self).__init__(*args, **kwargs)
+        self.api_key = saq.CONFIG['virus_total']['api_key']
+        self.base_uri = saq.CONFIG['virus_total']['base_uri']
+        self.proxies = proxies() if saq.CONFIG.getboolean('virus_total', 'use_proxy') else {}
+        if 'ignored_vendors' in saq.CONFIG['virus_total']:
+            self.ignored_vendors = set([x.strip().lower() for x in saq.CONFIG['virus_total']['ignored_vendors'].split(',')])
+        else:
+            self.ignored_vendors = set()
+
+    def execute_analysis(self, url): 
+        try:
+            r = requests.get(f'{self.base_uri}/url/report', params={
+                'resource': url.value,
+                'apikey': self.api_key}, proxies=self.proxies, timeout=5, verify=False)
+        except Exception as e:
+            logging.error("unable to query VT: {}".format(e))
+            return False
+
+        if r.status_code == 403:
+            logging.error("invalid virus total api key!")
+            return False
+
+        if r.status_code != 200:
+            logging.error("got invalid HTTP result {}: {}".format(r.status_code, r.reason))
+            return False
+
+        analysis = self.create_analysis(url)
+        analysis.details = json.loads(r.content.decode())
+        
+        # 4/28/2016 - looks like they now return an array of results
+        if isinstance(analysis.details, list):
+            analysis.details = analysis.details[0]
+
+        if not isinstance(analysis.details, dict):
+            logging.error("expecting dict but got {} for analysis.details of vt".format(type(analysis.details)))
+            return False
+
+        # do any vendors outside of our excluded list of vendors think this is "bad"
+        if 'scans' in analysis.details:
+            if isinstance(analysis.details['scans'], dict):
+                for vendor in analysis.details['scans'].keys():
+                    if vendor.lower() in self.ignored_vendors:
+                        continue
+
+                    vendor_report = analysis.details['scans'][vendor]
+                    if isinstance(vendor_report, dict):
+                        if 'detected' in vendor_report:
+                            if vendor_report['detected']:
+                                logging.info("vt vendor {} says {} is malicious".format(vendor, url.value))
+                                url.add_tag('malicious')
+                                return True
+        return True

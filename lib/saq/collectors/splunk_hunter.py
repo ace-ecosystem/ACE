@@ -28,6 +28,10 @@ class SplunkHunt(QueryHunt):
         self.search_id = None
         self.time_spec = None
 
+        # splunk app/user context
+        self.namespace_user = '-' # defaults to wildcards
+        self.namespace_app = '-'
+
     def extract_event_timestamp(self, event):
         if '_time' not in event:
             logging.warning(f"splunk event missing _time field for {self}")
@@ -48,11 +52,13 @@ class SplunkHunt(QueryHunt):
                 m.group(6)), '%Y-%m-%d %H:%M:%S')
 
     def formatted_query(self):
-        result = self.query.format(time_spec=self.time_spec)
-        return result
+        return self.query.replace('{time_spec}', self.time_spec)
 
     @property
     def query(self):
+        if self._query is None:
+            return self._query
+
         result = self._query
 
         # run the includes you might have
@@ -87,6 +93,13 @@ class SplunkHunt(QueryHunt):
         if '{time_spec}' not in self.query:
             logging.error(f"missing {{time_spec}} formatter in rule {self.name}")
 
+        # load the namespace names for app and user if they are defined
+        # if they are default then the default wildcard is used in the url for the API
+        if 'splunk_app_context' in section_rule:
+            self.namespace_app = section_rule['splunk_app_context']
+        if 'splunk_user_context' in section_rule:
+            self.namespace_user = section_rule['splunk_user_context']
+
     def execute_query(self, start_time, end_time, unit_test_query_results=None):
         earliest = start_time.strftime('%m/%d/%Y:%H:%M:%S')
         latest = end_time.strftime('%m/%d/%Y:%H:%M:%S')
@@ -96,7 +109,7 @@ class SplunkHunt(QueryHunt):
         else:
             self.time_spec = f'earliest = {earliest} latest = {latest}'
 
-        query = self.query.format(time_spec=self.time_spec)
+        query = self.formatted_query()
 
         logging.info(f"executing hunt {self.name} with start time {earliest} end time {latest}")
 
@@ -108,7 +121,9 @@ class SplunkHunt(QueryHunt):
             username=saq.CONFIG['splunk']['username'],
             password=saq.CONFIG['splunk']['password'],
             max_result_count=self.max_result_count,
-            query_timeout=self.query_timeout)
+            query_timeout=self.query_timeout,
+            namespace_user=self.namespace_user,
+            namespace_app=self.namespace_app)
 
         search_result = searcher.query(query)
         self.search_id = searcher.search_id

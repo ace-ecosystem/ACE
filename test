@@ -45,11 +45,13 @@ then
         saq.util.test_filter \
         saq.submission.test \
         saq.collectors.test \
-        saq.collectors.test_http \
         saq.collectors.test_email \
-        saq.collectors.test_smtp \
+        saq.collectors.test_falcon \
+        saq.collectors.test_http \
         saq.collectors.test_hunter \
+        saq.collectors.test_qradar_hunter \
         saq.collectors.test_query_hunter \
+        saq.collectors.test_smtp \
         saq.collectors.test_splunk_hunter \
         saq.database.test \
         saq.error.test \
@@ -71,6 +73,7 @@ then
         saq.modules.test_alerts \
         saq.modules.test_asset \
         saq.modules.test_cloudphish \
+        saq.modules.test_command_line \
         saq.modules.test_crits \
         saq.modules.test_email \
         saq.modules.test_file_analysis \

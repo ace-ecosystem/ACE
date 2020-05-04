@@ -49,6 +49,7 @@ ACE is the implementation of a proven detection strategy, a framework for automa
 
    installation
    analyst-orientation
+   hunting
    api
    education 
    additional

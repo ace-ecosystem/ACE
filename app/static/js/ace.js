@@ -68,6 +68,22 @@ function new_malware_option() {
   });
 }
 
+// This function is called from the "Send to.." modal dialog
+$(document).on('click', '#btn-send-to-send', function() {
+  // append the selected host to the formData
+  var selectedHost = $("#selected-host").val()
+  sendToDatastore.formData["hostname"] = selectedHost;
+  
+  // send a request to the API
+  $.post(sendToDatastore.url, sendToDatastore.formData)
+    .fail(function (data, textStatus, jqXHR) {
+      alert("Action failed: " + textStatus);
+    })
+    .always(function () {
+      $('#send-to-modal').modal('hide');
+  });
+});
+
 function remove_malware_option(index) {
   var element = document.getElementById("malware_option_" + index);
   element.parentNode.removeChild(element);

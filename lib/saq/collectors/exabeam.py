@@ -55,45 +55,10 @@ class ExabeamCollector(ScheduledCollector):
             if self.alert_exists(session):
                 continue
 
-            # get session details
-            details = {}
-            try:
-                with ExabeamSession() as exabeam:
-                    details = exabeam.get_session_details(session['id'])
-
-            except Exception as e:
-                logging.error(f"Failed to fetch session info for {session_id.value}: {e}")
-                logging.error(traceback.format_exc())
-
-            # add link to timeline to details
-            details['timeline_link'] = f"{saq.CONFIG['exabeam']['base_uri']}/uba/#user/{session['user']}/timeline/{session['id']}"
-
             # get observables from details
             observables = []
             observables.append({"type":F_USER, "value":session["user"]})
-            if 'events' in details:
-                for event in details['events']:
-                    for field in event['fields']:
-                        if saq.CONFIG.has_option('exabeam_observable_mapping', field):
-                            otype = saq.CONFIG['exabeam_observable_mapping'][field]
-                            if saq.CONFIG.has_option(f"exabeam_observable_mapping_{event['fields']['event_type']}", field):
-                                otype = saq.CONFIG[f"exabeam_observable_mapping_{event['fields']['event_type']}"][field]
-                            ovalue = event['fields'][field].strip()
-                            if ovalue.endswith('""'):
-                                ovalue = ovalue[:-2]
-                            if otype.startswith('split'):
-                                cmd, split_string, ot = otype.split(':', 2)
-                                ovalues = ovalue.split(split_string)
-                                for ov in ovalues:
-                                    observables.append({"type":ot, "value":ov})
-                                    if field == "recipients" and 'sender' in event['fields']:
-                                        observables.append({"type":F_EMAIL_CONVERSATION, "value":f"{event['fields']['sender']}|{ov}"})
-                            elif otype.startswith('external_uid'):
-                                ot, tool = otype.split(':', 1)
-                                ov = f"{tool}:{ovalue}"
-                                observables.append({"type":ot, "value":ov})
-                            else:
-                                observables.append({"type":otype, "value":ovalue})
+            observables.append({"type":F_EXABEAM_SESSION, "value":session["id"]})
 
             # create alert submission
             submission = Submission(
@@ -103,9 +68,10 @@ class ExabeamCollector(ScheduledCollector):
                 tool_instance = "",
                 type = ANALYSIS_TYPE_EXABEAM,
                 event_time = datetime.datetime.now(),
-                details = details,
+                details = session,
                 observables = observables,
                 tags = [],
+                queue = saq.CONFIG['service_exabeam_collector']['queue'],
                 files = [])
 
             # submit alert

@@ -498,4 +498,36 @@
     </div>
 </div>
 
+<!-- "Send to" modal -->
+<div class="modal fade" id="send-to-modal" tabindex="-1" role="dialog" aria-labelledby="send_to_modal_label" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                <h4 class="modal-title" id="send-to-modal-label">Send To</h4>
+            </div>
+            <div class="modal-body" id="send-to-body">
+                <!-- Host selections -->
+                <p>Please select a host to send this file to.</p>
+                
+                <select name="selected-host" id="selected-host" class="form-control">
+                    {% for host in send_to_hosts %}
+                    <option value="{{ host.hostname }}">host: {{ host.hostname }} path: {{ host.remote_path }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-default" data-dismiss="modal" aria-hidden="true">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-send-to-send">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- datastore to pass data to the modal -->
+<script type="text/javascript">
+var sendToDatastore = sendToDatastore ? sendToDatastore : {};
+</script>
+
+
+
 {% endblock body %}

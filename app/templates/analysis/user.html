@@ -94,9 +94,29 @@
 <table class="table table-bordered table-condensed">
     {% if 'ldap' in analysis.jinja_details %}
         {% if 'entitlements' in analysis.jinja_details['ldap'] %}
-            {% for entitlement in analysis.jinja_details['ldap']['entitlements'] %}
             <tr>
-                <td class="col-md-12" {% if entitlement['privileged'] %}style='background-color:#FFFFB0;'{% endif %}>{{entitlement['group']}}</td>
+                <th>Group</th>
+                <th>Organization</th>
+                <th>Domain</th>
+            </tr>
+            {% for entitlement in analysis.jinja_details['ldap']['entitlements'] %}
+            <tr {% if entitlement['privileged'] %}style='background-color:#FFFFB0;'{% endif %}>
+                {% set parts = entitlement['group'].split(',') %}
+                {% set group = [] %}
+                {% set org = [] %}
+                {% set domain = [] %}
+                {% for part in parts %}
+                    {% if part.startswith('CN=') %}
+                        {% do group.append(part[3:]) %}
+                    {% elif part.startswith('OU=') %}
+                        {% do org.append(part[3:]) %}
+                    {% else %}
+                        {% do domain.append(part[3:]) %}
+                    {% endif %}
+                {% endfor %}
+                <td>{{ group | join('.') }}</td>
+                <td>{{ org | join('.') }}</td>
+                <td>{{ domain | join('.') }}</td>
             </tr>
             {% endfor %}
         {% elif 'memberOf' in analysis.jinja_details['ldap'] %}

@@ -17,7 +17,7 @@ cbapi==1.4.4
 cbinterface
 dateparser
 dnspython
-exchangelib=3.1.1
+exchangelib==3.1.1
 gglsbl-rest-client
 hexdump
 html2text

@@ -28,6 +28,10 @@ source venv/bin/activate
 source $SAQ_HOME/load_environment
 EOF
 
+cat >> $SAQ_HOME/load_local_environment<<EOF
+export SAQ_ENC=ace
+EOF
+
 source venv/bin/activate
 source $SAQ_HOME/load_environment
 
@@ -82,7 +86,7 @@ if [ ! -e etc/local_networks.csv ]; then echo 'Indicator,Indicator_Type' > etc/l
 #./docker/provision/ace/install_ssl_certs.sh
 
 # build the documentation
-( cd docs && make html )
+#( cd docs && make html )
 
 #activate-global-python-argcomplete
 ln -s /opt/signatures /opt/ace/etc/yara

@@ -39,6 +39,8 @@ KEY_DETAILS = 'details'
 KEY_OBSERVABLES = 'observables'
 KEY_TAGS = 'tags'
 KEY_COMPANY_NAME = 'company_name'
+KEY_QUEUE = 'queue'
+KEY_INSTRUCTIONS = 'instructions'
 KEY_COMPANY_ID = 'company_id'
 
 KEY_O_TYPE = 'type'
@@ -91,6 +93,8 @@ def submit():
         root.alert_type = r[KEY_TYPE] if KEY_TYPE in r else saq.CONFIG['api']['default_alert_type']
         root.description = r[KEY_DESCRIPTION]
         root.event_time = LOCAL_TIMEZONE.localize(datetime.datetime.now())
+        root.queue = r[KEY_QUEUE] if KEY_QUEUE in r else QUEUE_DEFAULT
+        root.instructions = r[KEY_INSTRUCTIONS] if KEY_INSTRUCTIONS in r else None
         if KEY_EVENT_TIME in r:
             try:
                 root.event_time = parse_event_time(r[KEY_EVENT_TIME])
@@ -141,9 +145,9 @@ def submit():
                 if KEY_O_DIRECTIVES in o:
                     for directive in o[KEY_O_DIRECTIVES]:
                         # is this a valid directive?
-                        if directive not in VALID_DIRECTIVES:
-                            abort(Response("observable {} has invalid directive {} (choose from {})".format(
-                                           '{}:{}'.format(o_type, o_value), directive, ','.join(VALID_DIRECTIVES)), 400))
+                        #if directive not in VALID_DIRECTIVES:
+                            #abort(Response("observable {} has invalid directive {} (choose from {})".format(
+                                           #'{}:{}'.format(o_type, o_value), directive, ','.join(VALID_DIRECTIVES)), 400))
 
                         observable.add_directive(directive)
 
@@ -219,6 +223,8 @@ def submit():
                  details=r[KEY_DETAILS],
                  observables=r[KEY_OBSERVABLES],
                  tags=r[KEY_TAGS],
+                 queue=root.queue,
+                 instructions=root.instructions,
                  files=[os.path.join(root.storage_dir, _) for _ in file_list])
             
             # does this submission match any tuning rules we have?

@@ -569,7 +569,10 @@ class Analysis(TaggableObject, DetectableObject):
         # generate a summary before we go to disk
         # this gets stored in the main json data structure
         if not self.delayed:
-            self._summary = self.generate_summary()
+            try:
+                self._summary = self.generate_summary()
+            except Exception as e:
+                self._summary = f"Failed to generate summary for {self}: {e}"
 
         # this is a thing now -- analysis modules are over-writing the details of the root analysis since we got rid of the "engines" 
         # try to catch a case where we set the data but forgot to load first
@@ -1369,7 +1372,7 @@ class Observable(TaggableObject, DetectableObject):
 
     @type.setter
     def type(self, value):
-        assert value in VALID_OBSERVABLE_TYPES
+        #assert value in VALID_OBSERVABLE_TYPES
         self._type = value
 
     @property
@@ -2204,6 +2207,8 @@ class RootAnalysis(Analysis):
                  company_name=None,
                  company_id=None,
                  analysis_mode=None,
+                 queue=None,
+                 instructions=None,
                  *args, **kwargs):
 
         import uuid as uuidlib
@@ -2239,9 +2244,17 @@ class RootAnalysis(Analysis):
         if alert_type:
             self.alert_type = alert_type
 
+        self._queue = QUEUE_DEFAULT
+        if queue:
+            self.queue = queue
+
         self._description = None
         if desc:
             self.description = desc
+
+        self._instructions = None
+        if instructions:
+            self.instructions = instructions
 
         self._event_time = None
         if event_time:
@@ -2372,6 +2385,8 @@ class RootAnalysis(Analysis):
     KEY_COMPANY_ID = 'company_id'
     KEY_DELAYED_ANALYSIS_TRACKING = 'delayed_analysis_tracking'
     KEY_DEPENDECY_TRACKING = 'dependency_tracking'
+    KEY_QUEUE = 'queue'
+    KEY_INSTRUCTIONS = 'instructions'
 
     @property
     def json(self):
@@ -2395,6 +2410,8 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_COMPANY_ID: self.company_id,
             RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING: self.delayed_analysis_tracking,
             RootAnalysis.KEY_DEPENDECY_TRACKING: self.dependency_tracking,
+            RootAnalysis.KEY_QUEUE: self.queue,
+            RootAnalysis.KEY_INSTRUCTIONS: self.instructions,
         })
         return result
 
@@ -2443,6 +2460,10 @@ class RootAnalysis(Analysis):
                 self.delayed_analysis_tracking[key] = dateutil.parser.parse(self.delayed_analysis_tracking[key])
         if RootAnalysis.KEY_DEPENDECY_TRACKING in value:
             self.dependency_tracking = value[RootAnalysis.KEY_DEPENDECY_TRACKING]
+        if RootAnalysis.KEY_QUEUE in value:
+            self.queue = value[RootAnalysis.KEY_QUEUE]
+        if RootAnalysis.KEY_INSTRUCTIONS in value:
+            self.instructions = value[RootAnalysis.KEY_INSTRUCTIONS]
 
     @property
     def analysis_mode(self):
@@ -2508,6 +2529,28 @@ class RootAnalysis(Analysis):
         assert value is None or isinstance(value, str)
         self._alert_type = value
         self.set_modified()
+
+    @property
+    def queue(self):
+        """The queue the alert will appear in (ex: external, internal)."""
+        return self._queue
+
+    @queue.setter
+    def queue(self, value):
+        assert isinstance(value, str)
+        self._queue = value
+        self.set_modified()
+
+    @property
+    def instructions(self):
+        """A free form string value that gives the analyst instructions on what
+        this alert is about and/or how to analyze the data contained in the
+        alert."""
+        return self._instructions
+
+    @instructions.setter
+    def instructions(self, value):
+        self._instructions = value
 
     @property
     def description(self):
@@ -2933,7 +2976,7 @@ class RootAnalysis(Analysis):
 
         assert isinstance(o_type, str)
         assert isinstance(self.observable_store, dict)
-        assert o_time is None or isinstance(o_time, datetime.datetime)
+        assert o_time is None or isinstance(o_time, str) or isinstance(o_time, datetime.datetime)
 
         # create a temporary object to make use of any defined custom __eq__ ops
         observable = create_observable(o_type, o_value, o_time=o_time)

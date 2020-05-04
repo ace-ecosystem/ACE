@@ -10,7 +10,7 @@ import socket
 import saq
 from saq.constants import *
 from saq.collectors import Collector, Submission
-from saq.util import abs_path
+from saq.util import *
 from saq.error import report_exception
 
 KEY_METADATA = 'metadata'
@@ -219,12 +219,23 @@ class FalconCollector(Collector):
             { 'type': F_IPV4, 'value': event['LocalIP'], },
             { 'type': F_FILE_PATH, 'value': event['ParentImageFileName'], },
             { 'type': F_FILE_PATH, 'value': event['GrandparentImageFileName'], },
+            { 'type': F_COMMAND_LINE, 'value': event['CommandLine'], },
+            { 'type': F_COMMAND_LINE, 'value': event['GrandparentCommandLine'], },
+            { 'type': F_COMMAND_LINE, 'value': event['ParentCommandLine'], },
         ]
 
         if "custom rule" in event["DetectDescription"] and "IOARuleName" in event:
             ioa = f": {event['IOARuleName']}"
         else:
             ioa = ""
+
+        file_paths = extract_windows_filepaths(event['CommandLine'])
+        file_paths.extend(extract_windows_filepaths(event['GrandparentCommandLine']))
+        file_paths.extend(extract_windows_filepaths(event['ParentCommandLine']))
+        for file_path in file_paths:
+            observables.extend([
+                    {'type': F_FILE_PATH, 'value': file_path },
+                    {'type': F_FILE_LOCATION, 'value': create_file_location(event['ComputerName'], file_path) }])
         
         return Submission(
             description = f'Falcon - {event["DetectName"]} - {event["ComputerName"]} - '

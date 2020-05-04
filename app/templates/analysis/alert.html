@@ -59,6 +59,10 @@
 	<td class="col-md-10"><b>{{alert.disposition}}</b> by {{alert.disposition_user.gui_display}} @ {{alert.display_disposition_time}} ({{alert.disposition_time}} UTC)</td>
     </tr>
     {% endif %}
+    <tr>
+        <td class="col-md-2">Queue</td>
+        <td class="col-md-10">{{alert.queue}}</td>
+    </tr>
     {% if alert.owner %}
     <tr>
         <td class="col-md-2">Owner</td>
@@ -85,6 +89,13 @@
         <td class="col-md-10">{{detection.description}}</td>
     </tr>
     {% endfor %}
+
+    {% if alert.instructions %}
+    <tr>
+        <td class="col-md-2">Instructions</td>
+        <td class="col-md-10">{{alert.instructions}}</td>
+    </tr>
+    {% endif %}
     
     {#
     <tr>

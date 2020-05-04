@@ -327,7 +327,7 @@ EV_ROOT_ANALYSIS_UUID = '14ca0ff2-ff7e-4fa1-a375-160dc072ab02'
 def create_root_analysis(tool=None, tool_instance=None, alert_type=None, desc=None, event_time=None,
                          action_counts=None, details=None, name=None, remediation=None, state=None,
                          uuid=None, location=None, storage_dir=None, company_name=None, company_id=None,
-                         analysis_mode=None):
+                         analysis_mode=None, queue=None, instructions=None):
     """Returns a default RootAnalysis object with expected values for testing."""
     return RootAnalysis(tool=tool if tool else EV_ROOT_ANALYSIS_TOOL,
                         tool_instance=tool_instance if tool_instance else EV_ROOT_ANALYSIS_TOOL_INSTANCE,
@@ -346,7 +346,9 @@ def create_root_analysis(tool=None, tool_instance=None, alert_type=None, desc=No
                             start=saq.SAQ_HOME),
                         company_name=company_name if company_name else None,
                         company_id=company_id if company_id else None,
-                        analysis_mode=analysis_mode if analysis_mode else 'test_groups')
+                        analysis_mode=analysis_mode if analysis_mode else 'test_groups',
+                        queue=queue if queue else None,
+                        instructions=instructions if instructions else None)
 
 class ServerProcess(object):
     def __init__(self, args):

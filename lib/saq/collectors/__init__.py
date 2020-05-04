@@ -121,6 +121,8 @@ class RemoteNode(object):
             details=submission.details,
             observables=submission.observables,
             tags=submission.tags,
+            queue=submission.queue,
+            instructions=submission.instructions,
             company_id=self.company_id,
             files=_files)
 

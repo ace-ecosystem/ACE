@@ -7,6 +7,7 @@
         {% elif _observable.remediation_status == 'restore' %}`
             <span class="label label-special">restored</span>
         {% endif %}
+    {% elif _observable.remediation_success == None %}
     {% else %}
         <span class="label label-danger">remediation failed</span>
     {% endif %}

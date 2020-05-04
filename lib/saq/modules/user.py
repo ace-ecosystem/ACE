@@ -130,6 +130,12 @@ class UserAnalysis(Analysis):
         return True
 
 class UserAnalyzer(LDAPAnalysisModule):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tag_mappings = {}
+        for tag in saq.CONFIG['ldap_group_tags']:
+            self.tag_mappings[tag] = saq.CONFIG['ldap_group_tags'][tag].split(',')
+
     @property
     def generated_analysis_type(self):
         return UserAnalysis
@@ -168,15 +174,14 @@ class UserAnalyzer(LDAPAnalysisModule):
         # check for privileged access
         analysis.details['ldap']['entitlements'] = []
         if 'memberOf' in analysis.details['ldap'] and analysis.details['ldap']['memberOf'] is not None:
-            privileged_groups = dict(saq.CONFIG['ldap_privileged_groups'])
             for group in analysis.details['ldap']['memberOf']:
-                privileged = False
-                for _, privileged_group in privileged_groups.items():
-                    logging.debug(f"privileged_group = '{privileged_group}' and group = '{group}'")
-                    if privileged_group in group:
-                        user.add_tag("admin")
-                        privileged = True
-                        break
+                privileged = False # now used for any highlighting
+                for tag, patterns in self.tag_mappings.items():
+                    for pattern in patterns:
+                        if pattern in group:
+                            user.add_tag(tag)
+                            privileged = True
+                            break
                 analysis.details['ldap']['entitlements'].append({'group':group, 'privileged':privileged})
 
         # did we get an email address?
