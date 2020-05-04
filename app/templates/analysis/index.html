@@ -64,7 +64,7 @@
                                 <span class="glyphicon glyphicon-link"></span></button>
                                 <script type="text/javascript">
                                     $('#copy_link_action_{{unique_reference}}').on('click', function () {
-                                        let link = "{{ request.host }}{{ url_for('analysis.index', direct=alert.uuid) }}";
+                                        let link = "https://{{ request.host }}{{ url_for('analysis.index', direct=alert.uuid) }}";
                                         // see app/static/js/ace.js
                                         copy_to_clipboard(link);
                                         // let the user know it was copied by flashing it a bit

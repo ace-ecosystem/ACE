@@ -83,7 +83,7 @@ class EmailExtractionAnalysis(Analysis):
         message = self.result_description
         if message is None:
             message = "unknown error... contact administrator."
-        return f"Mailbox extraction: {message}"
+        return f"Mailbox Extraction: {message}"
 
 
 def get_extractors(config_sections) -> list:
@@ -204,7 +204,14 @@ class EmailExtractionAnalyzer(AnalysisModule):
         file_path = os.path.join(self.root.storage_dir, 'email.rfc822')
 
         try:
-            with open(file_path, 'w') as wf:
+            if isinstance(rfc_822_message, str):
+                mode = 'w'
+            elif isinstance(rfc_822_message, bytes):
+                mode = 'wb'
+            else:
+                raise ValueError(f"rfc_822_message is unsupported type {type(rfc_822_message)}")
+
+            with open(file_path, mode) as wf:
                 wf.write(rfc_822_message)
         except Exception as e:
             logging.error(f"unable to write rfc 822 message to {file_path} for {analysis.message_id}, {analysis.recipient}")

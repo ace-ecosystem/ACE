@@ -124,7 +124,10 @@ class _database_pool(object):
             logging.debug(f"unable to close database connection: {e}")
 
         with self.lock:
-            self.in_use.remove(connection)
+            try:
+                self.in_use.remove(connection)
+            except ValueError:
+                logging.warning("attempted to remove missing database connection {connection}")
 
     def open_new_connection(self):
         connection = pymysql.connect(**self.kwargs)
@@ -314,7 +317,23 @@ def execute_with_retry(db, cursor, sql_or_func, params=(), attempts=2, commit=Fa
 # new school database connections
 import logging
 import os.path
-from sqlalchemy import Column, Integer, BigInteger, String, ForeignKey, DateTime, TIMESTAMP, DATE, DATETIME, text, create_engine, Text, Enum, func
+from sqlalchemy import (
+        BigInteger,
+        Column,
+        DATE,
+        DATETIME,
+        DateTime,
+        Enum,
+        ForeignKey,
+        Integer,
+        String,
+        TIMESTAMP,
+        Text,
+        create_engine,
+        event,
+        exc,
+        func,
+        text,)
 from sqlalchemy.dialects.mysql import BOOLEAN, VARBINARY, BLOB
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship, reconstructor, backref, validates, scoped_session
@@ -438,6 +457,10 @@ class User(UserMixin, Base):
     omniscience = Column(Integer, nullable=False, default=0)
     timezone = Column(String(512))
     display_name = Column(String(1024))
+    queue = Column(
+        String(64),
+        nullable=False,
+        default=saq.constants.QUEUE_DEFAULT)
 
     def __str__(self):
         return self.username
@@ -955,6 +978,11 @@ class Alert(RootAnalysis, Base):
             saq.constants.DISPOSITION_INSIDER_DATA_CONTROL,
             saq.constants.DISPOSITION_INSIDER_DATA_EXFIL),
         nullable=True)
+
+    queue = Column(
+        String(64),
+        nullable=False,
+        default=saq.constants.QUEUE_DEFAULT)
 
     disposition_user_id = Column(
         Integer,
@@ -2333,9 +2361,26 @@ def initialize_database():
             isolation_level='READ COMMITTED',
             **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
 
+        @event.listens_for(engine, 'connect')
+        def connect(dbapi_connection, connection_record):
+            pid = os.getpid()
+            connection_record.info['pid'] = pid
+
+        @event.listens_for(engine, 'checkout')
+        def checkout(dbapi_connection, connection_record, connection_proxy):
+            pid = os.getpid()
+            if connection_record.info['pid'] != pid:
+                connection_record.connection = connection_proxy.connection = None
+                message = f"connection record belongs to pid {connection_record.info['pid']} attempting to check out in pid {pid}"
+                logging.debug(message)
+                raise exc.DisconnectionError(message)
+
         DatabaseSession = sessionmaker(bind=engine)
         saq.db = scoped_session(DatabaseSession)
+
     else:
+        # if you call this a second time it just closes all the sessions
+        # this (currently) happens in unit testing
         from sqlalchemy.orm.session import close_all_sessions
         close_all_sessions()
 

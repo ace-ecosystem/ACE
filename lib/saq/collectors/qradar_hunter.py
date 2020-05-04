@@ -5,6 +5,7 @@
 
 import datetime
 import logging
+import re
 
 import saq
 from saq.constants import *
@@ -19,7 +20,10 @@ class QRadarHunt(QueryHunt):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.tool_instance = saq.CONFIG['qradar']['url']
+        try:
+            self.tool_instance = saq.CONFIG['qradar']['url']
+        except:
+            self.tool_instance = None
 
         # reference to the client used to make the request
         self.qradar_client = None
@@ -30,14 +34,20 @@ class QRadarHunt(QueryHunt):
     def extract_event_timestamp(self, event):
         # the time of the event is always going to be in the deviceTimeFormatted field (see above)
         # 2019-10-29 19:50:38.592 -0400
-        if 'deviceTime' in event:
-            return datetime.datetime.fromtimestamp(event['deviceTime'] / 1000.0).astimezone(pytz.UTC)
-        elif 'deviceTimeFormatted' in event:
-            return datetime.datetime.strptime(event['deviceTimeFormatted'], 
-                                              '%Y-%m-%d %H:%M:%S.%f %z').astimezone(pytz.UTC)
-            event_time = event_time.astimezone(pytz.UTC)
+        key_map = {key.lower(): key for key in event.keys()}
+        if 'devicetime' in key_map:
+            target_key = key_map['devicetime']
+        elif 'starttime' in key_map:
+            target_key = key_map['starttime']
+        elif 'endtime' in key_map:
+            target_key = key_map['endtime']
         else:
-            logging.warning(f"{self} does not include deviceTime field for event time (defaulting to now)")
+            target_key = None
+
+        if target_key:
+            return datetime.datetime.fromtimestamp(event[target_key] / 1000.0).astimezone(pytz.UTC)
+        else:
+            logging.warning(f"{self} does not include valid field for event time (defaulting to now)")
             return local_time()
 
     def execute_query(self, start_time, end_time, unit_test_query_results=None):
@@ -86,11 +96,12 @@ class QRadarHunt(QueryHunt):
                               analysis_mode=ANALYSIS_MODE_CORRELATION,
                               tool=f'hunter-{self.type}',
                               tool_instance=saq.CONFIG['qradar']['url'],
-                              type=self.type,
+                              type=f"hunter - {self.type} - {re.split(r'[ _]', self.name)[0].lower()}",
                               tags=self.tags,
                               details=[],
                               observables=[],
                               event_time=None,
+                              queue=self.queue,
                               files=[])
 
         # TODO implement the continue check callback

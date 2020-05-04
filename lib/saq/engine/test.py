@@ -266,6 +266,41 @@ class TestCase(ACEEngineTestCase):
         analysis = observable.get_analysis('BasicTestAnalysis')
         self.assertIsNotNone(analysis)
 
+    def test_analysis_queues(self):
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.analysis_mode = 'test_queues'
+        root.queue = 'test'
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable = root.add_observable(F_TEST, 'test')
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_basic_test')
+        engine.enable_module('analysis_module_valid_queues_test')
+        engine.enable_module('analysis_module_invalid_queues_test')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+        observable = root.get_observable(observable.id)
+        self.assertIsNotNone(observable)
+
+        # make sure modules with no valid_queues or invlaid_queues run on all queues
+        analysis = observable.get_analysis('BasicTestAnalysis')
+        self.assertIsNotNone(analysis)
+
+        # make sure modules with valid_queues run
+        analysis = observable.get_analysis('ValidQueueAnalysis')
+        self.assertIsNotNone(analysis)
+
+        # make sure modules with invalid queues do not run
+        analysis = observable.get_analysis('InvalidQueueAnalysis')
+        self.assertIsNone(analysis)
+
     def test_invalid_analysis_mode(self):
 
         # an invalid analysis mode happens when you submit an analysis to an engine

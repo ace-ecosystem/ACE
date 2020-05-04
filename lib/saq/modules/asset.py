@@ -376,14 +376,13 @@ class DNSAnalysis(Analysis):
             return "DNS Analysis (hostname: {0} fqdn {1} ipv4 {2})".format(
                 self.dns_hostname,
                 self.dns_fqdn,
-                self.dns_ipv4)
+                ','.join(self.dns_ipv4))
 
         return None
 
 class DNSAnalyzer(AnalysisModule):
 
     def verify_environment(self):
-        self.verify_config_exists('local_domains')
         self.verify_program_exists('dig')
     
     @property
@@ -395,16 +394,13 @@ class DNSAnalyzer(AnalysisModule):
         return F_ASSET, F_FQDN, F_HOSTNAME
 
     def execute_analysis(self, observable):
-        # TODO turn this into a common global function
-        # we only want to resolve for local networks
-        # at least for now... TODO XXX NOTE
         if observable.type == F_FQDN:
             is_local_domain = False
             if '.' in observable.value:
                 domain = '.'.join(observable.value.split('.')[1:])
                 if domain.startswith('.'):
                     domain = domain[1:]
-                    if domain in [x.lower() for x in saq.CONFIG.get(self.config_section, 'local_domains').split(',')]:
+                    if domain in saq.LOCAL_DOMAINS:
                         logging.debug("{} identified as local domain".format(observable))
                         is_local_domain = True
             else:
@@ -423,52 +419,65 @@ class DNSAnalyzer(AnalysisModule):
             dig_process.append('-x')
         else:
             dig_process.append('+search')
-        dig_process.append(observable.value)
 
-        # are we executing this from a host in a target network?
-        if self.config['ssh_host']:
-            dig_process.insert(0, self.config['ssh_host'])
-            dig_process.insert(0, 'ssh')
+        target_queries = [ observable.value ]
 
-        p = Popen(dig_process, stdout=PIPE, stderr=DEVNULL)
-        try:
-            answer_section = False # state flag
-            for line in p.stdout:
-                #logging.debug(line)
-                if ';; ANSWER SECTION' in line.decode():
-                    answer_section = True
-                    continue
+        # if we have a hostname then we try all the local domains we know about as well
+        if observable.type == F_HOSTNAME:
+            for local_domain in saq.LOCAL_DOMAINS:
+                for local_domain in saq.CONFIG['global']['local_domains'].split(','):
+                    target_queries.append(f'{observable.value}.{local_domain}')
 
-                if not answer_section:
-                    continue
+        for target_query in target_queries:
 
-                m = re.match(r'^\S+\s+[0-9]+\s+IN\s+PTR\s+(\S+)$', line.decode(saq.DEFAULT_ENCODING))
-                if m:
-                    (fqdn,) = m.groups()
-                    analysis.dns_resolved = True
-                    analysis.dns_ipv4.append(observable.value)
-                    if '.' in fqdn:
-                        analysis.dns_hostname = fqdn.split('.')[0]
-                    analysis.dns_fqdn = fqdn
-                    continue
+            dig_process.append(target_query)
 
-                # PCN0117337.ashland.ad.ai. 1200  IN      A       149.55.130.115
-                m = re.match(r'^\S+\s+[0-9]+\s+IN\s+A\s+(\S+)$', line.decode())
-                if m:
-                    (ipv4,) = m.groups()
-                    if ipv4 is not None:
-                        logging.debug("hostname {} resolved to {}".format(observable.value, ipv4))
-                        analysis.add_observable(F_IPV4, ipv4)
+            # are we executing this from a host in a target network?
+            if self.config['ssh_host']:
+                dig_process.insert(0, self.config['ssh_host'])
+                dig_process.insert(0, 'ssh')
+
+            p = Popen(dig_process, stdout=PIPE, stderr=DEVNULL)
+            try:
+                answer_section = False # state flag
+                for line in p.stdout:
+                    #logging.debug(line)
+                    if ';; ANSWER SECTION' in line.decode():
+                        answer_section = True
+                        continue
+
+                    if not answer_section:
+                        continue
+
+                    m = re.match(r'^\S+\s+[0-9]+\s+IN\s+PTR\s+(\S+)$', line.decode(saq.DEFAULT_ENCODING))
+                    if m:
+                        (fqdn,) = m.groups()
                         analysis.dns_resolved = True
-                        if is_hostname(observable.value):
-                            analysis.dns_hostname = observable.value
-                        else:
-                            analysis.dns_fqdn = observable.value
+                        if observable.value not in analysis.dns_ipv4:
+                            analysis.dns_ipv4.append(observable.value)
+                        if '.' in fqdn:
+                            analysis.dns_hostname = fqdn.split('.')[0]
+                        analysis.dns_fqdn = fqdn
+                        continue
 
-                        analysis.dns_ipv4.append(ipv4)
-                    continue
-        finally:
-            p.wait()
+                    # PCN0117337.ashland.ad.ai. 1200  IN      A       149.55.130.115
+                    m = re.match(r'^\S+\s+[0-9]+\s+IN\s+A\s+(\S+)$', line.decode())
+                    if m:
+                        (ipv4,) = m.groups()
+                        if ipv4 is not None:
+                            logging.debug("hostname {} resolved to {}".format(observable.value, ipv4))
+                            analysis.add_observable(F_IPV4, ipv4)
+                            analysis.dns_resolved = True
+                            if is_hostname(observable.value):
+                                analysis.dns_hostname = observable.value
+                            else:
+                                analysis.dns_fqdn = observable.value
+
+                            if ipv4 not in analysis.dns_ipv4:
+                                analysis.dns_ipv4.append(ipv4)
+                        continue
+            finally:
+                p.wait()
 
         if not analysis.dns_resolved:
             logging.debug("reverse dns lookup failed for asset {}".format(observable))

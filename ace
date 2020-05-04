@@ -12,6 +12,7 @@ import importlib
 import io
 import json
 import logging
+import operator
 import os
 import os.path
 import pwd
@@ -224,6 +225,8 @@ def execute_hunt(args):
                 details=submission.details,
                 observables=submission.observables,
                 tags=submission.tags,
+                queue=submission.queue,
+                instructions=submission.instructions,
                 files=[])
 
 hunt_parser = subparsers.add_parser('hunt')
@@ -249,8 +252,67 @@ execute_hunt_parser.add_argument('--submit-alerts', required=False, default=None
     help="Submit as alerts to the given host[:port]")
 execute_hunt_parser.add_argument('--query-result-file', required=False, default=None,
     help="Valid only for query hunts. Save the raw query results to the given file.")
-    
 execute_hunt_parser.set_defaults(func=execute_hunt)
+
+def verify_hunt(args):
+    from saq.collectors.hunter import HunterCollector
+    from saq.collectors.query_hunter import QueryHunt
+    collector = HunterCollector()
+    collector.load_hunt_managers()
+    failed = False
+    for hunt_type, manager in collector.hunt_managers.items():
+        manager.load_hunts_from_config()
+        if manager.failed_ini_files:
+            sys.stderr.write(f"ERROR: unable to load {len(manager.failed_ini_files)} {hunt_type} hunts\n")
+            failed = True
+
+    if failed:
+        sys.exit(1)
+
+    print("hunt syntax verified")
+    sys.exit(0)
+
+verify_hunt_parser = hunt_sp.add_parser('verify',
+    help="Verifies that all configured hunts are able to load.")
+verify_hunt_parser.set_defaults(func=verify_hunt)
+
+def list_hunts(args):
+    from saq.collectors.hunter import HunterCollector
+    from saq.collectors.query_hunter import QueryHunt
+    collector = HunterCollector()
+    collector.load_hunt_managers()
+    for hunt_type, manager in sorted(collector.hunt_managers.items()):
+        manager.load_hunts_from_config()
+        for hunt in sorted(sorted(manager.hunts, key=operator.attrgetter('name')), 
+                key=operator.attrgetter('enabled'), reverse=True):
+            ini_file = os.path.splitext(os.path.basename(hunt.ini_path))[0]
+            status = "E" if hunt.enabled else "D"
+            print(f"{status} {hunt_type}:{ini_file} - {hunt.name}")
+
+    sys.exit(0)
+
+list_hunts_parser = hunt_sp.add_parser('list',
+    help="""List the available hunts.
+    The format of the output is
+    E|D type:name - description
+    E: enabled
+    D: disabled""")
+list_hunts_parser.set_defaults(func=list_hunts)
+
+def list_hunt_types(args):
+    from saq.collectors.hunter import HunterCollector
+    from saq.collectors.query_hunter import QueryHunt
+    collector = HunterCollector()
+    collector.load_hunt_managers()
+    for hunt_type in collector.hunt_managers.keys():
+        print(hunt_type)
+
+    sys.exit(0)
+
+list_hunt_types_parser = hunt_sp.add_parser('list-types',
+    help="List the available hunting types.")
+list_hunt_types_parser.set_defaults(func=list_hunt_types)
+
 
 # ============================================================================
 # persistence data
@@ -503,7 +565,7 @@ start_service_parser.add_argument('services', nargs="*",
     help="The names of the services to start. Use ace service list to get a list of names.")
 start_service_parser.set_defaults(func=start_service)
 
-def stop_service(args):
+def _stop_service(args):
     import saq.service
 
     # get the list of the services to start
@@ -523,6 +585,8 @@ def stop_service(args):
             if not args.all:
                 logging.info(f"service {service_name} status already ({service_status})")
 
+def stop_service(args):
+    _stop_service(args)
     sys.exit(0)
 
 stop_service_parser = service_sp.add_parser('stop',
@@ -532,6 +596,27 @@ stop_service_parser.add_argument('--all', action='store_true', default=False,
 stop_service_parser.add_argument('services', nargs="*",
     help="The names of the service to stop. Use ace service list to get a list of names.")
 stop_service_parser.set_defaults(func=stop_service)
+
+def restart_service(args):
+    _stop_service(args)
+    start_service(args)
+
+restart_service_parser = service_sp.add_parser('restart',
+    help="Restart ACE services.")
+restart_service_parser.add_argument('--debug', action='store_true', default=False,
+    help="Starts the service in debug mode.")
+restart_service_parser.add_argument('-d', '--daemon', '--background', action='store_true', default=False,
+    help="Starts the service and then executes in the background, tracking the PID. "
+         "This is the default if no other option is specified." )
+restart_service_parser.add_argument('--foreground', action='store_true', default=False,
+    help="Starts the service and then executes in the foreground, tracking the PID.")
+restart_service_parser.add_argument('--all', action='store_true', default=False,
+    help="Restarts all enabled services.")
+restart_service_parser.add_argument('--no-deps', action='store_true', default=False,
+    help="Do NOT automatically start service dependencies.")
+restart_service_parser.add_argument('services', nargs="*",
+    help="The names of the services to restart. Use ace service list to get a list of names.")
+restart_service_parser.set_defaults(func=restart_service)
 
 def status_service(args):
     from saq.service import get_all_service_names, get_service_config, get_service_status
@@ -775,6 +860,7 @@ def correlate(args):
         saq.CONFIG[f'analysis_mode_{root.analysis_mode}']['cleanup'] = 'no'
 
         root.description = args.description if args.description else 'Command Line Correlation'
+        root.instructions = args.instructions
         root.event_time = datetime.datetime.now() if reference_time is None else reference_time
         if args.load_details:
             with open(args.load_details, 'r') as fp:
@@ -792,9 +878,9 @@ def correlate(args):
         o_type = args.targets[index]
         o_value = args.targets[index + 1]
 
-        if o_type not in VALID_OBSERVABLE_TYPES:
-            logging.error("invalid observable type {0}".format(o_type))
-            sys.exit(1)
+        #if o_type not in VALID_OBSERVABLE_TYPES:
+            #logging.error("invalid observable type {0}".format(o_type))
+            #sys.exit(1)
 
         # the root analysis we're currently working on (defaults to the main alert)
         current_root = root
@@ -971,7 +1057,7 @@ correlate_parser.add_argument('-m', '--analysis-mode', required=False, dest='ana
 correlate_parser.add_argument('-d', '--storage-dir', required=False, dest='storage_dir', default='ace.out',
     help="Specify an output directory.  Defaults to ace.out.")
 correlate_parser.add_argument('-t', '--reference-time', required=False, dest='reference_time', default=None,
-    help="Specify a datetime in YYYY-MM-DD HH:MM:SS Z format that observables (of a temporal type) should be referenced from.")
+    help="Specify a datetime in YYYY-MM-DD HH:MM:SS [+-]0000 format that observables (of a temporal type) should be referenced from.")
 correlate_parser.add_argument('--description', required=False, dest='description', default="ACE Manual Correlation",
     help="Supply a description.  This will be displayed as part of the alert if this correlation is later imported as an alert.")
 correlate_parser.add_argument('--comment', required=False, dest='comment', default=None,
@@ -982,6 +1068,10 @@ correlate_parser.add_argument('--add-tag', required=False, dest='tags', action='
     help="Adds the given tag to all observables specified.  This option can be used multiple times.")
 correlate_parser.add_argument('--alert-type', required=False, dest='alert_type', default='cli_analysis',
     help="Optionally set the alert type.  Some analysis is only performed for alerts of a certain type.")
+correlate_parser.add_argument('--instructions', required=False, dest='instructions', default=None,
+    help="""A free form string value that gives the analyst instructions on what
+        this alert is about and/or how to analyze the data contained in the
+        alert.""")
 correlate_parser.add_argument('--company-name', required=False, dest='company_name', default=None,
     help="Optionally assign ownership of this analysis to a company.")
 correlate_parser.add_argument('--alert', required=False, dest='alert', action='store_true', default=False,
@@ -3611,7 +3701,212 @@ import_encrypted_passwords_parser.add_argument('file',
             Use a file name of - to import from stdin.""")
 import_encrypted_passwords_parser.set_defaults(func=import_encrypted_passwords)
 
-# move to bro integration
+# ============================================================================
+# CrowdStrike API utilities
+# TODO support integration with CLI
+
+falcon_parser = subparsers.add_parser('falcon',
+    help="Utility commands supporting the Crowdstrike Falcon API.")
+falcon_sp = falcon_parser.add_subparsers(dest='falcon_cmd')
+
+falcon_oauth_parser = falcon_sp.add_parser('oauth',
+    help="Utilities to manage oauth tokens.")
+falcon_oauth_sp = falcon_oauth_parser.add_subparsers(dest='falcon_oauth_cmd')
+
+def falcon_oauth_acquire(args):
+    from saq.falcon import FalconAPIClient
+    with FalconAPIClient() as client:
+        print(client.token)
+
+    sys.exit(0)
+
+falcon_oauth_acquire_token_parser = falcon_oauth_sp.add_parser('acquire',
+    help="Acquire an oauth token. Does nothing if a token is already acquired and still valid.")
+falcon_oauth_acquire_token_parser.set_defaults(func=falcon_oauth_acquire)
+
+def falcon_oauth_revoke(args):
+    from saq.falcon import FalconAPIClient
+    with FalconAPIClient() as client:
+        client.revoke_oauth2_token()
+
+    sys.exit(0)
+
+falcon_oauth_revoke_token_parser = falcon_oauth_sp.add_parser('revoke',
+    help="Revoke an oauth token. Does nothing if a token is not already acquired.")
+falcon_oauth_revoke_token_parser.set_defaults(func=falcon_oauth_revoke)
+
+def falcon_rtr_list_sessions(args):
+    from saq.falcon import FalconAPIClient
+    with FalconAPIClient() as client:
+        session_ids = client.api_rtr_get_session_ids()
+        print(json.dumps(session_ids))
+
+    sys.exit(0)
+
+falcon_rtr_parser = falcon_sp.add_parser('rtr',
+    help="Real Time Response")
+falcon_rtr_sp = falcon_rtr_parser.add_subparsers(dest='falcon_rtr_cmd')
+
+falcon_rtr_list_sessions_parser = falcon_rtr_sp.add_parser('list-sessions',
+    help="")
+falcon_rtr_list_sessions_parser.set_defaults(func=falcon_rtr_list_sessions)
+
+def falcon_rtr_open_session(args):
+    from saq.falcon import FalconAPIClient
+    with FalconAPIClient() as client:
+        result = client.api_rtr_open_session(args.device_id)
+        print(json.dumps(result))
+
+    sys.exit(0)
+
+falcon_rtr_open_session_parser = falcon_rtr_sp.add_parser('open-session',
+    help="")
+falcon_rtr_open_session_parser.add_argument('device_id',
+    help="The device to open the session on.")
+falcon_rtr_open_session_parser.set_defaults(func=falcon_rtr_open_session)
+
+def falcon_rtr_close_session(args):
+    from saq.falcon import FalconAPIClient
+    with FalconAPIClient() as client:
+        result = client.api_rtr_close_session(args.session_id)
+        if result:
+            print("session closed")
+
+    sys.exit(0)
+
+falcon_rtr_close_session_parser = falcon_rtr_sp.add_parser('close-session',
+    help="")
+falcon_rtr_close_session_parser.add_argument('session_id',
+    help="The id of the session to close.")
+falcon_rtr_close_session_parser.set_defaults(func=falcon_rtr_close_session)
+
+def single_falcon_target(func):
+    def wrapper(*args, **kwargs):
+        from saq.falcon import ( 
+            HostNotFoundError, 
+            MultipleHostsFoundError
+        )
+        try:
+            return func(*args, **kwargs)
+        except HostNotFoundError:
+            sys.stderr.write("ERROR: host not found\n")
+            sys.exit(1)
+        
+        except MultipleHostsFoundError as e:
+            sys.stderr.write("ERROR: multiple hosts found (see list below)\n")
+            for host in e.hosts:
+                sys.stderr.write(f"hostname: {host['hostname']} "
+                                 f"local_ip: {host['local_ip']} "
+                                 f"external_ip: {host['external_ip']} "
+                                 f"mac_address: {host['mac_address']} "
+                                 f"device_id: {host['device_id']} "
+                                 f"last_seen: {host['last_seen']}\n")
+
+    return wrapper
+
+@single_falcon_target
+def falcon_rtr_execute_command(args):
+    from saq.falcon import ( 
+        FalconAPIClient, 
+        HostNotFoundError, 
+        MultipleHostsFoundError
+    )
+    
+    with FalconAPIClient() as client:
+        with client.open_session(
+            hostname=args.hostname,
+            ipv4=args.ipv4,
+            local_ip=args.local_ip,
+            external_ip=args.external_ip,
+            mac_address=args.mac_address,
+            device_id=args.device_id) as host_session:
+
+            if args.admin:
+                results = host_session.execute_admin_command(args.base_command, args.command_string)
+            else:
+                results = host_session.execute_command(args.base_command, args.command_string)
+
+            for result in results:
+                if result['stdout']:
+                    sys.stdout.write(result['stdout'])
+                if result['stderr']:
+                    sys.stderr.write(result['stdout'])
+
+    sys.exit(0)
+
+def _add_falcon_host_spec_args(parser):
+    parser.add_argument('--hostname',
+        help="The host to execute the command on (specified by hostname.)")
+    parser.add_argument('--ipv4',
+        help="The host to execute the command on (specified by local or external ip.)")
+    parser.add_argument('--local-ip',
+        help="The host to execute the command on (specified by local ip.)")
+    parser.add_argument('--external-ip',
+        help="The host to execute the command on (specified by external ip.)")
+    parser.add_argument('--mac-address',
+        help="The host to execute the command on (specified by mac address in the format XX-XX-XX-XX-XX-XX.)")
+    parser.add_argument('--device-id',
+        help="The host to execute the command on (specified by device id.) This overrides other filters.")
+
+falcon_rtr_execute_command_parser = falcon_rtr_sp.add_parser('execute',
+    help="")
+_add_falcon_host_spec_args(falcon_rtr_execute_command_parser)
+falcon_rtr_execute_command_parser.add_argument('base_command',
+    help="The command to execute on the host.")
+falcon_rtr_execute_command_parser.add_argument('command_string',
+    help="The command to execute on the host.")
+falcon_rtr_execute_command_parser.add_argument('--admin', action='store_true', default=False,
+    help="Execute the command as an admin. Some commands require this.")
+falcon_rtr_execute_command_parser.set_defaults(func=falcon_rtr_execute_command)
+
+@single_falcon_target
+def falcon_rtr_get_file(args):
+    from saq.falcon import ( 
+        FalconAPIClient, 
+        HostNotFoundError, 
+        MultipleHostsFoundError
+    )
+
+    with FalconAPIClient() as client:
+        with client.open_session(
+            hostname=args.hostname,
+            ipv4=args.ipv4,
+            local_ip=args.local_ip,
+            external_ip=args.external_ip,
+            mac_address=args.mac_address,
+            device_id=args.device_id) as host_session:
+
+            host_session.get_file(args.remote_path, args.local_path)
+
+    sys.exit(0)
+
+falcon_rtr_get_file_parser = falcon_rtr_sp.add_parser('get-file',
+    help="")
+_add_falcon_host_spec_args(falcon_rtr_get_file_parser)
+falcon_rtr_get_file_parser.add_argument('remote_path',
+    help="The path of the file to get (relative to the remote system.)")
+falcon_rtr_get_file_parser.add_argument('local_path',
+    help="The path to save the file to locally.")
+falcon_rtr_get_file_parser.set_defaults(func=falcon_rtr_get_file)
+
+def falcon_device_search(args):
+    from saq.falcon import FalconAPIClient
+    with FalconAPIClient() as client:
+        result = client.api_search_devices(args.filter)
+        print(json.dumps(result))
+
+    sys.exit(0)
+
+falcon_device_parser = falcon_sp.add_parser('device',
+    help="Devices")
+falcon_device_sp = falcon_device_parser.add_subparsers(dest='falcon_device_cmd')
+
+falcon_device_search_parser = falcon_device_sp.add_parser('search',
+    help="Searches for devices known to Falcon.")
+falcon_device_search_parser.add_argument('filter',
+    help="The FQL filter to apply to the search.")
+falcon_device_search_parser.set_defaults(func=falcon_device_search)
+
 def add_bro_http_whitelist(args):
     import saq
 

@@ -183,6 +183,7 @@ class Worker(object):
 
     def worker_loop(self):
         logging.info("started worker loop on process {} with priority {}".format(os.getpid(), self.mode))
+
         CURRENT_ENGINE.setup(self.mode)
 
         # let the main process know we started
@@ -194,9 +195,6 @@ class Worker(object):
             self.next_auto_refresh_time = datetime.datetime.now() + datetime.timedelta(
                                           seconds=self.auto_refresh_frequency)
             logging.debug(f"next auto refresh time for {os.getpid()} set to {self.next_auto_refresh_time}")
-
-        # each process gets it's own SQLAlchemy session scope
-        saq.database.initialize_database()
         
         while True:
             # is the engine shutting down?

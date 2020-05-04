@@ -150,6 +150,8 @@ def _execute_api_call(command,
         kwargs['params'] = params
     if ssl_verification is not None:
         kwargs['verify'] = ssl_verification
+    else:
+        kwargs['verify'] = False
     if data is not None:
         kwargs['data'] = data
     if files is not None:
@@ -229,6 +231,7 @@ ping_command_parser = _api_command(subparsers.add_parser('ping',
     help="""Connectivity check to the ACE ecosystem."""))
 ping_command_parser.set_defaults(func=_cli_ping)
 
+# TODO parameters should default to None and let the server decide the default value
 def submit(
     description, 
     analysis_mode='analysis',
@@ -241,6 +244,8 @@ def submit(
     observables=[],
     tags=[],
     files=[],
+    queue='default', 
+    instructions=None,
     *args, **kwargs):
     """Submit a request to ACE for analysis and/or correlation.
     
@@ -257,6 +262,10 @@ def submit(
     :param list observables: (optional) A list of observables to add to the request.
     :param list tags: (optional) An optional list of tags to add the the analysis.
     :param list files: (optional) A list of (file_name, file_descriptor) tuples to be included in this ACE request.
+    :param str queue: (optional) The queue this analysis should go into if this submissions becomes an alert.
+    :param str instructions: (optional) A free form string value that gives the analyst instructions on what
+        this alert is about and/or how to analyze the data contained in the
+        alert.
     :return: A result dictionary. If submission was successful, the UUID of the analysis will be contained. Like this:
         {'result': {'uuid': '960b0a0f-3ea2-465f-852f-ebccac6ae282'}}
     :rtype: dict
@@ -327,6 +336,8 @@ def submit(
             'details': details,
             'observables': observables,
             'tags': tags, 
+            'queue': queue, 
+            'instructions': instructions,
         }),
     }, files=files_params, method=METHOD_POST, *args, **kwargs).json()
 
@@ -399,7 +410,7 @@ def _cli_submit(args):
     f_kwargs = { 'remote_host': args.remote_host }
     for prop in [ 'ssl_verification', 'disable_ssl_verification', 'analysis_mode', 'tool', 'tool_instance', 
                   'type', 'event_time', 'details', 'observables',
-                  'tags', 'files' ]:
+                  'tags', 'files', 'instructions' ]:
 
         if getattr(args, prop) is not None:
             f_kwargs[prop] = getattr(args, prop)
@@ -437,6 +448,11 @@ submit_command_parser.add_argument('-f', '--files', nargs='+', dest='files',
     help="""The list of files to add to the analysis.
             Each file name can optionally be renamed in the remote submission by using the format
             source_path-->dest_path where dest_path is a relative path.""")
+# TODO add support for queue
+submit_command_parser.add_argument('--instructions', 
+    help="""A free form string value that gives the analyst instructions on what
+        this alert is about and/or how to analyze the data contained in the
+        alert.""")
 submit_command_parser.set_defaults(func=_cli_submit)
 
 def resubmit_alert(uuid, *args, **kwargs):

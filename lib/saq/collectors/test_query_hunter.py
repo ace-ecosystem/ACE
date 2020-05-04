@@ -32,6 +32,7 @@ def default_hunt(enabled=True,
                  name='test_hunt', 
                  description='Test Hunt', 
                  type='test_query',
+                 alert_type='test - query',
                  frequency=create_timedelta('00:10'), 
                  tags=[ 'test_tag' ],
                  search_query_path='hunts/test/query/test_1.query',
@@ -46,6 +47,7 @@ def default_hunt(enabled=True,
                          name=name, 
                          description=description,
                          type=type,     
+                         alert_type=alert_type,
                          frequency=frequency, 
                          tags=tags,
                          search_query_path=search_query_path,
@@ -71,13 +73,15 @@ class TestCase(HunterBaseTestCase):
         os.mkdir(self.temp_rules_dir)
         s['rule_dirs'] = self.temp_rules_dir
 
-        with open(os.path.join(self.temp_rules_dir, 'test_1.ini'), 'w') as fp:
+        self.test_ini_path = os.path.join(self.temp_rules_dir, 'test_1.ini')
+        with open(self.test_ini_path, 'w') as fp:
             fp.write(f"""
 [rule]
 enabled = yes
 name = query_test_1
 description = Query Test Description 1
 type = query_test
+alert_type = test - query
 frequency = 00:01:00
 tags = tag1, tag2
 
@@ -100,7 +104,8 @@ dst_ip = yes
 [directives]
 """)
 
-        with open(os.path.join(self.temp_rules_dir, 'test_1.query'), 'w') as fp:
+        self.test_query_path = os.path.join(self.temp_rules_dir, 'test_1.query')
+        with open(self.test_query_path, 'w') as fp:
             fp.write('Test query.')
 
     def manager_kwargs(self):
@@ -121,6 +126,7 @@ dst_ip = yes
         self.assertEquals(hunt.name, 'query_test_1')
         self.assertEquals(hunt.description, 'Query Test Description 1')
         self.assertEquals(hunt.type, 'test_query')
+        self.assertEquals(hunt.alert_type, 'test - query')
         self.assertEquals(hunt.frequency, create_timedelta('00:01:00'))
         self.assertEquals(hunt.tags, ['tag1', 'tag2'])
         self.assertEquals(hunt.time_range, create_timedelta('00:01:00'))
@@ -132,6 +138,82 @@ dst_ip = yes
         self.assertTrue(hunt.use_index_time)
         self.assertEquals(hunt.observable_mapping, { 'src_ip': 'ipv4', 'dst_ip': 'ipv4' })
         self.assertEquals(hunt.temporal_fields, { 'src_ip': True, 'dst_ip': True })
+
+    def test_load_query_inline(self):
+        with open(self.test_ini_path, 'w') as fp:
+            fp.write(f"""
+[rule]
+enabled = yes
+name = query_test_1
+description = Query Test Description 1
+type = query_test
+alert_type = test - query
+frequency = 00:01:00
+tags = tag1, tag2
+
+time_range = 00:01:00
+max_time_range = 01:00:00
+offset = 00:05:00
+full_coverage = yes
+group_by = field1
+query = Test query.
+use_index_time = yes
+
+[observable_mapping]
+src_ip = ipv4
+dst_ip = ipv4
+
+[temporal_fields]
+src_ip = yes
+dst_ip = yes
+
+[directives]
+""")
+        manager = HuntManager(**self.manager_kwargs())
+        manager.load_hunts_from_config()
+        self.assertEquals(len(manager.hunts), 1)
+        hunt = manager.hunts[0]
+        self.assertTrue(hunt.enabled)
+        self.assertEquals(hunt.query, 'Test query.')
+
+    def test_load_multi_line_query_inline(self):
+        with open(self.test_ini_path, 'w') as fp:
+            fp.write(f"""
+[rule]
+enabled = yes
+name = query_test_1
+description = Query Test Description 1
+type = query_test
+alert_type = test - query
+frequency = 00:01:00
+tags = tag1, tag2
+
+time_range = 00:01:00
+max_time_range = 01:00:00
+offset = 00:05:00
+full_coverage = yes
+group_by = field1
+query = 
+    This is a multi line query.
+    How about that?
+use_index_time = yes
+
+[observable_mapping]
+src_ip = ipv4
+dst_ip = ipv4
+
+[temporal_fields]
+src_ip = yes
+dst_ip = yes
+
+[directives]
+""")
+        manager = HuntManager(**self.manager_kwargs())
+        manager.load_hunts_from_config()
+        self.assertEquals(len(manager.hunts), 1)
+        hunt = manager.hunts[0]
+        self.assertTrue(hunt.enabled)
+        self.assertEquals(hunt.query, """\nThis is a multi line query.\nHow about that?""")
 
     def test_reload_hunts_on_search_modified(self):
         saq.CONFIG['service_hunter']['update_frequency'] = '1'
@@ -245,3 +327,24 @@ dst_ip = yes
         # the times passed to hunt.execute_query should be 30 minutes offset
         self.assertEquals(target_start_time - hunt.offset, hunt.exec_start_time)
         self.assertEquals(hunt.last_end_time - hunt.offset, hunt.exec_end_time)
+
+    #
+    # NOTE if a query file is missing and then ends up appearing later, the hunt will still not be loaded
+    # 
+
+    def test_missing_query_file(self):
+        os.remove(self.test_query_path)
+        manager = HuntManager(**self.manager_kwargs())
+        manager.load_hunts_from_config()
+        self.assertEquals(len(manager.hunts), 0)
+        self.assertEquals(len(manager.failed_ini_files), 1)
+
+        self.assertFalse(manager.reload_hunts_flag)
+        manager.check_hunts()
+        self.assertFalse(manager.reload_hunts_flag)
+
+        with open(self.test_query_path, 'w') as fp:
+            fp.write('Test query.')
+
+        manager.check_hunts()
+        self.assertFalse(manager.reload_hunts_flag)

@@ -76,6 +76,7 @@ from saq.remediation.email import old_request_email_remediation, \
                                   remediate_emails, \
                                   unremediate_emails
 from saq.remediation.constants import REMEDIATION_TYPE_EMAIL
+from saq.file_upload import *
 
 import ace_api
 
@@ -108,6 +109,16 @@ def generic_functions():
         return str(uuid.uuid4())
 
     return { 'generate_unique_reference': generate_unique_reference }
+
+@analysis.context_processor
+def send_to_hosts():
+    hosts = {}
+    try:
+        config_keys = [x for x in saq.CONFIG.keys() if x.startswith('send_file_to_')]
+        hosts = [saq.CONFIG[x] for x in config_keys]
+    except Exception as e:
+        logging.error(f"no hosts properly configured to send to: {e}")
+    return dict(send_to_hosts=hosts)
 
 # utility routines
 
@@ -143,10 +154,23 @@ def get_current_alert():
 
     return None
 
+def load_current_alert():
+    alert = get_current_alert()
+    if alert is None:
+        return None
+
+    try:
+        alert.load()
+        return alert
+    except Exception as e:
+        logging.error(f"unable to load alert uuid {alert.uuid}: {e}")
+        return None
+
 def filter_special_tags(tags):
     # we don't show "special" tags in the display
     special_tag_names = [tag for tag in saq.CONFIG['tags'].keys() if saq.CONFIG['tags'][tag] == 'special']
     return [tag for tag in tags if tag.name not in special_tag_names]
+
 
 @analysis.after_request
 def add_header(response):
@@ -282,6 +306,13 @@ def redirect_to():
         return redirect('{}/ProtectManager/IncidentDetail.do?value(variable_1)=incident.id&value(operator_1)=incident.id_in&value(operand_1)={}'.format(
             saq.CONFIG['dlp']['base_uri'],
             file_observable.value))
+
+    if target == 'exabeam':
+        return redirect(f'{saq.CONFIG["exabeam"]["base_uri"]}/uba/#user/{file_observable.value}')
+
+    if target == 'exabeam_session':
+        user_value = file_observable.value.split('-')[0]
+        return redirect(f'{saq.CONFIG["exabeam"]["base_uri"]}/uba/#user/{user_value}/timeline/{file_observable.value}')
 
     # both of these requests require the sha256 hash
     # as on 12/23/2015 the FileObservable stores these hashes as a part of the observable
@@ -762,9 +793,9 @@ def add_observable():
         flash("invalid observable time format")
         return redirection
 
-    if o_type not in VALID_OBSERVABLE_TYPES:
-        flash("invalid observable type {0}".format(o_type))
-        return redirection
+    #if o_type not in VALID_OBSERVABLE_TYPES:
+        #flash("invalid observable type {0}".format(o_type))
+        #return redirection
 
     if o_value == '':
         flash("missing observable value")
@@ -1049,6 +1080,7 @@ def new_alert(db, c):
     tool_instance = saq.CONFIG['global']['instance_name']
     alert_type = request.form.get('new_alert_type', 'manual')
     description = request.form.get('new_alert_description', 'Manual Alert')
+    queue = request.form.get('new_alert_queue', 'default')
     node_data = request.form.get('target_node_data').split(',')
     node_id = node_data[0]
     node_location = node_data[1]
@@ -1123,6 +1155,7 @@ def new_alert(db, c):
                 details = details,
                 observables = observables,
                 tags = tags,
+                queue = queue,
                 files = files)
 
             if 'result' in result and 'uuid' in result['result']:
@@ -1591,6 +1624,7 @@ def verify_integer(filter_value):
 # NOTE these values ARE EQUAL TO the "name" field in the <form> of the filter dialog
 FILTER_CB_OPEN = 'filter_open'
 FILTER_CB_UNOWNED = 'filter_unowned'
+FILTER_CB_USERS_QUEUE = 'filter_users_queue'
 FILTER_CB_ONLY_SLA = 'filter_sla'
 FILTER_CB_ONLY_REMEDIATED = 'filter_only_remediated'
 FILTER_CB_REMEDIATE_DATE = 'remediate_date'
@@ -1687,6 +1721,7 @@ def manage():
     filters = {
         FILTER_CB_OPEN: SearchFilter('filter_open', FILTER_TYPE_CHECKBOX, True),
         FILTER_CB_UNOWNED: SearchFilter('filter_unowned', FILTER_TYPE_CHECKBOX, True),
+        FILTER_CB_USERS_QUEUE: SearchFilter('filter_users_queue', FILTER_TYPE_CHECKBOX, True),
         FILTER_CB_ONLY_SLA: SearchFilter('filter_sla', FILTER_TYPE_CHECKBOX, False),
         FILTER_CB_ONLY_REMEDIATED: SearchFilter('filter_only_remediated', FILTER_TYPE_CHECKBOX, False),
         FILTER_CB_REMEDIATE_DATE: SearchFilter('remediate_date', FILTER_TYPE_CHECKBOX, False),
@@ -1920,6 +1955,7 @@ def manage():
         # in this case we clear out all other filters except for this observable and disposition
         filters[FILTER_CB_OPEN].value = False
         filters[FILTER_CB_UNOWNED].value = False
+        filters[FILTER_CB_USERS_QUEUE].value = False
 
         key = f'observable_{odh_o.id}'
         filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
@@ -1958,6 +1994,10 @@ def manage():
     if filters[FILTER_CB_UNOWNED].value:
         query = query.filter(or_(GUIAlert.owner_id == current_user.id, GUIAlert.owner_id == None))
         filter_english.append("not owned by others")
+
+    if filters[FILTER_CB_USERS_QUEUE].value:
+        query = query.filter(GUIAlert.queue == current_user.queue)
+        filter_english.append(f"in {current_user.queue} queue")
 
     # what timezone do we display the alerts in?
     # all times MUST be UTC in the database
@@ -2410,6 +2450,7 @@ def manage():
         alert_limit=alert_limit,
         user_limit=session['limit'] if 'limit' in session else "50",
         alert_offset=alert_offset,
+        default_queue=current_user.queue,
         alert_remediations=alert_remediations)
 
 
@@ -3945,6 +3986,7 @@ ORDER BY
                            observable_types=VALID_OBSERVABLE_TYPES,
                            date=date, 
                            available_nodes=available_nodes,
+                           queue=current_user.queue,
                            timezones=pytz.common_timezones)
 
 @analysis.route('/upload_file', methods=['POST'])
@@ -4167,6 +4209,19 @@ def observable_action():
             logging.info(f"{current_user.username} set sip indicator {sip_id} status to {status}")
             result = saq.intel.set_sip_indicator_status(sip_id, status)
             return "OK", 200
+
+        elif action_id == ACTION_FILE_SEND_TO:
+            host = request.form.get('hostname')
+            try:
+                # data is validated by the uploader
+                logging.info(f"attempting to send file '{observable}' to {host}")
+                uploader = FileUploader(host, alert.storage_dir, observable.value, alert.uuid)
+                uploader.uploadFile()
+            except Exception as error:
+                logging.error(f"unable to send file '{observable}' to {host} due to error: {error}")
+                return f"Error: {error}", 400
+            else:
+                return "File uploaded", 200
 
         return "invalid action_id", 500
 
@@ -4524,4 +4579,22 @@ def remediate_targets():
     from saq.analysis import _JSONEncoder
     response = make_response(json.dumps(result, cls=_JSONEncoder))
     response.mimetype = 'application/json'
+    return response
+
+@analysis.route('/html_details', methods=['GET'])
+@login_required
+def html_details():
+    alert = load_current_alert()
+    if alert is None:
+        response = make_response("alert not found")
+        response.mimtype = 'text/plain'
+        return response
+
+    if 'field' not in request.args:
+        response = make_response("missing required parameter: field")
+        response.mimtype = 'text/plain'
+        return response
+
+    response = make_response(alert.details[request.args['field']])
+    response.mimtype = 'text/html'
     return response

@@ -12,14 +12,6 @@ from saq.collectors.splunk_hunter import SplunkHunt
 from saq.test import *
 from saq.util import *
 
-def manager_kwargs():
-    return { 'collector': HunterCollector(),
-             'hunt_type': 'splunk',
-             'rule_dirs': [ 'hunts/test/splunk', ],
-             'hunt_cls': SplunkHunt,
-             'concurrency_limit': 1,
-             'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir']),
-             'update_frequency': 60}
 
 class TestCase(HunterBaseTestCase):
     def setUp(self):
@@ -28,14 +20,26 @@ class TestCase(HunterBaseTestCase):
         if not integration_enabled('splunk'):
             raise unittest.SkipTest("skipping splunk tests (splunk integration not enabled)")
 
+        shutil.rmtree(self.temp_rules_dir)
+        shutil.copytree('hunts/test/splunk', self.temp_rules_dir)
+
         ips_txt = 'hunts/test/splunk/ips.txt'
         with open(ips_txt, 'w') as fp:
             fp.write('1.1.1.1\n')
 
         saq.CONFIG['splunk']['uri'] = 'https://localhost:8089'
 
+    def manager_kwargs(self):
+        return { 'collector': HunterCollector(),
+                 'hunt_type': 'splunk',
+                 'rule_dirs': [ self.temp_rules_dir, ],
+                 'hunt_cls': SplunkHunt,
+                 'concurrency_limit': 1,
+                 'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir']),
+                 'update_frequency': 60}
+
     def test_load_hunt_ini(self):
-        manager = HuntManager(**manager_kwargs())
+        manager = HuntManager(**self.manager_kwargs())
         manager.load_hunts_from_config(hunt_filter=lambda hunt: hunt.name == 'query_test_1')
         self.assertEquals(len(manager.hunts), 1)
         
@@ -56,13 +60,23 @@ class TestCase(HunterBaseTestCase):
         self.assertTrue(hunt.use_index_time)
         self.assertEquals(hunt.observable_mapping, { 'src_ip': 'ipv4', 'dst_ip': 'ipv4' })
         self.assertEquals(hunt.temporal_fields, { 'src_ip': True, 'dst_ip': True })
+        self.assertEquals(hunt.namespace_app, '-')
+        self.assertEquals(hunt.namespace_user, '-')
+
+        manager = HuntManager(**self.manager_kwargs())
+        manager.load_hunts_from_config(hunt_filter=lambda hunt: hunt.name == 'test_app_context')
+        self.assertEquals(len(manager.hunts), 1)
+
+        hunt = manager.get_hunt_by_name('test_app_context')
+        self.assertEquals(hunt.namespace_app, 'app')
+        self.assertEquals(hunt.namespace_user, 'user')
 
     def test_load_hunt_with_includes(self):
         ips_txt = 'hunts/test/splunk/ips.txt'
         with open(ips_txt, 'w') as fp:
             fp.write('1.1.1.1\n')
 
-        manager = HuntManager(**manager_kwargs())
+        manager = HuntManager(**self.manager_kwargs())
         manager.load_hunts_from_config(hunt_filter=lambda hunt: hunt.name == 'query_test_includes')
         hunt = manager.get_hunt_by_name('query_test_includes')
         self.assertIsNotNone(hunt)
@@ -78,7 +92,7 @@ class TestCase(HunterBaseTestCase):
         os.remove(ips_txt)
 
     def test_splunk_query(self):
-        manager = HuntManager(**manager_kwargs())
+        manager = HuntManager(**self.manager_kwargs())
         manager.load_hunts_from_config(hunt_filter=lambda hunt: hunt.name == 'Test Splunk Query')
         self.assertEquals(len(manager.hunts), 1)
         hunt = manager.get_hunt_by_name('Test Splunk Query')
@@ -99,7 +113,7 @@ class TestCase(HunterBaseTestCase):
                 self.assertEquals(submission.tags, ['tag1', 'tag2'])
                 self.assertEquals(submission.tool, 'hunter-splunk')
                 self.assertEquals(submission.tool_instance, saq.CONFIG['splunk']['uri'])
-                self.assertEquals(submission.type, 'splunk')
+                self.assertEquals(submission.type, 'hunter - splunk - test')
 
                 if submission.description == 'Test Splunk Query: 29380 (3 events)':
                     self.assertEquals(submission.event_time, datetime.datetime(2019, 12, 23, 16, 5, 36))

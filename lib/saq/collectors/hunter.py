@@ -33,6 +33,7 @@ import threading
 import sqlite3
 from croniter import croniter
 
+from croniter import croniter
 import pytz
 
 import saq
@@ -52,16 +53,27 @@ def open_hunt_db(hunt_type):
 class Hunt(object):
     """Abstract class that represents a single hunt."""
 
-    def __init__(self, enabled=None, name=None, description=None, type=None,
-                       frequency=None, tags=[]):
+    def __init__(
+            self, 
+            enabled=None, 
+            name=None, 
+            description=None, 
+            type=None, 
+            alert_type=None,
+            analysis_mode=None,
+            frequency=None, 
+            tags=[]):
 
         self.enabled = enabled
         self.name = name
         self.description = description
         self.type = type
+        self.alert_type = alert_type
+        self.analysis_mode = analysis_mode
         self.frequency = frequency
         self.tags = tags
         self.cron_schedule = None
+        self.queue = QUEUE_DEFAULT
 
         # the last time the hunt was executed
         # see the last_executed_time property
@@ -185,19 +197,38 @@ class Hunt(object):
     def load_from_ini(self, path):
         """Loads the settings for the hunt from an ini formatted file. This function must return the 
            ConfigParser object used to load the settings."""
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
         config.optionxform = str # preserve case when reading option names
         config.read(path)
 
         section_rule = config['rule']
 
         self.enabled = section_rule.getboolean('enabled')
-        self.name = section_rule['name']
+
+        # if we don't pass the name then we create it from the name of the ini file
+        self.name = section_rule.get(
+                'name', 
+                fallback=(os.path.splitext(os.path.basename(path))[0]).replace('_', ' ').title())
+
         self.description = section_rule['description']
         self.type = section_rule['type']
-        self.frequency = create_timedelta(section_rule['frequency'])
+        # if we don't pass an alert type then we default to the type field
+        self.alert_type = section_rule.get('alert_type', fallback=f'hunter - {self.type}')
+        self.analysis_mode = section_rule.get('analysis_mode', fallback=ANALYSIS_MODE_CORRELATION)
+
+        # frequency can be either a timedelta or a crontab entry
+        self.frequency = None
+        if ':' in section_rule['frequency']:
+            self.frequency = create_timedelta(section_rule['frequency'])
+
+        self.cron_schedule = None
+        if self.frequency is None:
+            self.cron_schedule = section_rule.get('cron_schedule', fallback=section_rule['frequency'])
+            # make sure this crontab entry parses
+            croniter(self.cron_schedule)
+
         self.tags = [_.strip() for _ in section_rule['tags'].split(',') if _]
-        self.cron_schedule = section_rule['cron_schedule'] if 'cron_schedule' in section_rule else None
+        self.queue = section_rule['queue'] if 'queue' in section_rule else QUEUE_DEFAULT
 
         self.ini_path = path
         self.last_mtime = os.path.getmtime(path)
@@ -326,6 +357,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
 
         # acquire this lock before making any modifications to the hunts
         self.hunt_lock = threading.RLock()
+
+        # the ini files that failed to load
+        self.failed_ini_files = {} # key = ini_path, value = os.path.getmtime()
 
         # the type of concurrency contraint this type of hunt uses (can be None)
         # use the set_concurrency_limit() function to change it
@@ -462,10 +496,19 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                     logging.info(f"detected modification to {hunt}")
                     trigger_reload = True
 
+            # if any hunts failed to load last time, check to see if they were modified
+            for ini_path, mtime in self.failed_ini_files.items():
+                try:
+                    if os.path.getmtime(ini_path) != mtime:
+                        logging.info(f"detected modification to failed ini file {ini_path}")
+                        trigger_reload = True
+                except Exception as e:
+                    logging.error(f"unable to check failed ini file {ini_path}: {e}")
+
             # are there any new hunts?
             existing_ini_paths = set([hunt.ini_path for hunt in self._hunts])
             for ini_path in self._list_hunt_ini():
-                if ini_path not in existing_ini_paths:
+                if ini_path not in existing_ini_paths and ini_path not in self.failed_ini_files:
                     logging.info(f"detected new hunt ini {ini_path}")
                     trigger_reload = True
 
@@ -622,14 +665,23 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
         for hunt_config in self._list_hunt_ini():
             hunt = self.hunt_cls()
             logging.debug(f"loading hunt from {hunt_config}")
-            hunt.load_from_ini(hunt_config)
-            hunt.type = self.hunt_type
+            try:
+                hunt.load_from_ini(hunt_config)
+                hunt.type = self.hunt_type
 
-            if hunt_filter(hunt):
-                logging.info(f"loaded {hunt} from {hunt_config}")
-                self.add_hunt(hunt)
-            else:
-                logging.debug(f"not loading {hunt} (hunt_filter returned False)")
+                if hunt_filter(hunt):
+                    logging.debug(f"loaded {hunt} from {hunt_config}")
+                    self.add_hunt(hunt)
+                else:
+                    logging.debug(f"not loading {hunt} (hunt_filter returned False)")
+
+            except Exception as e:
+                logging.error(f"unable to load hunt {hunt}: {e}")
+                report_exception()
+                try:
+                    self.failed_ini_files[hunt_config] = os.path.getmtime(hunt_config)
+                except Exception as e:
+                    logging.error(f"unable to get mtime for {hunt_config}: {e}")
 
         # remember that we loaded the hunts from the configuration file
         # this is used when we receive the signal to reload the hunts
@@ -666,6 +718,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                 db.commit()
 
             self._hunts = []
+            self.failed_ini_files = {}
 
         self.wait_control_event.set()
 
