@@ -54,11 +54,11 @@ class ObservableTestCase(ACEBasicTestCase):
         for o_type in EV_OBSERVABLE_VALUE_MAP.keys():
             root.add_observable(o_type, EV_OBSERVABLE_VALUE_MAP[o_type])
         
-    def test_observable_000_add_observable(self):
+    def test_add_observable(self):
         root = create_root_analysis()
         self.add_observables(root)
 
-    def test_observable_001_add_invalid_observables(self):
+    def test_add_invalid_observables(self):
         root = create_root_analysis()
         o = root.add_observable(F_IPV4, '1.2.3.4.5')
         self.assertIsNone(o)
@@ -67,7 +67,7 @@ class ObservableTestCase(ACEBasicTestCase):
         o = root.add_observable(F_FILE, '')
         self.assertIsNone(o)
 
-    def test_observable_002_observable_storage(self):
+    def test_observable_storage(self):
         root = create_root_analysis()
         self.add_observables(root)
         root.save()
@@ -81,7 +81,7 @@ class ObservableTestCase(ACEBasicTestCase):
             self.assertEquals(o.type, o_type)
             self.assertEquals(o.value, EV_OBSERVABLE_VALUE_MAP[o_type])
 
-    def test_observable_003_caseless_observables(self):
+    def test_caseless_observables(self):
         root = create_root_analysis()
         o1 = root.add_observable(F_HOSTNAME, 'abc')
         o2 = root.add_observable(F_HOSTNAME, 'ABC')
@@ -89,7 +89,7 @@ class ObservableTestCase(ACEBasicTestCase):
         self.assertIs(o1, o2)
         self.assertEquals(o2.value, 'abc')
 
-    def test_observable_004_file_type_observables(self):
+    def test_file_type_observables(self):
         root = create_root_analysis()
         o1 = root.add_observable(F_FILE, 'sample.txt')
         o2 = root.add_observable(F_FILE_NAME, 'sample.txt')
@@ -97,7 +97,7 @@ class ObservableTestCase(ACEBasicTestCase):
         # the second should NOT return the same object
         self.assertIsNot(o1, o2)
 
-    def test_observable_005_ipv6(self):
+    def test_ipv6_observable(self):
         root = create_root_analysis()
         # this should not add an observable since this is an ipv6 address
         o1 = root.add_observable(F_IPV4, '::1')
@@ -112,3 +112,21 @@ class ObservableTestCase(ACEBasicTestCase):
         root = create_root_analysis()
         observable = root.add_observable(F_EMAIL_DELIVERY, create_email_delivery('CANTOGZtOdse1SqNtFRs2o22ohrWpbddWfCzkzn+iy1SEHxt2pg@mail.gmail.com', 'test@localhost.com'))
         self.assertEquals(observable.value, '<CANTOGZtOdse1SqNtFRs2o22ohrWpbddWfCzkzn+iy1SEHxt2pg@mail.gmail.com>|test@localhost.com')
+
+    def test_valid_mac_observable(self):
+        root = create_root_analysis()
+        observable = root.add_observable(F_MAC_ADDRESS, '001122334455')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, '001122334455')
+        self.assertEquals(observable.mac_address(), '00:11:22:33:44:55')
+        self.assertEquals(observable.mac_address(sep='-'), '00-11-22-33-44-55')
+
+        observable = root.add_observable(F_MAC_ADDRESS, '00:11:22:33:44:55')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, '00:11:22:33:44:55')
+        self.assertEquals(observable.mac_address(sep=''), '001122334455')
+
+    def test_invalid_mac_observable(self):
+        root = create_root_analysis()
+        observable = root.add_observable(F_MAC_ADDRESS, '00112233445Z')
+        self.assertIsNone(observable)

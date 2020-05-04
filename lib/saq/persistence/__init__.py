@@ -17,6 +17,9 @@ from saq.database import (
     retry
 )
 
+from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy import and_, or_
+
 def persistant_property(*key_args):
     """Utility decorator for Persistable-based objects. Adds any arguments as properties
        that automatically loads and stores the value in the persistence table in the database.
@@ -156,8 +159,12 @@ ON DUPLICATE KEY UPDATE last_update = CURRENT_TIMESTAMP""", (self.persistence_so
 
     def load_persistent_data(self, key_name):
         """Returns the value of the persistent key by name. Raises an exception if the key does not exist."""
-        persistence = saq.db.query(Persistence).filter(Persistence.source_id == self.persistence_source.id,
-                                                       Persistence.uuid == key_name).one()
+        try:
+            persistence = saq.db.query(Persistence).filter(Persistence.source_id == self.persistence_source.id,
+                                                           Persistence.uuid == key_name).one()
+        except NoResultFound:
+            raise KeyError(key_name)
+
         if persistence.value is None:
             return None
 
@@ -168,3 +175,9 @@ ON DUPLICATE KEY UPDATE last_update = CURRENT_TIMESTAMP""", (self.persistence_so
         persistence = saq.db.query(Persistence).filter(Persistence.source_id == self.persistence_source.id,
                                                        Persistence.uuid == key_name).first()
         return persistence is not None
+
+    def delete_persistent_key(self, key_name):
+        """Deletes the given persistence key."""
+        saq.db.execute(Persistence.__table__.delete().where(and_(Persistence.source_id == self.persistence_source.id,
+                                                            Persistence.uuid == key_name)))
+        saq.db.commit()

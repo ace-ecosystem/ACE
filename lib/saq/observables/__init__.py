@@ -60,6 +60,10 @@ __all__ = [
 class ObservableValueError(ValueError):
     pass
 
+class DefaultObservable(Observable):
+    """If an observable type does not match a known type then this class is used to represent it."""
+    pass
+
 class CaselessObservable(Observable):
     """An observable that doesn't care about the case of the value."""
     def __init__(self, *args, **kwargs):
@@ -196,6 +200,14 @@ class UserObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_USER, *args, **kwargs)
         self.value = self.value.strip()
+
+    @property
+    def jinja_available_actions(self):
+        result = []
+        result.append(ObservableActionViewInExabeam())
+        result.append(ObservableActionSeparator())
+        result.extend(super().jinja_available_actions)
+        return result
 
 class URLObservable(Observable):
     def __init__(self, *args, **kwargs):
@@ -453,7 +465,11 @@ class FileObservable(Observable):
                     result.append(ObservableActionUploadToVx())
                 if integration_enabled('falcon_sandbox'):
                     result.append(ObservableActionUploadToFalconSandbox())
-
+            
+            if any([x for x in saq.CONFIG.keys() if x.startswith('send_file_to_')]):
+                result.append(ObservableActionSeparator())
+                result.append(ObservableActionFileSendTo())
+            
             result.append(ObservableActionSeparator())
             result.append(ObservableActionViewInVt())
             if integration_enabled('vx'):
@@ -776,6 +792,18 @@ class DLPIncidentObservable(Observable):
         result.extend(super().jinja_available_actions)
         return result
 
+class ExabeamSessionObservable(Observable): 
+    def __init__(self, *args, **kwargs): 
+        super().__init__(F_EXABEAM_SESSION, *args, **kwargs)
+
+    @property
+    def jinja_available_actions(self):
+        result = []
+        result.append(ObservableActionViewInExabeamSession())
+        result.append(ObservableActionSeparator())
+        result.extend(super().jinja_available_actions)
+        return result
+
 class FireEyeUUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_FIREEYE_UUID, *args, **kwargs)
@@ -795,6 +823,22 @@ class TestObservable(Observable):
     def value(self, v):
         self._value = base64.b64encode(pickle.dumps(v))
 
+RE_MAC = re.compile(r'^([a-fA-F0-9]{2})[^a-fA-F0-9]*?([a-fA-F0-9]{2})[^a-fA-F0-9]*?([a-fA-F0-9]{2})[^a-fA-F0-9]*?([a-fA-F0-9]{2})[^a-fA-F0-9]*?([a-fA-F0-9]{2})[^a-fA-F0-9]*?([a-fA-F0-9]{2})[^a-fA-F0-9]*?$')
+class MacAddressObservable(Observable):
+    def __init__(self, *args, **kwargs):
+        super().__init__(F_MAC_ADDRESS, *args, **kwargs)
+
+        # try to deal with the various formats of mac addresses
+        # some separate with different characters and some don't separate at all
+        m = RE_MAC.match(self.value)
+        if m is None:
+            raise ObservableValueError(f"{self.value} does not parse as a mac address")
+
+        self.mac_parts = m.groups()
+
+    def mac_address(self, sep=':'):
+        """Return the mac address formatted with the given separator. Defaults to :"""
+        return sep.join(self.mac_parts)
 #
 # technically we could store the class and module inside the observable
 # and load it at runtime by reading that and doing it the same way we load analysis modules
@@ -809,6 +853,7 @@ _OBSERVABLE_TYPE_MAPPING = {
     F_EMAIL_ADDRESS: EmailAddressObservable,
     F_EMAIL_CONVERSATION: EmailConversationObservable,
     F_EMAIL_DELIVERY: EmailDeliveryObservable,
+    F_EXABEAM_SESSION: ExabeamSessionObservable,
     F_EXTERNAL_UID: ExternalUIDObservable,
     F_FILE: FileObservable,
     F_FILE_LOCATION: FileLocationObservable,
@@ -821,6 +866,7 @@ _OBSERVABLE_TYPE_MAPPING = {
     F_IPV4: IPv4Observable,
     F_IPV4_CONVERSATION: IPv4ConversationObservable,
     F_IPV4_FULL_CONVERSATION: IPv4FullConversationObservable,
+    F_MAC_ADDRESS: MacAddressObservable,
     F_MD5: MD5Observable,
     F_MESSAGE_ID: MessageIDObservable,
     F_PCAP: FileObservable,
@@ -838,14 +884,19 @@ _OBSERVABLE_TYPE_MAPPING = {
 def create_observable(o_type, o_value, o_time=None):
     """Returns an Observable-based class instance for the given type, value and optionally time, 
        or None if value is invalid for the type of Observable."""
+
+    o_class = None
+
     try:
         o_class = _OBSERVABLE_TYPE_MAPPING[o_type]
     except KeyError:
-        logging.error("invalid observable type {}".format(o_type))
-        raise
+        logging.debug("unknown observable type {}".format(o_type))
 
     try:
-        return o_class(o_value, time=o_time)
+        if o_class is None:
+            return DefaultObservable(o_type, o_value, time=o_time)
+        else:
+            return o_class(o_value, time=o_time)
     except ObservableValueError as e:
         logging.debug("invalid value {} for observable type {}: {}".format(o_value.encode('unicode_escape'), o_type, e))
         return None

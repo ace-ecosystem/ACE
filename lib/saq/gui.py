@@ -4,6 +4,7 @@
 #
 
 import logging
+import os
 
 import saq
 from saq.constants import *
@@ -22,12 +23,53 @@ class GUIAlert(Alert):
     """Extends the Alert class to add functionality specific to the GUI."""
     @property
     def jinja_template_path(self):
-        # have a specified a template for this alert type?
+        # is there a custom template for this alert type that we can use?
         try:
-            logging.debug("checking for custom template for {}: {}".format(
-                          self.alert_type, saq.CONFIG.get('custom_alerts', self.alert_type)))
-            return saq.CONFIG.get('custom_alerts', self.alert_type)
-        except:
+            logging.debug(f"checking for custom template for {self.alert_type}")
+
+            # first check backward compatible config to see if there is already a template set for this alert_type value
+            if saq.CONFIG.get('custom_alerts_backward_compatibility', self.alert_type, fallback=None):
+                logging.debug('found backward compatible custom template')
+                return saq.CONFIG.get('custom_alerts_backward_compatibility', self.alert_type)
+
+            base_template_dir = saq.CONFIG.get('custom_alerts', 'template_dir')
+            dirs = saq.CONFIG.get('custom_alerts', 'dir').split(';')
+
+            # gather all available custom templates into dictionary with their parent directory
+            # Ex. {custom1: '/custom', custom2: '/custom', custom3: '/custom/site'}
+            files = {}
+            for directory in dirs:
+                files.update({file: directory for file in os.listdir(os.path.join(saq.SAQ_HOME, base_template_dir, directory))})
+
+            """ 
+                alert_type switch logic:
+                0. alert_type should be ' - ' separated in 'decreasing' subtype order: 
+                    Ex. 'tool - app - query' or 'hunter - splunk - aws' 
+                1. alert_subtype = alert_type tranformed to 'desired' HTML format
+                    Ex. 'tool_app_query' or 'hunter_splunk_aws'
+                2. Check whether desired filename (ex. 'tool_app_query.html') exists in our dictionary of files 
+                    if yes --> return path to that file
+                    if not --> Step 3 
+                3. Truncate alert_type from last '_' and repeat step 2 (ex. check for 'tool_app.html' or 'hunter_splunk.html')
+                    If fully truncated alert_type ('tool.html' or 'hunter.html') not found, return default view "analysis/alert.html"
+            """
+
+            alert_subtype = self.alert_type.replace(' - ', '_')
+            while True:
+                if f'{alert_subtype}.html' in files.keys():
+
+                    logging.debug(f"found custom template {alert_subtype}.html")
+                    return os.path.join(files[f'{alert_subtype}.html'], f'{alert_subtype}.html')
+
+                if '_' not in alert_subtype:
+                    break
+                else:
+                    alert_subtype = alert_subtype.rsplit('_', 1)[0]
+
+            logging.debug(f" template not found for {self.alert_type}; defaulting to alert.html")
+
+        except Exception as e:
+            logging.debug(e)
             pass
 
         # otherwise just return the default
@@ -160,6 +202,14 @@ class ObservableActionViewAsText(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/view_as_text.html'
         self.icon = 'file'
 
+class ObservableActionFileSendTo(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_FILE_SEND_TO
+        self.description = "Send to..."
+        self.jinja_action_path = 'analysis/observable_actions/send_to.html'
+        self.icon = 'export'
+        
 class ObservableActionUploadToVt(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -206,6 +256,22 @@ class ObservableActionViewInDLP(ObservableAction):
         self.name = ACTION_DLP_INCIDENT_VIEW_DLP
         self.description = "View In DLP"
         self.jinja_action_path = 'analysis/observable_actions/view_in_dlp.html'
+        self.icon = 'chevron-right'
+
+class ObservableActionViewInExabeam(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_USER_VIEW_EXABEAM
+        self.description = "View In Exabeam"
+        self.jinja_action_path = 'analysis/observable_actions/view_in_exabeam.html'
+        self.icon = 'chevron-right'
+
+class ObservableActionViewInExabeamSession(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_EXABEAM_SESSION_VIEW_EXABEAM
+        self.description = "View In Exabeam"
+        self.jinja_action_path = 'analysis/observable_actions/view_in_exabeam_session.html'
         self.icon = 'chevron-right'
 
 class ObservableActionViewInVx(ObservableAction):

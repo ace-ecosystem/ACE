@@ -11,6 +11,8 @@ import json
 import logging
 import os, os.path
 import re
+import shlex
+import shutil
 import signal
 import tempfile
 import urllib
@@ -33,6 +35,13 @@ def create_directory(path):
         os.makedirs(path)
 
     return path
+
+def remove_directory(path):
+    """Executes shutil.rmtree in a try catch block."""
+    try:
+        shutil.rmtree(path)
+    except Exception as e:
+        logging.error(f"unable to delete directory {path}: {e}")
 
 def is_ipv4(value):
     """Returns True if the given value is a dotted-quad IP address or CIDR notation."""
@@ -166,6 +175,10 @@ def validate_uuid(uuid):
 
     return True
 
+def is_uuid(uuid):
+    """Returns True if the given string matches the UUID pattern."""
+    return UUID_REGEX.match(uuid)
+
 def local_time():
     """Returns datetime.datetime.now() in UTC time zone."""
     return saq.LOCAL_TIMEZONE.localize(datetime.datetime.now()).astimezone(pytz.UTC)
@@ -232,7 +245,6 @@ def json_parse(fileobj, decoder=json.JSONDecoder(), buffersize=2048):
                 # Not enough data to decode, read more
                 break
 
-
 def fang(url):
     """Re-fangs a url that has been de-fanged.
     If url does not match the defang format, it returns the original string."""
@@ -241,6 +253,49 @@ def fang(url):
         if url.startswith(item):
             return f"http{url[4:]}"
     return url
+
+RE_NT_DRIVE_LETTER = re.compile(r'^[a-zA-Z]:.+$')
+RE_NT_UNC_PATH = re.compile(r'^\\\\[^\\]+\\.+$')
+INVALID_WINDOWS_CHARS = [ '<', '>', ':', '"', '/', '\\', '|', '?', '*' ]
+RE_NT_INVALID_CHARS = re.compile('[<>:"/\\|?*]')
+
+def is_nt_path(path):
+    """Returns True if the given path is clearly an NT (Windows) path.
+       Returns False if it could possibly not be."""
+
+    drive_letter = RE_NT_DRIVE_LETTER.match(path)
+    unc = RE_NT_UNC_PATH.match(path)
+
+    if not drive_letter and not unc:
+        return False
+
+    target = path
+    if drive_letter:
+        target = path[2:]
+
+    if RE_NT_INVALID_CHARS.search(target):
+        return False
+
+    return True
+
+def safe_file_name(file_name):
+    """Returns a file name with all path separator and directory traversal replaced with underscores."""
+    return re.sub('_+', '_', file_name.replace('\\', '_').replace('../', '_').replace('/', '_').replace('~', '_'))
+
+def extract_windows_filepaths(command_line):
+    """Given a command line, extract any file paths found inside of it and return a list of them."""
+    result = []
+    for token in shlex.split(command_line, posix=False):
+        # remove surrounding quotes if they exist
+        while token.startswith('"') and token.endswith('"'):
+            token = token[1:-1]
+
+        if not is_nt_path(token):
+            continue
+
+        result.append(token)
+
+    return result
 
 class RegexObservableParser:
     """Helper class to handle regex and observable mapping.

@@ -106,3 +106,51 @@ class TestNoAceInit(unittest.TestCase):
 
         for _test in test_pairs:
             self.assertEqual(_test['expected'], fang(_test['test_case']))
+
+    def test_is_nt_path(self):
+        test_pairs = [
+            (r'C:\Users\john\test.txt', True),
+            (r'\\server\some\path.txt', True),
+            (r'/some/unix/path.txt', False),
+            (r'file.txt', False),
+            (r'C:\<Users\john\test.txt', False),
+            (r'C:\>Users\john\test.txt', False),
+            (r'C:\:Users\john\test.txt', False),
+            (r'C:\"Users\john\test.txt', False),
+            (r'C:\/Users\john\test.txt', False),
+            (r'C:\|Users\john\test.txt', False),
+            (r'C:\?Users\john\test.txt', False),
+            (r'C:\*Users\john\test.txt', False),
+        ]
+
+        for test_case, expected in test_pairs:
+            with self.subTest(test_case=test_case, expected=expected):
+                self.assertEqual(is_nt_path(test_case), expected)
+
+    def test_safe_file_name(self):
+        test_pairs = [
+            (r'test.txt', 'test.txt'),
+            (r'../test.txt', '_test.txt'),
+            (r'../../test.txt', '_test.txt'),
+            (r'../../../test.txt', '_test.txt'),
+            (r'\\../../test.txt', '_test.txt'),
+            (r'\\.\\.\\/test.txt', '_._._test.txt'),
+            (r'/some/path/test.txt', '_some_path_test.txt'),
+            (r'//////test.txt', '_test.txt'),
+            (r'~john/test', '_john_test'),
+        ]
+
+        for test_case, expected in test_pairs:
+            with self.subTest(test_case=test_case, expected=expected):
+                self.assertEqual(safe_file_name(test_case), expected)
+
+    def test_extract_windows_filepaths(self):
+        test_pairs = [
+            ("\"C:\\Windows\\SysWOW64\\mshta.exe\" \"\\\\DM0001.INFO53.com\\53Shares\\Applications\\EUPT\\Operations\\Shared_Services\\Item_Processing\\Databases\\Item Processing Database\\DB_FILES\\IP Database.hta\" ", [ 
+                r'C:\Windows\SysWOW64\mshta.exe', r'\\DM0001.INFO53.com\53Shares\Applications\EUPT\Operations\Shared_Services\Item_Processing\Databases\Item Processing Database\DB_FILES\IP Database.hta' ])
+        ]
+
+        for test_case, expected in test_pairs:
+            with self.subTest(test_case=test_case, expected=expected):
+                self.assertEqual(extract_windows_filepaths(test_case), expected)
+

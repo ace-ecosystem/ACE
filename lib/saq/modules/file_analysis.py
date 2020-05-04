@@ -477,7 +477,7 @@ class ArchiveAnalysis(Analysis):
         return None
 
 # 2018-02-19 12:15:48          319534300    299585795  155 files, 47 folders
-Z7_SUMMARY_REGEX = re.compile(rb'^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\d+\s+\d+\s+(\d+)\s+files.*?')
+Z7_SUMMARY_REGEX = re.compile(rb'^.+?\s+\d+\s+\d+\s+(\d+)\s+files.*?')
 
 # listed: 1 files, totaling 711.168 bytes (compressed 326.520)
 UNACE_SUMMARY_REGEX = re.compile(rb'^listed: (\d+) files,.*')
@@ -1263,76 +1263,78 @@ class OLEVBA_Analyzer_v1_2(AnalysisModule):
             current_macro_index = None
             output_dir = None
 
-            for file_name, stream_path, vba_filename, vba_code in parser.extract_macros():
-                if current_macro_index is None:
-                    current_macro_index = 0
-                    output_dir = '{}.olevba'.format(local_file_path)
-                    if not os.path.isdir(output_dir):
-                        os.mkdir(output_dir)
+            if parser.detect_vba_macros():
+                analysis.scan_results = parser.analyze_macros(
+                        show_decoded_strings=True, 
+                        deobfuscate=False) # <-- NOTE setting that to True causes it to hang in 0.55.1
 
-                output_path = os.path.join(output_dir, 'macro_{}.bas'.format(current_macro_index))
+                for file_name, stream_path, vba_filename, vba_code in parser.extract_all_macros():
+                    if current_macro_index is None:
+                        current_macro_index = 0
+                        output_dir = '{}.olevba'.format(local_file_path)
+                        if not os.path.isdir(output_dir):
+                            os.mkdir(output_dir)
 
-                if isinstance(vba_code, bytes):
-                    vba_code = vba_code.decode('utf8', errors='ignore')
+                    output_path = os.path.join(output_dir, 'macro_{}.bas'.format(current_macro_index))
 
-                vba_code = filter_vba(vba_code)
-                if not vba_code.strip():
-                    continue
+                    if isinstance(vba_code, bytes):
+                        vba_code = vba_code.decode('utf8', errors='ignore')
 
-                with open(output_path, 'w') as fp:
-                    fp.write(vba_code)
+                    vba_code = filter_vba(vba_code)
+                    if not vba_code.strip():
+                        continue
 
-                file_observable = analysis.add_observable(F_FILE, os.path.relpath(output_path, self.root.storage_dir))
-                if file_observable:
-                    file_observable.redirection = _file
-                    file_observable.add_tag('macro')
-                    file_observable.add_directive(DIRECTIVE_SANDBOX)
-                    analysis.macros.append({'file_name': file_name,
-                                            'stream_path': stream_path,
-                                            'vba_filename': vba_filename,
-                                            'vba_code': vba_code,
-                                            'local_path': file_observable.value})
+                    with open(output_path, 'w') as fp:
+                        fp.write(vba_code)
 
-                    # this analysis module will analyze it's own output so we need to not do that
-                    file_observable.exclude_analysis(self)
+                    file_observable = analysis.add_observable(F_FILE, os.path.relpath(output_path, self.root.storage_dir))
+                    if file_observable:
+                        file_observable.redirection = _file
+                        file_observable.add_tag('macro')
+                        file_observable.add_directive(DIRECTIVE_SANDBOX)
+                        analysis.macros.append({'file_name': file_name,
+                                                'stream_path': stream_path,
+                                                'vba_filename': vba_filename,
+                                                'vba_code': vba_code,
+                                                'local_path': file_observable.value})
 
-                current_macro_index += 1
+                        # this analysis module will analyze it's own output so we need to not do that
+                        file_observable.exclude_analysis(self)
 
-            if analysis.macros:
-                all_macro_code = '\r\n\r\n'.join([x['vba_code'] for x in analysis.macros])
-                scanner = VBA_Scanner(all_macro_code)
-                analysis.scan_results = scanner.scan(False, False) # setting this to True takes too long to use in prod
-                analysis.keyword_summary = {}
-                for _type, keyword, description in analysis.scan_results:
-                    if _type not in analysis.keyword_summary:
-                        analysis.keyword_summary[_type.lower()] = 0
+                    current_macro_index += 1
 
-                    analysis.keyword_summary[_type.lower()] += 1
+                if analysis.scan_results:
+                    analysis.keyword_summary = {}
+                    for _type, keyword, description in analysis.scan_results:
+                        if _type not in analysis.keyword_summary:
+                            analysis.keyword_summary[_type.lower()] = 0
 
-                # do the counts exceed the thresholds?
-                threshold_exceeded = True
-                for option in self.config.keys():
-                    if option.startswith("threshold_"):
-                        _, kw_type = option.split('_', 1)
+                        analysis.keyword_summary[_type.lower()] += 1
 
-                        if kw_type not in analysis.keyword_summary:
-                            logging.debug("threshold keyword {} not seen in {}".format(kw_type, local_file_path))
-                            threshold_exceeded = False
-                            break
+                    # do the counts exceed the thresholds?
+                    threshold_exceeded = True
+                    for option in self.config.keys():
+                        if option.startswith("threshold_"):
+                            _, kw_type = option.split('_', 1)
 
-                        if analysis.keyword_summary[kw_type] < self.config.getint(option):
-                            logging.debug("count for {} ({}) does not meet threshold {} for {}".format(
-                                          kw_type, analysis.keyword_summary[kw_type], self.config.getint(option), local_file_path))
-                            threshold_exceeded = False
-                            break
+                            if kw_type not in analysis.keyword_summary:
+                                logging.debug("threshold keyword {} not seen in {}".format(kw_type, local_file_path))
+                                threshold_exceeded = False
+                                break
 
-                        logging.debug("count for {} ({}) meets threshold {} for {}".format(
-                            kw_type, analysis.keyword_summary[kw_type], self.config.getint(option), local_file_path))
+                            if analysis.keyword_summary[kw_type] < self.config.getint(option):
+                                logging.debug("count for {} ({}) does not meet threshold {} for {}".format(
+                                              kw_type, analysis.keyword_summary[kw_type], self.config.getint(option), local_file_path))
+                                threshold_exceeded = False
+                                break
 
-                # all thresholds passed (otherwise we would have returned by now)
-                if threshold_exceeded:
-                    _file.add_tag('olevba') # tag it for alerting
-                    _file.add_directive(DIRECTIVE_SANDBOX)
+                            logging.debug("count for {} ({}) meets threshold {} for {}".format(
+                                kw_type, analysis.keyword_summary[kw_type], self.config.getint(option), local_file_path))
+
+                    # all thresholds passed (otherwise we would have returned by now)
+                    if threshold_exceeded:
+                        _file.add_tag('olevba') # tag it for alerting
+                        _file.add_directive(DIRECTIVE_SANDBOX)
                 
         except Exception as e:
             logging.warning("olevba execution error on {}: {}".format(local_file_path, e))
@@ -2433,12 +2435,12 @@ class YaraScanner_v3_4(AnalysisModule):
 
                             if modifier.startswith('directive'):
                                 key, modifier_directive = modifier.split('=', 1)
-                                if modifier_directive not in VALID_DIRECTIVES:
-                                    logging.warning("yara rule {} attempts to add invalid directive {}".format(match_result['rule'], modifier_directive))
-                                else:
-                                    logging.debug("assigned directive {} to {} by modifiers on yara rule {}".format(
-                                                  modifier_directive, _file, match_result['rule']))
-                                    _file.add_directive(modifier_directive)
+                                #if modifier_directive not in VALID_DIRECTIVES:
+                                    #logging.warning("yara rule {} attempts to add invalid directive {}".format(match_result['rule'], modifier_directive))
+                                #else:
+                                logging.debug("assigned directive {} to {} by modifiers on yara rule {}".format(
+                                              modifier_directive, _file, match_result['rule']))
+                                _file.add_directive(modifier_directive)
 
                                 continue
 

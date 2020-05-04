@@ -26,10 +26,10 @@ class TestHunt(Hunt):
     def cancel(self):
         pass
 
-def default_hunt(enabled=True, name='test_hunt', description='Test Hunt', type='test',
+def default_hunt(enabled=True, name='test_hunt', description='Test Hunt', type='test', alert_type='test - alert',
                  frequency=create_timedelta('00:10'), tags=[ 'test_tag' ]):
     return TestHunt(enabled=enabled, name=name, description=description,
-                    type=type, frequency=frequency, tags=tags)
+                    type=type, alert_type=alert_type, frequency=frequency, tags=tags)
 
 class HunterBaseTestCase(CollectorBaseTestCase):
     def setUp(self, *args, **kwargs):
@@ -44,6 +44,10 @@ class HunterBaseTestCase(CollectorBaseTestCase):
         self.temp_rules_dir = tempfile.mkdtemp(dir=saq.TEMP_DIR)
         self.temp_rules_dir = os.path.join(self.temp_rules_dir, 'rules')
         shutil.copytree('hunts/test/generic', self.temp_rules_dir)
+
+    def clear_temp_rules_dir(self):
+        for file_name in os.listdir(self.temp_rules_dir):
+            os.remove(os.path.join(self.temp_rules_dir, file_name))
 
     def manager_kwargs(self):
         return { 'collector': HunterCollector(),
@@ -135,9 +139,9 @@ class TestCase(HunterBaseTestCase):
         collector = HunterCollector()
         collector.start_service(threaded=True)
         # testing that the execution order works
-        wait_for_log_count('unit test execute marker: Hunt(unit_test_2[test])', 4)
+        wait_for_log_count('unit test execute marker: Hunt(Test 2[test])', 4)
         self.assertEquals(log_count('unit test execute marker: Hunt(unit_test_1[test])'), 1)
-        self.assertTrue(log_count('next hunt is Hunt(unit_test_2[test])') > 0)
+        self.assertTrue(log_count('next hunt is Hunt(Test 2[test])') > 0)
         collector.stop_service()
         collector.wait_service()
 
@@ -155,15 +159,62 @@ class TestCase(HunterBaseTestCase):
         self.assertEquals(hunter.hunts[1].name, 'unit_test_1')
         self.assertEquals(hunter.hunts[1].description, 'Unit Test Description 1')
         self.assertEquals(hunter.hunts[1].type, 'test')
+        self.assertEquals(hunter.hunts[1].alert_type, 'test - alert')
+        self.assertEquals(hunter.hunts[1].analysis_mode, ANALYSIS_MODE_CORRELATION)
         self.assertTrue(isinstance(hunter.hunts[1].frequency, datetime.timedelta))
         self.assertEquals(hunter.hunts[1].tags, ['tag1', 'tag2'])
 
         self.assertTrue(hunter.hunts[0].enabled)
-        self.assertEquals(hunter.hunts[0].name, 'unit_test_2')
+        # the second one is missing the name so the name is auto generated
+        self.assertEquals(hunter.hunts[0].name, 'Test 2')
         self.assertEquals(hunter.hunts[0].description, 'Unit Test Description 2')
         self.assertEquals(hunter.hunts[0].type, 'test')
+        # the second one is missing the alert_type so this is auto generated
+        self.assertEquals(hunter.hunts[0].alert_type, 'hunter - test')
+        self.assertEquals(hunter.hunts[0].analysis_mode, ANALYSIS_MODE_ANALYSIS)
         self.assertTrue(isinstance(hunter.hunts[0].frequency, datetime.timedelta))
         self.assertEquals(hunter.hunts[0].tags, ['tag1', 'tag2'])
+
+    def test_fix_invalid_hunt(self):
+        failed_ini_path = os.path.join(self.temp_rules_dir, 'test_3.ini')
+        with open(failed_ini_path, 'w') as fp:
+            fp.write("""
+[rule]
+enabled = yes
+name = unit_test_3
+description = Unit Test Description 3
+type = test
+alert_type = test - alert
+;frequency = 00:00:01 <-- missing frequency
+tags = tag1, tag2 """)
+
+        hunter = HuntManager(**self.manager_kwargs())
+        hunter.load_hunts_from_config()
+        self.assertEquals(len(hunter.hunts), 2)
+        self.assertEquals(len(hunter.failed_ini_files), 1)
+        self.assertTrue(failed_ini_path in hunter.failed_ini_files)
+        self.assertEquals(hunter.failed_ini_files[failed_ini_path], os.path.getmtime(failed_ini_path))
+
+        self.assertFalse(hunter.reload_hunts_flag)
+        hunter.check_hunts()
+        self.assertFalse(hunter.reload_hunts_flag)
+
+        with open(failed_ini_path, 'w') as fp:
+            fp.write("""
+[rule]
+enabled = yes
+name = unit_test_3 
+description = Unit Test Description 3
+type = test
+alert_type = test - alert
+frequency = 00:00:01
+tags = tag1, tag2 """)
+
+        hunter.check_hunts()
+        self.assertTrue(hunter.reload_hunts_flag)
+        hunter.reload_hunts()
+        self.assertEquals(len(hunter.hunts), 3)
+        self.assertEquals(len(hunter.failed_ini_files), 0)
 
     def test_hunt_disabled(self):
         hunter = HuntManager(**self.manager_kwargs())
@@ -195,11 +246,11 @@ class TestCase(HunterBaseTestCase):
         collector = HunterCollector()
         collector.start_service(threaded=True)
         wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 1)
-        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 1)
+        wait_for_log_count('loaded Hunt(Test 2[test]) from', 1)
         os.kill(os.getpid(), signal.SIGHUP)
         wait_for_log_count('received signal to reload hunts', 1)
         wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 2)
-        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 2)
+        wait_for_log_count('loaded Hunt(Test 2[test]) from', 2)
         collector.stop_service()
         collector.wait_service()
 
@@ -208,13 +259,13 @@ class TestCase(HunterBaseTestCase):
         collector = HunterCollector()
         collector.start_service(threaded=True)
         wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 1)
-        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 1)
+        wait_for_log_count('loaded Hunt(Test 2[test]) from', 1)
         with open(os.path.join(self.temp_rules_dir, 'test_1.ini'), 'a') as fp:
             fp.write('\n\n; modified')
 
         wait_for_log_count('detected modification to', 1, 5)
         wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 2)
-        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 2)
+        wait_for_log_count('loaded Hunt(Test 2[test]) from', 2)
         collector.stop_service()
         collector.wait_service()
 
@@ -223,10 +274,10 @@ class TestCase(HunterBaseTestCase):
         collector = HunterCollector()
         collector.start_service(threaded=True)
         wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 1)
-        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 1)
+        wait_for_log_count('loaded Hunt(Test 2[test]) from', 1)
         os.remove(os.path.join(self.temp_rules_dir, 'test_1.ini'))
         wait_for_log_count('detected modification to', 1, 5)
-        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 2)
+        wait_for_log_count('loaded Hunt(Test 2[test]) from', 2)
         self.assertTrue(log_count('loaded Hunt(unit_test_1[test]) from') == 1)
         collector.stop_service()
         collector.wait_service()
@@ -236,7 +287,7 @@ class TestCase(HunterBaseTestCase):
         collector = HunterCollector()
         collector.start_service(threaded=True)
         wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 1)
-        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 1)
+        wait_for_log_count('loaded Hunt(Test 2[test]) from', 1)
         with open(os.path.join(self.temp_rules_dir, 'test_3.ini'), 'a') as fp:
             fp.write("""
 [rule]
@@ -244,15 +295,53 @@ enabled = yes
 name = unit_test_3
 description = Unit Test Description 3
 type = test
+alert_type = test - alert
 frequency = 00:00:10
 tags = tag1, tag2""")
 
         wait_for_log_count('detected new hunt ini', 1, 5)
         wait_for_log_count('loaded Hunt(unit_test_1[test]) from', 2)
-        wait_for_log_count('loaded Hunt(unit_test_2[test]) from', 2)
+        wait_for_log_count('loaded Hunt(Test 2[test]) from', 2)
         wait_for_log_count('loaded Hunt(unit_test_3[test]) from', 1)
         collector.stop_service()
         collector.wait_service()
 
     # TODO test the semaphore locking
 
+    def test_valid_cron_schedule(self):
+        self.clear_temp_rules_dir()
+        with open(os.path.join(self.temp_rules_dir, 'test_1.ini'), 'a') as fp:
+            fp.write("""
+[rule]
+enabled = yes
+name = unit_test_1
+description = Unit Test Description 1
+type = test
+alert_type = test - alert
+frequency = */1 * * * *
+tags = tag1, tag2""")
+
+        hunter = HuntManager(**self.manager_kwargs())
+        hunter.load_hunts_from_config()
+        self.assertEquals(len(hunter.hunts), 1)
+        self.assertTrue(isinstance(hunter.hunts[0], TestHunt))
+        self.assertIsNone(hunter.hunts[0].frequency)
+        self.assertEquals(hunter.hunts[0].cron_schedule, '*/1 * * * *')
+
+    def test_invalid_cron_schedule(self):
+        self.clear_temp_rules_dir()
+        with open(os.path.join(self.temp_rules_dir, 'test_1.ini'), 'a') as fp:
+            fp.write("""
+[rule]
+enabled = yes
+name = unit_test_1
+description = Unit Test Description 1
+type = test
+alert_type = test - alert
+frequency = */1 * * *
+tags = tag1, tag2""")
+
+        hunter = HuntManager(**self.manager_kwargs())
+        hunter.load_hunts_from_config()
+        self.assertEquals(len(hunter.hunts), 0)
+        self.assertEquals(len(hunter.failed_ini_files), 1)

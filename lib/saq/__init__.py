@@ -158,6 +158,7 @@ def initialize(saq_home=None,
     global GLOBAL_SLA_SETTINGS
     global GUI_WHITELIST_EXCLUDED_OBSERVABLE_TYPES
     global INSTANCE_TYPE
+    global LOCAL_DOMAINS
     global LOCK_TIMEOUT_SECONDS
     global LOG_DIRECTORY
     global LOG_LEVEL
@@ -327,6 +328,7 @@ def initialize(saq_home=None,
     SERVICES_DIR = os.path.join(DATA_DIR, 'var', 'services')
     COMPANY_NAME = CONFIG['global']['company_name']
     COMPANY_ID = CONFIG['global'].getint('company_id')
+    LOCAL_DOMAINS = [_.strip() for _ in CONFIG['global']['local_domains'].split(',')]
 
     minutes, seconds = map(int, CONFIG['global']['lock_timeout'].split(':'))
     LOCK_TIMEOUT_SECONDS = (minutes * 60) + seconds
@@ -412,9 +414,9 @@ def initialize(saq_home=None,
     GUI_WHITELIST_EXCLUDED_OBSERVABLE_TYPES = [_.strip() for _ in 
                                                CONFIG['gui']['whitelist_excluded_observable_types'].split(',')]
 
-    for o_type in GUI_WHITELIST_EXCLUDED_OBSERVABLE_TYPES:
-        if o_type not in VALID_OBSERVABLE_TYPES:
-            logging.error(f"invalid observable type {o_type} specified in [gui] whitelist_excluded_observable_types")
+    #for o_type in GUI_WHITELIST_EXCLUDED_OBSERVABLE_TYPES:
+        #if o_type not in VALID_OBSERVABLE_TYPES:
+            #logging.error(f"invalid observable type {o_type} specified in [gui] whitelist_excluded_observable_types")
 
     # make this a faster lookup
     GUI_WHITELIST_EXCLUDED_OBSERVABLE_TYPES = set(GUI_WHITELIST_EXCLUDED_OBSERVABLE_TYPES)

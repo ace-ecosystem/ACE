@@ -24,7 +24,13 @@ from saq.brocess import query_brocess_by_email_conversation, query_brocess_by_so
 from saq.constants import *
 from saq.crypto import encrypt, decrypt
 from saq.database import get_db_connection, execute_with_retry, Alert, use_db
-from saq.email import normalize_email_address, search_archive, get_email_archive_sections, decode_rfc2822
+from saq.email import (
+        decode_rfc2822,
+        get_email_archive_sections, 
+        normalize_email_address, 
+        normalize_message_id, 
+        search_archive, 
+)
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule, AnalysisModule
 from saq.modules.remediation import *
@@ -34,6 +40,8 @@ from saq.remediation.constants import *
 from saq.remediation.email import request_email_remediation
 from saq.whitelist import BrotexWhitelist, WHITELIST_TYPE_SMTP_FROM, WHITELIST_TYPE_SMTP_TO
 
+import dateutil
+import pytz
 from msoffice_decrypt import MSOfficeDecryptor, UnsupportedAlgorithm
 from html2text import html2text
 
@@ -82,6 +90,8 @@ TAG_OUTBOUND_EXCEPTION_EMAIL = 'outbound_email_exception'
 RE_EMAIL_HEADER = re.compile(r'^[^:]+:\s.*$')
 # regex to match an email header continuation line
 RE_EMAIL_HEADER_CONTINUE = re.compile(r'^\s.*$')
+# regex to match Received date
+RE_EMAIL_RECEIVED_DATE = re.compile(r';\s?(.+)$')
 
 MAILBOX_ALERT_PREFIX = 'ACE Mailbox Scanner Detection -'
 class MailboxEmailAnalysis(Analysis):
@@ -1327,6 +1337,19 @@ class EmailAnalyzer(AnalysisModule):
         mail_from = None # str
         mail_to = None # strt
 
+        received_time = None
+
+        # figure out when the email was received
+        if 'received' in target_email:
+            # use the last received email header as the date
+            received = target_email.get_all('received')[-1]
+            m = RE_EMAIL_RECEIVED_DATE.search(received, re.M)
+            if m:
+                try:
+                    received_time = dateutil.parser.parse(m.group(1)).astimezone(pytz.UTC)
+                except Exception as e:
+                    logging.debug(f"unable to parse {m.group(1)} as date time: {e}")
+
         if 'from' in target_email:
             email_details[KEY_FROM] = decode_rfc2822(target_email['from'])
             
@@ -1390,7 +1413,11 @@ class EmailAnalyzer(AnalysisModule):
 
         if 'message-id' in target_email:
             email_details[KEY_MESSAGE_ID] = target_email['message-id']
-            message_id_observable = analysis.add_observable(F_MESSAGE_ID, target_email['message-id'].strip())
+            message_id_observable = analysis.add_observable(
+                    F_MESSAGE_ID, 
+                    normalize_message_id(target_email['message-id']),
+                    o_time=received_time)
+
             if message_id_observable: 
                 # this module will extract an email from the archives based on the message-id
                 # we don't want to do that here so we exclude that analysis
@@ -1433,7 +1460,7 @@ class EmailAnalyzer(AnalysisModule):
             value = target_email['x-originating-ip']
             value = re.sub(r'[^0-9\.]', '', value) # these seem to have extra characters added
             email_details[KEY_ORIGINATING_IP] = value
-            ipv4 = analysis.add_observable(F_IPV4, value)
+            ipv4 = analysis.add_observable(F_IPV4, value, o_time=received_time)
             if ipv4: 
                 ipv4.add_tag('sender_ip')
 

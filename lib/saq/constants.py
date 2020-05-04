@@ -36,10 +36,12 @@ F_DISPOSITION = 'disposition'
 
 F_ASSET = 'asset'
 F_CIDR = 'cidr'
+F_COMMAND_LINE = 'command_line'
 F_DLP_INCIDENT = 'dlp_incident'
 F_EMAIL_ADDRESS = 'email_address'
 F_EMAIL_CONVERSATION = 'email_conversation'
 F_EMAIL_DELIVERY = 'email_delivery'
+F_EXABEAM_SESSION = 'exabeam_session'
 F_EXTERNAL_UID = 'external_uid'
 F_FILE = 'file'
 F_FILE_LOCATION = 'file_location'
@@ -53,6 +55,7 @@ F_INDICATOR = 'indicator'
 F_IPV4 = 'ipv4'
 F_IPV4_CONVERSATION = 'ipv4_conversation'
 F_IPV4_FULL_CONVERSATION = 'ipv4_full_conversation'
+F_MAC_ADDRESS = 'mac_address'
 F_MD5 = 'md5'
 F_MESSAGE_ID = 'message_id'
 F_PCAP = 'pcap'
@@ -70,10 +73,12 @@ F_YARA_RULE = 'yara_rule'
 OBSERVABLE_DESCRIPTIONS = {
     F_ASSET: 'a F_IPV4 identified to be a managed asset',
     F_CIDR: 'IPv4 range in CIDR notation',
+    F_COMMAND_LINE: 'command line options to a command that was executed',
     F_DLP_INCIDENT: 'id of a symantec dlp incident',
     F_EMAIL_ADDRESS: 'email address',
     F_EMAIL_CONVERSATION: 'a conversation between a source email address (MAIL FROM) and a destination email address (RCPT TO)',
     F_EMAIL_DELIVERY: 'a delivery of a an email to a target mailbox',
+    F_EXABEAM_SESSION: 'id of an exabeam session',
     F_EXTERNAL_UID: 'unique identifier for something that is stored in an external tool. Format: tool_name:uid',
     F_FILE: 'path to an attached file',
     F_FILE_LOCATION: 'the location of file with format hostname@full_path',
@@ -87,6 +92,7 @@ OBSERVABLE_DESCRIPTIONS = {
     F_IPV4: 'IP address (version 4)',
     F_IPV4_CONVERSATION: 'two F_IPV4 that were communicating formatted as aaa.bbb.ccc.ddd_aaa.bbb.ccc.ddd',
     F_IPV4_FULL_CONVERSATION: 'two F_IPV4 that were communicating formatted as src_ipv4:src_port:dest_ipv4:dest_port',
+    F_MAC_ADDRESS: 'network card mac address',
     F_MD5: 'MD5 hash',
     F_MESSAGE_ID: 'email Message-ID',
     F_PCAP: 'path to a pcap formatted file *** DEPRECATED (use F_FILE instead)',
@@ -105,10 +111,12 @@ OBSERVABLE_DESCRIPTIONS = {
 VALID_OBSERVABLE_TYPES = sorted([
     F_ASSET,
     F_CIDR,
+    F_COMMAND_LINE,
     F_DLP_INCIDENT,
     F_EMAIL_ADDRESS,
     F_EMAIL_CONVERSATION,
     F_EMAIL_DELIVERY,
+    F_EXABEAM_SESSION,
     F_EXTERNAL_UID,
     F_FILE,
     F_FILE_LOCATION,
@@ -122,6 +130,7 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_IPV4,
     F_IPV4_CONVERSATION,
     F_IPV4_FULL_CONVERSATION,
+    F_MAC_ADDRESS,
     F_MD5,
     F_MESSAGE_ID,
     F_PCAP,
@@ -150,14 +159,14 @@ def parse_ipv4_full_conversation(f_ipv4_fc):
     return f_ipv4_fc.split(':', 4)
 
 def create_ipv4_full_conversation(src, src_port, dst, dst_port):
-    return '{}:{}:{}:{}'.format(src, src_port, dst, dst_port)
+    return '{}:{}:{}:{}'.format(src.strip(), src_port.strip(), dst.strip(), dst_port.strip())
 
 # utility functions to work with F_IPV4_CONVERSATION types
 def parse_ipv4_conversation(f_ipv4_c):
     return f_ipv4_c.split('_', 2)
 
 def create_ipv4_conversation(src, dst):
-    return '{}_{}'.format(src, dst)
+    return '{}_{}'.format(src.strip(), dst.strip())
 
 # utility functions to work with F_EMAIL_CONVERSATION types
 def parse_email_conversation(f_ipv4_c):
@@ -170,19 +179,19 @@ def parse_email_conversation(f_ipv4_c):
     return result
 
 def create_email_conversation(mail_from, rcpt_to):
-    return '{}|{}'.format(mail_from, rcpt_to)
+    return '{}|{}'.format(mail_from.strip(), rcpt_to.strip())
 
 def parse_file_location(file_location):
     return file_location.split('@', 1)
 
 def create_file_location(hostname, full_path):
-    return '{}@{}'.format(hostname, full_path)
+    return '{}@{}'.format(hostname.strip(), full_path)
 
 def parse_email_delivery(email_delivery):
     return email_delivery.split('|', 1)
 
 def create_email_delivery(message_id, mailbox):
-    return '{}|{}'.format(message_id, mailbox)
+    return '{}|{}'.format(message_id.strip(), mailbox.strip())
 
 # the expected format of the event_time of an alert
 event_time_format_tz = '%Y-%m-%d %H:%M:%S %z'
@@ -437,8 +446,11 @@ VALID_EVENTS = [
 ACTION_CLEAR_CLOUDPHISH_ALERT = 'clear_cloudphish_alert'
 ACTION_COLLECT_FILE = 'collect_file'
 ACTION_DLP_INCIDENT_VIEW_DLP = 'dlp_incident_view_dlp'
+ACTION_EXABEAM_SESSION_VIEW_EXABEAM = 'exabeam_session_view_exabeam'
+ACTION_USER_VIEW_EXABEAM = 'user_view_exabeam'
 ACTION_FILE_DOWNLOAD = 'file_download'
 ACTION_FILE_DOWNLOAD_AS_ZIP = 'file_download_as_zip'
+ACTION_FILE_SEND_TO = 'file_send_to'
 ACTION_FILE_UPLOAD_VT = 'file_upload_vt'
 ACTION_FILE_UPLOAD_FALCON_SANDBOX = 'file_upload_falcon_sandbox'
 ACTION_FILE_UPLOAD_VX = 'file_upload_vx'
@@ -463,15 +475,19 @@ METRIC_THREAD_COUNT = 'thread_count'
 
 # relationships
 R_DOWNLOADED_FROM = 'downloaded_from'
+R_EXECUTED_ON = 'executed_on'
 R_EXTRACTED_FROM = 'extracted_from'
-R_REDIRECTED_FROM = 'redirected_from'
 R_IS_HASH_OF = 'is_hash_of'
+R_LOGGED_INTO = 'logged_into'
+R_REDIRECTED_FROM = 'redirected_from'
 
 VALID_RELATIONSHIP_TYPES = [
     R_DOWNLOADED_FROM,
+    R_EXECUTED_ON,
     R_EXTRACTED_FROM,
-    R_REDIRECTED_FROM,
     R_IS_HASH_OF,
+    R_LOGGED_INTO,
+    R_REDIRECTED_FROM,
 ]
 
 TARGET_EMAIL_RECEIVED = 'email.received'
@@ -521,3 +537,6 @@ ANALYSIS_TYPE_BRICATA = 'bricata'
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'
 INTEL_DB_CRITS = 'crits'
+
+# alert queues
+QUEUE_DEFAULT = 'default'

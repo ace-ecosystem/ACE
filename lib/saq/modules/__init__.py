@@ -487,6 +487,28 @@ class AnalysisModule(object):
         return [_.strip() for _ in self.config['valid_observable_types'].split(',')]
 
     @property
+    def valid_queues(self):
+        """Returns a list of strings that are valid queues for this module.  
+           If the configuration setting valid_queues is present then those values are used.
+           Defaults to None (all queues are valid.)  Return None to disable the check."""
+
+        if 'valid_queues' not in self.config:
+            return None
+
+        return [_.strip() for _ in self.config['valid_queues'].split(',')]
+
+    @property
+    def invalid_queues(self):
+        """Returns a list of strings that are invalid queues for this module.  
+           If the configuration setting invalid_queues is present then those values are used.
+           Defaults to None (no queues are invalid)  Return None to disable the check."""
+
+        if 'invalid_queues' not in self.config:
+            return None
+
+        return [_.strip() for _ in self.config['invalid_queues'].split(',')]
+
+    @property
     def required_directives(self):
         """Returns a list of required directives for the analysis to occur. 
            If the configuration setting required_directives is present, then those values are used.
@@ -546,6 +568,14 @@ class AnalysisModule(object):
                 logging.error("valid_observable_types returned invalid data type {} for {}".format(
                     type(valid_types), self))
                 return False
+
+        # do not accept observables from queues we are not configured to accept
+        if isinstance(obj, Observable) and self.valid_queues is not None and obj.root is not None and obj.root.queue not in self.valid_queues:
+            return False
+
+        # do not accept observables from queues we are configured to ignore
+        if isinstance(obj, Observable) and self.invalid_queues is not None and obj.root is not None and obj.root.queue in self.invalid_queues:
+            return False
 
         if isinstance(obj, Observable):
             # does this analysis module exclude this observable from analysis?

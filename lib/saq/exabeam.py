@@ -33,6 +33,21 @@ class ExabeamSession(object):
                 r.raise_for_status()
         except Exception as e:
             raise Exception(f"Failed to login: {e}")
+            
+    # get last session id for a user
+    def get_last_session(self, user):
+        lastSessionId = None
+        try:
+            r = self.session.get(f"{self.base_uri}/uba/api/user/{user}/info", verify=self.verify)
+            if r.status_code != requests.codes.ok:
+                r.raise_for_status()
+            result = r.json()
+            lastSessionId = result['userInfo']['lastSessionId']
+
+        except Exception as e:
+            logging.error(f"failed to get notable sessions for {user}: {e}")
+
+        return lastSessionId
 
     # get list of notbale sessiosn for a user over a period of time
     def get_notable_sessions(self, user, start_time, end_time):

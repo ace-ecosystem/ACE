@@ -94,6 +94,9 @@ class QRadarAPIAnalysis(Analysis):
             result += f'ERROR: {self.query_error}'
             return result
         elif self.query_results is not None:
+            if len(self.query_results['events']) == 0:
+                return None
+
             result += f'({len(self.query_results["events"])} results)'
             return result
         else:
@@ -103,8 +106,10 @@ class QRadarAPIAnalyzer(AnalysisModule):
     def verify_environment(self):
         self.verify_config_exists('question')
         self.verify_config_exists('summary')
-        self.verify_config_exists('aql_path')
-        self.verify_path_exists(abs_path(self.config['aql_path']))
+        if 'aql' not in self.config and 'aql_path' not in self.config:
+            raise RuntimeError(f"module {self} missing aql or aql_path settings in configuration")
+        if 'aql_path' in self.config:
+            self.verify_path_exists(abs_path(self.config['aql_path']))
 
     @property
     def generated_analysis_type(self):
@@ -125,6 +130,10 @@ class QRadarAPIAnalyzer(AnalysisModule):
            By default, the observable_value is returned as-is."""
         return observable_value
 
+    def process_finalize(self, analysis, observable):
+        """Called after all events have completed processing."""
+        pass
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -135,19 +144,36 @@ class QRadarAPIAnalyzer(AnalysisModule):
             self.api_class = kwargs['api_class']
 
         # load the AQL query for this instance
-        with open(abs_path(self.config['aql_path']), 'r') as fp:
-            self.aql_query = fp.read()
+        if 'aql' in self.config:
+            self.aql_query = self.config['aql']
+        elif 'aql_path' in self.config:
+            with open(abs_path(self.config['aql_path']), 'r') as fp:
+                self.aql_query = fp.read()
+        else:
+            raise RuntimeError(f"module {self} missing aql or aql_path settings in configuration")
 
         # each query can specify it's own range
-        if 'relative_duration_before' in self.config:
-            self.relative_duration_before = create_timedelta(self.config['relative_duration_before'])
+        # the wide range is used if the observable does not have a time
+        if 'wide_duration_before' in self.config:
+            self.wide_duration_before = create_timedelta(self.config['wide_duration_before'])
         else:
-            self.relative_duration_before = create_timedelta(saq.CONFIG['qradar']['relative_duration_before'])
+            self.wide_duration_before = create_timedelta(saq.CONFIG['qradar']['wide_duration_before'])
 
-        if 'relative_duration_after' in self.config:
-            self.relative_duration_after = create_timedelta(self.config['relative_duration_after'])
+        if 'wide_duration_after' in self.config:
+            self.wide_duration_after = create_timedelta(self.config['wide_duration_after'])
         else:
-            self.relative_duration_after = create_timedelta(saq.CONFIG['qradar']['relative_duration_after'])
+            self.wide_duration_after = create_timedelta(saq.CONFIG['qradar']['wide_duration_after'])
+
+        # the narrow range is used if the observable has a time
+        if 'narrow_duration_before' in self.config:
+            self.narrow_duration_before = create_timedelta(self.config['narrow_duration_before'])
+        else:
+            self.narrow_duration_before = create_timedelta(saq.CONFIG['qradar']['narrow_duration_before'])
+
+        if 'narrow_duration_after' in self.config:
+            self.narrow_duration_after = create_timedelta(self.config['narrow_duration_after'])
+        else:
+            self.narrow_duration_after = create_timedelta(saq.CONFIG['qradar']['narrow_duration_after'])
 
         # load the observable mapping for this query
         # NOTE that the keys (event field names) are case sensitive
@@ -155,10 +181,10 @@ class QRadarAPIAnalyzer(AnalysisModule):
         for key in self.config.keys():
             if key.startswith('map_'):
                 event_field, observable_type = [_.strip() for _ in self.config[key].split('=', 2)]
-                if observable_type not in VALID_OBSERVABLE_TYPES:
-                    logging.error(f"invalid observable type specified for observable mapping "
-                                  f"{key} in {self}: {observable_type}")
-                    continue
+                #if observable_type not in VALID_OBSERVABLE_TYPES:
+                    #logging.error(f"invalid observable type specified for observable mapping "
+                                  #f"{key} in {self}: {observable_type}")
+                    #continue
 
                 self.observable_mapping[event_field] = observable_type
 
@@ -196,18 +222,20 @@ class QRadarAPIAnalyzer(AnalysisModule):
 
         # figure out the start and stop time
         source_event_time = self.root.event_time_datetime
+        # if we are going off of the event time, then we use the wide duration
+        start_time = source_event_time - self.wide_duration_before
+        stop_time = source_event_time + self.wide_duration_after
+
         if observable.time is not None:
             source_event_time = observable.time
-
-        start_time = source_event_time - self.relative_duration_before
-        stop_time = source_event_time + self.relative_duration_after
+            start_time = source_event_time - self.narrow_duration_before
+            stop_time = source_event_time + self.narrow_duration_after
         
         start_time_str = start_time.strftime('%Y-%m-%d %H:%M %z')
         stop_time_str = stop_time.strftime('%Y-%m-%d %H:%M %z')
 
         target_query = target_query.replace('<O_START>', start_time_str)\
                                    .replace('<O_STOP>', stop_time_str)
-
 
         try:
             logging.info(f"executing qradar query: {target_query}")
@@ -219,8 +247,6 @@ class QRadarAPIAnalyzer(AnalysisModule):
 
         # map results to observables
         for event in analysis.query_results['events']:
-            observable_time = None
-
             #
             # the time of the event is always going to be in the deviceTimeFormatted field (see above)
             # 2019-10-29 19:50:38.592 -0400
@@ -229,7 +255,7 @@ class QRadarAPIAnalyzer(AnalysisModule):
                 event_time = datetime.datetime.strptime(event['deviceTimeFormatted'], '%Y-%m-%d %H:%M:%S.%f %z')
                 event_time = event_time.astimezone(pytz.UTC)
             elif 'deviceTime' in event:
-                event_time = event['deviceTime']
+                event_time = datetime.datetime.fromtimestamp(event['deviceTime'] / 1000).astimezone(pytz.UTC)
             else:
                 event_time = None
 
@@ -245,10 +271,11 @@ class QRadarAPIAnalyzer(AnalysisModule):
                                                          self.filter_observable_value(event_field, 
                                                                                       self.observable_mapping[event_field], 
                                                                                       event[event_field]), 
-                                                         o_time=observable_time)
+                                                         o_time=event_time)
 
                 self.process_qradar_field_mapping(analysis, event, event_time, observable, event_field)
 
+        self.process_finalize(analysis, observable)
         return True
 
 KEY_METHOD_MAP = 'method_map'
@@ -297,6 +324,12 @@ class QRadarProxyDomainMethodAnalyzer(QRadarAPIAnalyzer):
         self.verify_config_exists('field_applied_policy')
         self.verify_config_exists('field_url_category')
         self.verify_config_exists('field_count')
+
+    def custom_requirement(self, observable):
+        if observable.type == F_FQDN and observable.is_managed():
+            return False
+
+        return True
 
     @property
     def generated_analysis_type(self):
@@ -371,13 +404,19 @@ class QRadarProxyDomainTrafficAnalysis(QRadarAPIAnalysis):
             return f"{result}No activity was observed."
 
 class QRadarProxyDomainTrafficAnalyzer(QRadarAPIAnalyzer):
-    @property
-    def generated_analysis_type(self):
-        return QRadarProxyDomainTrafficAnalysis
-
     def verify_environment(self):
         self.verify_config_exists('field_request_method')
         self.verify_config_exists('field_applied_policy')
+
+    def custom_requirement(self, observable):
+        if observable.type == F_FQDN and observable.is_managed():
+            return False
+
+        return True
+
+    @property
+    def generated_analysis_type(self):
+        return QRadarProxyDomainTrafficAnalysis
 
     @property
     def field_request_method(self):

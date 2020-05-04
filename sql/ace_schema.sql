@@ -48,6 +48,7 @@ CREATE TABLE `alerts` (
   `location` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
   `detection_count` int(11) DEFAULT '0',
   `event_time` timestamp NULL DEFAULT NULL,
+  `queue` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL DEFAULT 'default',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uuid` (`uuid`),
   KEY `insert_date` (`insert_date`),
@@ -640,6 +641,7 @@ CREATE TABLE `users` (
   `omniscience` int(11) NOT NULL DEFAULT '0',
   `timezone` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci DEFAULT NULL COMMENT 'The timezone this user is in. Dates and times will appear in this timezone in the GUI.',
   `display_name` varchar(45) DEFAULT NULL COMMENT 'The display name of the user. This may be different than the username. This is used in the GUI.',
+  `queue` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL DEFAULT 'default',
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`,`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;

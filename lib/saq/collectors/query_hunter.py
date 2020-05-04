@@ -206,7 +206,6 @@ class QueryHunt(Hunt):
 
         self.full_coverage = rule_section.getboolean('full_coverage')
         self.group_by = rule_section.get('group_by', fallback=None)
-        self.search_query_path = rule_section['search']
         self.use_index_time = rule_section.getboolean('use_index_time')
 
         self.max_result_count =  rule_section.getint('max_result_count', 
@@ -222,8 +221,8 @@ class QueryHunt(Hunt):
         
         self.observable_mapping = {}
         for key, value in observable_mapping_section.items():
-            if value not in VALID_OBSERVABLE_TYPES:
-                raise ValueError(f"invalid observable type {value}")
+            #if value not in VALID_OBSERVABLE_TYPES:
+                #raise ValueError(f"invalid observable type {value}")
 
             self.observable_mapping[key] = value
 
@@ -251,13 +250,25 @@ class QueryHunt(Hunt):
                         option_name, option_value = option.split('=', 1)
                         self.directive_options[key][option_name] = option_value
                 
-                if directive not in VALID_DIRECTIVES:
-                    raise ValueError(f"invalid directive {directive}")
+                #if directive not in VALID_DIRECTIVES:
+                    #raise ValueError(f"invalid directive {directive}")
 
                 self.directives[key].append(directive)
 
-        self.query = self.load_query_from_file(self.search_query_path)
-        self.query_last_mtime = os.path.getmtime(self.search_query_path)
+        # search or search_query_path load the search from a file
+        if 'search' not in rule_section and 'query' not in rule_section:
+            raise KeyError(f"missing search or query in {path}")
+
+        self.search_query_path = rule_section.get('search', fallback=None)
+        self.query = rule_section.get('query', fallback=None)
+
+        if self.search_query_path is not None and self.query is not None:
+            raise ValueError(f"both search and query are specified for {path} (only need one)")
+
+        if self.search_query_path:
+            self.query = self.load_query_from_file(self.search_query_path)
+            self.query_last_mtime = os.path.getmtime(self.search_query_path)
+
         return config
 
     @property
@@ -267,6 +278,9 @@ class QueryHunt(Hunt):
     @property
     def query_is_modified(self):
         """Returns True if this query was loaded from file and that file has been modified since we loaded it."""
+        if self.search_query_path is None:
+            return False
+
         try:
             return self.query_last_mtime != os.path.getmtime(self.search_query_path)
         except FileNotFoundError:
@@ -281,6 +295,7 @@ class QueryHunt(Hunt):
 
         offset_start_time = target_start_time = start_time if start_time is not None else self.start_time
         offset_end_time = target_end_time = end_time if end_time is not None else self.end_time
+        query_result = None
 
         try:
             # the optional offset allows hunts to run at some offset of time
@@ -322,17 +337,17 @@ class QueryHunt(Hunt):
 
         def _create_submission():
             return Submission(description=self.name,
-                              # TODO support other analysis modes!
-                              analysis_mode=ANALYSIS_MODE_CORRELATION,
+                              analysis_mode=self.analysis_mode,
                               tool=f'hunter-{self.type}',
-                              #tool_instance=saq.CONFIG['qradar']['url'], # XXX <--
                               tool_instance=self.tool_instance,
-                              type=self.type,
+                              type=self.alert_type,
                               tags=self.tags,
                               details=[{'search_id': self.search_id if self.search_id else None,
                                         'query': self.formatted_query()}],
                               observables=[],
                               event_time=None,
+                              queue=self.queue,
+                              instructions=self.description,
                               files=[])
 
         event_grouping = {} # key = self.group_by field value, value = Submission

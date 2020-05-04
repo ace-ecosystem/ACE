@@ -38,7 +38,9 @@ class Submission(object):
                  observables,
                  tags,
                  files,
-                 group_assignments=[]):
+                 queue=saq.constants.QUEUE_DEFAULT,
+                 group_assignments=[],
+                 instructions=None):
 
         self.description = description
         self.analysis_mode = analysis_mode
@@ -51,6 +53,8 @@ class Submission(object):
         self.tags = tags
         self.files = files
         self.uuid = str(uuid.uuid4())
+        self.queue = queue
+        self.instructions = instructions
 
         # list of RemoteNodeGroup.name values
         # empty list means send to all configured groups

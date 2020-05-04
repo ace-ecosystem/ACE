@@ -188,6 +188,22 @@ class ConfigurableModuleTestAnalyzer(AnalysisModule):
         analysis = self.create_analysis(test)
         return True
 
+class BadSummaryTestAnalysis(TestAnalysis):
+    def initialize_details(self):
+        self.details = { KEY_TEST_RESULT: True }
+
+    def generate_summary(self):
+        return f"This is a bad summary becuase there is {self['no_such_key']}"
+
+class BadSummaryTestAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return BadSummaryTestAnalysis
+
+    def execute_analysis(self, test):
+        analysis = self.create_analysis(test)
+        return True
+
 class GenericTestAnalysis(TestAnalysis):
     def initialize_details(self):
         self.details = { 'Hello': 'world!' }
@@ -199,6 +215,46 @@ class GenericTestAnalyzer(AnalysisModule):
     @property
     def generated_analysis_type(self):
         return GenericTestAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return VALID_OBSERVABLE_TYPES
+
+    def execute_analysis(self, observable):
+        analysis = self.create_analysis(observable)
+        return True
+
+class ValidQueueAnalysis(TestAnalysis):
+    def initialize_details(self):
+        self.details = { "success": True }
+
+    def generate_summary(self):
+        return ""
+
+class ValidQueueAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return ValidQueueAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return VALID_OBSERVABLE_TYPES
+
+    def execute_analysis(self, observable):
+        analysis = self.create_analysis(observable)
+        return True
+
+class InvalidQueueAnalysis(TestAnalysis):
+    def initialize_details(self):
+        self.details = { "success": True }
+
+    def generate_summary(self):
+        return ""
+
+class InvalidQueueAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return InvalidQueueAnalysis
 
     @property
     def valid_observable_types(self):

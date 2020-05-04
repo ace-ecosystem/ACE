@@ -164,33 +164,42 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
                 logging.error(f"unable to delete {pcap_zip_path}: {e}")
                 report_exception()
 
-            # check that there is a pcap_dir
-            if len(pcap_dir) > 0:
-                # build command with correct pcap-ng files
-                pcap_path = os.path.join(pcap_dir, 'merged.pcap')
-                command = ['mergecap', '-w', pcap_path]
-                command.extend(os.path.join(pcap_dir, i) for i in os.listdir(pcap_dir))
+            # did we get any pcap files?
+            if not os.listdir(pcap_dir):
+                analysis.error = "error: no pcap files downloaded"
+                logging.error(f"did not get any pcap files for {observable}")
+                return True
 
-                # merge all pcaps in pcap_dir to merged_pcap.pcapng
-                p = Popen(command, stdout=PIPE, stderr=PIPE)
-                _stdout, _stderr = p.communicate()
+            # build command with correct pcap-ng files
+            pcap_path = os.path.join(pcap_dir, 'merged.pcap')
+            command = ['mergecap', '-w', pcap_path]
+            command.extend(os.path.join(pcap_dir, i) for i in os.listdir(pcap_dir))
 
-                if os.path.getsize(pcap_path) in [ 92, 0 ]:
-                    # for pcap-ng (the default), a size of 72 bytes means the pcap is empty of content
-                    # also, a file of 0 means the pcap data was missing entirely
-                    # merging 2 or more empty (either 0 or 72 bytes) pcap-ng files gives a pcap of size 92 bytes
-                    # so we remove those
-                    logging.debug(f"removing empty pcap file {pcap_path}")
-                    try:
-                        os.remove(pcap_path)
-                    except Exception as e:
-                        logging.error(f"unable to remove empty pcap file {pcap_path}: {e}")
-                        report_exception()
-                else:
-                    # add it as an observable to the analysis
-                    pcap_file = analysis.add_observable(F_FILE, os.path.relpath(pcap_path, start=self.root.storage_dir))
-                    pcap_file.add_tag('pcap')
-                    analysis.pcap_paths.append(pcap_file.value)
+            # merge all pcaps in pcap_dir to merged_pcap.pcapng
+            p = Popen(command, stdout=PIPE, stderr=PIPE)
+            _stdout, _stderr = p.communicate()
+
+            if not os.path.exists(pcap_path):
+                analysis.error = "error: failed to merge pcap files"
+                logging.error(f"failed to merge pcap files for {observable}")
+                return True
+
+            if os.path.getsize(pcap_path) in [ 92, 0 ]:
+                # for pcap-ng (the default), a size of 72 bytes means the pcap is empty of content
+                # also, a file of 0 means the pcap data was missing entirely
+                # merging 2 or more empty (either 0 or 72 bytes) pcap-ng files gives a pcap of size 92 bytes
+                # so we remove those
+                logging.debug(f"removing empty pcap file {pcap_path}")
+                try:
+                    os.remove(pcap_path)
+                except Exception as e:
+                    logging.error(f"unable to remove empty pcap file {pcap_path}: {e}")
+                    report_exception()
+            else:
+                # add it as an observable to the analysis
+                pcap_file = analysis.add_observable(F_FILE, os.path.relpath(pcap_path, start=self.root.storage_dir))
+                pcap_file.add_tag('pcap')
+                analysis.pcap_paths.append(pcap_file.value)
 
             return True
 

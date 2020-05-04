@@ -41,6 +41,8 @@ class SplunkQueryObject(object):
         relative_duration_after="00:00:05",
         query_timeout="00:30:00",
         network_timeout=30,
+        namespace_user='-',
+        namespace_app='-',
         *args, **kwargs):
 
         super(SplunkQueryObject, self).__init__(*args, **kwargs)
@@ -59,6 +61,16 @@ class SplunkQueryObject(object):
 
         # how long until a network request times out
         self.network_timeout = network_timeout
+
+        # https://docs.splunk.com/Documentation/Splunk/7.3.4/RESTUM/RESTusing#Namespace
+        # modify the app/user context for search activies
+        self.namespace_user = namespace_user
+        if self.namespace_user is None:
+            self.namespace_user = '-'
+
+        self.namespace_app = namespace_app
+        if self.namespace_app is None:
+            self.namespace_app = '-'
 
         self.session_key = None # temp authentication token
         self.search_id = None # search id
@@ -227,7 +239,7 @@ class SplunkQueryObject(object):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 r = requests.post(
-                    '{0}/services/search/jobs'.format(self.uri),
+                    '{0}/servicesNS/{1}/{2}/search/jobs'.format(self.uri, self.namespace_user, self.namespace_app),
                     verify = False, # XXX take this out!
                     headers = {
                         'Authorization': 'Splunk {0}'.format(self.session_key)
@@ -264,7 +276,7 @@ class SplunkQueryObject(object):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 r = requests.get(
-                    '{0}/services/search/jobs/{1}'.format(self.uri, self.search_id),
+                    '{0}/servicesNS/{1}/{2}/search/jobs/{3}'.format(self.uri, self.namespace_user, self.namespace_app, self.search_id),
                     headers = {
                         'Authorization': 'Splunk {0}'.format(self.session_key)
                     }, 
@@ -302,7 +314,7 @@ class SplunkQueryObject(object):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 r = requests.get(
-                    '{0}/services/search/jobs/{1}/results'.format(self.uri, self.search_id),
+                    '{0}/servicesNS/{1}/{2}/search/jobs/{3}/results'.format(self.uri, self.namespace_user, self.namespace_app, self.search_id),
                     headers = {
                         'Authorization': 'Splunk {0}'.format(self.session_key)
                     }, 
