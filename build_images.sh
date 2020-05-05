@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+SAQ_HOME=${SAQ_HOME:.}
 
 cd $SAQ_HOME || exit 1
 
