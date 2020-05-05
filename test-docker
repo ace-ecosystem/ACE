@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+docker image build -f Dockerfile.ace -t ace:latest . || exit 0
+for volume in ace-test-data-volume ace-test-db-volume
+do
+    if docker volume ls | grep "$volume" > /dev/null
+    then
+        echo "removing $volume"
+        docker volume rm "$volume" > /dev/null || exit 0
+    fi
+
+    echo "creating $volume"
+    docker volume create "$volume" > /dev/null || exit 0
+done
+
+if ! docker network inspect ace-test-network > /dev/null 2>&1
+then
+    docker network create ace-test-network
+fi
+
+if docker container inspect ace-test-db > /dev/null 2>&1
+then
+    docker container stop ace-test-db
+fi
+
+cp docker/provision/test/50-ace-unittest.sql docker/mounts/mysql/init
+cat sql/ace_schema.sql >> docker/mounts/mysql/init/50-ace-unittest.sql
+cp docker/provision/test/9A-test.sql docker/mounts/mysql/init
+
+docker run \
+    --name ace-test-db \
+    --hostname ace-test-db \
+    --rm \
+    -e MYSQL_ROOT_PASSWORD=ace \
+    --mount source=ace-test-db-volume,target=/var/lib/mysql \
+    --mount "type=bind,source=/opt/ace/docker/mounts/mysql/init,target=/docker-entrypoint-initdb.d" \
+    --network ace-test-network \
+    --expose 3306 \
+    -p 127.0.0.1:13306:3306/tcp \
+    -d \
+    mysql:5.7 
+
+docker run \
+    -it -u ace \
+    --rm \
+    --network=ace-test-network \
+    --mount source=ace-test-data-volume,target=/opt/ace/data \
+    ace:latest \
+    /bin/bash -l -c docker/provision/test/execute
+
+docker container stop ace-test-db
