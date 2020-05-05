@@ -37,7 +37,7 @@ bin/build-unittest-database
 # if we passed no parameters then we run all the tests
 if [ "$#" -eq "0" ]
 then
-    PYTHONPATH=lib python3 -W ignore -m unittest -f -v \
+    python3 -W ignore -m unittest -f -v \
         $(find -L lib -type f -name 'test*.py' -ipath '*/site/*' | sed -e 's;^lib/;;' -e 's/\.py$//' -e 's;/;.;g') \
         saq.analysis.test \
         saq.service.test \
@@ -113,7 +113,7 @@ then
 fi
 
 # otherwise we run whatever test is specified on the command line
-PYTHONPATH=lib python3 -W ignore -m unittest -f -v "$@"
+python3 -W ignore -m unittest -f -v "$@"
 
 #PYTHONPATH=lib python3 -W ignore -m unittest -v saq.engine.test_cloudphish.CloudPhishEngineTestCase.test_cloudphish_engine_007_http_clear_alert
 #PYTHONPATH=lib python3 -W ignore -m unittest -v saq.modules.test_asset.AssetAnalysisModuleTestCase.test_carbon_black_asset_ident_000
