@@ -91,6 +91,7 @@ if [ ! -e etc/local_networks.csv ]; then echo 'Indicator,Indicator_Type' > etc/l
 #activate-global-python-argcomplete
 ln -s /opt/signatures /opt/ace/etc/yara
 cp etc/saq.docker.ini etc/saq.ini
+cp etc/saq.docker.unittest.ini etc/saq.unittest.ini
 
 for l in api apache
 do

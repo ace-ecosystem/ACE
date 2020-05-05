@@ -408,7 +408,7 @@ def iterate_data_blocks(s):
     while True:
         block = read_data_block(s)
         if len(block) == 0:
-            raise StopIteration()
+            return
     
         yield block
 

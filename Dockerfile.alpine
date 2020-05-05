@@ -13,6 +13,7 @@ RUN addgroup -S $SAQ_GROUP \
         nmap \
         p7zip \
         unzip \
+        unrar \
         poppler-utils \
         rng-tools \
         libffi-dev \
@@ -28,6 +29,7 @@ RUN addgroup -S $SAQ_GROUP \
         uwsgi \
         uwsgi-python3 \
         libxslt-dev \
+        findutils \
     && ln -s /usr/include/locale.h /usr/include/xlocale.h \
     && mkdir /opt/signatures \
     && chown ace:ace /opt/signatures \

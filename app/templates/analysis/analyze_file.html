@@ -14,7 +14,7 @@
       <tr><th style="padding-right:10px;">Alert Type</th><td style="width:100%;"><input type="text" class="form-control" name="new_alert_type" value="manual"/></td></tr>
       <tr><th style="padding-right:10px;">Description</th><td style="width:100%;"><input type="text" class="form-control" name="new_alert_description" value="Manual Correlation"/></td></tr>
       <tr><th style="padding-right:10px;">Queue</th><td style="width:100%;"><input type="text" class="form-control" name="new_alert_queue" value="{{queue}}"/></td></tr>
-      <tr><th style="padding-right:10px;">Target ACE Node</th><td style="width:100%;"><select class="form-control" name="target_node_id">
+      <tr><th style="padding-right:10px;">Target ACE Node</th><td style="width:100%;"><select class="form-control" name="target_node_data">
       {% for node_id, node_name, node_location, company_id, company_name in available_nodes %}
         <option value="{{node_id}},{{node_location}},{{company_id}}">{{node_location}} ({{company_name}})</option>
       {% endfor %}

@@ -157,7 +157,7 @@ def get_content_metadata(sha256_content, db, c):
     if row is None:
         return None
 
-    return row[0], row[1].decode('unicode_internal')
+    return row[0], row[1].decode('utf-16le')
 
 # global url filter
 url_filter = None
@@ -247,7 +247,7 @@ def _get_cached_analysis(url, db, c):
     if row:
         status, result, http_result, http_message, sha256_content, node, file_name, uuid = row
         if file_name:
-            file_name = file_name.decode('unicode_internal')
+            file_name = file_name.decode('utf-16le')
 
         storage_dir = storage_dir_from_uuid(uuid)
         if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
