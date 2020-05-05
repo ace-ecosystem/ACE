@@ -7,7 +7,7 @@ then
     rm -rf docker/mounts/mysql/init
 fi
 
-mkdir docker/mounts/mysql/init
+mkdir -p docker/mounts/mysql/init
 
 cat > docker/mounts/mysql/init/01-ace.sql<<EOF
 CREATE DATABASE IF NOT EXISTS \`ace\`;
