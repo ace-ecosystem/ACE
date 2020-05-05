@@ -1611,6 +1611,7 @@ def test_database_connections(args):
                     print("OK")
             except Exception as e:
                 print("FAILED: {}".format(e))
+                sys.exit(1)
 
     sys.exit(0)
 

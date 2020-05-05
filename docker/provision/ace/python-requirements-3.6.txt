@@ -15,6 +15,7 @@ beautifulsoup4
 businesstime
 cbapi==1.4.4
 cbinterface
+croniter
 dateparser
 dnspython
 exchangelib
@@ -56,3 +57,4 @@ gglsbl-rest-client
 argcomplete==1.10.0
 msal
 ip-inspector
+uwsgi

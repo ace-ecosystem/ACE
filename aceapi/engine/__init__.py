@@ -56,7 +56,7 @@ def download(uuid):
             while True:
                 data = os.read(fp, io.DEFAULT_BUFFER_SIZE)
                 if data == b'':
-                    raise StopIteration()
+                    return
                 yield data
 
         return Response(_iter_send(), mimetype='application/octet-stream')

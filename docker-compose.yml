@@ -5,12 +5,12 @@ services:
         command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_520_ci
         restart: always
         environment:
-            MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+            MYSQL_ROOT_PASSWORD: 'ace'
         expose:
             - '3306'
         volumes:
             - ace-db-volume:/var/lib/mysql
-            - ./docker/provision/mysql/init:/docker-entrypoint-initdb.d
+            - ./docker/mounts/mysql/init:/docker-entrypoint-initdb.d
         hostname: ace-db
 
     ace-http:
@@ -31,8 +31,8 @@ services:
     ace:
         build:
             context: .
-            dockerfile: Dockerfile
-        image: ace-alpine:latest
+            dockerfile: Dockerfile.ace
+        image: ace:latest
         depends_on:
             - ace-db
         command: docker/provision/ace/setup

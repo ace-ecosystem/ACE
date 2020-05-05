@@ -96,7 +96,7 @@ def iterate_fqdn_parts(fqdn, reverse=False):
         partial_fqdn = '.'.join(partial_fqdn)
         yield partial_fqdn
 
-    raise StopIteration()
+    return
 
 def human_readable_size(size):
     from math import log2

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+docker run \
+    -it \
+    -u root \
+    --rm \
+    --network=ace-test-network \
+    --mount source=ace-test-data-volume,target=/opt/ace/data \
+    ace:latest \
+    /bin/bash -il

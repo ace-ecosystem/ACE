@@ -179,7 +179,7 @@ class CloudphishAPITestCase(CloudphishTestCase, ACEEngineTestCase):
         self.assertEquals(len(result), 1)
         node, file_name = result[0]
         self.assertEquals(node, saq.SAQ_NODE)
-        file_name = file_name.decode('unicode_internal')
+        file_name = file_name.decode('utf-16le')
         self.assertEquals(file_name, 'Payment_Advice.pdf')
 
         # we should have seen the analysis mode change

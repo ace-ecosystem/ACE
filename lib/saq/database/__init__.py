@@ -106,6 +106,9 @@ class _database_pool(object):
         return connection
 
     def return_connection(self, connection):
+        if connection is None:
+            return
+
         try:
             connection.rollback()
         except Exception as e:

@@ -609,7 +609,7 @@ class CloudphishRequestAnalyzer(AnalysisModule):
                         logging.error("unable to copy {} to {}: {}".format(src, cache_path, e))
 
                 sha256_content = file_observable.sha256_hash
-                file_name = os.path.basename(file_observable.value).encode('unicode_internal')
+                file_name = os.path.basename(file_observable.value).encode('utf-16le')
 
             break
 

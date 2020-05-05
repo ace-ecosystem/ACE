@@ -2085,7 +2085,7 @@ class PDFAnalyzer(AnalysisModule):
 
         # run pdf parser
         with open(pdfparser_output_file, 'wb') as fp:
-            p = Popen(['python2.7', self.pdfparser_path,
+            p = Popen(['python3', self.pdfparser_path,
             '-f', '-w', '-v', '-c', '--debug', local_file_path], stdout=fp, stderr=PIPE)
             try:
                 _, stderr = p.communicate(timeout=10)

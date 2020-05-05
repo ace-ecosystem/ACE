@@ -1,0 +1,52 @@
+FROM python:3.8-slim-buster
+ENV SAQ_HOME /opt/ace
+ENV SAQ_USER ace
+ENV SAQ_GROUP ace
+ENV TZ UTC
+ENV DEBIAN_FRONTEND noninteractive
+RUN groupadd ace \
+    && useradd -g ace -G sudo -m -s /bin/bash ace \
+    && sed -i -e 's/main$/main contrib non-free/g' /etc/apt/sources.list \
+    && apt -y update \
+    && apt -y install --no-install-recommends apt-utils \
+    && mkdir -p /usr/share/man/man1/ \
+    && apt -y install --no-install-recommends \
+        nmap \
+        libldap2-dev \
+        libsasl2-dev \
+        libffi-dev \
+        libimage-exiftool-perl \
+        p7zip-full \
+        p7zip-rar \
+        unzip \
+        zip \
+        unrar \
+        unace-nonfree \
+        libxml2-dev libxslt1-dev \
+        libyaml-dev \
+        ssdeep \
+        poppler-utils \
+        rng-tools \
+        wireshark-common \
+        build-essential \
+        file \
+        less \
+        nginx \
+        default-jre \
+        bsdmainutils \
+        node-esprima \
+        python2.7 \
+        python-pip \
+    && mkdir /opt/signatures \
+    && chown ace:ace /opt/signatures \
+    && mkdir /opt/ace \
+    && chown ace:ace /opt/ace \
+    && python3 -m pip install pip virtualenv --upgrade \
+    && python2.7 -m pip install officeparser
+USER ace
+WORKDIR /opt/ace
+COPY --chown=ace:ace docker/provision/ace/python-requirements-3.6.txt docker/provision/ace/python-requirements-3.6.txt
+RUN /bin/bash -c "python3 -m virtualenv --python=python3 /opt/ace/venv && source /opt/ace/venv/bin/activate && python3 -m pip install -r docker/provision/ace/python-requirements-3.6.txt"
+COPY --chown=ace:ace . /opt/ace
+COPY --from=ace-ssl:latest --chown=ace:ace /ssl /opt/ace/ssl
+RUN docker/provision/ace/install
