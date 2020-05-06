@@ -83,6 +83,27 @@ class ExabeamSession(object):
             logging.error(f"Failed to fetch watchlists: {e}")
             return {}
 
+    def ClearWatchlistUsers(self, watchlist):
+        try:
+            r = self.session.put(f"{self.base_uri}/uba/api/watchlist/{self.watchlists[watchlist]}/removeAll", json={}, verify=self.verify)
+            if r.status_code != requests.codes.ok:
+                r.raise_for_status()
+        except Exception as e:
+            raise Exception(f"Failed to clear Exabeam watchlist: watchlist - {e}")
+
+    def AddWatchlistUsers(self, watchlist, users):
+        try:
+            data = { "category": "Users", "items": users }
+            r = self.session.put(f"{self.base_uri}/uba/api/watchlist/{self.watchlists[watchlist]}/add", json=data, verify=self.verify)
+            if r.status_code != requests.codes.ok:
+                r.raise_for_status()
+        except Exception as e:
+            logging.error(f"Failed to add users to Exabeam watchlist: {watchlist} - {e}")
+
+    def UpdateWatchlistUsers(self, watchlist, users):
+        self.ClearWatchlistUsers(watchlist)
+        self.AddWatchlistUsers(watchlist, users)
+
     # returns list of users that are on the notable users watchlist
     def get_notable_user_sessions(self):
         sessions = []

@@ -102,8 +102,8 @@ chmod 400 ssl/root/ca/.intermediate_ca.pwd
 (cd ssl && rm -f localhost.key.pem && ln -s root/ca/intermediate/private/localhost.key.pem .)
 
 # copy into mysql server
-sudo cp -a ssl/root/ca/intermediate/certs/ca-chain.cert.pem /var/lib/mysql/ca.pem
-sudo cp -a ssl/root/ca/intermediate/certs/localhost.cert.pem /var/lib/mysql/server-cert.pem
-sudo cp -a ssl/root/ca/intermediate/private/localhost.key.pem /var/lib/mysql/server-key.pem
-sudo chown mysql:mysql /var/lib/mysql/ca.pem /var/lib/mysql/server-cert.pem /var/lib/mysql/server-key.pem
-sudo systemctl restart mysql.service
+#sudo cp -a ssl/root/ca/intermediate/certs/ca-chain.cert.pem /var/lib/mysql/ca.pem
+#sudo cp -a ssl/root/ca/intermediate/certs/localhost.cert.pem /var/lib/mysql/server-cert.pem
+#sudo cp -a ssl/root/ca/intermediate/private/localhost.key.pem /var/lib/mysql/server-key.pem
+#sudo chown mysql:mysql /var/lib/mysql/ca.pem /var/lib/mysql/server-cert.pem /var/lib/mysql/server-key.pem
+#sudo systemctl restart mysql.service

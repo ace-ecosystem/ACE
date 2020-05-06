@@ -24,6 +24,7 @@ html2text
 iptools
 ldap3==2.5 
 lxml
+mkdocs
 msoffice_decrypt
 olefile
 oletools
@@ -37,6 +38,7 @@ pyasn1
 pymongo==2.8
 pysip
 pysocks
+pytest
 python-magic
 python-memcached
 pytz 
@@ -44,8 +46,6 @@ requests
 sandboxapi
 setuptools_git 
 six
-sphinx
-sphinx_rtd_theme
 tld
 tzlocal
 urlfinderlib

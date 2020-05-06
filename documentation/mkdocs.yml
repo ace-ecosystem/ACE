@@ -1,0 +1,64 @@
+# Project information
+site_name: Analysis Correlation Engine
+site_description: Documentation for Analysis Correlation Engine
+site_author: John Davison
+site_url: 
+
+# Repository
+repo_name: ace
+repo_url: 
+edit_uri: ""
+
+theme:
+  name: null
+  custom_dir: 'material'
+  feature:
+    tabs: true
+
+  # 404 page
+  static_templates:
+    - 404.html
+
+  # Don't include MkDocs' JavaScript
+  include_search_page: false
+  search_index_only: true
+
+  # Default values, taken from mkdocs_theme.yml
+  language: en
+  feature:
+    tabs: true
+  palette:
+    primary: indigo
+    accent: indigo
+  font:
+    text: Roboto
+    code: Roboto Mono
+  favicon: assets/images/favicon.png
+  logo:
+    icon: "\uE80C"
+
+# Extensions
+markdown_extensions:
+  - admonition
+  - codehilite:
+      guess_lang: false
+  - toc:
+      permalink: true
+  - fenced_code
+
+# Page tree
+nav:
+    - Home: index.md
+    - Overview: overview/index.md
+    - Installation: 
+        - Overview: installation/index.md
+    - Analyst Guide: 
+        - Overview: user/index.md
+        - Hunting: user/hunting.md
+    - Administrators Guide: 
+        - Overview: admin/index.md
+    - Development Guide: 
+        - Overview: development/index.md
+        - API: development/api.md
+        - History: development/history.md
+
