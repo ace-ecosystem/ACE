@@ -1,0 +1,846 @@
+
+
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <meta http-equiv="x-ua-compatible" content="ie=edge">
+      
+        <meta name="description" content="Documentation for Analysis Correlation Engine">
+      
+      
+      
+        <meta name="author" content="John Davison">
+      
+      
+        <meta name="lang:clipboard.copy" content="Copy to clipboard">
+      
+        <meta name="lang:clipboard.copied" content="Copied to clipboard">
+      
+        <meta name="lang:search.language" content="en">
+      
+        <meta name="lang:search.pipeline.stopwords" content="True">
+      
+        <meta name="lang:search.pipeline.trimmer" content="True">
+      
+        <meta name="lang:search.result.none" content="No matching documents">
+      
+        <meta name="lang:search.result.one" content="1 matching document">
+      
+        <meta name="lang:search.result.other" content="# matching documents">
+      
+        <meta name="lang:search.tokenizer" content="[\s\-]+">
+      
+      <link rel="shortcut icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.1, mkdocs-material-4.6.3">
+    
+    
+      
+        <title>Hunting - Analysis Correlation Engine</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/application.adb8469c.css">
+      
+        <link rel="stylesheet" href="../../assets/stylesheets/application-palette.a8b3c06d.css">
+      
+      
+        
+        
+        <meta name="theme-color" content="#3f51b5">
+      
+    
+    
+      <script src="../../assets/javascripts/modernizr.86422ebf.js"></script>
+    
+    
+      
+        <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,400i,700%7CRoboto+Mono&display=fallback">
+        <style>body,input{font-family:"Roboto","Helvetica Neue",Helvetica,Arial,sans-serif}code,kbd,pre{font-family:"Roboto Mono","Courier New",Courier,monospace}</style>
+      
+    
+    <link rel="stylesheet" href="../../assets/fonts/material-icons.css">
+    
+    
+    
+      
+    
+    
+  </head>
+  
+    
+    
+    <body dir="ltr" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    <svg class="md-svg">
+      <defs>
+        
+        
+      </defs>
+    </svg>
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" data-md-component="overlay" for="__drawer"></label>
+    
+      <a href="#hunting" tabindex="0" class="md-skip">
+        Skip to content
+      </a>
+    
+    
+      <header class="md-header" data-md-component="header">
+  <nav class="md-header-nav md-grid">
+    <div class="md-flex">
+      <div class="md-flex__cell md-flex__cell--shrink">
+        <a href="../.." title="Analysis Correlation Engine" aria-label="Analysis Correlation Engine" class="md-header-nav__button md-logo">
+          
+            <i class="md-icon"></i>
+          
+        </a>
+      </div>
+      <div class="md-flex__cell md-flex__cell--shrink">
+        <label class="md-icon md-icon--menu md-header-nav__button" for="__drawer"></label>
+      </div>
+      <div class="md-flex__cell md-flex__cell--stretch">
+        <div class="md-flex__ellipsis md-header-nav__title" data-md-component="title">
+          
+            <span class="md-header-nav__topic">
+              Analysis Correlation Engine
+            </span>
+            <span class="md-header-nav__topic">
+              
+                Hunting
+              
+            </span>
+          
+        </div>
+      </div>
+      <div class="md-flex__cell md-flex__cell--shrink">
+        
+          <label class="md-icon md-icon--search md-header-nav__button" for="__search"></label>
+          
+<div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" aria-label="search" name="query" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="query" data-md-state="active">
+      <label class="md-icon md-search__icon" for="__search"></label>
+      <button type="reset" class="md-icon md-search__icon" data-md-component="reset" tabindex="-1">
+        &#xE5CD;
+      </button>
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="result">
+          <div class="md-search-result__meta">
+            Type to start searching
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+        
+      </div>
+      
+    </div>
+  </nav>
+</header>
+    
+    <div class="md-container">
+      
+        
+      
+      
+        
+
+  
+
+<nav class="md-tabs md-tabs--active" data-md-component="tabs">
+  <div class="md-tabs__inner md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  <li class="md-tabs__item">
+    
+      <a href="../.." class="md-tabs__link">
+        Home
+      </a>
+    
+  </li>
+
+      
+        
+      
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../../installation/" class="md-tabs__link">
+          Installation
+        </a>
+      
+    </li>
+  
+
+      
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../" class="md-tabs__link md-tabs__link--active">
+          Analyst Guide
+        </a>
+      
+    </li>
+  
+
+      
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../../admin/index.md" class="md-tabs__link">
+          Administrators Guide
+        </a>
+      
+    </li>
+  
+
+      
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../../development/" class="md-tabs__link">
+          Development Guide
+        </a>
+      
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+      
+      <main class="md-main" role="main">
+        <div class="md-main__inner md-grid" data-md-component="container">
+          
+            
+              <div class="md-sidebar md-sidebar--primary" data-md-component="navigation">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    <nav class="md-nav md-nav--primary" data-md-level="0">
+  <label class="md-nav__title md-nav__title--site" for="__drawer">
+    <a href="../.." title="Analysis Correlation Engine" class="md-nav__button md-logo">
+      
+        <i class="md-icon"></i>
+      
+    </a>
+    Analysis Correlation Engine
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
+    <a href="../.." title="Home" class="md-nav__link">
+      Home
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
+    <a href="../../overview/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-3" type="checkbox" id="nav-3">
+    
+    <label class="md-nav__link" for="nav-3">
+      Installation
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-3">
+        Installation
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../installation/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+      
+      
+      
+
+  
+
+
+  <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-4" type="checkbox" id="nav-4" checked>
+    
+    <label class="md-nav__link" for="nav-4">
+      Analyst Guide
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-4">
+        Analyst Guide
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+  
+
+
+  <li class="md-nav__item md-nav__item--active">
+    
+    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+    
+      
+    
+    
+      <label class="md-nav__link md-nav__link--active" for="__toc">
+        Hunting
+      </label>
+    
+    <a href="./" title="Hunting" class="md-nav__link md-nav__link--active">
+      Hunting
+    </a>
+    
+      
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#fundamentals" class="md-nav__link">
+    Fundamentals
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-hunting-systems" class="md-nav__link">
+    Supported Hunting Systems
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hunt-configuration" class="md-nav__link">
+    Hunt Configuration
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debugging-hunts" class="md-nav__link">
+    Debugging Hunts
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+    
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-5" type="checkbox" id="nav-5">
+    
+    <label class="md-nav__link" for="nav-5">
+      Administrators Guide
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-5">
+        Administrators Guide
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../admin/index.md" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-6" type="checkbox" id="nav-6">
+    
+    <label class="md-nav__link" for="nav-6">
+      Development Guide
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-6">
+        Development Guide
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/api/" title="API" class="md-nav__link">
+      API
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/history/" title="History" class="md-nav__link">
+      History
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="toc">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#fundamentals" class="md-nav__link">
+    Fundamentals
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#supported-hunting-systems" class="md-nav__link">
+    Supported Hunting Systems
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hunt-configuration" class="md-nav__link">
+    Hunt Configuration
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debugging-hunts" class="md-nav__link">
+    Debugging Hunts
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          <div class="md-content">
+            <article class="md-content__inner md-typeset">
+              
+                
+                
+                <h1 id="hunting">Hunting<a class="headerlink" href="#hunting" title="Permanent link">&para;</a></h1>
+<p>ACE has a service called <em>hunter</em> that executes <strong>hunts</strong> at a specific
+time or frequency. Each type of hunter is designed to execute a specific
+type of hunt. Currently the following hunting services are available in
+ACE.</p>
+<h2 id="fundamentals">Fundamentals<a class="headerlink" href="#fundamentals" title="Permanent link">&para;</a></h2>
+<p>A hunt is compromised of a <strong>configuration</strong> and an <strong>execution</strong>.</p>
+<p>The configuration defines the various aspects of the hunt such as what
+it should be identified as, what hunting system it's a part of, when it
+should run, how the results should be interpreted, etc.</p>
+<p>The execution defines what exactly the hunt is looking for. In the case
+of query-based hunts the execution would be a search string or a
+database query.</p>
+<p>The results of the execution then feed ACE with an analysis submission.</p>
+<h3 id="supported-hunting-systems">Supported Hunting Systems<a class="headerlink" href="#supported-hunting-systems" title="Permanent link">&para;</a></h3>
+<p>At this time the following hunting system are supported.</p>
+<ul>
+<li>Splunk</li>
+<li>IBM QRadar</li>
+</ul>
+<h3 id="hunt-configuration">Hunt Configuration<a class="headerlink" href="#hunt-configuration" title="Permanent link">&para;</a></h3>
+<p>Hunts are defined in individual ini files, one hunt per file. There is
+no limit on the number of hunts that can be defined.</p>
+<p>The following provides an example as well as the documentation of the
+fields in each hunt configuration.</p>
+<p>``` {.sourceCode .ini}
+[rule]
+; set this to either yes or no to enable or disable the hunt
+; hunts that are disabled are not executed
+enabled = yes</p>
+<p>; OPTIONAL
+; a unique name for the hunt
+; this also becomes the prefix for the name of the alert in ACE
+; by default the name for the hunt is derived from the file name
+name = Super Awesome Hunt</p>
+<p>; a useful description for the hunt
+; this is a free-form text value that will be included as the
+; "instructions" field in the alert
+; you can use this field to describe what this hunt is looking for
+; as well as ways to analyze the results
+description = This looks for a thing and then you have to analyze it.</p>
+<p>; OPTIONAL
+; defines what analysis mode submissions will be in when they reach ACE
+; this controls what analysis modules run on the hunt results
+; by default this is set to <strong>correlation</strong> which forces the hunts results
+; to become alerts by default
+analysis_mode = correlation</p>
+<p>; defines what hunter should execute this hunt
+; use the ace hunt list-types to get the full list of supported types
+type = qradar</p>
+<p>; OPTIONAL 
+; this maps to the type field of an ACE alert
+; this is used to define custom templates to view the data in ACE
+; by default this takes the value of hunter - [type] 
+alert_type = hunter - qradar - bluecoat</p>
+<p>; how often to execute the hunt
+; this can be either a timespec in HH:MM:SS format
+; or it can be a crontab entry format if you want to hunt to execute
+; at a specific time of the day
+; keep in mind that ACE uses UTC
+frequency = 00:30:00</p>
+<p>; a comma separated list of tags to add to the analysis if submitted to ACE
+tags = tag1, tag2, tag3</p>
+<p>;
+; the following configuration options are valid only for query-based hunts
+;</p>
+<p>; set to yes to enable full coverage, no to disable
+; this option ensures that the starting time of the next execution will be
+; equal to the ending time of the last time the hunt successfully executed
+; this will effectively bypass the time_range setting and use the frequency
+; to determine the search times, except for the first time it runs
+full_coverage = yes</p>
+<p>; set to yes to enable, no to disable
+; use whatever is considered the "index time" for this hunt type
+; events that are collected by log systems often record when they received
+; the event, which is separate from when the event actually occurred
+; this can be very different when logs are sent by batch methods
+; use this method in conjunction with full_coverage to ensure that you
+; search all of the log records with your hunts
+use_index_time = yes</p>
+<p>; set the time range for the query in HH:MM:SS format
+; specifies how far back to look when performing a query (by controlling
+; the time field in whatever system is executing the hunt)
+; if full_coverage is yes, then this value is only used the first time the
+; hunt is executed
+time_range = 00:30:00</p>
+<p>; specified a maximum time range for a single query in [DD:]HH:MM:SS format
+; queries that would exceed this time range are split into chunks and
+; executed in series with time ranges no larger than max_time_range
+max_time_range = 24:00:00</p>
+<p>; OPTIONAL
+; specifies an offset in HH:MM:SS format to execute queries on
+; the final time range of all queries is offset by this value
+; this option is useful if your logging system is slow to index data
+offset = 00:05:00</p>
+<p>; when a query hunt executes and returns multiple results, these results
+; are then grouped together by the field specified in this option
+; this also becomes part of the name of the alert
+; by appending the value of the grouped field to the name of the hunt
+group_by = root_domain</p>
+<p>; OPTIONAL 
+; specifies a path (relative to SAQ_HOME) to a file that contains the
+; actual hunt to execute
+search = hunts/site/qradar/bluecoat-malicious_domain.sql</p>
+<p>; OPTIONAL
+; specifies the actual hunt to execute
+query = SELECT * FROM whatever WHERE something = 'this_or_that'</p>
+<p>;
+; the following configuration options are valid only for SPLUNK hunts
+;</p>
+<p>; OPTIONAL
+; puts the splunk search into the context of the given user and/or app
+; by default the splunk hunter uses the default (wildcard) user and app namespace
+splunk_user_context = user_name
+splunk_app_context = app_name</p>
+<p>; OPTIONAL
+; maps the fields to observable types in ACE
+; using the format field_name = observable_type
+[observable_mapping]
+root_domain = fqdn
+BluecoatProxy-URL = url
+userName = user
+sourceip = ipv4
+destinationip = ipv4</p>
+<p>; OPTIONAL
+; by default all observations are assumed to have happened when the hunt
+; was executed which is probably not what you want
+; any field set to yes in this section will also record the event time
+; along with the added observable so that correlation targets the correct time
+[temporal_fields]
+sourceip = yes
+destinationip = yes
+ipv4_conversation = yes</p>
+<p>; OPTIONAL
+; use this section to add any number of directives (comma separated) to any
+; observable that is added
+[directives]
+ipv4_conversation = extract_pcap</p>
+<div class="codehilite"><pre><span></span><code>Hunt Configuration Locations 
+------------------
+The location of the hunts depends on the settings for each type of hunt. Typically these are
+located in the integration settings for the system the hunts execute
+against (for example etc/saq.qradar.default.ini).
+
+Look for the **rule_dirs** configuration settings in the
+[hunt_type_TYPE] configuration block. This specifies a comma
+separated list of directories to look for hunts in.
+
+``` {.sourceCode .ini}
+[hunt_type_TYPE]
+module = saq.collectors.TYPE_hunter
+class = TYPEHunt
+rule_dirs = hunts/type
+concurrency_limit = type
+</code></pre></div>
+
+
+<h3 id="debugging-hunts">Debugging Hunts<a class="headerlink" href="#debugging-hunts" title="Permanent link">&para;</a></h3>
+<p>A hunt can be manually executed by using the execute subcommand of the
+hunt command.</p>
+<p>``` {.sourceCode .bash}
+ace hunt execute --help</p>
+<div class="codehilite"><pre><span></span><code>For example, to execute the **query\_stuff** hunt in the **splunk**
+hunting system you would issue the following command.
+
+``` {.sourceCode .bash}
+ace hunt execute -s 04/17/2020:00:00:00 -e /04/18/2020:00:00:00 -z US/Eastern splunk:query_stuff
+</code></pre></div>
+
+
+<p>By default what gets displayed is a list of the alerts that would have
+been generated. There are additional options to display more details of
+the alerts.</p>
+                
+                  
+                
+                
+              
+              
+                
+
+
+              
+            </article>
+          </div>
+        </div>
+      </main>
+      
+        
+<footer class="md-footer">
+  
+    <div class="md-footer-nav">
+      <nav class="md-footer-nav__inner md-grid">
+        
+          <a href="../" title="Overview" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+            <div class="md-flex__cell md-flex__cell--shrink">
+              <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
+            </div>
+            <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
+              <span class="md-flex__ellipsis">
+                <span class="md-footer-nav__direction">
+                  Previous
+                </span>
+                Overview
+              </span>
+            </div>
+          </a>
+        
+        
+          <a href="../../development/" title="Overview" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+            <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
+              <span class="md-flex__ellipsis">
+                <span class="md-footer-nav__direction">
+                  Next
+                </span>
+                Overview
+              </span>
+            </div>
+            <div class="md-flex__cell md-flex__cell--shrink">
+              <i class="md-icon md-icon--arrow-forward md-footer-nav__button"></i>
+            </div>
+          </a>
+        
+      </nav>
+    </div>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-footer-copyright">
+        
+        powered by
+        <a href="https://www.mkdocs.org" target="_blank" rel="noopener">MkDocs</a>
+        and
+        <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+          Material for MkDocs</a>
+      </div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    
+      <script src="../../assets/javascripts/application.df00da5d.js"></script>
+      
+      <script>app.initialize({version:"1.1",url:{base:"../.."}})</script>
+      
+    
+  </body>
+</html>

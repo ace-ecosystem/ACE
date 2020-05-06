@@ -1,0 +1,994 @@
+
+
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <meta http-equiv="x-ua-compatible" content="ie=edge">
+      
+        <meta name="description" content="Documentation for Analysis Correlation Engine">
+      
+      
+      
+        <meta name="author" content="John Davison">
+      
+      
+        <meta name="lang:clipboard.copy" content="Copy to clipboard">
+      
+        <meta name="lang:clipboard.copied" content="Copied to clipboard">
+      
+        <meta name="lang:search.language" content="en">
+      
+        <meta name="lang:search.pipeline.stopwords" content="True">
+      
+        <meta name="lang:search.pipeline.trimmer" content="True">
+      
+        <meta name="lang:search.result.none" content="No matching documents">
+      
+        <meta name="lang:search.result.one" content="1 matching document">
+      
+        <meta name="lang:search.result.other" content="# matching documents">
+      
+        <meta name="lang:search.tokenizer" content="[\s\-]+">
+      
+      <link rel="shortcut icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.1, mkdocs-material-4.6.3">
+    
+    
+      
+        <title>API - Analysis Correlation Engine</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/application.adb8469c.css">
+      
+        <link rel="stylesheet" href="../../assets/stylesheets/application-palette.a8b3c06d.css">
+      
+      
+        
+        
+        <meta name="theme-color" content="#3f51b5">
+      
+    
+    
+      <script src="../../assets/javascripts/modernizr.86422ebf.js"></script>
+    
+    
+      
+        <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,400i,700%7CRoboto+Mono&display=fallback">
+        <style>body,input{font-family:"Roboto","Helvetica Neue",Helvetica,Arial,sans-serif}code,kbd,pre{font-family:"Roboto Mono","Courier New",Courier,monospace}</style>
+      
+    
+    <link rel="stylesheet" href="../../assets/fonts/material-icons.css">
+    
+    
+    
+      
+    
+    
+  </head>
+  
+    
+    
+    <body dir="ltr" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    <svg class="md-svg">
+      <defs>
+        
+        
+      </defs>
+    </svg>
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" data-md-component="overlay" for="__drawer"></label>
+    
+      <a href="#ace-api-examples" tabindex="0" class="md-skip">
+        Skip to content
+      </a>
+    
+    
+      <header class="md-header" data-md-component="header">
+  <nav class="md-header-nav md-grid">
+    <div class="md-flex">
+      <div class="md-flex__cell md-flex__cell--shrink">
+        <a href="../.." title="Analysis Correlation Engine" aria-label="Analysis Correlation Engine" class="md-header-nav__button md-logo">
+          
+            <i class="md-icon"></i>
+          
+        </a>
+      </div>
+      <div class="md-flex__cell md-flex__cell--shrink">
+        <label class="md-icon md-icon--menu md-header-nav__button" for="__drawer"></label>
+      </div>
+      <div class="md-flex__cell md-flex__cell--stretch">
+        <div class="md-flex__ellipsis md-header-nav__title" data-md-component="title">
+          
+            <span class="md-header-nav__topic">
+              Analysis Correlation Engine
+            </span>
+            <span class="md-header-nav__topic">
+              
+                API
+              
+            </span>
+          
+        </div>
+      </div>
+      <div class="md-flex__cell md-flex__cell--shrink">
+        
+          <label class="md-icon md-icon--search md-header-nav__button" for="__search"></label>
+          
+<div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" aria-label="search" name="query" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="query" data-md-state="active">
+      <label class="md-icon md-search__icon" for="__search"></label>
+      <button type="reset" class="md-icon md-search__icon" data-md-component="reset" tabindex="-1">
+        &#xE5CD;
+      </button>
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="result">
+          <div class="md-search-result__meta">
+            Type to start searching
+          </div>
+          <ol class="md-search-result__list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+        
+      </div>
+      
+    </div>
+  </nav>
+</header>
+    
+    <div class="md-container">
+      
+        
+      
+      
+        
+
+  
+
+<nav class="md-tabs md-tabs--active" data-md-component="tabs">
+  <div class="md-tabs__inner md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  <li class="md-tabs__item">
+    
+      <a href="../.." class="md-tabs__link">
+        Home
+      </a>
+    
+  </li>
+
+      
+        
+      
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../../installation/" class="md-tabs__link">
+          Installation
+        </a>
+      
+    </li>
+  
+
+      
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../../user/" class="md-tabs__link">
+          Analyst Guide
+        </a>
+      
+    </li>
+  
+
+      
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../../admin/index.md" class="md-tabs__link">
+          Administrators Guide
+        </a>
+      
+    </li>
+  
+
+      
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../" class="md-tabs__link md-tabs__link--active">
+          Development Guide
+        </a>
+      
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+      
+      <main class="md-main" role="main">
+        <div class="md-main__inner md-grid" data-md-component="container">
+          
+            
+              <div class="md-sidebar md-sidebar--primary" data-md-component="navigation">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    <nav class="md-nav md-nav--primary" data-md-level="0">
+  <label class="md-nav__title md-nav__title--site" for="__drawer">
+    <a href="../.." title="Analysis Correlation Engine" class="md-nav__button md-logo">
+      
+        <i class="md-icon"></i>
+      
+    </a>
+    Analysis Correlation Engine
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
+    <a href="../.." title="Home" class="md-nav__link">
+      Home
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item">
+    <a href="../../overview/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-3" type="checkbox" id="nav-3">
+    
+    <label class="md-nav__link" for="nav-3">
+      Installation
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-3">
+        Installation
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../installation/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-4" type="checkbox" id="nav-4">
+    
+    <label class="md-nav__link" for="nav-4">
+      Analyst Guide
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-4">
+        Analyst Guide
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../user/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../user/hunting/" title="Hunting" class="md-nav__link">
+      Hunting
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-5" type="checkbox" id="nav-5">
+    
+    <label class="md-nav__link" for="nav-5">
+      Administrators Guide
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-5">
+        Administrators Guide
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../admin/index.md" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+      
+      
+      
+
+  
+
+
+  <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-6" type="checkbox" id="nav-6" checked>
+    
+    <label class="md-nav__link" for="nav-6">
+      Development Guide
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-6">
+        Development Guide
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+  
+
+
+  <li class="md-nav__item md-nav__item--active">
+    
+    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+    
+      
+    
+    
+      <label class="md-nav__link md-nav__link--active" for="__toc">
+        API
+      </label>
+    
+    <a href="./" title="API" class="md-nav__link md-nav__link--active">
+      API
+    </a>
+    
+      
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#connect-to-a-server" class="md-nav__link">
+    Connect to a Server
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submitting-data-to-ace" class="md-nav__link">
+    Submitting data to ACE
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#submit-a-file" class="md-nav__link">
+    Submit a File
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#submit-a-url" class="md-nav__link">
+    Submit a URL
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#as-an-observable" class="md-nav__link">
+    As an observable
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-cloudphish" class="md-nav__link">
+    Using Cloudphish
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#forcing-alert-creation" class="md-nav__link">
+    Forcing Alert Creation
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#downloading-cloudphish-results" class="md-nav__link">
+    Downloading Cloudphish Results
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#downloading-an-alert" class="md-nav__link">
+    Downloading an Alert
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+    
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../history/" title="History" class="md-nav__link">
+      History
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="toc">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#connect-to-a-server" class="md-nav__link">
+    Connect to a Server
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submitting-data-to-ace" class="md-nav__link">
+    Submitting data to ACE
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#submit-a-file" class="md-nav__link">
+    Submit a File
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#submit-a-url" class="md-nav__link">
+    Submit a URL
+  </a>
+  
+    <nav class="md-nav">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#as-an-observable" class="md-nav__link">
+    As an observable
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-cloudphish" class="md-nav__link">
+    Using Cloudphish
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#forcing-alert-creation" class="md-nav__link">
+    Forcing Alert Creation
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#downloading-cloudphish-results" class="md-nav__link">
+    Downloading Cloudphish Results
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#downloading-an-alert" class="md-nav__link">
+    Downloading an Alert
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          <div class="md-content">
+            <article class="md-content__inner md-typeset">
+              
+                
+                
+                <h1 id="ace-api-examples">ACE API Examples<a class="headerlink" href="#ace-api-examples" title="Permanent link">&para;</a></h1>
+<p>Let's go through a few examples using the ACE API. We will specifically
+use the <code>ace_api</code> python library.</p>
+<h2 id="connect-to-a-server">Connect to a Server<a class="headerlink" href="#connect-to-a-server" title="Permanent link">&para;</a></h2>
+<p>By default, the <code>ace_api</code> library will attempt to connect to localhost.
+Use the ace_api.set_default_remote_host function to have the library
+connect to a different server. The OS's certificate store is used to
+validate the server. See ace_api.set_default_ssl_ca_path to change
+this behavior.</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; import ace_api
+
+&gt;&gt;&gt; server = &#39;ace.integraldefense.com&#39;
+
+&gt;&gt;&gt; ace_api.set_default_remote_host(server)
+
+&gt;&gt;&gt; ace_api.ping()
+{&#39;result&#39;: &#39;pong&#39;}
+</code></pre></div>
+
+
+<p>You can over-ride this default in the ace_api.Analysis class with the
+ace_api.Analysis.set_remote_host method and you can also manually
+specify a remote host with any submit.</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; analysis = ace_api.Analysis(&#39;this is the analysis description&#39;)
+
+&gt;&gt;&gt; analysis.remote_host
+&#39;ace.integraldefense.com&#39;
+
+&gt;&gt;&gt; analysis.set_remote_host(&#39;something.else.com&#39;).remote_host
+&#39;something.else.com&#39;
+
+&gt;&gt;&gt; ace_api.default_remote_host
+&#39;ace.integraldefense.com&#39;
+</code></pre></div>
+
+
+<p>If your ACE instance is listening on a port other than 443, specify it
+like so:</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; ace_api.set_default_remote_host(&#39;ace.integraldefense.com:24443&#39;)
+
+&gt;&gt;&gt; ace_api.default_remote_host
+&#39;ace.integraldefense.com:24443&#39;
+</code></pre></div>
+
+
+<h2 id="submitting-data-to-ace">Submitting data to ACE<a class="headerlink" href="#submitting-data-to-ace" title="Permanent link">&para;</a></h2>
+<p>You should submit data to ace by first creating an <a href="">Analysis</a> object
+and loading it with the data you want to submit for analysis and/or
+correlation. The below examples show how to perform some common
+submissions.</p>
+<h3 id="submit-a-file">Submit a File<a class="headerlink" href="#submit-a-file" title="Permanent link">&para;</a></h3>
+<p>Say we have a suspect file in our current working director named
+"Business.doc" that we want to submit to ACE. First, we create an
+analysis object and then we pass the path to the file to the
+ace_api.Analysis.add_file method. We will also include some tags and
+check the status (ace_api.Analysis.status) of the analysis as ACE works
+on the submission.</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; path_to_file = &#39;Business.doc&#39;
+
+&gt;&gt;&gt; analysis.add_file(path_to_file)
+&lt;ace_api.Analysis object at 0x7f23d57e74e0&gt;
+
+&gt;&gt;&gt; analysis.add_tag(&#39;Business.doc&#39;).add_tag(&#39;suspicious doc&#39;)
+&lt;ace_api.Analysis object at 0x7f23d57e74e0&gt;
+
+&gt;&gt;&gt; analysis.submit()
+&lt;ace_api.Analysis object at 0x7f23d57e74e0&gt;
+
+&gt;&gt;&gt; analysis.status
+&#39;NEW&#39;
+
+&gt;&gt;&gt; analysis.status
+&#39;ANALYZING&#39;
+
+&gt;&gt;&gt; analysis.status
+&#39;COMPLETE (Alerted with 8 detections)&#39;
+
+&gt;&gt;&gt; result_url = &#39;https://{}/ace/analysis?direct={}&#39;.format(analysis.remote_host, analysis.uuid)
+
+&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))
+</code></pre></div>
+
+
+<p>The results of this submission can be viewed here:
+<a href="https://ace.integraldefense.com/ace/analysis?direct=137842ac-9d53-4a25-8066-ad2a1f6cfa17">https://ace.integraldefense.com/ace/analysis?direct=137842ac-9d53-4a25-8066-ad2a1f6cfa17</a></p>
+<h3 id="submit-a-url">Submit a URL<a class="headerlink" href="#submit-a-url" title="Permanent link">&para;</a></h3>
+<p>Two examples of submitting a URL to ACE follow. The first example shows
+how to submit a URL by adding the URL as an observable to an
+<a href="">Analysis</a> object. This also allows us to demontrate the use of
+directives. The second example shows how simple it is to submit a URL
+for analysis directly to Cloudphish.</p>
+<h4 id="as-an-observable">As an observable<a class="headerlink" href="#as-an-observable" title="Permanent link">&para;</a></h4>
+<p>You can submit as many observables &lt;observable&gt; as you desire in a
+submission to ACE, but they won't neccessarily get passed to every
+analysis module that can work on them by default. This is the case for
+URL observables, which by themselves, require the crawl directive to
+tell ACE you want to download the conent from the URL for further
+analysis.</p>
+<p>Submititing a request for a suspicious URL to be analyzed, note the use
+of the crawl directive and how to get a list of the valid directives.</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; suspicious_url = &#39;http://davidcizek.cz/Invoice/ifKgg-jrzA_PvC-a7&#39;
+
+&gt;&gt;&gt; analysis = ace_api.Analysis(&#39;Suspicious URL&#39;)
+
+&gt;&gt;&gt; analysis.add_tag(&#39;suspicious_url&#39;)
+&lt;ace_api.Analysis object at 0x7f23d57e7588&gt;
+
+&gt;&gt;&gt; for d in ace_api.get_valid_directives()[&#39;result&#39;]:
+...     if d[&#39;name&#39;] == &#39;crawl&#39;:
+...         print(d[&#39;description&#39;])
+... 
+crawl the URL
+
+&gt;&gt;&gt; analysis.add_url(suspicious_url, directives=[&#39;crawl&#39;]).submit()
+&lt;ace_api.Analysis object at 0x7f23d57e7588&gt;
+
+&gt;&gt;&gt; analysis.status
+&#39;COMPLETE (Alerted with 9 detections)&#39;
+
+&gt;&gt;&gt; result_url = &#39;https://{}/ace/analysis?direct={}&#39;.format(analysis.remote_host, analysis.uuid)
+
+&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))
+</code></pre></div>
+
+
+<p>The results of this submission can be viewed here:
+<a href="https://ace.integraldefense.com/ace/analysis?direct=de66b2d3-f273-4bdd-a05b-771ecf5c8a76">https://ace.integraldefense.com/ace/analysis?direct=de66b2d3-f273-4bdd-a05b-771ecf5c8a76</a></p>
+<h4 id="using-cloudphish">Using Cloudphish<a class="headerlink" href="#using-cloudphish" title="Permanent link">&para;</a></h4>
+<p>If you just want ACE to analyze a single URL, it's best to submit
+directly to Cloudphish. In this example, a URL is submitted to
+cloudphish that cloudphish has never seen before and a 'NEW' status is
+returned. After cloudphish has finished analyzing the URL, the status
+changes to 'ANALYZED' and the analysis_result tells us at least one
+detection was found (as we alerted).</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; another_url = &#39;http://medicci.ru/myATT/tu8794_QcbkoEsv_Xw20pYh7ij&#39;
+
+&gt;&gt;&gt; cp_result = ace_api.cloudphish_submit(another_url)
+
+&gt;&gt;&gt; cp_result[&#39;status&#39;]
+&#39;NEW&#39;
+
+&gt;&gt;&gt;  # Query again, a moment later:
+...
+&gt;&gt;&gt; cp_result = ace_api.cloudphish_submit(another_url)
+
+&gt;&gt;&gt; cp_result[&#39;status&#39;]
+&#39;ANALYZED&#39;
+
+&gt;&gt;&gt; cp_result[&#39;analysis_result&#39;]
+&#39;ALERT&#39;
+
+&gt;&gt;&gt; result_url = &#39;https://{}/ace/analysis?direct={}&#39;.format(ace_api.default_remote_host, cp_result[&#39;uuid&#39;])
+
+&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))
+</code></pre></div>
+
+
+<p>The results of this submission can be viewed here:
+<a href="https://ace.integraldefense.com/ace/analysis?direct=732ec396-ce20-463f-82b0-6b043b07f941">https://ace.integraldefense.com/ace/analysis?direct=732ec396-ce20-463f-82b0-6b043b07f941</a></p>
+<h2 id="forcing-alert-creation">Forcing Alert Creation<a class="headerlink" href="#forcing-alert-creation" title="Permanent link">&para;</a></h2>
+<p>By default, ACE alerts are only created if an detection is made in the
+initially submitted analysis. You can force alert creation by changing
+the default analysis mode from <em>analysis</em> to <em>correlation</em>. This is
+accomplished like so:</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; analysis = ace_api.Analysis(&#39;This is an analysis with no detections&#39;, analysis_mode=&#39;correlation&#39;)
+
+&gt;&gt;&gt; analysis.submit()
+&lt;ace_api.Analysis object at 0x7fbe81af66a0&gt;
+
+&gt;&gt;&gt; analysis.status
+&#39;COMPLETE (Alerted with 0 detections)&#39;
+</code></pre></div>
+
+
+<h2 id="downloading-cloudphish-results">Downloading Cloudphish Results<a class="headerlink" href="#downloading-cloudphish-results" title="Permanent link">&para;</a></h2>
+<p>Cloudphish keeps a cache of the URL content it downloads. In this
+example we will download the results of the URL submitted in the
+previous example, which in this case is a malicious word document.</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; ace_api.cloudphish_download(another_url, output_path=&#39;cp_result.raw&#39;)
+True
+&gt;&gt;&gt; os.path.exists(&#39;cp_result.raw&#39;)
+True
+</code></pre></div>
+
+
+<h2 id="downloading-an-alert">Downloading an Alert<a class="headerlink" href="#downloading-an-alert" title="Permanent link">&para;</a></h2>
+<p>You can use the ace_api.download function to download an entire Alert.
+Below, we download an entire Alert and have it written to a directory
+named by the Alert's UUID.:</p>
+<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; uuid = cp_result[&#39;uuid&#39;]
+
+&gt;&gt;&gt; &gt;&gt;&gt; uuid
+&#39;732ec396-ce20-463f-82b0-6b043b07f941&#39;
+
+&gt;&gt;&gt; ace_api.download(uuid, target_dir=uuid)
+</code></pre></div>
+
+
+<p>Now, there is a new directory named
+'732ec396-ce20-463f-82b0-6b043b07f941' in our current working directory
+that contians all of the files and data from the alert with uuid
+732ec396-ce20-463f-82b0-6b043b07f941. Use the ace_api.load_analysis
+function to load an alert into a new <a href="">Analysis</a> object.</p>
+<h1 id="ace-api">ACE API<a class="headerlink" href="#ace-api" title="Permanent link">&para;</a></h1>
+<h2 id="python-library">Python Library<a class="headerlink" href="#python-library" title="Permanent link">&para;</a></h2>
+<p>A python library exits for intereacting with the ACE API. You can
+install it wil pip: <code>pip3 install ace_api</code>.</p>
+<h2 id="common-api">Common API<a class="headerlink" href="#common-api" title="Permanent link">&para;</a></h2>
+<h2 id="alert-api">Alert API<a class="headerlink" href="#alert-api" title="Permanent link">&para;</a></h2>
+<h3 id="submit">submit<a class="headerlink" href="#submit" title="Permanent link">&para;</a></h3>
+<p>Submits a new alert to ACE. These go directly into the correlation
+engine for analysis and show up to analysts as alerts.</p>
+<p>Parameters: alert - JSON dict with the following schema :</p>
+<div class="codehilite"><pre><span></span><code>{
+    &#39;tool&#39;: tool_name,
+    &#39;tool_instance&#39;: tool_instance_name,
+    &#39;type&#39;: alert_type,
+    &#39;description&#39;: alert description,
+    &#39;event_time&#39;: time of the alert/event (in %Y-%m-%dT%H:%M:%S.%f%z format),
+    &#39;details&#39;: free-form JSON dict of anything you want to include,
+    &#39;observables&#39;: (see below),
+    &#39;tags&#39;: a list of tags to add to the alert,
+}
+</code></pre></div>
+
+
+<p>The observables field is a list of zero or more dicts with the following
+format :</p>
+<div class="codehilite"><pre><span></span><code>{
+    &#39;type&#39;: The type of the observable,
+    &#39;value&#39;: The value of the observable,
+    &#39;time&#39;: The optional time of the observable (can be null),
+    &#39;tags&#39;: Optional list of tags to add to the observable,
+    &#39;directives&#39;: Optional list of directives to add to the observable,
+}
+</code></pre></div>
+
+
+<p>To attach files to the alert use the field named <strong>file</strong>.</p>
+                
+                  
+                
+                
+              
+              
+                
+
+
+              
+            </article>
+          </div>
+        </div>
+      </main>
+      
+        
+<footer class="md-footer">
+  
+    <div class="md-footer-nav">
+      <nav class="md-footer-nav__inner md-grid">
+        
+          <a href="../" title="Overview" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+            <div class="md-flex__cell md-flex__cell--shrink">
+              <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
+            </div>
+            <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
+              <span class="md-flex__ellipsis">
+                <span class="md-footer-nav__direction">
+                  Previous
+                </span>
+                Overview
+              </span>
+            </div>
+          </a>
+        
+        
+          <a href="../history/" title="History" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+            <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
+              <span class="md-flex__ellipsis">
+                <span class="md-footer-nav__direction">
+                  Next
+                </span>
+                History
+              </span>
+            </div>
+            <div class="md-flex__cell md-flex__cell--shrink">
+              <i class="md-icon md-icon--arrow-forward md-footer-nav__button"></i>
+            </div>
+          </a>
+        
+      </nav>
+    </div>
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-footer-copyright">
+        
+        powered by
+        <a href="https://www.mkdocs.org" target="_blank" rel="noopener">MkDocs</a>
+        and
+        <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+          Material for MkDocs</a>
+      </div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    
+      <script src="../../assets/javascripts/application.df00da5d.js"></script>
+      
+      <script>app.initialize({version:"1.1",url:{base:"../.."}})</script>
+      
+    
+  </body>
+</html>
