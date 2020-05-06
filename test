@@ -38,7 +38,7 @@ bin/build-unittest-database
 if [ "$#" -eq "0" ]
 then
     python3 -W ignore -m unittest -f -v \
-        $(find -L lib -type f -name 'test*.py' -ipath '*/site/*' | sed -e 's;^lib/;;' -e 's/\.py$//' -e 's;/;.;g') \
+        $(find -L saq -type f -name 'test*.py' -ipath '*/site/*' | sed -e 's;^lib/;;' -e 's/\.py$//' -e 's;/;.;g') \
         saq.analysis.test \
         saq.service.test \
         saq.util.test \

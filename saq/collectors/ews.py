@@ -64,6 +64,10 @@ class EWSCollectionBaseConfiguration(object):
         self.always_alert = False
         self.alert_prefix = None
         self.folders = []
+        # exchangelib defaults to making requests for 100 emails at a time. 
+        # If emails are large, those requests can time out. To request fewer,
+        # add a `page_size` item to your collector config in saq.ews.ini
+        self.page_size = 100
 
         BaseProtocol.HTTP_ADAPTER_CLS = RootCAAdapter
 
@@ -76,10 +80,11 @@ class EWSCollectionBaseConfiguration(object):
         self.server = saq.CONFIG[section]['server']
         self.target_mailbox = saq.CONFIG[section]['target_mailbox']
         self.frequency = saq.CONFIG[section].getint('frequency', fallback=60)
-        #self.folder = saq.CONFIG[section]['folder']
         self.delete_emails = saq.CONFIG[section].getboolean('delete_emails', fallback=False)
         self.always_alert = saq.CONFIG[section].getboolean('always_alert', fallback=False)
         self.alert_prefix = saq.CONFIG[section]['alert_prefix']
+        if 'page_size' in saq.CONFIG[section]:
+            self.page_size = int(saq.CONFIG[section]['page_size'])
         self.section = section
 
         for option, value in saq.CONFIG[section].items():
@@ -157,7 +162,7 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         
         _account_class = kwargs.get('account_class') or Account  # Account class connects to exchange.
         account = _account_class(self.target_mailbox, config=config, autodiscover=False, access_type=DELEGATE) # TODO autodiscover, access_type should be configurable
-        
+
         for folder in self.folders:
             path_parts = [_.strip() for _ in folder.split('/')]
             root = path_parts.pop(0)
@@ -169,7 +174,7 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
             except AttributeError:
                 public_folders_root = _account.public_folders_root
                 target_folder = public_folders_root / root
-            #print(target_folder.tree())
+            # print(target_folder.tree())
 
             for path_part in path_parts:
                 target_folder = target_folder / path_part
@@ -180,7 +185,10 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
             total_count = 0
             already_processed_count = 0
             error_count = 0
-            for message in target_folder.all().order_by('-datetime_received'):
+
+            mail_query = target_folder.all()
+            mail_query.page_size = self.page_size
+            for message in mail_query:
                 if isinstance(message, ResponseMessageError):
                     logging.warning(f"error when iterating mailbox {self.target_mailbox} folder {folder}: {message} ({type(message)})")
                     continue
