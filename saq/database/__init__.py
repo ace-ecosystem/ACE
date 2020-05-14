@@ -20,7 +20,7 @@ import saq.constants
 from saq.analysis import RootAnalysis
 from saq.error import report_exception
 from saq.performance import track_execution_time
-from saq.util import abs_path, validate_uuid
+from saq.util import abs_path, validate_uuid, create_timedelta
 
 import pytz
 import businesstime
@@ -89,15 +89,38 @@ class _database_pool(object):
 
         self.kwargs = kwargs
 
+    def close(self):
+        """Closes all of the *socket* connections in the pool without killing the database connection."""
+        with self.lock:
+            for connection in self.available:
+                try:
+                    # we _force_close because this connection may still used by another process
+                    connection._force_close()
+                except Exception as e:
+                    logging.debug(f"unable to close database connection: {e}")
+
+            for connection in self.in_use:
+                try:
+                    # we _force_close because this connection may still used by another process
+                    connection._force_close()
+                except Exception as e:
+                    logging.debug(f"unable to close database connection: {e}")
+
+            self.available.clear()
+            self.in_use.clear()
+
     def get_connection(self):
         connection = None
         with self.lock:
             try:
                 connection = self.available.pop()
-                #logging.debug(f"got pooled database connection to {self.name}")
+                # is this connection old? we don't like old connections so we want to let them DIE so we can keep our nice stuff
+                if datetime.datetime.now() >= connection.termination_date: # termination_date is a property we add in open_new_connection()
+                    logging.debug(f"terminating old connection {connection}")
+                    self.close_connection(connection)
+                    connection = self.open_new_connection()
             except IndexError:
                 connection = self.open_new_connection()
-                logging.debug(f"got new database connection to {self.name}")
 
             self.in_use.append(connection)
             connection.acquired = datetime.datetime.now()
@@ -120,17 +143,20 @@ class _database_pool(object):
             self.in_use.remove(connection)
             self.available.append(connection)
 
-    def destroy_connection(self, connection):
+    def close_connection(self, connection):
         try:
             connection.close()
         except Exception as e:
             logging.debug(f"unable to close database connection: {e}")
 
+    def destroy_connection(self, connection):
+        self.close_connection(connection)
+
         with self.lock:
             try:
                 self.in_use.remove(connection)
             except ValueError:
-                logging.warning("attempted to remove missing database connection {connection}")
+                logging.debug(f"attempted to remove missing database connection {connection}")
 
     def open_new_connection(self):
         connection = pymysql.connect(**self.kwargs)
@@ -138,6 +164,13 @@ class _database_pool(object):
         cursor.execute('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED')
         cursor.close()
         connection.commit()
+
+        # keep track of when this connection should be invalidated
+        setattr(connection,
+                'termination_date',
+                datetime.datetime.now() + create_timedelta(saq.CONFIG['database']['max_connection_lifetime']))
+
+        logging.debug(f"got new database connection to {self.name} ({len(self.in_use)} existing connections)")
         return connection
 
     def start(self):
@@ -193,6 +226,7 @@ def get_pool(name='ace'):
         # if the pool was created on another process then we just creat another pool to use
         # and ignore the old one (which may be used by the previous process)
         if result.pid != os.getpid():
+            result.close() # closes the sockets without killing the database connections
             result = _global_db_pools[name] = _database_pool(name)
             logging.debug(f"created new pool {name} under pid {result.pid}")
 

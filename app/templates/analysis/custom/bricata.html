@@ -21,9 +21,11 @@
         <td colspan="4"><div class="well raw-log">{{alert['data']['alert']['rule']['header']}}<br>
                                                   {{alert['data']['alert']['rule']['options']}}</div></td>
     </tr>
+    {% if 'payload' in alert['data'] %}
     <tr>
         <td colspan="4"><div class="well raw-log pre">{{alert['data']['payload'] | b64decode | hexdump('return') }}</div></td>
     </tr>
+    {% endif %}
     {% endfor %}
     </table>
     </div>

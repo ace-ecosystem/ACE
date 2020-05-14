@@ -223,7 +223,7 @@ class URLObservable(Observable):
     @property
     def sha256(self):
         """Returns the sha256 value of this URL suitable for cloudphish processing."""
-        from lib.saq.cloudphish import hash_url
+        from saq.cloudphish import hash_url
 
         if hasattr(self, '_sha256'):
             return self._sha256

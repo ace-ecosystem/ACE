@@ -232,6 +232,79 @@ class TestCase(CollectorBaseTestCase):
         self.assertEquals(c.fetchone()[0], 1)
 
     @use_db
+    def test_submit_target_nodes(self, db, c):
+        from saq.database import initialize_node
+
+        class _custom_collector(TestCollector):
+            def __init__(_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.available_work = [self.create_submission() for _ in range(1)]
+
+            def get_next_submission(_self):
+                if not self.available_work:
+                    return None
+
+                return self.available_work.pop()
+
+        _node_id = saq.SAQ_NODE_ID
+        _node = saq.SAQ_NODE
+        saq.SAQ_NODE = 'node_1'
+        initialize_node()
+        node_1_id = saq.SAQ_NODE_ID
+        saq.SAQ_NODE = 'node_2'
+        saq.SAQ_NODE_ID = None
+        initialize_node()
+        node_2_id = saq.SAQ_NODE_ID
+
+        # we have two nodes at this point
+        self.assertTrue(isinstance(node_1_id, int))
+        self.assertTrue(isinstance(node_2_id, int))
+        self.assertTrue(node_1_id != node_2_id)
+
+        # XXX need some abstraction man
+        db.commit()
+        c.execute("UPDATE nodes SET any_mode = 1, is_local = 0")
+        db.commit()
+
+        collector = _custom_collector()
+        # add a group that only targets node_1 
+        tg1 = collector.add_group('test_group_1', 100, False, saq.COMPANY_ID, 'ace', target_nodes=['node_1'])
+
+        # and then take node_1 offline
+        db.commit()
+        c.execute("UPDATE nodes SET last_update = DATE_ADD(last_update, INTERVAL -1 DAY) WHERE id = %s", (node_1_id,))
+        db.commit()
+
+        self.start_api_server()
+        collector.start()
+
+        # we should see a warning that no nodes are available, even though node_2 is set to any and is active
+        wait_for_log_count('no remote nodes are avaiable', 1, 5)
+
+        collector.stop()
+        collector.wait()
+
+        # make sure nothing was attempted to be submitted
+        self.assertEquals(log_count('submitting 1 items'), 0)
+
+        # now make node_1 active and run again
+        db.commit()
+        c.execute("UPDATE nodes SET last_update = NOW() WHERE id = %s", (node_1_id,))
+        db.commit()
+
+        collector = _custom_collector()
+        # add a group that only targets node_1 
+        tg1 = collector.add_group('test_group_1', 100, False, saq.COMPANY_ID, 'ace', target_nodes=['node_1'])
+
+        collector.start()
+
+        # should see the attempt to submit the item now
+        wait_for_log_count('submitting 1 items', 1, 5)
+
+        collector.stop()
+        collector.wait()
+
+    @use_db
     def test_coverage(self, db, c):
 
         class _custom_collector(TestCollector):

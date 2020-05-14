@@ -1394,6 +1394,7 @@ def add_user(args):
     u.username = args.username
     u.email = args.email
     u.display_name = args.display_name
+    u.queue = args.queue
 
     try:
         import pytz
@@ -1415,13 +1416,14 @@ def add_user(args):
         if password != confirm:
             logging.error("passwords do not match")
             sys.exit(1)
+    
 
     u.password = password
 
     with get_db_connection() as db:
         c = db.cursor()
-        c.execute("""INSERT INTO users ( username, email, password_hash, timezone, display_name ) VALUES ( %s, %s, %s, %s, %s )""", (
-            u.username, u.email, u.password_hash, u.timezone, u.display_name ))
+        c.execute("""INSERT INTO users ( username, email, password_hash, timezone, display_name, queue ) VALUES ( %s, %s, %s, %s, %s, %s )""", (
+            u.username, u.email, u.password_hash, u.timezone, u.display_name, u.queue ))
         db.commit()
 
     logging.info("added user {}".format(u.username))
@@ -1441,6 +1443,8 @@ add_user_parser.add_argument('-d', '--display-name', required=False, default=Non
 add_user_parser.add_argument('--password', required=False, default=None,
     help="""Provide the password for the user on the command line. 
     Don't do this unless it's a part of automation.""")
+add_user_parser.add_argument('-q', '--queue', required=False, default='default', 
+    help="Set the default queue the user is assigned to.")
 add_user_parser.set_defaults(func=add_user)
 
 # XXX DEPRECATED
@@ -1483,7 +1487,7 @@ def modify_user(args):
             sys.exit(1)
 
         u.password = password
-
+    
     try:
         import pytz
         u.timezone = 'Etc/UTC'
@@ -1507,6 +1511,9 @@ def modify_user(args):
         if args.timezone:
             c.execute("""UPDATE users SET timezone = %s WHERE id = %s""", ( u.timezone, user_id ))
 
+        if args.default_queue:
+            c.execute("""UPDATE users SET queue = %s WHERE id = %s""", ( args.default_queue, user_id ))
+
         db.commit()
 
     logging.info("modified user {0}".format(u.username))
@@ -1517,6 +1524,7 @@ modify_user_parser.add_argument('username', help="The username of the user to mo
 modify_user_parser.add_argument('-e', '--email', dest='email', default=None, help="The new email address of the user.")
 modify_user_parser.add_argument('-p', '--password', action='store_true', dest='password', default=False, help="Prompt for a new password.")
 modify_user_parser.add_argument('-z', '--timezone', required=False, default=None, help="The timezone the user is in. Defaults to UTC.")
+modify_user_parser.add_argument('-q', '--default_queue', required=False, default=None, help="Change the default queue the user is assigned to.")
 modify_user_parser.set_defaults(func=modify_user)
 
 # XXX DEPRECATED
@@ -1551,12 +1559,13 @@ delete_user_parser.set_defaults(func=delete_user)
 def list_users(args):
     import saq
     from saq.database import User
-    print("{:<6}{:<15}{:<40}{}".format('Id', 'User', 'Name', 'TZ'))
+    print("{:<6}{:<15}{:<25}{:<40}{}".format('Id', 'User', 'Name', 'Queue', 'TZ'))
     for user in saq.db.query(User).order_by(User.username):
-        print("{:<6}{:<15}{:<40}{}".format(
+        print("{:<6}{:<15}{:<25}{:<40}{}".format(
               user.id, 
               user.username, 
               '' if user.display_name is None else user.display_name, 
+              user.queue,
               user.timezone))
 
     sys.exit(0)
@@ -1594,10 +1603,10 @@ def test_database_connections(args):
 
     for key in saq.CONFIG.keys():
         if key.startswith('database_'):
-            if not saq.CONFIG[key]['hostname'] \
-            or not saq.CONFIG[key]['database'] \
-            or not saq.CONFIG[key]['username'] \
-            or not saq.CONFIG[key]['password']:
+            if 'hostname' not in saq.CONFIG[key] or not saq.CONFIG[key]['hostname'] \
+            or 'database' not in saq.CONFIG[key] or not saq.CONFIG[key]['database'] \
+            or 'username' not in saq.CONFIG[key] or not saq.CONFIG[key]['username'] \
+            or 'password' not in saq.CONFIG[key] or not saq.CONFIG[key]['password']:
                 print("skipping {}".format(key))
                 continue
 

@@ -1832,6 +1832,39 @@ class TestCase(ACEEngineTestCase):
         analysis = observable.get_analysis(BasicTestAnalysis)
         self.assertIsNotNone(analysis)
 
+    def test_excluded_analysis_mode(self):
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable = root.add_observable(F_TEST, 'test_1')
+        root.save()
+        root.schedule()
+
+        engine = TestEngine(
+                local_analysis_modes=[],
+                excluded_analysis_modes=['test_groups'],
+                pool_size_limit=1)
+
+        engine.enable_module('analysis_module_basic_test')
+        engine.controlled_stop()
+        engine.start()
+
+        # XXX this is not a great way to do this
+        # wait until we start seeing these log messages which means it knows there is work but it's not picking it up
+        wait_for_log_count('queue sizes workload 1 delayed 0', 2)
+        wait_for_log_count('looking for work with', 4, 5)
+
+        engine.stop()
+        engine.wait()
+
+        root.load()
+        observable = root.get_observable(observable.id)
+        self.assertIsNotNone(observable)
+        from saq.modules.test import BasicTestAnalysis
+        analysis = observable.get_analysis(BasicTestAnalysis)
+        self.assertIsNone(analysis)
+
     def test_local_analysis_mode_missing_default(self):
 
         saq.CONFIG['service_engine']['default_analysis_mode'] = 'test_single'
@@ -1899,6 +1932,69 @@ class TestCase(ACEEngineTestCase):
 
         # this should exit out since the workload entry is for test_single analysis mode
         # but we don't support that with this engine so it shouldn't see it
+
+    def test_target_nodes(self):
+
+        # only pull work from the local node
+        import saq
+        saq.CONFIG['service_engine']['target_nodes'] = 'LOCAL'
+
+        # initialize this node
+        import saq.database
+        saq.database.initialize_node()
+
+        # schedule work on the current node
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable = root.add_observable(F_TEST, 'test_1')
+        root.save()
+        root.schedule()
+
+        existing_node = saq.SAQ_NODE
+        existing_node_id = saq.SAQ_NODE_ID
+
+        # now start another engine on a different "node"
+        saq.CONFIG['global']['node'] = 'second_host'
+        saq.set_node('second_host')
+        saq.SAQ_NODE_ID = None
+        saq.database.initialize_node()
+
+        self.assertFalse(saq.SAQ_NODE == existing_node)
+        self.assertFalse(saq.SAQ_NODE_ID == existing_node_id)
+
+        engine = TestEngine(pool_size_limit=1)
+        self.assertEquals(engine.target_nodes, [saq.SAQ_NODE])
+        engine.enable_module('analysis_module_basic_test')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # we should still have that workload in the database
+        with get_db_connection() as db:
+            c = db.cursor()
+            c.execute("SELECT COUNT(*) FROM workload")
+            self.assertEquals(c.fetchone()[0], 1)
+
+        # change our node back
+        saq.CONFIG['global']['node'] = existing_node
+        saq.set_node(existing_node)
+        saq.SAQ_NODE_ID = None
+        saq.database.initialize_node()
+
+        # run again -- we should pick it up this time
+        engine = TestEngine(pool_size_limit=1)
+        self.assertEquals(engine.target_nodes, [saq.SAQ_NODE])
+        engine.enable_module('analysis_module_basic_test')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # workload should be clear
+        with get_db_connection() as db:
+            c = db.cursor()
+            c.execute("SELECT COUNT(*) FROM workload")
+            self.assertEquals(c.fetchone()[0], 0)
 
     def test_local_analysis_mode_remote_pickup(self):
 
@@ -2070,6 +2166,24 @@ class TestCase(ACEEngineTestCase):
         c.execute("SELECT any_mode FROM nodes WHERE id = %s", (saq.SAQ_NODE_ID,))
         self.assertEquals(c.fetchone(), (0,))
 
+        # then we do the same check for an engine with analysis mode exclusion configured
+        engine = TestEngine(local_analysis_modes=[], excluded_analysis_modes=['test_empty'])
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # we should have NO entries in the node_modes database for the current node_id
+        c.execute("SELECT analysis_mode FROM node_modes WHERE node_id = %s ORDER BY analysis_mode ASC", (saq.SAQ_NODE_ID,))
+        self.assertIsNone(c.fetchone())
+
+        # and the any_mode column should be 1 for this node
+        c.execute("SELECT any_mode FROM nodes WHERE id = %s", (saq.SAQ_NODE_ID,))
+        self.assertEquals(c.fetchone(), (1,))
+
+        # and we should have a single in the node_modes_excluded table
+        c.execute("SELECT analysis_mode FROM node_modes_excluded WHERE node_id = %s ORDER BY analysis_mode ASC", (saq.SAQ_NODE_ID,))
+        self.assertEquals(c.fetchone(), ('test_empty',))
+
     @use_db
     def test_node_modes_update_any(self, db, c):
 
@@ -2082,6 +2196,10 @@ class TestCase(ACEEngineTestCase):
 
         # we should have NO entries in the node_modes database for the current node_id
         c.execute("SELECT analysis_mode FROM node_modes WHERE node_id = %s ORDER BY analysis_mode ASC", (saq.SAQ_NODE_ID,))
+        self.assertIsNone(c.fetchone())
+
+        # we should have NO entries in the node_modes_excluded database for the current node_id
+        c.execute("SELECT analysis_mode FROM node_modes_excluded WHERE node_id = %s ORDER BY analysis_mode ASC", (saq.SAQ_NODE_ID,))
         self.assertIsNone(c.fetchone())
 
         # and the any_mode column should be 1 for this node

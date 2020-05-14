@@ -314,6 +314,35 @@ class TestCase(ACEBasicTestCase):
         self.assertEquals(get_pool().in_use_count, 0)
         self.assertEquals(get_pool().available_count, 2)
 
+    def test_pooling_old_connection(self):
+        get_pool().clear()
+        # made them invalid immediately
+        saq.CONFIG['database']['max_connection_lifetime'] = '00:00:00'
+
+        with get_db_connection() as _:
+            pass
+
+        self.assertEquals(log_count('got new database connection to'), 1)
+
+        with get_db_connection() as _:
+            pass
+
+        self.assertEquals(log_count('got new database connection to'), 2)
+
+        # change it back and then we should start re-using the connections again
+        get_pool().clear()
+        saq.CONFIG['database']['max_connection_lifetime'] = '00:01:00'
+
+        with get_db_connection() as _:
+            pass
+
+        self.assertEquals(log_count('got new database connection to'), 3)
+
+        with get_db_connection() as _:
+            pass
+
+        self.assertEquals(log_count('got new database connection to'), 3)
+
     def test_pooling_without_contextmanager(self):
         get_pool().clear()
         db = get_pool().get_connection()
