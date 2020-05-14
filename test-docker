@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-SAQ_HOME=${SAQ_HOME:.}
 
 docker image build -f Dockerfile.ace -t ace:latest . || exit 0
 for volume in ace-test-data-volume ace-test-db-volume

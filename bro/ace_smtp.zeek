@@ -1,4 +1,6 @@
-@load ace/ace_local.bro
+@load base/protocols/conn
+@load base/protocols/smtp
+@load ace/ace_local.zeek
 
 redef record connection += {
     ace_smtp_state: bool &default=F;

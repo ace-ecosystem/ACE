@@ -44,8 +44,8 @@ class ExabeamAnalyzer(AnalysisModule):
                 analysis.details['watchlists'] = exabeam.get_user_watchlists(user.value)
                 for watchlist in analysis.details['watchlists']:
                     key = watchlist.lower().replace(' ', '_')
-                    if key in saq.CONFIG['analysis_module_exabeam_analyzer_watchlist_tag_mapping']:
-                        user.add_tag(saq.CONFIG['analysis_module_exabeam_analyzer_watchlist_tag_mapping'][key])
+                    if key in saq.CONFIG['exabeam_analyzer_watchlist_tag_mapping']:
+                        user.add_tag(saq.CONFIG['exabeam_analyzer_watchlist_tag_mapping'][key])
 
         except Exception as e:
             logging.error(f"Exabeam analysis failed for {user.value}: {e}")

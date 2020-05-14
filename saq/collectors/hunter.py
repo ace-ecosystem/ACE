@@ -139,7 +139,7 @@ class Hunt(object):
     def cancel(self):
         """Called when the hunt needs to be cancelled, such as when the system is shutting down.
            This must be safe to call even if the hunt is not currently executing."""
-        raise NotImplementedError()
+        logging.warning(f"called cancel on hunt {self} but {self.type} does not support cancel")
 
     def execute_with_lock(self, *args, **kwargs):
         # we use this lock to determine if a hunt is running, and, to wait for execution to complete.

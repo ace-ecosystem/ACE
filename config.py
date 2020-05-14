@@ -45,15 +45,16 @@ class Config(object):
         super().__init__(*args, **kwargs)
 
         # are we using SSL for MySQL connections? (you should be)
-        if saq.CONFIG['database_ace'].get('ssl_ca', fallback=None) \
-        or saq.CONFIG['database_ace'].get('ssl_cert', fallback=None) \
-        or saq.CONFIG['database_ace'].get('ssl_key', fallback=None):
-            ssl_options = { 'ca': abs_path(saq.CONFIG['database_ace']['ssl_ca']) }
-            if saq.CONFIG['database_ace'].get('ssl_cert', fallback=None):
-                ssl_options['cert'] = abs_path(saq.CONFIG['database_ace']['ssl_cert'])
-            if saq.CONFIG['database_ace'].get('ssl_key', fallback=None):
-                ssl_options['key'] = abs_path(saq.CONFIG['database_ace']['ssl_key'])
-            self.SQLALCHEMY_DATABASE_OPTIONS['connect_args']['ssl'] = ssl_options
+        if not saq.CONFIG['database_ace'].get('unix_socket', fallback=None):
+            if saq.CONFIG['database_ace'].get('ssl_ca', fallback=None) \
+            or saq.CONFIG['database_ace'].get('ssl_cert', fallback=None) \
+            or saq.CONFIG['database_ace'].get('ssl_key', fallback=None):
+                ssl_options = { 'ca': abs_path(saq.CONFIG['database_ace']['ssl_ca']) }
+                if saq.CONFIG['database_ace'].get('ssl_cert', fallback=None):
+                    ssl_options['cert'] = abs_path(saq.CONFIG['database_ace']['ssl_cert'])
+                if saq.CONFIG['database_ace'].get('ssl_key', fallback=None):
+                    ssl_options['key'] = abs_path(saq.CONFIG['database_ace']['ssl_key'])
+                self.SQLALCHEMY_DATABASE_OPTIONS['connect_args']['ssl'] = ssl_options
 
     @staticmethod
     def init_app(app):
