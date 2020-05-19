@@ -1,5 +1,13 @@
+archive/
 data/
 data_unittest/
 error_reports/
 logs/
+malicious/
 scan_failures/
+stats/
+storage/
+venv/
+vt_cache/
+work/
+yss/
