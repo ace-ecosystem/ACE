@@ -145,7 +145,20 @@ class RemoteNodeGroup(object):
     """Represents a collection of one or more RemoteNode objects that share the
        same group configuration property."""
 
-    def __init__(self, name, coverage, full_delivery, company_id, database, group_id, workload_type_id, shutdown_event, batch_size=32, target_node_as_company_id=None):
+    def __init__(
+            self,
+            name,
+            coverage,
+            full_delivery,
+            company_id,
+            database,
+            group_id,
+            workload_type_id,
+            shutdown_event,
+            batch_size=32,
+            target_node_as_company_id=None,
+            target_nodes=[]):
+
         assert isinstance(name, str) and name
         assert isinstance(coverage, int) and coverage > 0 and coverage <= 100
         assert isinstance(full_delivery, bool)
@@ -154,6 +167,7 @@ class RemoteNodeGroup(object):
         assert isinstance(group_id, int)
         assert isinstance(workload_type_id, int)
         assert isinstance(shutdown_event, threading.Event)
+        assert isinstance(target_nodes, list)
 
         self.name = name
 
@@ -194,6 +208,10 @@ class RemoteNodeGroup(object):
 
         # reference to Controller.shutdown_event, used to synchronize a clean shutdown
         self.shutdown_event = shutdown_event
+
+        # an optional list of target nodes names this group will limit itself to
+        # if this list is empty then there is no limit
+        self.target_nodes = target_nodes
 
         # when do we think a node has gone offline
         # each node (engine) should update it's status every [engine][node_status_update_frequency] seconds
@@ -244,7 +262,7 @@ class RemoteNodeGroup(object):
                 if self.shutdown_event.wait(1):
                     break
 
-    @use_db
+    @use_db(name='collection')
     def execute(self, db, c):
         # first we get a list of all the distinct analysis modes available in the work queue
         c.execute("""
@@ -271,6 +289,7 @@ WHERE
         # given this list of modes that need remote targets, see what is currently available
         with get_db_connection(self.database) as node_db:
             node_c = node_db.cursor()
+
             sql = """
 SELECT
     nodes.id, 
@@ -282,29 +301,60 @@ SELECT
     COUNT(workload.id) AS 'WORKLOAD_COUNT'
 FROM
     nodes LEFT JOIN node_modes ON nodes.id = node_modes.node_id
+    LEFT JOIN node_modes_excluded ON nodes.id = node_modes_excluded.node_id
     LEFT JOIN workload ON nodes.id = workload.node_id
 WHERE
-    nodes.company_id = %s
-    AND nodes.is_local = 0
-    AND TIMESTAMPDIFF(SECOND, nodes.last_update, NOW()) <= %s
-    AND ( nodes.any_mode OR node_modes.analysis_mode in ( {} ) )
+    {where_clause}
 GROUP BY
     nodes.id,
     nodes.name,
     nodes.location,
     nodes.any_mode,
     nodes.last_update,
-    node_modes.analysis_mode
+    node_modes.analysis_mode,
+    node_modes_excluded.analysis_mode
 ORDER BY
     WORKLOAD_COUNT ASC,
     nodes.last_update ASC
-""".format(','.join(['%s' for _ in available_modes]))
+"""
+            where_clause = []
+            where_clause_params = []
+
+            # XXX not sure what this does
+            company_id = self.company_id
             if self.target_node_as_company_id is not None:
-                params = [ self.target_node_as_company_id, self.node_status_update_frequency * 2 ]
-            else:
-                params = [ self.company_id, self.node_status_update_frequency * 2 ]
-            params.extend(available_modes)
-            node_c.execute(sql, tuple(params))
+                company_id = self.target_node_as_company_id
+
+            where_clause.append("nodes.company_id = %s")
+            where_clause_params.append(company_id)
+
+            where_clause.append("nodes.is_local = 0")
+
+            where_clause.append("TIMESTAMPDIFF(SECOND, nodes.last_update, NOW()) <= %s")
+            where_clause_params.append(self.node_status_update_frequency * 2)
+
+            param_str = ','.join(['%s' for _ in available_modes])
+            where_clause.append(f""" 
+            (
+                (nodes.any_mode AND 
+                    (node_modes_excluded.analysis_mode IS NULL 
+                     OR node_modes_excluded.analysis_mode NOT IN ( {param_str} )
+                    )
+                )
+                OR node_modes.analysis_mode IN ( {param_str} )
+            ) """)
+            where_clause_params.extend(available_modes)
+            where_clause_params.extend(available_modes)
+
+            # are we limiting what nodes we are sending to?
+            if self.target_nodes:
+                param_str = ','.join(['%s' for _ in self.target_nodes])
+                where_clause.append(f"nodes.name IN ( {param_str} )")
+                where_clause_params.extend(self.target_nodes)
+
+            sql = sql.format(where_clause='AND '.join([f'( {_} ) ' for _ in where_clause]))
+            #logging.debug(f"MARKER: {sql} {where_clause_params}")
+            node_c.execute(sql, tuple(where_clause_params))
             node_status = node_c.fetchall()
 
         if not node_status:
@@ -538,7 +588,7 @@ class Collector(ACEService, Persistable):
         # XXX meh -- maybe this should be hard coded, or at least in a configuratin file or something
         # get the workload type_id from the database, or, add it if it does not already exist
         try:
-            with get_db_connection() as db:
+            with get_db_connection('collection') as db:
                 c = db.cursor()
                 c.execute("SELECT id FROM incoming_workload_type WHERE name = %s", (self.workload_type,))
                 row = c.fetchone()
@@ -675,9 +725,10 @@ class Collector(ACEService, Persistable):
         full_delivery, 
         company_id, 
         database, 
-        target_node_as_company_id=None):
+        target_node_as_company_id=None,
+        target_nodes=[]):
 
-        with get_db_connection() as db:
+        with get_db_connection('collection') as db:
             c = db.cursor()
             c.execute("SELECT id FROM work_distribution_groups WHERE name = %s", (name,))
             row = c.fetchone()
@@ -697,7 +748,8 @@ class Collector(ACEService, Persistable):
                 group_id, 
                 self.workload_type_id, 
                 self.service_shutdown_event, 
-                target_node_as_company_id=target_node_as_company_id)
+                target_node_as_company_id=target_node_as_company_id,
+                target_nodes=target_nodes)
             self.remote_node_groups.append(remote_node_group)
             logging.info("added {}".format(remote_node_group))
             return remote_node_group
@@ -722,9 +774,20 @@ class Collector(ACEService, Persistable):
             if 'target_node_as_company_id' in saq.CONFIG[section]:
                 target_node_as_company_id = saq.CONFIG[section]['target_node_as_company_id']
 
-            logging.info("loaded group {} coverage {} full_delivery {} company_id {} database {} target_node_as_company_id {}".format(
-                         group_name, coverage, full_delivery, company_id, database, target_node_as_company_id))
-            self.add_group(group_name, coverage, full_delivery, company_id, database, target_node_as_company_id)
+            target_nodes = []
+            if 'target_nodes' in saq.CONFIG[section]:
+                for node in saq.CONFIG[section]['target_nodes'].split(','):
+                    if not node:
+                        continue
+
+                    if node == 'LOCAL':
+                        node = saq.SAQ_NODE
+
+                    target_nodes.append(node)
+
+            logging.info("loaded group {} coverage {} full_delivery {} company_id {} database {} target_node_as_company_id {} target_nodes {}".format(
+                         group_name, coverage, full_delivery, company_id, database, target_node_as_company_id, target_nodes))
+            self.add_group(group_name, coverage, full_delivery, company_id, database, target_node_as_company_id, target_nodes)
 
 
     def _signal_handler(self, signum, frame):
@@ -750,7 +813,7 @@ class Collector(ACEService, Persistable):
 
         logging.debug("exited cleanup loop")
 
-    @use_db
+    @use_db(name='collection')
     def execute_workload_cleanup(self, db, c):
         # look up all the work that is currently completed
         # a completed work item has no entries in the work_distribution table with a status of 'READY'
@@ -863,7 +926,7 @@ HAVING
                     logging.error(f"I/O error moving files into {target_dir}: {e}")
                     report_exception()
 
-    @use_db
+    @use_db(name='collection')
     def schedule_submission(self, submission, db, c):
 
         # we don't really need to change the file paths that are stored in the Submission object

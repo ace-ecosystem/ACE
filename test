@@ -8,9 +8,9 @@ fi
 
 cd "${SAQ_HOME}" || { echo "cannot cd to ${SAQ_HOME}"; exit 1; }
 
-if [ -f "logs/unittest.log" ]
+if [ -f "data/logs/unittest.log" ]
 then
-    rm logs/unittest.log
+    rm data/logs/unittest.log
 fi
 
 if [ ! -d data_unittest ]
@@ -47,11 +47,9 @@ then
         saq.collectors.test \
         saq.collectors.test_email \
         saq.collectors.test_falcon \
-        saq.collectors.test_http \
         saq.collectors.test_hunter \
         saq.collectors.test_qradar_hunter \
         saq.collectors.test_query_hunter \
-        saq.collectors.test_smtp \
         saq.collectors.test_splunk_hunter \
         saq.database.test \
         saq.error.test \
@@ -87,7 +85,9 @@ then
         aceapi.events.test \
         test_ace_api \
 
-        #saq.collectors.test_cb_binaries \
+        # reintroduce these
+        #saq.collectors.test_smtp \
+        #saq.collectors.test_http \
 
         # TODO reintroduce these next two somehow
         #saq.engine.test_cloudphish \
@@ -108,6 +108,8 @@ then
 
         # these needs to be created
         #saq.modules.test_qradar \
+
+        #saq.collectors.test_cb_binaries \
 
     exit 0
 fi

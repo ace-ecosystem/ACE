@@ -12,7 +12,7 @@ type Val: record {
 # the list of networks we whitelist is stored in /opt/ace/bro/http.whitelist
 global http_whitelist: table[subnet] of Val = table();
 
-event bro_init() {
+event zeek_init() {
     Input::add_table([$source="/opt/ace/bro/http.whitelist", $name="http.whitelist", $idx=Idx, $val=Val, $destination=http_whitelist, $mode=Input::REREAD]);
 }
 

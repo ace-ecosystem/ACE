@@ -40,9 +40,9 @@ from sqlalchemy.engine import Engine
 class CustomSQLAlchemy(SQLAlchemy):
     def apply_driver_hacks(self, app, info, options):
         # are we using SSL for MySQL connections? (you should be)
-        if 'ssl_ca' in saq.CONFIG['database_ace'] \
-        or 'ssl_cert' in saq.CONFIG['database_ace'] \
-        or 'ssl_key' in saq.CONFIG['database_ace']:
+        if ( 'ssl_ca' in saq.CONFIG['database_ace'] and saq.CONFIG['database_ace']['ssl_ca'] ) \
+        or ( 'ssl_cert' in saq.CONFIG['database_ace'] and saq.CONFIG['database_ace']['ssl_cert'] ) \
+        or ( 'ssl_key' in saq.CONFIG['database_ace'] and saq.CONFIG['database_ace']['ssl_key'] ):
             ssl_options = { 'ca': saq.CONFIG['database_ace']['ssl_ca'] }
             if 'ssl_cert' in saq.CONFIG['database_ace']:
                 ssl_options['cert'] = saq.CONFIG['database_ace']['ssl_cert']
@@ -63,11 +63,19 @@ def create_app(testing=False):
         INSTANCE_NAME = saq.CONFIG.get('global', 'instance_name')
 
         # also see lib/saq/database.py:initialize_database
-        SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{username}:{password}@{hostname}/{database}?charset=utf8mb4'.format(
-            username=saq.CONFIG.get('database_ace', 'username'),
-            password=saq.CONFIG.get('database_ace', 'password'),
-            hostname=saq.CONFIG.get('database_ace', 'hostname'),
-            database=saq.CONFIG.get('database_ace', 'database'))
+        if saq.CONFIG['database_ace'].get('unix_socket', fallback=None):
+            SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{username}:{password}@{hostname}/{database}?unix_socket={unix_socket}&charset=utf8mb4'.format(
+                username=saq.CONFIG.get('database_ace', 'username'),
+                password=saq.CONFIG.get('database_ace', 'password'),
+                hostname=saq.CONFIG.get('database_ace', 'hostname'),
+                database=saq.CONFIG.get('database_ace', 'database'),
+                unix_socket=saq.CONFIG.get('database_ace', 'unix_socket'))
+        else:
+            SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{username}:{password}@{hostname}/{database}?charset=utf8mb4'.format(
+                username=saq.CONFIG.get('database_ace', 'username'),
+                password=saq.CONFIG.get('database_ace', 'password'),
+                hostname=saq.CONFIG.get('database_ace', 'hostname'),
+                database=saq.CONFIG.get('database_ace', 'database'))
 
         SQLALCHEMY_POOL_TIMEOUT = 10
         SQLALCHEMY_POOL_RECYCLE = 60

@@ -63,10 +63,10 @@ def translate_node(node: str) -> str:
     for key in saq.CONFIG['node_translation'].keys():
         src, target = saq.CONFIG['node_translation'][key].split(',')
         if node == src:
-            logging.info("translating node {} to {}".format(node, target))
+            logging.debug("translating node {} to {}".format(node, target))
             return target
 
-    logging.info(f"no translation for {node}")
+    logging.debug(f"no translation for {node}")
     return node
 
 
@@ -425,13 +425,17 @@ class Engine(ACEService):
                        pool_size_limit=None, 
                        copy_analysis_on_error=None,
                        single_threaded_mode=False, 
+                       excluded_analysis_modes=None,
+                       target_nodes=None,
                        *args, **kwargs):
 
         super().__init__(service_config=saq.CONFIG['service_engine'], *args, **kwargs)
 
         assert local_analysis_modes is None or isinstance(local_analysis_modes, list)
+        assert excluded_analysis_modes is None or isinstance(excluded_analysis_modes, list)
         assert analysis_pools is None or isinstance(analysis_pools, dict)
         assert pool_size_limit is None or (isinstance(pool_size_limit, int) and pool_size_limit > 0)
+        assert target_nodes is None or isinstance(target_nodes, list)
 
         global CURRENT_ENGINE
         CURRENT_ENGINE = self
@@ -496,6 +500,26 @@ class Engine(ACEService):
             self.local_analysis_modes = local_analysis_modes
         else:
             self.local_analysis_modes = [_.strip() for _ in self.service_config['local_analysis_modes'].split(',') if _]
+
+        if self.local_analysis_modes:
+            for mode in self.local_analysis_modes:
+                logging.debug(f"analysis mode {mode} supported by this engine")
+
+        # the list of analysis modes this engine DOES NOT support
+        # if the analysis_modes parameter is passed to the constructor then we use that instead
+        if excluded_analysis_modes is not None:
+            self.excluded_analysis_modes = excluded_analysis_modes
+        else:
+            self.excluded_analysis_modes = [_.strip() for _ in self.service_config['excluded_analysis_modes'].split(',') if _]
+
+        if self.excluded_analysis_modes:
+            for mode in self.excluded_analysis_modes:
+                logging.debug(f"analysis mode {mode} is excluded from analysis by this engine")
+
+        if self.excluded_analysis_modes and self.local_analysis_modes:
+            logging.critical("both excluded_analysis_modes and local_analysis_modes are enabled for the engine")
+            logging.critical("this is a misconfiguration error")
+            sys.exit(1)
 
         # load the analysis pool settings
         # if we specified analysis_pools on the constructor then we use that instead
@@ -620,6 +644,19 @@ class Engine(ACEService):
 
         # by default alerting is turned on
         self.alerting_enabled = True
+
+        # list of nodes this engine will pull work from
+        self.target_nodes = []
+        if 'target_nodes' in self.service_config:
+            self.target_nodes = [_.strip() for _ in self.service_config['target_nodes'].split(',') if _.strip()]
+        if target_nodes is not None: # let parameter override config setting
+            self.target_nodes = target_nodes
+
+        # translate the special value of LOCAL to whatever the local node is
+        self.target_nodes = [saq.SAQ_NODE if node == 'LOCAL' else node for node in self.target_nodes]
+
+        if self.target_nodes:
+            logging.debug(f"target nodes for {saq.SAQ_NODE} is limited to {self.target_nodes}")
 
     def __str__(self):
         return "Engine ({} - {})".format(saq.SAQ_NODE, self.name)
@@ -782,9 +819,12 @@ class Engine(ACEService):
         # insert this engine as a node (if it isn't already)
         initialize_node()
 
-        # update the database with the list of analysis modes we accept
+        # update the database with the list of analysis modes we accept and don't accept
         sql = [ "DELETE FROM node_modes WHERE node_id = %s" ]
         params = [ (saq.SAQ_NODE_ID,) ]
+
+        sql.append("DELETE FROM node_modes_excluded WHERE node_id = %s")
+        params.append((saq.SAQ_NODE_ID,))
         
         # if we do NOT specify local_analysis_modes then we default to ANY mode
         # by setting the any_mode column of the node database row
@@ -794,7 +834,13 @@ class Engine(ACEService):
         for mode in self.local_analysis_modes:
             sql.append("INSERT INTO node_modes ( node_id, analysis_mode ) VALUES ( %s, %s )")
             params.append((saq.SAQ_NODE_ID, mode))
-            logging.info("node {} supports mode {}".format(saq.SAQ_NODE, mode))
+            logging.debug("node {} supports mode {}".format(saq.SAQ_NODE, mode))
+
+        if self.excluded_analysis_modes:
+            for mode in self.excluded_analysis_modes:
+                sql.append("INSERT INTO node_modes_excluded ( node_id, analysis_mode ) VALUES ( %s, %s )")
+                params.append((saq.SAQ_NODE_ID, mode))
+                logging.debug("node {} does not support mode {}".format(saq.SAQ_NODE, mode))
 
         execute_with_retry(db, c, sql, params, commit=True)
 
@@ -1484,6 +1530,8 @@ class Engine(ACEService):
                                saq.SAQ_NODE_ID, target_dir, uuid))
             execute_with_retry(db, c, "UPDATE delayed_analysis SET node_id = %s, storage_dir = %s WHERE uuid = %s", (
                                saq.SAQ_NODE_ID, target_dir, uuid))
+            execute_with_retry(db, c, "UPDATE alerts SET location = %s, storage_dir = %s WHERE uuid = %s", (
+                               saq.SAQ_NODE, target_dir, uuid))
             db.commit()
 
             # then finally tell the remote system to clear this work item
@@ -1567,6 +1615,7 @@ ORDER BY
            of this worker are selected.
            If local is True then only work items on the local node are selected.
            Remote work items are moved to become local.
+           Note that the target_nodes configuration option controls which nodes are valid to pull from.
            Returns a valid work item, or None if none are available."""
     
         where_clause = [ 'locks.uuid IS NULL' ]
@@ -1590,12 +1639,21 @@ ORDER BY
             # limit our scope to locally support analysis modes
             where_clause.append('workload.analysis_mode IN ( {} )'.format(','.join(['%s' for _ in self.local_analysis_modes])))
             params.extend(self.local_analysis_modes)
+        elif self.excluded_analysis_modes:
+            where_clause.append('workload.analysis_mode NOT IN ( {} )'.format(','.join(['%s' for _ in self.excluded_analysis_modes])))
+            params.extend(self.excluded_analysis_modes)
 
         if self.exclusive_uuid is not None:
             where_clause.append('workload.exclusive_uuid = %s')
             params.append(self.exclusive_uuid)
         else:
             where_clause.append('workload.exclusive_uuid IS NULL')
+
+        # are we limiting what nodes we pull work from?
+        if not self.is_local and self.target_nodes:
+            param_str = ','.join(['%s' for _ in self.target_nodes])
+            where_clause.append(f"workload.node_id IN ( SELECT id FROM nodes WHERE name IN ( {param_str} ) )")
+            params.extend(self.target_nodes)
 
         where_clause = ' AND '.join(['({})'.format(clause) for clause in where_clause])
 
@@ -1925,7 +1983,8 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
             # workload in DISPOSITIONED mode even though the analysis_mode saved with the alert is CORRELATION
             current_analysis_mode = self.root.analysis_mode
             self.root.load()
-            if self.root.analysis_mode != current_analysis_mode:
+            # NOTE in the case of transfers from another node, current_analysis_mode will be None
+            if current_analysis_mode is not None and self.root.analysis_mode != current_analysis_mode:
                 logging.debug(f"changing analysis mode for {self.root} from {self.root.analysis_mode} "
                               f"to workload value of {current_analysis_mode}")
                 self.root.override_analysis_mode(current_analysis_mode)

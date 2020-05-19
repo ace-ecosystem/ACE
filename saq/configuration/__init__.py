@@ -158,7 +158,7 @@ def _load_configuration():
 def export_encrypted_passwords():
     """Returns a JSON dict of all the encrypted passwords with decrypted values."""
     from saq.database import get_db_connection
-    with get_db_connection() as db:
+    with get_db_connection(name=saq.CONFIG['global']['encrypted_passwords_db']) as db:
         c = db.cursor()
         c.execute("""
 SELECT
@@ -188,7 +188,7 @@ def encrypt_password(key, value):
     encrypted_value = base64.b64encode(encrypt_chunk(value.encode('utf8')))
 
     from saq.database import get_db_connection
-    with get_db_connection() as db:
+    with get_db_connection(name=saq.CONFIG['global']['encrypted_passwords_db']) as db:
         c = db.cursor()
         c.execute("""
 INSERT INTO `encrypted_passwords` ( `key`, `encrypted_value` )
@@ -200,7 +200,7 @@ ON DUPLICATE KEY UPDATE
 def delete_password(key):
     """Deletes the given password from the database. Returns True if the password was deleted."""
     from saq.database import get_db_connection
-    with get_db_connection() as db:
+    with get_db_connection(name=saq.CONFIG['global']['encrypted_passwords_db']) as db:
         c = db.cursor()
         c.execute("DELETE FROM `encrypted_passwords` WHERE `key` = %s", (key,))
         db.commit()
@@ -209,7 +209,7 @@ def delete_password(key):
 def decrypt_password(key):
     """Returns the decrypted value for the given key."""
     from saq.database import get_db_connection
-    with get_db_connection() as db:
+    with get_db_connection(name=saq.CONFIG['global']['encrypted_passwords_db']) as db:
         c = db.cursor()
         c.execute("""
 SELECT 
@@ -246,7 +246,7 @@ def set_database_config_value(key, value):
     else:
         raise TypeError(f"invalid type {type(value)} specified for set_database_config_value")
 
-    with get_db_connection() as db:
+    with get_db_connection(name=saq.CONFIG['global']['encrypted_passwords_db']) as db:
         c = db.cursor()
         c.execute("""
 INSERT INTO `config` ( `key`, `value` ) VALUES ( %s, %s )
@@ -255,7 +255,7 @@ ON DUPLICATE KEY UPDATE `value` = %s""", (key, value, value))
 
 def get_database_config_value(key, type=str):
     from saq.database import get_db_connection
-    with get_db_connection() as db:
+    with get_db_connection(name=saq.CONFIG['global']['encrypted_passwords_db']) as db:
         c = db.cursor()
         c.execute("""SELECT `value` FROM `config` WHERE `key` = %s""", (key,))
         result = c.fetchone()
@@ -274,7 +274,7 @@ def get_database_config_value(key, type=str):
 
 def delete_database_config_value(key):
     from saq.database import get_db_connection
-    with get_db_connection() as db:
+    with get_db_connection(name=saq.CONFIG['global']['encrypted_passwords_db']) as db:
         c = db.cursor()
         c.execute("""DELETE FROM `config` WHERE `key` = %s""", (key,))
         db.commit()

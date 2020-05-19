@@ -1,4 +1,4 @@
-@load ace/ace_local.bro
+@load ace/ace_local.zeek
 
 const MAX_MESSAGE_SIZE = 1024 * 1024 * 10; # 10 MB maximum
 

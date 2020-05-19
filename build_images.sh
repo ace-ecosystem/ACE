@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-SAQ_HOME=${SAQ_HOME:.}
-
-cd $SAQ_HOME || exit 1
 
 if [ -d docker/mounts/mysql/init ]
 then

@@ -178,6 +178,7 @@ REGEX_BRO_SMTP_SOURCE_IPV4 = re.compile(r'^([^:]+):(\d+).*$')
 REGEX_BRO_SMTP_MAIL_FROM = re.compile(r'^> MAIL FROM:<([^>]+)>.*$')
 REGEX_BRO_SMTP_RCPT_TO = re.compile(r'^> RCPT TO:<([^>]+)>.*$')
 REGEX_BRO_SMTP_DATA = re.compile(r'^< DATA 354.*$')
+REGEX_BRO_SMTP_RSET = re.compile(r'^< RSET.*$')
 
 class BroSMTPStreamAnalyzer(AnalysisModule):
     
@@ -206,6 +207,9 @@ class BroSMTPStreamAnalyzer(AnalysisModule):
 
         analysis = self.create_analysis(_file)
         path = os.path.join(self.root.storage_dir, _file.value)
+
+        # the current message we're parsing in the case of multiple emails coming in over the same connection
+        smtp_message_index = 0 
 
         try:
             with open(path, 'r', errors='ignore') as fp:
@@ -239,6 +243,17 @@ class BroSMTPStreamAnalyzer(AnalysisModule):
                 state = STATE_SMTP
                 rfc822_path = None
                 rfc822_fp = None
+
+                def _reset_state():
+                    nonlocal rfc822_fp, source_ipv4, source_port, envelope_from, envelope_to, state
+
+                    rfc822_fp = None
+                    source_ipv4 = None
+                    source_port = None
+                    envelope_from = None
+                    envelope_to = []
+
+                    state = STATE_SMTP
 
                 def _finalize():
                     # called when we detect the end of an SMTP stream OR the end of the file (data)
@@ -287,13 +302,7 @@ class BroSMTPStreamAnalyzer(AnalysisModule):
 
                         self.root.description += 'To {} '.format(','.join(envelope_to))
 
-                    rfc822_fp = None
-                    source_ipv4 = None
-                    source_port = None
-                    envelope_from = None
-                    envelope_to = []
-
-                    state = STATE_SMTP
+                    _reset_state()
 
                 # smtp is pretty much line oriented
                 while True:
@@ -317,12 +326,20 @@ class BroSMTPStreamAnalyzer(AnalysisModule):
                         m = REGEX_BRO_SMTP_DATA.match(line)
                         if m:
                             state = STATE_DATA
-                            rfc822_path = os.path.join(self.root.storage_dir, 'email.rfc822')
+                            rfc822_path = os.path.join(self.root.storage_dir, f'smtp.{smtp_message_index}.email.rfc822')
+                            smtp_message_index += 1
                             rfc822_fp = open(rfc822_path, 'w')
                             logging.debug("created {} for {}".format(rfc822_path, path))
                             continue
 
+                        m = REGEX_BRO_SMTP_RSET.match(line)
+                        if m:
+                            logging.debug(f"detected RSET for {path}")
+                            _reset_state()
+                            continue
+
                         # any other command we skip
+                        logging.debug(f"skipping SMTP command {line.strip()}")
                         continue
 
                     # otherwise we're reading DATA and looking for the end of that
@@ -341,7 +358,7 @@ class BroSMTPStreamAnalyzer(AnalysisModule):
 
         except Exception as e:
             logging.error("unable to parse smtp stream {}: {}".format(_file.value, e))
-            #report_exception()
+            report_exception()
             shutil.copy(os.path.join(self.root.storage_dir, _file.value), os.path.join(saq.DATA_DIR, 'review', 'smtp'))
             return False
 
@@ -2047,27 +2064,17 @@ class EmailArchiveAction(AnalysisModule):
                     else:
                         yield address
 
-            #env_from = normalize_email_address(email_analysis.env_mail_from)
-            #if env_from:
-                #transactions.append(('env_from', env_from))
-
             if email_analysis.env_rcpt_to:
                 for env_to in _normalize_email_address(email_analysis.env_rcpt_to[0]):
                     transactions.append(('env_to', env_to))
-                    
-                #env_to = _normalize_email_address(email_analysis.env_rcpt_to[0])
-                #if env_to:
-                    #transactions.append(('env_to', env_to))
 
-            for body_from in _normalize_email_address(email_analysis.mail_from):
-            #body_from = _normalize_email_address(email_analysis.mail_from)
-            #if body_from:
-                transactions.append(('body_from', body_from))
+            if email_analysis.mail_from:
+                for body_from in _normalize_email_address(email_analysis.mail_from):
+                    transactions.append(('body_from', body_from))
 
-            for body_to in _normalize_email_address(email_analysis.mail_to):
-            #body_to = _normalize_email_address(email_analysis.mail_to)
-            #if body_to:
-                transactions.append(('body_to', body_to))
+            if email_analysis.mail_to:
+                for body_to in _normalize_email_address(email_analysis.mail_to):
+                    transactions.append(('body_to', body_to))
 
             if email_analysis.subject:
                 transactions.append(('subject', email_analysis.subject))
