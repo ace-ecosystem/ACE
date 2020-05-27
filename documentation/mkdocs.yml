@@ -52,6 +52,7 @@ nav:
     - Overview: 
         - Main: overview/index.md
         - Collectors: overview/collector.md
+        - Analysis Overview: overview/analysis_overview.md
     - Installation: 
         - Overview: installation/index.md
     - Analyst Guide: 
@@ -63,4 +64,6 @@ nav:
         - Overview: development/index.md
         - API: development/api.md
         - History: development/history.md
+    - Databases:
+        - Overview: database/index.md
 
