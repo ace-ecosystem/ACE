@@ -49,10 +49,10 @@ markdown_extensions:
 # Page tree
 nav:
     - Home: index.md
-    - Overview: 
-        - Main: overview/index.md
-        - Collectors: overview/collector.md
-        - Analysis Overview: overview/analysis_overview.md
+    - Design: 
+        - Main: design/index.md
+        - Collectors: design/collector.md
+        - Analysis Overview: design/analysis_overview.md
     - Installation: 
         - Overview: installation/index.md
     - Analyst Guide: 
