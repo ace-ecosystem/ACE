@@ -1,6 +1,6 @@
 # Collectors
 
-A collector is a [service](development/services) that is responsible for collecting things to submit to one or more ACE nodes.
+A collector is a [service](service.md) that is responsible for collecting things to submit to one or more ACE nodes.
 
 ## Concepts
 
