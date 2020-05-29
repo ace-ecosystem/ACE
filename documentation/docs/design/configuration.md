@@ -8,40 +8,40 @@ ACE loads configuration files in a particular order. There are two different set
 
 ### Load Order (Normal)
 
-1) etc/saq.default.ini
-2) etc/saq.integrations.default.ini
-3) etc/saq.integrations.ini (if it exists)
-4) default integration files as configured in etc/saq.integrations.ini
-   
+1. etc/saq.default.ini
+2. etc/saq.integrations.default.ini
+3. etc/saq.integrations.ini (if it exists)
+4. default integration files as configured in etc/saq.integrations.ini
+
    typically these are saq.INTEGRATION_NAME.default.ini where INTEGRATION_NAME
    is the name of the integration
 
-5) local integration files as configured in etc/saq.integrations.ini (if they exist)
-   
+5. local integration files as configured in etc/saq.integrations.ini (if they exist)
+
    typically these are saq.INTEGRATION_NAME..ini where INTEGRATION_NAME is the
    name of the integration
 
-6) configuration files specified on the command line
-7) configuration files specified in the `SAQ_CONFIG_PATHS` environment variable
-8) etc/saq.ini
+6. configuration files specified on the command line
+7. configuration files specified in the `SAQ_CONFIG_PATHS` environment variable
+8. etc/saq.ini
 
 ### Load Order (Unit Testing)
 
-1) etc/saq.default.ini
-2) etc/saq.integrations.default.ini
-3) etc/saq.integrations.ini (if it exists)
-4) default integration files as configured in etc/saq.integrations.ini
+1. etc/saq.default.ini
+2. etc/saq.integrations.default.ini
+3. etc/saq.integrations.ini (if it exists)
+4. default integration files as configured in etc/saq.integrations.ini
 
    typically these are saq.INTEGRATION_NAME.default.ini where INTEGRATION_NAME
    is the name of the integration
 
-5) local integration files as configured in etc/saq.integrations.ini (if they exist)
+5. local integration files as configured in etc/saq.integrations.ini (if they exist)
 
    typically these are saq.INTEGRATION_NAME..ini where INTEGRATION_NAME is the
    name of the integration
 
-6) etc/saq.unittest.default.ini
-7) etc/saq.unittest.ini
+6. etc/saq.unittest.default.ini
+7. etc/saq.unittest.ini
 
 ## Encrypted Passwords
 

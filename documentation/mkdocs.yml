@@ -50,9 +50,11 @@ markdown_extensions:
 nav:
     - Home: index.md
     - Design: 
-        - Main: design/index.md
-        - Collectors: design/collector.md
+        - Philosophy: design/index.md
         - Analysis Overview: design/analysis_overview.md
+        - Collectors: design/collector.md
+        - Engine: design/engine.md
+        - Analysis Modules: design/analysis_module.md
     - Installation: 
         - Overview: installation/index.md
     - Analyst Guide: 

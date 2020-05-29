@@ -19,4 +19,4 @@ An [Analysis](analysis.md) is the output of analysis of an observable. It has
 
 ## Analysis Module
 
-An [Analysis Module](analysis_module.md5) is what is responsible for taking an observable and generating analysis. Analysis modules are loaded and executed by [Engines](engine.md).
+An [Analysis Module](analysis_module.md) is what is responsible for taking an observable and generating analysis. Analysis modules are loaded and executed by [Engines](engine.md).

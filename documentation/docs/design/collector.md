@@ -8,20 +8,32 @@ A collector takes *something* and decides if it should send it to a remote ACE n
 
 The collector then turns that *something* into a request that ACE can understand and process. It does so by
 
-- extracting observations into [observables](development/observables).
+- extracting observations into [observables](observables.md).
 - formatting raw analysis data into JSON.
 
 The collector turns that *something* into a [submission](development/submission) which contains all of the data required for analysis.
 
-The collector must also decide what [analysis mode](development/analysis_modes) a submission should be submitted as. The analysis mode determine how ACE treats the submission. Submissions made with the analysis mode set to `correlation` automatically become alerts, while submissions set to `analysis` are not automatically alerts but may become so when ACE analyzes the submission.
+The collector must also decide what [analysis mode](analysis_modes.md) a submission should be submitted as. The analysis mode determine how ACE treats the submission. Submissions made with the analysis mode set to `correlation` automatically become alerts, while submissions set to `analysis` are not automatically alerts but may become so when ACE analyzes the submission.
 
-The list of built-in analysis modes can be found [here](some/link), and administrators are free to create thier own.
+The list of built-in analysis modes can be found [here](some/link), and administrators are free to create their own.
+
+## How Collection Works
+
+Collection boils down to the following steps.
+
+1. Obtain the thing to collect and analyze.
+2. Extract observables and format the analysis data.
+3. Store the submission request to persistent storage.
+4. Queue the submission request.
+5. Retrieve the submission request from the queue.
+6. Perform the submission to the various node clusters.
+7. Delete the submission data once the submission satisfies all configured settings.
 
 ## Collection Groups
 
-Submissions are routed by collectors to remote ACE nodes using configuration settings called **collection groups**. A configuration section that starts with `[collection_group_]` is recognized by ACE as the definition of a collection group.
+Submissions are routed by collectors to [remote ACE nodes](engine.md) using [configuration](configuration.md) settings called **collection groups**. A configuration section that starts with `[collection_group_]` is recognized by ACE as the definition of a collection group.
 
-Each collection group identifies an ACE **cluster** to send to. A cluster is made up for 1 or more ACE engine nodes.
+Each collection group identifies an ACE [cluster](engine_cluster.md) to send to.
 
 All collection groups that are enabled have submissions routed to them. The configuration settings of each group define how those submissions are handled.
 
@@ -47,7 +59,7 @@ The `full_delivery` setting is a boolean option that controls how ACE treats sub
 
 ## Target Cluster Identification
 
-The ACE node cluster is identified by providing the name of the database section to the `database` option. For example:
+The ACE node [cluster](engine_cluster.md) is identified by providing the name of the database section to the `database` option. For example:
 
 ```ini
 [database_ace]
@@ -59,7 +71,7 @@ password = ace
 database = ace
 ```
 
-The value `ace` is the `ace` part of `[database_ace]` and tells ACE to use those database settings to connect to that ACE cluster.
+The value `ace` is the `ace` part of `[database_ace]` and tells ACE to use those database settings to connect to that ACE [cluster](engine_cluster.md).
 
 ## Target Nodes
 
@@ -93,7 +105,7 @@ example_mapping = 10.1.1.2:443,192.168.1.2:443
 
 A collector can submit requests to a local or remote ACE cluster.
 
-The ACE api [submit](some/link) call is used if the target node is remote.
+The ACE [api](link) [submit](link) call is used if the target node is remote.
 
 Local submission routines are used if the target node is local. This is much faster than remote submissions and should be use for high-volume collectors.
 
@@ -111,9 +123,9 @@ Collectors can use any type of persistant storage. ACE has built-in support for 
 
 One of the key requirements of collection is that submission data is not lost in the event of system failure. There are two types of submission storage available for collection.
 
-Collectors can use local file storage to help keep track of state. The base directory for this storage is defined by the configuration setting `persistence_dir`.
+Collectors can use local file storage to help keep track of state. The base directory for this storage is defined by the [configuration](configuration.md) setting `persistence_dir`.
 
-Additional collection data such as external file attachments are stored in the directory defined by the `incoming_dir` configuration setting.
+Additional collection data such as external file attachments are stored in the directory defined by the `incoming_dir` [configuration](configuration.md) setting.
 
 ```ini
 [collection]
@@ -127,20 +139,8 @@ incoming_dir = var/collection/incoming
 
 ## Persistent Storage - Database
 
-The database can be and is used to store persitance data.
+The database can be and is used to store persistance data.
 
 The [Submission](link) object itself is pickled and stored in the `work` field of the `incoming_workload` table.
 
 As an alternative to using the local file system to store stateful data for collection, the `persistence` and `persistence_source` tables are provided, [along with tooling to manage the data](link/to/persistence/docs).
-
-## How Collection Works
-
-Collection boils down to the following steps.
-
-1. Obtain the thing to collect and analyze.
-2. Extract observables and format the analysis data.
-3. Store the submission request to persistent storage.
-4. Queue the submission request.
-5. Retrieve the submission request from the queue.
-6. Perform the submission to the various node clusters.
-7. Delete the submission data once the submission satisfies all configured settings.
