@@ -219,7 +219,7 @@
   
     <li class="md-tabs__item">
       
-        <a href="../admin/index.md" class="md-tabs__link">
+        <a href="../admin/" class="md-tabs__link">
           Administrators Guide
         </a>
       
@@ -327,6 +327,18 @@
   <li class="md-nav__item">
     <a href="../design/analysis_overview/" title="Analysis Overview" class="md-nav__link">
       Analysis Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/configuration/" title="Configuration" class="md-nav__link">
+      Configuration
     </a>
   </li>
 
@@ -481,7 +493,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../admin/index.md" title="Overview" class="md-nav__link">
+    <a href="../admin/" title="Overview" class="md-nav__link">
       Overview
     </a>
   </li>
@@ -755,9 +767,9 @@
                 
                 
                 <h1 id="ace-databases">ACE Databases<a class="headerlink" href="#ace-databases" title="Permanent link">&para;</a></h1>
-<p>ACE uses multiple MySQL databases to operate. Each <a href="../overview/engine_cluster.md">ACE cluster</a> uses a different set of databases.</p>
+<p>ACE uses multiple MySQL databases to operate. Each <a href="../design/engine_cluster/">ACE cluster</a> uses a different set of databases.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
-<p>Each database connection is defined in the <a href="configuration.md">configuration</a> file in a section formatted as <code>[database_NAME]</code> where <code>NAME</code> is the unique name of the database.</p>
+<p>Each database connection is defined in the <a href="../design/configuration/">configuration</a> file in a section formatted as <code>[database_NAME]</code> where <code>NAME</code> is the unique name of the database.</p>
 <p>The following database names are supported.</p>
 <ul>
 <li>database_ace</li>
@@ -765,7 +777,7 @@
 <li>database_brocess</li>
 <li>database_email_archive</li>
 </ul>
-<p>Additional <a href="integrations.md">integrations</a> may add more.</p>
+<p>Additional <a href="link">integrations</a> may add more.</p>
 <p>All database configurations are formatted as follows.</p>
 <pre class="codehilite"><code class="language-ini">[database_NAME]
 hostname =
@@ -783,7 +795,7 @@ password =
 <p><code>database</code> is the name of the database on the database server.</p>
 <p><code>username</code> and <code>password</code> are the credentials used to access the database.</p>
 <p><strong>NOTE</strong> that you cannot use encryption to store the database credentials because the encryption key is stored in the database.</p>
-<p>There are optional settings for <a href="ssl.md">ssl</a> connections to the database. You should use SSL if the database is on a remote system.</p>
+<p>There are optional settings for <a href="../design/ssl/">ssl</a> connections to the database. You should use SSL if the database is on a remote system.</p>
 <p>The <code>ssl_ca</code> should point to the certificate authority chain file. The <code>ssl_key</code> and <code>ssl_cert</code> should point to the key and certificate files.</p>
 <p>You must also configure MySQL for SSL before using these options.</p>
 <h3 id="database_ace">database_ace<a class="headerlink" href="#database_ace" title="Permanent link">&para;</a></h3>
@@ -806,7 +818,7 @@ password =
 <p>The <code>email_archive</code> database contains a recorded history of all emails received by either the zeek-based <a href="../design/smtp_collector.md">smtp collector</a> or the office365-based <a href="../design/email_collector.md">email collector</a>.</p>
 <h3 id="database_collection">database_collection<a class="headerlink" href="#database_collection" title="Permanent link">&para;</a></h3>
 <p>The <code>collection</code> database points ACE at the database to use for executing <a href="../design/collector/">collectors</a>. </p>
-<p>If the entire ACE <a href="../design/cluster.md">cluster</a> runs on the same system, then these settings can be the same as the settings for <code>[database_ace]</code>.</p>
+<p>If the entire ACE <a href="../design/engine_cluster/">cluster</a> runs on the same system, then these settings can be the same as the settings for <code>[database_ace]</code>.</p>
 <h2 id="mysql-considerations">MySQL Considerations<a class="headerlink" href="#mysql-considerations" title="Permanent link">&para;</a></h2>
 <p>ACE currently uses a large number of database settings. Each ACE process could use from 20 to 50 connections. You may need to adjust the maximum number of MySQL connections to a much higher number until this issue is refactored out.</p>
                 
