@@ -36,7 +36,7 @@
         <meta name="lang:search.tokenizer" content="[\s\-]+">
       
       <link rel="shortcut icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.1, mkdocs-material-4.6.3">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-4.6.3">
     
     
       
@@ -176,6 +176,17 @@
 
       
         
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../../design/" class="md-tabs__link">
+          Design
+        </a>
+      
+    </li>
+  
+
       
         
   
@@ -229,6 +240,19 @@
   
 
       
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../../database/" class="md-tabs__link">
+          Databases
+        </a>
+      
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -269,10 +293,82 @@
       
 
 
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-2" type="checkbox" id="nav-2">
+    
+    <label class="md-nav__link" for="nav-2">
+      Design
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-2">
+        Design
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
   <li class="md-nav__item">
-    <a href="../../overview/" title="Overview" class="md-nav__link">
-      Overview
+    <a href="../../design/" title="Philosophy" class="md-nav__link">
+      Philosophy
     </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../design/analysis_overview/" title="Analysis Overview" class="md-nav__link">
+      Analysis Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../design/collector/" title="Collectors" class="md-nav__link">
+      Collectors
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../design/engine/" title="Engine" class="md-nav__link">
+      Engine
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../design/analysis_module/" title="Analysis Modules" class="md-nav__link">
+      Analysis Modules
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
   </li>
 
     
@@ -564,6 +660,42 @@
   </li>
 
     
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-7" type="checkbox" id="nav-7">
+    
+    <label class="md-nav__link" for="nav-7">
+      Databases
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-7">
+        Databases
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../database/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
   </ul>
 </nav>
                   </div>
@@ -685,40 +817,37 @@ Use the ace_api.set_default_remote_host function to have the library
 connect to a different server. The OS's certificate store is used to
 validate the server. See ace_api.set_default_ssl_ca_path to change
 this behavior.</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; import ace_api
+<pre class="codehilite"><code>&gt;&gt;&gt; import ace_api
 
-&gt;&gt;&gt; server = &#39;ace.integraldefense.com&#39;
+&gt;&gt;&gt; server = 'ace.integraldefense.com'
 
 &gt;&gt;&gt; ace_api.set_default_remote_host(server)
 
 &gt;&gt;&gt; ace_api.ping()
-{&#39;result&#39;: &#39;pong&#39;}
-</code></pre></div>
+{'result': 'pong'}</code></pre>
 
 
 <p>You can over-ride this default in the ace_api.Analysis class with the
 ace_api.Analysis.set_remote_host method and you can also manually
 specify a remote host with any submit.</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; analysis = ace_api.Analysis(&#39;this is the analysis description&#39;)
+<pre class="codehilite"><code>&gt;&gt;&gt; analysis = ace_api.Analysis('this is the analysis description')
 
 &gt;&gt;&gt; analysis.remote_host
-&#39;ace.integraldefense.com&#39;
+'ace.integraldefense.com'
 
-&gt;&gt;&gt; analysis.set_remote_host(&#39;something.else.com&#39;).remote_host
-&#39;something.else.com&#39;
+&gt;&gt;&gt; analysis.set_remote_host('something.else.com').remote_host
+'something.else.com'
 
 &gt;&gt;&gt; ace_api.default_remote_host
-&#39;ace.integraldefense.com&#39;
-</code></pre></div>
+'ace.integraldefense.com'</code></pre>
 
 
 <p>If your ACE instance is listening on a port other than 443, specify it
 like so:</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; ace_api.set_default_remote_host(&#39;ace.integraldefense.com:24443&#39;)
+<pre class="codehilite"><code>&gt;&gt;&gt; ace_api.set_default_remote_host('ace.integraldefense.com:24443')
 
 &gt;&gt;&gt; ace_api.default_remote_host
-&#39;ace.integraldefense.com:24443&#39;
-</code></pre></div>
+'ace.integraldefense.com:24443'</code></pre>
 
 
 <h2 id="submitting-data-to-ace">Submitting data to ACE<a class="headerlink" href="#submitting-data-to-ace" title="Permanent link">&para;</a></h2>
@@ -733,30 +862,29 @@ analysis object and then we pass the path to the file to the
 ace_api.Analysis.add_file method. We will also include some tags and
 check the status (ace_api.Analysis.status) of the analysis as ACE works
 on the submission.</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; path_to_file = &#39;Business.doc&#39;
+<pre class="codehilite"><code>&gt;&gt;&gt; path_to_file = 'Business.doc'
 
 &gt;&gt;&gt; analysis.add_file(path_to_file)
 &lt;ace_api.Analysis object at 0x7f23d57e74e0&gt;
 
-&gt;&gt;&gt; analysis.add_tag(&#39;Business.doc&#39;).add_tag(&#39;suspicious doc&#39;)
+&gt;&gt;&gt; analysis.add_tag('Business.doc').add_tag('suspicious doc')
 &lt;ace_api.Analysis object at 0x7f23d57e74e0&gt;
 
 &gt;&gt;&gt; analysis.submit()
 &lt;ace_api.Analysis object at 0x7f23d57e74e0&gt;
 
 &gt;&gt;&gt; analysis.status
-&#39;NEW&#39;
+'NEW'
 
 &gt;&gt;&gt; analysis.status
-&#39;ANALYZING&#39;
+'ANALYZING'
 
 &gt;&gt;&gt; analysis.status
-&#39;COMPLETE (Alerted with 8 detections)&#39;
+'COMPLETE (Alerted with 8 detections)'
 
-&gt;&gt;&gt; result_url = &#39;https://{}/ace/analysis?direct={}&#39;.format(analysis.remote_host, analysis.uuid)
+&gt;&gt;&gt; result_url = 'https://{}/ace/analysis?direct={}'.format(analysis.remote_host, analysis.uuid)
 
-&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))
-</code></pre></div>
+&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))</code></pre>
 
 
 <p>The results of this submission can be viewed here:
@@ -776,29 +904,28 @@ tell ACE you want to download the conent from the URL for further
 analysis.</p>
 <p>Submititing a request for a suspicious URL to be analyzed, note the use
 of the crawl directive and how to get a list of the valid directives.</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; suspicious_url = &#39;http://davidcizek.cz/Invoice/ifKgg-jrzA_PvC-a7&#39;
+<pre class="codehilite"><code>&gt;&gt;&gt; suspicious_url = 'http://davidcizek.cz/Invoice/ifKgg-jrzA_PvC-a7'
 
-&gt;&gt;&gt; analysis = ace_api.Analysis(&#39;Suspicious URL&#39;)
+&gt;&gt;&gt; analysis = ace_api.Analysis('Suspicious URL')
 
-&gt;&gt;&gt; analysis.add_tag(&#39;suspicious_url&#39;)
+&gt;&gt;&gt; analysis.add_tag('suspicious_url')
 &lt;ace_api.Analysis object at 0x7f23d57e7588&gt;
 
-&gt;&gt;&gt; for d in ace_api.get_valid_directives()[&#39;result&#39;]:
-...     if d[&#39;name&#39;] == &#39;crawl&#39;:
-...         print(d[&#39;description&#39;])
+&gt;&gt;&gt; for d in ace_api.get_valid_directives()['result']:
+...     if d['name'] == 'crawl':
+...         print(d['description'])
 ... 
 crawl the URL
 
-&gt;&gt;&gt; analysis.add_url(suspicious_url, directives=[&#39;crawl&#39;]).submit()
+&gt;&gt;&gt; analysis.add_url(suspicious_url, directives=['crawl']).submit()
 &lt;ace_api.Analysis object at 0x7f23d57e7588&gt;
 
 &gt;&gt;&gt; analysis.status
-&#39;COMPLETE (Alerted with 9 detections)&#39;
+'COMPLETE (Alerted with 9 detections)'
 
-&gt;&gt;&gt; result_url = &#39;https://{}/ace/analysis?direct={}&#39;.format(analysis.remote_host, analysis.uuid)
+&gt;&gt;&gt; result_url = 'https://{}/ace/analysis?direct={}'.format(analysis.remote_host, analysis.uuid)
 
-&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))
-</code></pre></div>
+&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))</code></pre>
 
 
 <p>The results of this submission can be viewed here:
@@ -810,27 +937,26 @@ cloudphish that cloudphish has never seen before and a 'NEW' status is
 returned. After cloudphish has finished analyzing the URL, the status
 changes to 'ANALYZED' and the analysis_result tells us at least one
 detection was found (as we alerted).</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; another_url = &#39;http://medicci.ru/myATT/tu8794_QcbkoEsv_Xw20pYh7ij&#39;
+<pre class="codehilite"><code>&gt;&gt;&gt; another_url = 'http://medicci.ru/myATT/tu8794_QcbkoEsv_Xw20pYh7ij'
 
 &gt;&gt;&gt; cp_result = ace_api.cloudphish_submit(another_url)
 
-&gt;&gt;&gt; cp_result[&#39;status&#39;]
-&#39;NEW&#39;
+&gt;&gt;&gt; cp_result['status']
+'NEW'
 
 &gt;&gt;&gt;  # Query again, a moment later:
 ...
 &gt;&gt;&gt; cp_result = ace_api.cloudphish_submit(another_url)
 
-&gt;&gt;&gt; cp_result[&#39;status&#39;]
-&#39;ANALYZED&#39;
+&gt;&gt;&gt; cp_result['status']
+'ANALYZED'
 
-&gt;&gt;&gt; cp_result[&#39;analysis_result&#39;]
-&#39;ALERT&#39;
+&gt;&gt;&gt; cp_result['analysis_result']
+'ALERT'
 
-&gt;&gt;&gt; result_url = &#39;https://{}/ace/analysis?direct={}&#39;.format(ace_api.default_remote_host, cp_result[&#39;uuid&#39;])
+&gt;&gt;&gt; result_url = 'https://{}/ace/analysis?direct={}'.format(ace_api.default_remote_host, cp_result['uuid'])
 
-&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))
-</code></pre></div>
+&gt;&gt;&gt; print(&quot;\nThe results of this submission can be viewed here: {}&quot;.format(result_url))</code></pre>
 
 
 <p>The results of this submission can be viewed here:
@@ -840,38 +966,35 @@ detection was found (as we alerted).</p>
 initially submitted analysis. You can force alert creation by changing
 the default analysis mode from <em>analysis</em> to <em>correlation</em>. This is
 accomplished like so:</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; analysis = ace_api.Analysis(&#39;This is an analysis with no detections&#39;, analysis_mode=&#39;correlation&#39;)
+<pre class="codehilite"><code>&gt;&gt;&gt; analysis = ace_api.Analysis('This is an analysis with no detections', analysis_mode='correlation')
 
 &gt;&gt;&gt; analysis.submit()
 &lt;ace_api.Analysis object at 0x7fbe81af66a0&gt;
 
 &gt;&gt;&gt; analysis.status
-&#39;COMPLETE (Alerted with 0 detections)&#39;
-</code></pre></div>
+'COMPLETE (Alerted with 0 detections)'</code></pre>
 
 
 <h2 id="downloading-cloudphish-results">Downloading Cloudphish Results<a class="headerlink" href="#downloading-cloudphish-results" title="Permanent link">&para;</a></h2>
 <p>Cloudphish keeps a cache of the URL content it downloads. In this
 example we will download the results of the URL submitted in the
 previous example, which in this case is a malicious word document.</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; ace_api.cloudphish_download(another_url, output_path=&#39;cp_result.raw&#39;)
+<pre class="codehilite"><code>&gt;&gt;&gt; ace_api.cloudphish_download(another_url, output_path='cp_result.raw')
 True
-&gt;&gt;&gt; os.path.exists(&#39;cp_result.raw&#39;)
-True
-</code></pre></div>
+&gt;&gt;&gt; os.path.exists('cp_result.raw')
+True</code></pre>
 
 
 <h2 id="downloading-an-alert">Downloading an Alert<a class="headerlink" href="#downloading-an-alert" title="Permanent link">&para;</a></h2>
 <p>You can use the ace_api.download function to download an entire Alert.
 Below, we download an entire Alert and have it written to a directory
 named by the Alert's UUID.:</p>
-<div class="codehilite"><pre><span></span><code>&gt;&gt;&gt; uuid = cp_result[&#39;uuid&#39;]
+<pre class="codehilite"><code>&gt;&gt;&gt; uuid = cp_result['uuid']
 
 &gt;&gt;&gt; &gt;&gt;&gt; uuid
-&#39;732ec396-ce20-463f-82b0-6b043b07f941&#39;
+'732ec396-ce20-463f-82b0-6b043b07f941'
 
-&gt;&gt;&gt; ace_api.download(uuid, target_dir=uuid)
-</code></pre></div>
+&gt;&gt;&gt; ace_api.download(uuid, target_dir=uuid)</code></pre>
 
 
 <p>Now, there is a new directory named
@@ -889,29 +1012,27 @@ install it wil pip: <code>pip3 install ace_api</code>.</p>
 <p>Submits a new alert to ACE. These go directly into the correlation
 engine for analysis and show up to analysts as alerts.</p>
 <p>Parameters: alert - JSON dict with the following schema :</p>
-<div class="codehilite"><pre><span></span><code>{
-    &#39;tool&#39;: tool_name,
-    &#39;tool_instance&#39;: tool_instance_name,
-    &#39;type&#39;: alert_type,
-    &#39;description&#39;: alert description,
-    &#39;event_time&#39;: time of the alert/event (in %Y-%m-%dT%H:%M:%S.%f%z format),
-    &#39;details&#39;: free-form JSON dict of anything you want to include,
-    &#39;observables&#39;: (see below),
-    &#39;tags&#39;: a list of tags to add to the alert,
-}
-</code></pre></div>
+<pre class="codehilite"><code>{
+    'tool': tool_name,
+    'tool_instance': tool_instance_name,
+    'type': alert_type,
+    'description': alert description,
+    'event_time': time of the alert/event (in %Y-%m-%dT%H:%M:%S.%f%z format),
+    'details': free-form JSON dict of anything you want to include,
+    'observables': (see below),
+    'tags': a list of tags to add to the alert,
+}</code></pre>
 
 
 <p>The observables field is a list of zero or more dicts with the following
 format :</p>
-<div class="codehilite"><pre><span></span><code>{
-    &#39;type&#39;: The type of the observable,
-    &#39;value&#39;: The value of the observable,
-    &#39;time&#39;: The optional time of the observable (can be null),
-    &#39;tags&#39;: Optional list of tags to add to the observable,
-    &#39;directives&#39;: Optional list of directives to add to the observable,
-}
-</code></pre></div>
+<pre class="codehilite"><code>{
+    'type': The type of the observable,
+    'value': The value of the observable,
+    'time': The optional time of the observable (can be null),
+    'tags': Optional list of tags to add to the observable,
+    'directives': Optional list of directives to add to the observable,
+}</code></pre>
 
 
 <p>To attach files to the alert use the field named <strong>file</strong>.</p>
@@ -987,7 +1108,7 @@ format :</p>
     
       <script src="../../assets/javascripts/application.df00da5d.js"></script>
       
-      <script>app.initialize({version:"1.1",url:{base:"../.."}})</script>
+      <script>app.initialize({version:"1.1.2",url:{base:"../.."}})</script>
       
     
   </body>

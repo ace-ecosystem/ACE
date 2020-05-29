@@ -36,7 +36,7 @@
         <meta name="lang:search.tokenizer" content="[\s\-]+">
       
       <link rel="shortcut icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.1, mkdocs-material-4.6.3">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-4.6.3">
     
     
       
@@ -176,6 +176,17 @@
 
       
         
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../design/" class="md-tabs__link">
+          Design
+        </a>
+      
+    </li>
+  
+
       
         
   
@@ -229,6 +240,19 @@
   
 
       
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../database/" class="md-tabs__link">
+          Databases
+        </a>
+      
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -269,10 +293,82 @@
       
 
 
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-2" type="checkbox" id="nav-2">
+    
+    <label class="md-nav__link" for="nav-2">
+      Design
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-2">
+        Design
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
   <li class="md-nav__item">
-    <a href="../overview/" title="Overview" class="md-nav__link">
-      Overview
+    <a href="../design/" title="Philosophy" class="md-nav__link">
+      Philosophy
     </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/analysis_overview/" title="Analysis Overview" class="md-nav__link">
+      Analysis Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/collector/" title="Collectors" class="md-nav__link">
+      Collectors
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/engine/" title="Engine" class="md-nav__link">
+      Engine
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/analysis_module/" title="Analysis Modules" class="md-nav__link">
+      Analysis Modules
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
   </li>
 
     
@@ -615,6 +711,42 @@
   <li class="md-nav__item">
     <a href="../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-7" type="checkbox" id="nav-7">
+    
+    <label class="md-nav__link" for="nav-7">
+      Databases
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-7">
+        Databases
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../database/" title="Overview" class="md-nav__link">
+      Overview
     </a>
   </li>
 
@@ -1038,7 +1170,7 @@ Alert filtering.</p>
 observables" src="/assets/images/expanded-alert-observables-emotet-noEventTag.png" /></p>
 <p><strong>Expand/Collapse Observables</strong>
 <pre></p>
-<div class="codehilite"><pre><span></span><code>- email_address
+<pre class="codehilite"><code>- email_address
   - fakeuser@fakecompany.com (21)
   - tfry@kennyross.com (2)
 - email_conversation
@@ -1131,8 +1263,7 @@ observables" src="/assets/images/expanded-alert-observables-emotet-noEventTag.pn
   - CRITS_StringVBS (6592)
   - CRITS_StringWindowsShell (1770)
   - macro_code_snippet (1013)
-  - macro_overused_legit_functions (82)
-</code></pre></div>
+  - macro_overused_legit_functions (82)</code></pre>
 
 
 <p></pre>
@@ -1153,8 +1284,7 @@ currently defined alert filter. So, with the default filter applied, if
 you clicked on an MD5 observable with value
 10EFE4369EA344308416FB59051D5947 then the page would refresh and you'd
 see that the new filter became:</p>
-<div class="codehilite"><pre><span></span><code>filter: open alerts AND not owned by others AND with observable type md5 value b&#39;10EFE4369EA344308416FB59051D5947&#39;`
-</code></pre></div>
+<pre class="codehilite"><code>filter: open alerts AND not owned by others AND with observable type md5 value b'10EFE4369EA344308416FB59051D5947'`</code></pre>
 
 
 <h3 id="the-alert-page">The Alert Page<a class="headerlink" href="#the-alert-page" title="Permanent link">&para;</a></h3>
@@ -1353,7 +1483,7 @@ it easy to do that very thing: <a href="https://github.com/ryhanson/phishery">ht
     
       <script src="../assets/javascripts/application.df00da5d.js"></script>
       
-      <script>app.initialize({version:"1.1",url:{base:".."}})</script>
+      <script>app.initialize({version:"1.1.2",url:{base:".."}})</script>
       
     
   </body>

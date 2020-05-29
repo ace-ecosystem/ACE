@@ -36,7 +36,7 @@
         <meta name="lang:search.tokenizer" content="[\s\-]+">
       
       <link rel="shortcut icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.1, mkdocs-material-4.6.3">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-4.6.3">
     
     
       
@@ -176,6 +176,17 @@
 
       
         
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../design/" class="md-tabs__link">
+          Design
+        </a>
+      
+    </li>
+  
+
       
         
   
@@ -229,6 +240,19 @@
   
 
       
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../database/" class="md-tabs__link">
+          Databases
+        </a>
+      
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -269,10 +293,82 @@
       
 
 
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-2" type="checkbox" id="nav-2">
+    
+    <label class="md-nav__link" for="nav-2">
+      Design
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-2">
+        Design
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
   <li class="md-nav__item">
-    <a href="../overview/" title="Overview" class="md-nav__link">
-      Overview
+    <a href="../design/" title="Philosophy" class="md-nav__link">
+      Philosophy
     </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/analysis_overview/" title="Analysis Overview" class="md-nav__link">
+      Analysis Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/collector/" title="Collectors" class="md-nav__link">
+      Collectors
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/engine/" title="Engine" class="md-nav__link">
+      Engine
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/analysis_module/" title="Analysis Modules" class="md-nav__link">
+      Analysis Modules
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
   </li>
 
     
@@ -639,6 +735,42 @@
   </li>
 
     
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-7" type="checkbox" id="nav-7">
+    
+    <label class="md-nav__link" for="nav-7">
+      Databases
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-7">
+        Databases
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../database/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
   </ul>
 </nav>
                   </div>
@@ -849,20 +981,18 @@ At a minimum, the server should have 4 GB RAM and 20 GB storage drive.
 When installing the server, all of the default configurations are fine.</p>
 <h3 id="getting-everything-ready">Getting Everything Ready<a class="headerlink" href="#getting-everything-ready" title="Permanent link">&para;</a></h3>
 <h4 id="the-ace-user">The ace User<a class="headerlink" href="#the-ace-user" title="Permanent link">&para;</a></h4>
-<div class="codehilite"><pre><span></span><code>$ sudo adduser ace
+<pre class="codehilite"><code>$ sudo adduser ace
 $ sudo adduser ace sudo
 $ sudo su - ace
-$ sudo chown ace:ace /opt
-</code></pre></div>
+$ sudo chown ace:ace /opt</code></pre>
 
 
 <h4 id="cloning-ace">Cloning ACE<a class="headerlink" href="#cloning-ace" title="Permanent link">&para;</a></h4>
 <p>As the ace user you previously created, cd into /opt and git clone the
 ace-ecosystem ACE master branch:
 <a href="https://github.com/ace-ecosystem/ACE.git">https://github.com/ace-ecosystem/ACE.git</a>:</p>
-<div class="codehilite"><pre><span></span><code>$ cd /opt
-$ git clone https://github.com/ace-ecosystem/ACE.git ace
-</code></pre></div>
+<pre class="codehilite"><code>$ cd /opt
+$ git clone https://github.com/ace-ecosystem/ACE.git ace</code></pre>
 
 
 <h3 id="run-the-installer">Run the Installer<a class="headerlink" href="#run-the-installer" title="Permanent link">&para;</a></h3>
@@ -870,17 +1000,15 @@ $ git clone https://github.com/ace-ecosystem/ACE.git ace
 installer. Run the installer as the ace user. You will be prompted for
 the password when certain things are run using sudo. This will take a
 little while to complete.</p>
-<div class="codehilite"><pre><span></span><code>$ cd /opt/ace
-$ ./installer/source_install
-</code></pre></div>
+<pre class="codehilite"><code>$ cd /opt/ace
+$ ./installer/source_install</code></pre>
 
 
 <h3 id="set-up-environment">Set Up Environment<a class="headerlink" href="#set-up-environment" title="Permanent link">&para;</a></h3>
 <p>Next, you will need to load the default environment variables ACE
 depends on. This load needs to be sourced from bash with the following
 command:</p>
-<div class="codehilite"><pre><span></span><code>$ source load_environment
-</code></pre></div>
+<pre class="codehilite"><code>$ source load_environment</code></pre>
 
 
 <p>This should already be added to the ace account bashrc, so the next
@@ -888,15 +1016,13 @@ login should automatically load it.</p>
 <h3 id="create-users">Create Users<a class="headerlink" href="#create-users" title="Permanent link">&para;</a></h3>
 <p>Users are managed from the ACE command line with the following ace
 commands:</p>
-<div class="codehilite"><pre><span></span><code>add-user            Add a new user to the system.
+<pre class="codehilite"><code>add-user            Add a new user to the system.
 modify-user         Modifies an existing user on the system.
-delete-user         Deletes an existing user from the system.
-</code></pre></div>
+delete-user         Deletes an existing user from the system.</code></pre>
 
 
 <p>Create your first user so that you can log into the ACE GUI:</p>
-<div class="codehilite"><pre><span></span><code>./ace add-user &lt;username&gt; &lt;email_address&gt;
-</code></pre></div>
+<pre class="codehilite"><code>./ace add-user &lt;username&gt; &lt;email_address&gt;</code></pre>
 
 
 <h3 id="log-into-the-gui">Log into the GUI<a class="headerlink" href="#log-into-the-gui" title="Permanent link">&para;</a></h3>
@@ -908,8 +1034,7 @@ installing ACE. This section will detail a few, but it's still a work in
 process.</p>
 <h3 id="ssl-errors">SSL Errors<a class="headerlink" href="#ssl-errors" title="Permanent link">&para;</a></h3>
 <p>You may run into an SSL error that will include the following text:</p>
-<div class="codehilite"><pre><span></span><code>Caused by SSLError(SSLError(&quot;bad handshake: Error([(&#39;SSL routines&#39;, &#39;tls_process_server_certificate&#39;, &#39;certificate verify failed&#39;)],)&quot;,),))
-</code></pre></div>
+<pre class="codehilite"><code>Caused by SSLError(SSLError(&quot;bad handshake: Error([('SSL routines', 'tls_process_server_certificate', 'certificate verify failed')],)&quot;,),))</code></pre>
 
 
 <p>This error is less common when running on a local VM; However, it is
@@ -925,27 +1050,24 @@ ACE machine with the default installation:</p>
     /opt/ace/etc/saq_apache.conf</li>
 </ul>
 <p>Then, restart the apache service (authentication required):</p>
-<div class="codehilite"><pre><span></span><code>$ service apache2 restart
-</code></pre></div>
+<pre class="codehilite"><code>$ service apache2 restart</code></pre>
 
 
 <p>Example 1:</p>
-<div class="codehilite"><pre><span></span><code># /opt/ace/etc/saq_apache.conf
+<pre class="codehilite"><code># /opt/ace/etc/saq_apache.conf
 
 &lt;VirtualHost *:443&gt;
     ServerName ip-10-10-10-10.ec2.internal
-    # Rest of the config...
-</code></pre></div>
+    # Rest of the config...</code></pre>
 
 
 <p>Example 2:</p>
-<div class="codehilite"><pre><span></span><code># /opt/ace/etc/saq_apache.conf
+<pre class="codehilite"><code># /opt/ace/etc/saq_apache.conf
 
 &lt;VirtualHost *:443&gt;
     ServerName ace.local
     ServerAlias ip-10-10-10-10.ec2.internal
-    # Rest of the config...
-</code></pre></div>
+    # Rest of the config...</code></pre>
 
 
 <h3 id="no-web-gui">No Web GUI?<a class="headerlink" href="#no-web-gui" title="Permanent link">&para;</a></h3>
@@ -956,8 +1078,7 @@ points to <code>/opt/ace/etc/saq_apache.conf</code>.</p>
 <h3 id="alerts-staying-in-new-status">Alerts staying in 'NEW' status?<a class="headerlink" href="#alerts-staying-in-new-status" title="Permanent link">&para;</a></h3>
 <p>Make sure the ACE engine is running. You can do this by running the
 following:</p>
-<div class="codehilite"><pre><span></span><code>cd /opt/ace &amp;&amp; ace service start engine --daemon
-</code></pre></div>
+<pre class="codehilite"><code>cd /opt/ace &amp;&amp; ace service start engine --daemon</code></pre>
 
 
 <h3 id="start-ace">Start ACE<a class="headerlink" href="#start-ace" title="Permanent link">&para;</a></h3>
@@ -1012,7 +1133,7 @@ for more information.</p>
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../overview/" title="Overview" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../design/analysis_module/" title="Analysis Modules" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -1021,7 +1142,7 @@ for more information.</p>
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                Overview
+                Analysis Modules
               </span>
             </div>
           </a>
@@ -1063,7 +1184,7 @@ for more information.</p>
     
       <script src="../assets/javascripts/application.df00da5d.js"></script>
       
-      <script>app.initialize({version:"1.1",url:{base:".."}})</script>
+      <script>app.initialize({version:"1.1.2",url:{base:".."}})</script>
       
     
   </body>

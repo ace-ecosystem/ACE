@@ -36,7 +36,7 @@
         <meta name="lang:search.tokenizer" content="[\s\-]+">
       
       <link rel="shortcut icon" href="../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.1, mkdocs-material-4.6.3">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-4.6.3">
     
     
       
@@ -176,6 +176,17 @@
 
       
         
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../design/" class="md-tabs__link">
+          Design
+        </a>
+      
+    </li>
+  
+
       
         
   
@@ -229,6 +240,19 @@
   
 
       
+        
+  
+  
+    <li class="md-tabs__item">
+      
+        <a href="../database/" class="md-tabs__link">
+          Databases
+        </a>
+      
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -269,10 +293,82 @@
       
 
 
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-2" type="checkbox" id="nav-2">
+    
+    <label class="md-nav__link" for="nav-2">
+      Design
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-2">
+        Design
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
   <li class="md-nav__item">
-    <a href="../overview/" title="Overview" class="md-nav__link">
-      Overview
+    <a href="../design/" title="Philosophy" class="md-nav__link">
+      Philosophy
     </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/analysis_overview/" title="Analysis Overview" class="md-nav__link">
+      Analysis Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/collector/" title="Collectors" class="md-nav__link">
+      Collectors
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/engine/" title="Engine" class="md-nav__link">
+      Engine
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/analysis_module/" title="Analysis Modules" class="md-nav__link">
+      Analysis Modules
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
   </li>
 
     
@@ -509,6 +605,42 @@
   </li>
 
     
+      
+      
+      
+
+
+  <li class="md-nav__item md-nav__item--nested">
+    
+      <input class="md-toggle md-nav__toggle" data-md-toggle="nav-7" type="checkbox" id="nav-7">
+    
+    <label class="md-nav__link" for="nav-7">
+      Databases
+    </label>
+    <nav class="md-nav" data-md-component="collapsible" data-md-level="1">
+      <label class="md-nav__title" for="nav-7">
+        Databases
+      </label>
+      <ul class="md-nav__list" data-md-scrollfix>
+        
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../database/" title="Overview" class="md-nav__link">
+      Overview
+    </a>
+  </li>
+
+        
+      </ul>
+    </nav>
+  </li>
+
+    
   </ul>
 </nav>
                   </div>
@@ -610,17 +742,16 @@ from saq.util import RegexObservableParserGroup</p>
 <h1 id="you-can-also-add-directives-to-control-analysisactions-taken-on-your">You can also add directives to control analysis/actions taken on your<a class="headerlink" href="#you-can-also-add-directives-to-control-analysisactions-taken-on-your" title="Permanent link">&para;</a></h1>
 <h1 id="observable">observable.<a class="headerlink" href="#observable" title="Permanent link">&para;</a></h1>
 <p>parser_group.add(r'url: ([^\n]+)', F_URL, directives=[DIRECTIVE_CRAWL])</p>
-<div class="codehilite"><pre><span></span><code>Once you&#39;ve added your parsers, you can parse the data:
+<pre class="codehilite"><code>Once you've added your parsers, you can parse the data:
 
 ``` {.sourceCode .python}
-parser_group.parse_content(sample_log)
-</code></pre></div>
+parser_group.parse_content(sample_log)</code></pre>
 
 
 <p>Then you can access the observables:</p>
 <p>``` {.sourceCode .python}
 observables = parser_group.observables</p>
-<div class="codehilite"><pre><span></span><code>The extractions from this example would create the following list of
+<pre class="codehilite"><code>The extractions from this example would create the following list of
 dictionairies which are in an appropriate format to be submitted to the
 collector:
 
@@ -668,8 +799,7 @@ collector:
             &quot;crawl&quot;
         ]
     }
-]
-</code></pre></div>
+]</code></pre>
 
 
 <p>What if you've created your own observable type? Or maybe you want to
@@ -689,7 +819,7 @@ from saq.util import RegexObservableParserGroup, RegexObservableParser</p>
 <p>parser_group = RegexObservableParserGroup()</p>
 <p>parser_group.add(r'ip: ([0-9.]+)', override_class=MyParser)</p>
 <p>parser_group.parse_content(my_log)</p>
-<div class="codehilite"><pre><span></span><code>When you&#39;re ready to submit to the collector:
+<pre class="codehilite"><code>When you're ready to submit to the collector:
 
 ``` {.sourceCode .python}
 observables = parser_group.observables
@@ -700,16 +830,15 @@ from saq.constanants import ANALYSIS_MODE_CORRELATION
 submission = Submission(
     description=&quot;My custom alert&quot;,
     analysis_mode=ANALYSIS_MODE_CORRELATION,
-    tool = &#39;my custom tool&#39;,
-    tool_instance = &#39;my custom tool instance&#39;,
-    type = &#39;custom_type&#39;,
-    event_time = &#39;datetime_from_alert&#39;,
+    tool = 'my custom tool',
+    tool_instance = 'my custom tool instance',
+    type = 'custom_type',
+    event_time = 'datetime_from_alert',
     details = [],
     observables = observables,
     tags=[],
     files=[],
-)
-</code></pre></div>
+)</code></pre>
                 
                   
                 
@@ -782,7 +911,7 @@ submission = Submission(
     
       <script src="../assets/javascripts/application.df00da5d.js"></script>
       
-      <script>app.initialize({version:"1.1",url:{base:".."}})</script>
+      <script>app.initialize({version:"1.1.2",url:{base:".."}})</script>
       
     
   </body>
