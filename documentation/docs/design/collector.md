@@ -8,7 +8,7 @@ A collector takes *something* and decides if it should send it to a remote ACE n
 
 The collector then turns that *something* into a request that ACE can understand and process. It does so by
 
-- extracting observations into [observables](observables.md).
+- extracting observations into [observables](observable.md).
 - formatting raw analysis data into JSON.
 
 The collector turns that *something* into a [submission](development/submission) which contains all of the data required for analysis.

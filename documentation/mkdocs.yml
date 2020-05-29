@@ -52,6 +52,7 @@ nav:
     - Design: 
         - Philosophy: design/index.md
         - Analysis Overview: design/analysis_overview.md
+        - Configuration: design/configuration.md
         - Collectors: design/collector.md
         - Engine: design/engine.md
         - Analysis Modules: design/analysis_module.md

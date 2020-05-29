@@ -1,10 +1,10 @@
 # ACE Databases
 
-ACE uses multiple MySQL databases to operate. Each [ACE cluster](../overview/engine_cluster.md) uses a different set of databases.
+ACE uses multiple MySQL databases to operate. Each [ACE cluster](../design/engine_cluster.md) uses a different set of databases.
 
 ## Configuration
 
-Each database connection is defined in the [configuration](configuration.md) file in a section formatted as `[database_NAME]` where `NAME` is the unique name of the database.
+Each database connection is defined in the [configuration](../design/configuration.md) file in a section formatted as `[database_NAME]` where `NAME` is the unique name of the database.
 
 The following database names are supported.
 
@@ -13,7 +13,7 @@ The following database names are supported.
 - database_brocess
 - database_email_archive
 
-Additional [integrations](integrations.md) may add more.
+Additional [integrations](link) may add more.
 
 All database configurations are formatted as follows.
 
@@ -39,7 +39,7 @@ password =
 
 **NOTE** that you cannot use encryption to store the database credentials because the encryption key is stored in the database.
 
-There are optional settings for [ssl](ssl.md) connections to the database. You should use SSL if the database is on a remote system.
+There are optional settings for [ssl](../design/ssl.md) connections to the database. You should use SSL if the database is on a remote system.
 
 The `ssl_ca` should point to the certificate authority chain file. The `ssl_key` and `ssl_cert` should point to the key and certificate files.
 
@@ -71,7 +71,7 @@ The `email_archive` database contains a recorded history of all emails received 
 
 The `collection` database points ACE at the database to use for executing [collectors](../design/collector.md). 
 
-If the entire ACE [cluster](../design/cluster.md) runs on the same system, then these settings can be the same as the settings for `[database_ace]`.
+If the entire ACE [cluster](../design/engine_cluster.md) runs on the same system, then these settings can be the same as the settings for `[database_ace]`.
 
 ## MySQL Considerations
 
