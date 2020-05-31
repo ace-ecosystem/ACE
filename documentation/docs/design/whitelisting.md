@@ -57,4 +57,4 @@ See [here](../admin/crawlphish_filter.md) for details about this whitelisting me
 
 ## Submission Filtering
 
-ACE receives work in the form of [submissions](submissions.md). A [filtering system](../admin/submission_filtering.md) is available that is specific to the format of that data.
+ACE receives work in the form of [submissions](submissions.md). A [filtering system](../admin/submission_filter.md) is available that is specific to the format of that data.

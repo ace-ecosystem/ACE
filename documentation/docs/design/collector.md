@@ -75,7 +75,7 @@ The value `ace` is the `ace` part of `[database_ace]` and tells ACE to use those
 
 ## Target Nodes
 
-By default a collector will submit to whatever node is availabe in a given cluster. The `target_nodes` setting is a comma-separated list of engine node names that can narrow down which nodes this collector submits to.
+By default a collector will submit to whatever node is available in a given cluster. The `target_nodes` setting is a comma-separated list of engine node names that can narrow down which nodes this collector submits to.
 
 The special value of `LOCAL` represents the local node regardless of the name.
 

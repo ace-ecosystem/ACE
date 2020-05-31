@@ -1,6 +1,6 @@
 # ACE Command Tooling
 
-ACE uses a single command to manage the entire system: the `ace` command, which sits in the [installation directory](saq_home.md) of ACE.
+The `ace` command sits in the [installation directory](saq_home.md) of ACE and it used to start, stop, configuration and manage the system.
 
 The command uses the sub-command pattern. The format of most commands is
 
