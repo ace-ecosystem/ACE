@@ -16,11 +16,11 @@ ACE is the implementation of a proven detection strategy, a framework for automa
 
 Base functionality provides the following:
 
+- [Recursive Data Analysis & Correlation](design/recursive_analysis.md)
 - [Email Scanning](design/email_scanning.md)
-- [Recursive File Scanning](design/file_analysis.md)
+- Microsoft Office Document Analysis
 - [URL Crawling and Content Caching](design/crawlphish.md)
 - [Intuitive Alert Presentation](design/gui.md)
-- [Recursive Data Analysis & Correlation](design/recursive_analysis.md)
 - Central Analyst Interface
 - Event/Incident management
 - Intel Ingestion

@@ -6,7 +6,7 @@ ACE is comprised of [services](../design/service.md), [web applications](link) a
 
 Some [services](../design/service.md) have [dependencies](../design/service.md#configuration-options) on other services. These dependencies are listed in the configuration of the service.
 
-The services that are part of the base ACE installation are documented here. Additional services may be available if additional [integrations](../design/integrations.md) are installed and enabled.
+The services that are part of the base ACE installation are documented here. Additional services may be available if additional [integrations](../design/integration.md) are installed and enabled.
 
 ## Core Services
 

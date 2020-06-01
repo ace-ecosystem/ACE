@@ -1,6 +1,6 @@
 # Email Scanning
 
-ACE has support for generating [alerts](alert.md) by scanning emails. ACE has three ways of receiving emails to scan.
+ACE has support for generating [alerts](alerts.md) by scanning emails. ACE has three ways of receiving emails to scan.
 
 - SMTP collection
 - Office365 journaling
