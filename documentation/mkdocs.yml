@@ -46,47 +46,8 @@ markdown_extensions:
       permalink: true
   - fenced_code
 
-# Page tree
-nav:
-    - Home: index.md
-    - Design: 
-        - design/alert_data.md
-        - design/alert_storage.md
-        - design/alerts.md
-        - design/analysis.md
-        - design/analysis_modes.md
-        - design/analysis_module.md
-        - design/analysis_overview.md
-        - design/collector.md
-        - design/command_tooling.md
-        - design/configuration.md
-        - design/data_dir.md
-        - design/detection_points.md
-        - design/directives.md
-        - design/encryption.md
-        - design/engine.md
-        - design/engine_cluster.md
-        - design/index.md
-        - design/module_class_spec.md
-        - design/observable.md
-        - design/root_analysis.md
-        - design/saq_home.md
-        - design/service.md
-        - design/ssl.md
-        - design/submissions.md
-        - design/tags.md
-        - design/whitelisting.md
-    - Installation: 
-        - Overview: installation/index.md
-    - Analyst Guide: 
-        - Overview: user/index.md
-        - Hunting: user/hunting.md
-    - Administrators Guide: 
-        - Overview: admin/index.md
-    - Development Guide: 
-        - Overview: development/index.md
-        - API: development/api.md
-        - History: development/history.md
-    - Databases:
-        - Overview: database/index.md
+# Plugins
+plugins:
+  - search
+  - awesome-pages
 

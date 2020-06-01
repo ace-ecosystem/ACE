@@ -1,57 +1,27 @@
-ACE: Analysis Correlation Engine
-================================
+# Analysis Correlation Engine
 
-ACE is a detection system and automation framework. At ACE’s foundation
-are its engines for recursive analysis and its delivery of an intuitive
-presentation to the analyst. ACE's goal is to reduce the analyst's
-time-to-disposition to as close to zero as humanly possible.
+![image](assets/images/analyst_on_ace.png)
 
-While ACE is a powerful detection system, and does have built in
-detections, ACE does not ship with all of the yara signatures and intel
-detections that teams have built around it. However, ACE makes it easy
-to load your own yara signatures and atomic indicator detections.
+ACE is a detection system and automation framework. The [analysis engine](design/engine.md) analyzes data and presents the output to analysts in a manner that attempts to reduce the time to [disposition](design/disposition.md) to as close to zero as possible. ACE adheres to a defined [design philosophy](design/index.md) in an attempt to achieve this goal.
 
-Alerts are sent to ACE, and ACE handles the ordinary, manual, redundant,
-and repetitive tasks of collecting, combining, and relating data. ACE
-will then contextually and intuitively present all the right data to the
-analyst, allowing for a quick, high confidence determination to be made.
-
-Got some new analysis that can be automated? Awesome! Add your
-automation, and let ACE keep working for you.
+ACE was designed to handle the ordinary, manual, redundant,
+and repetitive tasks of collecting, combining, and relating data. A contextual and intuitive presentation of all the important data is used to allow for a quick high confidence determination.
 
 ![Recursive Analysis;
 Presentation](assets/images/recursive-analysis-and-contextual-presentation.png)
 
-For the most part, custom hunting tools send alerts to ACE using ACE’s
-client library (API wrapper). ACE then gets to work by taking whatever
-detectable conditions it’s given and spiraling out through its recursive
-analysis of observables, hitting as many detection points as possible
-across the attack surface.
+Tools (some included in ACE) send [analysis requests](design/submissions.md) to ACE which then takes whatever is given and [recursively analyzes](design/recursive_analysis.md) the data. These requests may already be [alerts](design/alerts.md) that require additional correlation, or they may be something that could correlate into becoming an [alert](design/alerts.md).
 
-Regardless of skill level, ACE greatly reduces the time it takes an
-analyst to make a high confidence determination, or as we call it,
-disposition. This reduction in time-to-disposition, coupled with the
-appropriate hunting and tuning mindset, means that security teams can
-greatly increase the attack surface they cover, all while utilizing the
-same amount of analyst time and practically eliminating alert fatigue.
-Optimization good, alert fatigue bad.
+ACE is the implementation of a proven detection strategy, a framework for automating analysis, a central platform to launch and manage incident response activates, an email scanner, and more.
 
-Major Features
---------------
+Base functionality provides the following:
 
-ACE is the implementation of a proven detection strategy, a framework
-for automating analysis, a central platform to launch and manage
-incident response activates, an email scanner, and much more.
-
--   Email Scanning
--   Recursive File Scanning
--   URL Crawling and Content Caching
--   Intuitive Alert Presentation
--   Recursive Data Analysis & Correlation
--   Central Analyst Interface
--   Event/Incident management
--   Intel Ingestion
--   Modular Design for extending automation
-
-![image](assets/images/analyst_on_ace.png)
-
+- [Email Scanning](design/email_scanning.md)
+- [Recursive File Scanning](design/file_analysis.md)
+- [URL Crawling and Content Caching](design/crawlphish.md)
+- [Intuitive Alert Presentation](design/gui.md)
+- [Recursive Data Analysis & Correlation](design/recursive_analysis.md)
+- Central Analyst Interface
+- Event/Incident management
+- Intel Ingestion
+- [Modular Design for extending automation](design/analysis_module.md)

@@ -4,6 +4,8 @@ An *analysis module* is what takes an [observable](observable.md) and generates 
 
 Analysis modules are what make up the core of ACE. They contain the custom analysis logic that does most of the work.
 
+The modules that are part of the base installation are documented [here](../modules/index.md).
+
 ## Configuration
 
 An analysis module is defined in the [configuration](configuration.md) settings by sections with the format `[analysis_module_NAME]` where `NAME` is a unique name for the module in the configuration.

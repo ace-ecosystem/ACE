@@ -10,7 +10,7 @@ The value of a tag is any UTF8 encoded string.
 
 ## Relationships
 
-A tag adds a relationhips between alerts. ACE keeps track of what tags [alerts](alerts.md) contain. So quick correlational queries can be performed from the database.
+A tag adds a relationships between alerts. ACE keeps track of what tags [alerts](alerts.md) contain. So quick correlational queries can be performed from the database.
 
 ## Tag Severity Levels
 
@@ -30,39 +30,12 @@ tag_name = value
 
 `value` is one of the following values.
 
-<table>
-<tr>
-<td><b>Value</b></td>
-<td><b>Effect<b></td>
-</tr>
-<tr>
-<td>hidden</td>
-<td>Hides the tags in the GUI.</td>
-</tr>
-<tr>
-<td>special</td>
-<td>Displayed as a black-on-white tag.</td>
-</tr>
-<tr>
-<td>fp</td>
-<td>green</td>
-</tr>
-<tr>
-<td>info</td>
-<td>gray</td>
-</tr>
-<tr>
-<td>warning</td>
-<td>yellow - adds a detection point</td>
-</tr>
-<tr>
-<td>alert</td>
-<td>red - adds a detection point</td>
-</tr>
-<tr>
-<td>critical</td>
-<td>dark red - adds a detection point</td>
-</tr>
-</table>
+- `hidden` - hides the tags in the [GUI](gui.md).
+- `special` - displayed as a black-on-white tag.
+- `fp` - green
+- `info` - gray
+- `warning` - yellow and adds a [detection point](detection_points.md)
+- `alert` - red and adds a [detection point](detection_points.md)
+- `critical` - dark red and adds a [detection point](detection_points.md)
 
 The visual display (color) of the tags is controlled by `[tag_css_class]` section which associates a tag severity level to a CSS class to use to display the tag.

@@ -8,7 +8,7 @@ Yara scanning is also single-threaded. THe yara scanner service runs yara on mul
 
 ## Yara Rules
 
-ACE [loads yara rules](../admin/yara_rules.md) when the yara scanner service starts up. It then monitors the source of the yara rules for changes and then recompiles the rules as needed.
+ACE [loads yara rules](../admin/yara_scanning_config.md) when the yara scanner service starts up. It then monitors the source of the yara rules for changes and then recompiles the rules as needed.
 
 ACE also uses a specific format of meta tagging to control which files a given rule should fire on.
 

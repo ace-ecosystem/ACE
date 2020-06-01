@@ -39,7 +39,7 @@ Note that each ACE [cluster](engine_cluster.md) shares a common encryption passw
 
 1. The user provides the USER PASSWORD in one of the following ways.
     - Using the -p option for the main [ace](command_tooling.md) command.
-    - Using the Encryption Cache Service.
+    - Using the [Encryption Cache Service](ecs.md).
     - Use the `SAQ_ENC` environment variable.
 
 2. ACE computes the USER AES KEY and VERIFICATION KEY using the supplied
