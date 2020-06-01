@@ -45,6 +45,21 @@ The `ssl_ca` should point to the certificate authority chain file. The `ssl_key`
 
 You must also configure MySQL for SSL before using these options.
 
+## User Accounts
+
+By default the installation gives the user `ace-user` read/write access to all of the ACE-related databases.
+
+An additional user called `ace-superuser` is also created that has the same privilege levels as the database root user. This has a different password than the `ace-user`.
+
+Both users are allowed access from any host.
+
+## MySQL Defaults Files
+
+MySQL [defaults files](https://dev.mysql.com/doc/refman/5.7/en/option-file-options.html#option_general_defaults-file) are created for both users. You can use these files with the `mysql` command to access the database.
+
+- `etc/mysql_defaults`: defaults for `ace-user`
+- `etc/mysql_defaults.root`: defaults for `ace-superuser`
+
 ### database_ace
 
 The `ace` database contains most of the ace-related data objects. The following lists some of the things stored in the `ace` database.
