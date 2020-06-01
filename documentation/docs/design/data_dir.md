@@ -6,9 +6,16 @@ By default this is set to `data`.
 
 ## Directory Contents
 
-- [alert storage](alert_storage.md)
-- error reports
-- archive data
-- logs
-- statistics
-- variable persistent data
+- `archive`
+- `error_reports`
+- `es_logs`
+- `logs`
+- `review`
+- `scan_failures`
+- `splunk_logs`
+- `stats`
+- `var`
+- `vt_cache`
+
+This directory also contains [alert storage directories](alert_storage_md). These directories will be named after the name of the [node](engine.md).
+
