@@ -362,8 +362,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../admin/exchange_remediation/" title="Exchange Remediation" class="md-nav__link">
+      Exchange Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../admin/hunting/" title="Hunting" class="md-nav__link">
       Hunting
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../admin/integration/" title="Integrations" class="md-nav__link">
+      Integrations
     </a>
   </li>
 
@@ -386,8 +410,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../admin/office365_remediation/" title="Office365 Email Remediation" class="md-nav__link">
+      Office365 Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../admin/service/" title="Services" class="md-nav__link">
       Services
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../admin/smtp_collector/" title="SMTP Collector" class="md-nav__link">
+      SMTP Collector
     </a>
   </li>
 
@@ -479,6 +527,20 @@
     Configuration
   </a>
   
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-accounts" class="md-nav__link">
+    User Accounts
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mysql-defaults-files" class="md-nav__link">
+    MySQL Defaults Files
+  </a>
+  
     <nav class="md-nav">
       <ul class="md-nav__list">
         
@@ -530,6 +592,18 @@
   
 </nav>
     
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="ace_remediation/" title="Remediation Table" class="md-nav__link">
+      Remediation Table
+    </a>
   </li>
 
         
@@ -767,8 +841,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../design/email_collector/" title="Email Collector" class="md-nav__link">
+      Email Collector
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../design/email_logging/" title="Email Logging" class="md-nav__link">
       Email Logging
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
     </a>
   </li>
 
@@ -827,8 +925,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../design/file_system_layout/" title="File System Layout" class="md-nav__link">
+      File System Layout
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../design/hunting/" title="Hunting" class="md-nav__link">
       Hunting
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/integration/" title="Integrations" class="md-nav__link">
+      Integrations
     </a>
   </li>
 
@@ -937,6 +1059,18 @@
   <li class="md-nav__item">
     <a href="../design/service/" title="Service" class="md-nav__link">
       Service
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/smtp_collector/" title="SMTP Collector" class="md-nav__link">
+      SMTP Collector
     </a>
   </li>
 
@@ -1151,7 +1285,7 @@
 
 
   <li class="md-nav__item">
-    <a href="../modules/email_analysis/" title="Email Analyzer" class="md-nav__link">
+    <a href="../modules/email_analyzer/" title="Email Analyzer" class="md-nav__link">
       Email Analyzer
     </a>
   </li>
@@ -1233,6 +1367,20 @@
         <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     Configuration
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#user-accounts" class="md-nav__link">
+    User Accounts
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#mysql-defaults-files" class="md-nav__link">
+    MySQL Defaults Files
   </a>
   
     <nav class="md-nav">
@@ -1327,6 +1475,16 @@ password =
 <p>There are optional settings for <a href="../design/ssl/">ssl</a> connections to the database. You should use SSL if the database is on a remote system.</p>
 <p>The <code>ssl_ca</code> should point to the certificate authority chain file. The <code>ssl_key</code> and <code>ssl_cert</code> should point to the key and certificate files.</p>
 <p>You must also configure MySQL for SSL before using these options.</p>
+<h2 id="user-accounts">User Accounts<a class="headerlink" href="#user-accounts" title="Permanent link">&para;</a></h2>
+<p>By default the installation gives the user <code>ace-user</code> read/write access to all of the ACE-related databases.</p>
+<p>An additional user called <code>ace-superuser</code> is also created that has the same privilege levels as the database root user. This has a different password than the <code>ace-user</code>.</p>
+<p>Both users are allowed access from any host.</p>
+<h2 id="mysql-defaults-files">MySQL Defaults Files<a class="headerlink" href="#mysql-defaults-files" title="Permanent link">&para;</a></h2>
+<p>MySQL <a href="https://dev.mysql.com/doc/refman/5.7/en/option-file-options.html#option_general_defaults-file">defaults files</a> are created for both users. You can use these files with the <code>mysql</code> command to access the database.</p>
+<ul>
+<li><code>etc/mysql_defaults</code>: defaults for <code>ace-user</code></li>
+<li><code>etc/mysql_defaults.root</code>: defaults for <code>ace-superuser</code></li>
+</ul>
 <h3 id="database_ace">database_ace<a class="headerlink" href="#database_ace" title="Permanent link">&para;</a></h3>
 <p>The <code>ace</code> database contains most of the ace-related data objects. The following lists some of the things stored in the <code>ace</code> database.</p>
 <ul>
@@ -1344,7 +1502,7 @@ password =
 <li>user proxy history</li>
 </ul>
 <h3 id="database_email_archive">database_email_archive<a class="headerlink" href="#database_email_archive" title="Permanent link">&para;</a></h3>
-<p>The <code>email_archive</code> database contains a recorded history of all emails received by either the zeek-based <a href="../design/smtp_collector.md">smtp collector</a> or the office365-based <a href="../design/email_collector.md">email collector</a>.</p>
+<p>The <code>email_archive</code> database contains a recorded history of all emails received by either the zeek-based <a href="../design/smtp_collector/">smtp collector</a> or the office365-based <a href="../design/email_collector/">email collector</a>.</p>
 <h3 id="database_collection">database_collection<a class="headerlink" href="#database_collection" title="Permanent link">&para;</a></h3>
 <p>The <code>collection</code> database points ACE at the database to use for executing <a href="../design/collector/">collectors</a>. </p>
 <p>If the entire ACE <a href="../design/engine_cluster/">cluster</a> runs on the same system, then these settings can be the same as the settings for <code>[database_ace]</code>.</p>
@@ -1386,13 +1544,13 @@ password =
           </a>
         
         
-          <a href="../design/" title="Philosophy" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+          <a href="ace_remediation/" title="Remediation Table" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
             <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
               <span class="md-flex__ellipsis">
                 <span class="md-footer-nav__direction">
                   Next
                 </span>
-                Philosophy
+                Remediation Table
               </span>
             </div>
             <div class="md-flex__cell md-flex__cell--shrink">
