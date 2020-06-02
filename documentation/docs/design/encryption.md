@@ -1,5 +1,7 @@
 # Encryption
 
+See the [admin guide](./admin/encryption.md) for how to manage encrypted passwords.
+
 ACE uses AES-256 to encrypt the following sensitive information:
 
 - archived emails
@@ -12,18 +14,6 @@ ACE uses AES-256 to encrypt the following sensitive information:
 - **USER AES KEY**: The 32 byte key used to encrypt and decrypt the Primary AES Key.
 - **VERIFICATION KEY**: The 32 byte value used to check the validity of the provided password.
 - **PRIMARY AES KEY**: The 32 byte key to by ACE to encrypt and decrypt data.
-
-## Setting the Encryption Password
-
-The primary encryption password can be set using the following command. The password is prompted for.
-
-```bash
-ace enc set
-```
-
-## Changing the Encryption Password
-
-The same command can be used to change the password at any time.
 
 ## How ACE Implements Encryption
 
