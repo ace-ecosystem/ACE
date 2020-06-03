@@ -362,6 +362,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../admin/encryption/" title="Encryption" class="md-nav__link">
+      Encryption
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../admin/exchange_remediation/" title="Exchange Remediation" class="md-nav__link">
       Exchange Remediation
     </a>
@@ -412,6 +424,18 @@
   <li class="md-nav__item">
     <a href="../../admin/office365_remediation/" title="Office365 Email Remediation" class="md-nav__link">
       Office365 Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../admin/persistence/" title="Persistence Data" class="md-nav__link">
+      Persistence Data
     </a>
   </li>
 
@@ -506,8 +530,44 @@
 
 
   <li class="md-nav__item">
+    <a href="../../database/ace/" title="ace Database" class="md-nav__link">
+      ace Database
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../database/ace_remediation/" title="Remediation Table" class="md-nav__link">
       Remediation Table
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../database/brocess/" title="brocess Database" class="md-nav__link">
+      brocess Database
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../database/email_archive/" title="email-archive Database" class="md-nav__link">
+      email-archive Database
     </a>
   </li>
 
@@ -630,6 +690,18 @@
   <li class="md-nav__item">
     <a href="../analysis_overview/" title="Analysis Overview" class="md-nav__link">
       Analysis Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../brocess/" title="Brocess" class="md-nav__link">
+      Brocess
     </a>
   </li>
 
@@ -830,20 +902,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#setting-the-encryption-password" class="md-nav__link">
-    Setting the Encryption Password
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#changing-the-encryption-password" class="md-nav__link">
-    Changing the Encryption Password
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#how-ace-implements-encryption" class="md-nav__link">
     How ACE Implements Encryption
   </a>
@@ -979,6 +1037,18 @@
   <li class="md-nav__item">
     <a href="../observable/" title="Observables" class="md-nav__link">
       Observables
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../persistence/" title="Persistence Data" class="md-nav__link">
+      Persistence Data
     </a>
   </li>
 
@@ -1271,6 +1341,18 @@
   </li>
 
         
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../modules/email_logging_analyzer/" title="Email Logging Analyzer" class="md-nav__link">
+      Email Logging Analyzer
+    </a>
+  </li>
+
+        
       </ul>
     </nav>
   </li>
@@ -1352,20 +1434,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#setting-the-encryption-password" class="md-nav__link">
-    Setting the Encryption Password
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#changing-the-encryption-password" class="md-nav__link">
-    Changing the Encryption Password
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#how-ace-implements-encryption" class="md-nav__link">
     How ACE Implements Encryption
   </a>
@@ -1404,12 +1472,14 @@
                 
                 
                 <h1 id="encryption">Encryption<a class="headerlink" href="#encryption" title="Permanent link">&para;</a></h1>
+<p>See the <a href="../../admin/encryption/">admin guide</a> for how to manage encrypted passwords.</p>
 <p>ACE uses AES-256 to encrypt the following sensitive information:</p>
 <ul>
 <li>archived emails</li>
 <li>passwords to connect to other systems</li>
 <li>API keys</li>
 </ul>
+<p>The <a href="../admin/encryption/#configuration">encryption settings</a> are stored in the <code>config</code> table of the <a href="../../database/">database</a> specified by the <code>encrypted_passwords_db</code> option in the <code>[global]</code> <a href="../configuration/">configuration</a> section.</p>
 <h2 id="definitions">Definitions<a class="headerlink" href="#definitions" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>USER PASSWORD</strong>: The password supplied by the user. This password is used when starting ACE.</li>
@@ -1417,13 +1487,6 @@
 <li><strong>VERIFICATION KEY</strong>: The 32 byte value used to check the validity of the provided password.</li>
 <li><strong>PRIMARY AES KEY</strong>: The 32 byte key to by ACE to encrypt and decrypt data.</li>
 </ul>
-<h2 id="setting-the-encryption-password">Setting the Encryption Password<a class="headerlink" href="#setting-the-encryption-password" title="Permanent link">&para;</a></h2>
-<p>The primary encryption password can be set using the following command. The password is prompted for.</p>
-<pre class="codehilite"><code class="language-bash">ace enc set</code></pre>
-
-
-<h2 id="changing-the-encryption-password">Changing the Encryption Password<a class="headerlink" href="#changing-the-encryption-password" title="Permanent link">&para;</a></h2>
-<p>The same command can be used to change the password at any time.</p>
 <h2 id="how-ace-implements-encryption">How ACE Implements Encryption<a class="headerlink" href="#how-ace-implements-encryption" title="Permanent link">&para;</a></h2>
 <ol>
 <li>The user supplies the USER PASSWORD.</li>

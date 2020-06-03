@@ -362,6 +362,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../admin/encryption/" title="Encryption" class="md-nav__link">
+      Encryption
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../admin/exchange_remediation/" title="Exchange Remediation" class="md-nav__link">
       Exchange Remediation
     </a>
@@ -412,6 +424,18 @@
   <li class="md-nav__item">
     <a href="../../admin/office365_remediation/" title="Office365 Email Remediation" class="md-nav__link">
       Office365 Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../admin/persistence/" title="Persistence Data" class="md-nav__link">
+      Persistence Data
     </a>
   </li>
 
@@ -506,8 +530,44 @@
 
 
   <li class="md-nav__item">
+    <a href="../../database/ace/" title="ace Database" class="md-nav__link">
+      ace Database
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../database/ace_remediation/" title="Remediation Table" class="md-nav__link">
       Remediation Table
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../database/brocess/" title="brocess Database" class="md-nav__link">
+      brocess Database
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../database/email_archive/" title="email-archive Database" class="md-nav__link">
+      email-archive Database
     </a>
   </li>
 
@@ -640,6 +700,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../brocess/" title="Brocess" class="md-nav__link">
+      Brocess
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../collector/" title="Collectors" class="md-nav__link">
       Collectors
     </a>
@@ -733,47 +805,6 @@
   <a href="#encrypted-passwords" class="md-nav__link">
     Encrypted Passwords
   </a>
-  
-    <nav class="md-nav">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#adding-encrypted-passwords" class="md-nav__link">
-    Adding Encrypted Passwords
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#removing-encrypted-passwords" class="md-nav__link">
-    Removing Encrypted Passwords
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#listing-encrypted-passwords" class="md-nav__link">
-    Listing Encrypted Passwords
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#importing-and-exporting-passwords-in-bulk" class="md-nav__link">
-    Importing and Exporting Passwords In Bulk
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#referencing-encrypted-passwords-in-the-configuration-settings" class="md-nav__link">
-    Referencing Encrypted Passwords in the Configuration Settings
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1012,6 +1043,18 @@
   <li class="md-nav__item">
     <a href="../observable/" title="Observables" class="md-nav__link">
       Observables
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../persistence/" title="Persistence Data" class="md-nav__link">
+      Persistence Data
     </a>
   </li>
 
@@ -1304,6 +1347,18 @@
   </li>
 
         
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../modules/email_logging_analyzer/" title="Email Logging Analyzer" class="md-nav__link">
+      Email Logging Analyzer
+    </a>
+  </li>
+
+        
       </ul>
     </nav>
   </li>
@@ -1409,47 +1464,6 @@
     Encrypted Passwords
   </a>
   
-    <nav class="md-nav">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#adding-encrypted-passwords" class="md-nav__link">
-    Adding Encrypted Passwords
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#removing-encrypted-passwords" class="md-nav__link">
-    Removing Encrypted Passwords
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#listing-encrypted-passwords" class="md-nav__link">
-    Listing Encrypted Passwords
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#importing-and-exporting-passwords-in-bulk" class="md-nav__link">
-    Importing and Exporting Passwords In Bulk
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#referencing-encrypted-passwords-in-the-configuration-settings" class="md-nav__link">
-    Referencing Encrypted Passwords in the Configuration Settings
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
       
@@ -1505,35 +1519,12 @@
 <li><code>etc/saq.unittest.ini</code></li>
 </ol>
 <h2 id="encrypted-passwords">Encrypted Passwords<a class="headerlink" href="#encrypted-passwords" title="Permanent link">&para;</a></h2>
-<p>ACE supports <a href="../encryption/">encrypting passwords</a> used by the configuration file.</p>
-<h3 id="adding-encrypted-passwords">Adding Encrypted Passwords<a class="headerlink" href="#adding-encrypted-passwords" title="Permanent link">&para;</a></h3>
-<p>Stores a password in the <a href="../../database/">database</a> using encryption. <code>key</code> is the name of the password to be stored. The value is prompted for.</p>
-<pre class="codehilite"><code class="language-bash">ace enc config set key</code></pre>
-
-
-<h3 id="removing-encrypted-passwords">Removing Encrypted Passwords<a class="headerlink" href="#removing-encrypted-passwords" title="Permanent link">&para;</a></h3>
-<p>Removes an encrypted password from the <a href="../../database/">database</a>. <code>key</code> is the name of the password to be deleted.</p>
-<pre class="codehilite"><code class="language-bash">ace enc config delete key</code></pre>
-
-
-<h3 id="listing-encrypted-passwords">Listing Encrypted Passwords<a class="headerlink" href="#listing-encrypted-passwords" title="Permanent link">&para;</a></h3>
-<p>The current list of passwords can be viewed by listing them. If the <a href="../encryption/">encryption key</a> is loaded then the actual (decrypted) values of the passwords are displayed.</p>
-<pre class="codehilite"><code class="language-bash">ace enc config list</code></pre>
-
-
-<h3 id="importing-and-exporting-passwords-in-bulk">Importing and Exporting Passwords In Bulk<a class="headerlink" href="#importing-and-exporting-passwords-in-bulk" title="Permanent link">&para;</a></h3>
-<p>The entire list of encrypted passwords can be exported into a JSON formatted file. This file can then be imported into ACE.</p>
-<p>Note that the exported data is plain text.</p>
-<pre class="codehilite"><code class="language-bash">ace enc config export output_file.json
-ace enc config import output_file.json</code></pre>
-
-
-<h3 id="referencing-encrypted-passwords-in-the-configuration-settings">Referencing Encrypted Passwords in the Configuration Settings<a class="headerlink" href="#referencing-encrypted-passwords-in-the-configuration-settings" title="Permanent link">&para;</a></h3>
-<p>These passwords are referenced by using the following format as the value of the configuration option.</p>
+<p>ACE supports <a href="../encryption/">encrypting passwords</a> used by the configuration file. These passwords are referenced by using the following format as the value of the configuration option.</p>
 <pre class="codehilite"><code class="language-ini">some_option = encrypted:key</code></pre>
 
 
 <p>The configuration system ACE uses is instrumented to recognize these specially formatted values. If the <a href="../encryption/">encryption key</a> has been decrypted then these values are automatically decrypted and made available to ACE.</p>
+<p>See the <a href="../../admin/encryption/">admin guide</a> for instructions on how to view and manage encrypted passwords.</p>
                 
                   
                 

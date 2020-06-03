@@ -362,6 +362,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../admin/encryption/" title="Encryption" class="md-nav__link">
+      Encryption
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../admin/exchange_remediation/" title="Exchange Remediation" class="md-nav__link">
       Exchange Remediation
     </a>
@@ -412,6 +424,18 @@
   <li class="md-nav__item">
     <a href="../admin/office365_remediation/" title="Office365 Email Remediation" class="md-nav__link">
       Office365 Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../admin/persistence/" title="Persistence Data" class="md-nav__link">
+      Persistence Data
     </a>
   </li>
 
@@ -541,22 +565,15 @@
     MySQL Defaults Files
   </a>
   
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#databases" class="md-nav__link">
+    Databases
+  </a>
+  
     <nav class="md-nav">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#database_ace" class="md-nav__link">
-    database_ace
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#database_brocess" class="md-nav__link">
-    database_brocess
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#database_email_archive" class="md-nav__link">
@@ -601,8 +618,44 @@
 
 
   <li class="md-nav__item">
+    <a href="ace/" title="ace Database" class="md-nav__link">
+      ace Database
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="ace_remediation/" title="Remediation Table" class="md-nav__link">
       Remediation Table
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="brocess/" title="brocess Database" class="md-nav__link">
+      brocess Database
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="email_archive/" title="email-archive Database" class="md-nav__link">
+      email-archive Database
     </a>
   </li>
 
@@ -723,6 +776,18 @@
   <li class="md-nav__item">
     <a href="../design/analysis_overview/" title="Analysis Overview" class="md-nav__link">
       Analysis Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/brocess/" title="Brocess" class="md-nav__link">
+      Brocess
     </a>
   </li>
 
@@ -999,6 +1064,18 @@
   <li class="md-nav__item">
     <a href="../design/observable/" title="Observables" class="md-nav__link">
       Observables
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../design/persistence/" title="Persistence Data" class="md-nav__link">
+      Persistence Data
     </a>
   </li>
 
@@ -1291,6 +1368,18 @@
   </li>
 
         
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../modules/email_logging_analyzer/" title="Email Logging Analyzer" class="md-nav__link">
+      Email Logging Analyzer
+    </a>
+  </li>
+
+        
       </ul>
     </nav>
   </li>
@@ -1383,22 +1472,15 @@
     MySQL Defaults Files
   </a>
   
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#databases" class="md-nav__link">
+    Databases
+  </a>
+  
     <nav class="md-nav">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#database_ace" class="md-nav__link">
-    database_ace
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#database_brocess" class="md-nav__link">
-    database_brocess
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#database_email_archive" class="md-nav__link">
@@ -1471,10 +1553,10 @@ password =
 <p><code>unix_socket</code> is an <em>optional</em> setting the defines the full path to the unix socket connection to the database. This only applies when the hostname is set to <strong>localhost</strong>.</p>
 <p><code>database</code> is the name of the database on the database server.</p>
 <p><code>username</code> and <code>password</code> are the credentials used to access the database.</p>
-<p><strong>NOTE</strong> that you cannot use encryption to store the database credentials because the encryption key is stored in the database.</p>
+<p><strong>NOTE</strong> that you cannot use encryption to store the database credentials because the <a href="../admin/encryption#configuration">encryption key is stored in the database</a>.</p>
 <p>There are optional settings for <a href="../design/ssl/">ssl</a> connections to the database. You should use SSL if the database is on a remote system.</p>
 <p>The <code>ssl_ca</code> should point to the certificate authority chain file. The <code>ssl_key</code> and <code>ssl_cert</code> should point to the key and certificate files.</p>
-<p>You must also configure MySQL for SSL before using these options.</p>
+<p>You must also <a href="https://dev.mysql.com/doc/refman/5.7/en/encrypted-connections.html">configure MySQL for SSL</a> before using these options.</p>
 <h2 id="user-accounts">User Accounts<a class="headerlink" href="#user-accounts" title="Permanent link">&para;</a></h2>
 <p>By default the installation gives the user <code>ace-user</code> read/write access to all of the ACE-related databases.</p>
 <p>An additional user called <code>ace-superuser</code> is also created that has the same privilege levels as the database root user. This has a different password than the <code>ace-user</code>.</p>
@@ -1485,21 +1567,12 @@ password =
 <li><code>etc/mysql_defaults</code>: defaults for <code>ace-user</code></li>
 <li><code>etc/mysql_defaults.root</code>: defaults for <code>ace-superuser</code></li>
 </ul>
-<h3 id="database_ace">database_ace<a class="headerlink" href="#database_ace" title="Permanent link">&para;</a></h3>
-<p>The <code>ace</code> database contains most of the ace-related data objects. The following lists some of the things stored in the <code>ace</code> database.</p>
+<h2 id="databases">Databases<a class="headerlink" href="#databases" title="Permanent link">&para;</a></h2>
+<p>The following databases are used by ACE.</p>
 <ul>
-<li><a href="../design/alerts/">alerts</a></li>
-<li>user settings</li>
-<li>workload information</li>
-<li><a href="../design/engine/">engine</a> node status</li>
-<li><a href="../design/observable/">observable</a> and <a href="../design/tags/">tag</a> mappings</li>
-<li>many other things</li>
-</ul>
-<h3 id="database_brocess">database_brocess<a class="headerlink" href="#database_brocess" title="Permanent link">&para;</a></h3>
-<p>The <code>brocess</code> database contains a recorded history of activity relevant to analysis.</p>
-<ul>
-<li>email delivery history</li>
-<li>user proxy history</li>
+<li><a href="ace/">ace</a></li>
+<li><a href="brocess/">brocess</a></li>
+<li><a href="email_archive/">email_archive</a></li>
 </ul>
 <h3 id="database_email_archive">database_email_archive<a class="headerlink" href="#database_email_archive" title="Permanent link">&para;</a></h3>
 <p>The <code>email_archive</code> database contains a recorded history of all emails received by either the zeek-based <a href="../design/smtp_collector/">smtp collector</a> or the office365-based <a href="../design/email_collector/">email collector</a>.</p>
@@ -1544,13 +1617,13 @@ password =
           </a>
         
         
-          <a href="ace_remediation/" title="Remediation Table" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+          <a href="ace/" title="ace Database" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
             <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
               <span class="md-flex__ellipsis">
                 <span class="md-footer-nav__direction">
                   Next
                 </span>
-                Remediation Table
+                ace Database
               </span>
             </div>
             <div class="md-flex__cell md-flex__cell--shrink">

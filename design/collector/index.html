@@ -362,6 +362,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../admin/encryption/" title="Encryption" class="md-nav__link">
+      Encryption
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../admin/exchange_remediation/" title="Exchange Remediation" class="md-nav__link">
       Exchange Remediation
     </a>
@@ -412,6 +424,18 @@
   <li class="md-nav__item">
     <a href="../../admin/office365_remediation/" title="Office365 Email Remediation" class="md-nav__link">
       Office365 Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../admin/persistence/" title="Persistence Data" class="md-nav__link">
+      Persistence Data
     </a>
   </li>
 
@@ -506,8 +530,44 @@
 
 
   <li class="md-nav__item">
+    <a href="../../database/ace/" title="ace Database" class="md-nav__link">
+      ace Database
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../database/ace_remediation/" title="Remediation Table" class="md-nav__link">
       Remediation Table
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../database/brocess/" title="brocess Database" class="md-nav__link">
+      brocess Database
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../database/email_archive/" title="email-archive Database" class="md-nav__link">
+      email-archive Database
     </a>
   </li>
 
@@ -630,6 +690,18 @@
   <li class="md-nav__item">
     <a href="../analysis_overview/" title="Analysis Overview" class="md-nav__link">
       Analysis Overview
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../brocess/" title="Brocess" class="md-nav__link">
+      Brocess
     </a>
   </li>
 
@@ -1037,6 +1109,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../persistence/" title="Persistence Data" class="md-nav__link">
+      Persistence Data
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../recursive_analysis/" title="Recursive Analysis" class="md-nav__link">
       Recursive Analysis
     </a>
@@ -1319,6 +1403,18 @@
   </li>
 
         
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../modules/email_logging_analyzer/" title="Email Logging Analyzer" class="md-nav__link">
+      Email Logging Analyzer
+    </a>
+  </li>
+
+        
       </ul>
     </nav>
   </li>
@@ -1580,7 +1676,7 @@ example_mapping = 10.1.1.2:443,192.168.1.2:443</code></pre>
 <li>when the last time a collection request was made.</li>
 <li>what the unique ID of the last collected item was.</li>
 </ul>
-<p>Collectors can use any type of persistant storage. ACE has built-in support for using the local file system and the database.</p>
+<p>Collectors can use any type of persistent storage. ACE has built-in support for using the local file system and the database.</p>
 <h2 id="persistent-storage-files">Persistent Storage - Files<a class="headerlink" href="#persistent-storage-files" title="Permanent link">&para;</a></h2>
 <p>One of the key requirements of collection is that submission data is not lost in the event of system failure. There are two types of submission storage available for collection.</p>
 <p>Collectors can use local file storage to help keep track of state. The base directory for this storage is defined by the <a href="../configuration/">configuration</a> setting <code>persistence_dir</code>.</p>
@@ -1595,7 +1691,7 @@ incoming_dir = var/collection/incoming</code></pre>
 
 
 <h2 id="persistent-storage-database">Persistent Storage - Database<a class="headerlink" href="#persistent-storage-database" title="Permanent link">&para;</a></h2>
-<p>The database can be and is used to store persistance data.</p>
+<p>The database can be and is used to store <a href="../persistence/">persistance data</a>.</p>
 <p>The <a href="link">Submission</a> object itself is pickled and stored in the <code>work</code> field of the <code>incoming_workload</code> table.</p>
 <p>As an alternative to using the local file system to store stateful data for collection, the <code>persistence</code> and <code>persistence_source</code> tables are provided, <a href="link/to/persistence/docs">along with tooling to manage the data</a>.</p>
                 
@@ -1619,7 +1715,7 @@ incoming_dir = var/collection/incoming</code></pre>
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../analysis_overview/" title="Analysis Overview" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../brocess/" title="Brocess" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -1628,7 +1724,7 @@ incoming_dir = var/collection/incoming</code></pre>
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                Analysis Overview
+                Brocess
               </span>
             </div>
           </a>
