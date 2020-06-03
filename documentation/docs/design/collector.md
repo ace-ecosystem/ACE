@@ -117,7 +117,7 @@ Collectors use persistent storage to maintain state. Some examples include
 - when the last time a collection request was made.
 - what the unique ID of the last collected item was.
 
-Collectors can use any type of persistant storage. ACE has built-in support for using the local file system and the database.
+Collectors can use any type of persistent storage. ACE has built-in support for using the local file system and the database.
 
 ## Persistent Storage - Files
 
@@ -139,7 +139,7 @@ incoming_dir = var/collection/incoming
 
 ## Persistent Storage - Database
 
-The database can be and is used to store persistance data.
+The database can be and is used to store [persistance data](persistence.md).
 
 The [Submission](link) object itself is pickled and stored in the `work` field of the `incoming_workload` table.
 

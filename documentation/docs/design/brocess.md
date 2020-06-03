@@ -7,4 +7,4 @@ Brocess keeps track of two things for ACE.
 
 ## Design History
 
-Brocess is an incomplete 
+Brocess is an incomplete thought ...

@@ -2,6 +2,15 @@
 
 See the [design guide](../design/encryption.md) for how encryption is implemented and used in ACE.
 
+## Configuration
+
+The `encrypted_passwords_db` option in the `[global]` [configuration](../design/configuration.md) section specifies which [database](../database/index.md) connection to use to access the encryption settings. The value of this option corresponds to the database configuration section. By default this is set to `ace` which uses the `[database_ace]` configuration settings.
+
+```ini
+[global]
+encrypted_passwords_db = ace
+```
+
 ## Setting the Encryption Password
 
 The primary encryption password can be set using the following command. The password is prompted for.

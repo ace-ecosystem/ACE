@@ -37,13 +37,13 @@ password =
 
 `username` and `password` are the credentials used to access the database.
 
-**NOTE** that you cannot use encryption to store the database credentials because the encryption key is stored in the database.
+**NOTE** that you cannot use encryption to store the database credentials because the [encryption key is stored in the database](../admin/encryption#configuration).
 
 There are optional settings for [ssl](../design/ssl.md) connections to the database. You should use SSL if the database is on a remote system.
 
 The `ssl_ca` should point to the certificate authority chain file. The `ssl_key` and `ssl_cert` should point to the key and certificate files.
 
-You must also configure MySQL for SSL before using these options.
+You must also [configure MySQL for SSL](https://dev.mysql.com/doc/refman/5.7/en/encrypted-connections.html) before using these options.
 
 ## User Accounts
 
@@ -60,23 +60,13 @@ MySQL [defaults files](https://dev.mysql.com/doc/refman/5.7/en/option-file-optio
 - `etc/mysql_defaults`: defaults for `ace-user`
 - `etc/mysql_defaults.root`: defaults for `ace-superuser`
 
-### database_ace
+## Databases
 
-The `ace` database contains most of the ace-related data objects. The following lists some of the things stored in the `ace` database.
+The following databases are used by ACE.
 
-- [alerts](../design/alerts.md)
-- user settings
-- workload information
-- [engine](../design/engine.md) node status
-- [observable](../design/observable.md) and [tag](../design/tags.md) mappings
-- many other things
-
-### database_brocess
-
-The `brocess` database contains a recorded history of activity relevant to analysis.
-
-- email delivery history
-- user proxy history
+- [ace](ace.md)
+- [brocess](brocess.md)
+- [email_archive](email_archive.md)
 
 ### database_email_archive
 

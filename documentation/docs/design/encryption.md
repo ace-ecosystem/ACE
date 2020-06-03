@@ -1,12 +1,14 @@
 # Encryption
 
-See the [admin guide](./admin/encryption.md) for how to manage encrypted passwords.
+See the [admin guide](../admin/encryption.md) for how to manage encrypted passwords.
 
 ACE uses AES-256 to encrypt the following sensitive information:
 
 - archived emails
 - passwords to connect to other systems
 - API keys
+
+The [encryption settings](../admin/encryption/#configuration) are stored in the `config` table of the [database](../database/index.md) specified by the `encrypted_passwords_db` option in the `[global]` [configuration](configuration.md) section.
 
 ## Definitions
 
