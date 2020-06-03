@@ -40,7 +40,7 @@
     
     
       
-        <title>Analysis Overview - Analysis Correlation Engine</title>
+        <title>Philosophy - Analysis Correlation Engine</title>
       
     
     
@@ -87,7 +87,7 @@
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
     <label class="md-overlay" data-md-component="overlay" for="__drawer"></label>
     
-      <a href="#analysis-overview" tabindex="0" class="md-skip">
+      <a href="#philosophy" tabindex="0" class="md-skip">
         Skip to content
       </a>
     
@@ -113,7 +113,7 @@
             </span>
             <span class="md-header-nav__topic">
               
-                Analysis Overview
+                Philosophy
               
             </span>
           
@@ -604,8 +604,8 @@
 
 
   <li class="md-nav__item">
-    <a href="../" title="Philosophy" class="md-nav__link">
-      Philosophy
+    <a href="../" title="Analysis Overview" class="md-nav__link">
+      Analysis Overview
     </a>
   </li>
 
@@ -679,70 +679,6 @@
     <a href="../analysis_module/" title="Analysis Module" class="md-nav__link">
       Analysis Module
     </a>
-  </li>
-
-        
-          
-          
-          
-
-  
-
-
-  <li class="md-nav__item md-nav__item--active">
-    
-    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-    
-      
-    
-    
-      <label class="md-nav__link md-nav__link--active" for="__toc">
-        Analysis Overview
-      </label>
-    
-    <a href="./" title="Analysis Overview" class="md-nav__link md-nav__link--active">
-      Analysis Overview
-    </a>
-    
-      
-<nav class="md-nav md-nav--secondary">
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">Table of contents</label>
-    <ul class="md-nav__list" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#observable" class="md-nav__link">
-    Observable
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#analysis" class="md-nav__link">
-    Analysis
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#analysis-module" class="md-nav__link">
-    Analysis Module
-  </a>
-  
-</li>
-      
-      
-      
-      
-      
-    </ul>
-  
-</nav>
-    
   </li>
 
         
@@ -1043,6 +979,70 @@
     <a href="../persistence/" title="Persistence Data" class="md-nav__link">
       Persistence Data
     </a>
+  </li>
+
+        
+          
+          
+          
+
+  
+
+
+  <li class="md-nav__item md-nav__item--active">
+    
+    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+    
+      
+    
+    
+      <label class="md-nav__link md-nav__link--active" for="__toc">
+        Philosophy
+      </label>
+    
+    <a href="./" title="Philosophy" class="md-nav__link md-nav__link--active">
+      Philosophy
+    </a>
+    
+      
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#driving-behavior" class="md-nav__link">
+    Driving Behavior
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#false-positive-an-alert-youre-not-going-to-respond-to" class="md-nav__link">
+    False Positive - An alert you're not going to respond to.
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#algorithms-and-metrics" class="md-nav__link">
+    Algorithms and Metrics
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+    
   </li>
 
         
@@ -1420,22 +1420,22 @@
     <ul class="md-nav__list" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#observable" class="md-nav__link">
-    Observable
+  <a href="#driving-behavior" class="md-nav__link">
+    Driving Behavior
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#analysis" class="md-nav__link">
-    Analysis
+  <a href="#false-positive-an-alert-youre-not-going-to-respond-to" class="md-nav__link">
+    False Positive - An alert you're not going to respond to.
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#analysis-module" class="md-nav__link">
-    Analysis Module
+  <a href="#algorithms-and-metrics" class="md-nav__link">
+    Algorithms and Metrics
   </a>
   
 </li>
@@ -1457,23 +1457,129 @@
               
                 
                 
-                <h1 id="analysis-overview">Analysis Overview<a class="headerlink" href="#analysis-overview" title="Permanent link">&para;</a></h1>
-<p>ACE analyzes <a href="../observable/">Observables</a> which generates <a href="../analysis/">Analysis</a> output which can in turn contain more <a href="../observable/">Observables</a>.</p>
-<h2 id="observable">Observable<a class="headerlink" href="#observable" title="Permanent link">&para;</a></h2>
-<p>An <a href="../observable/">Observable</a> is an <em>observation</em> made during analysis. It has</p>
+                <h1 id="philosophy">Philosophy<a class="headerlink" href="#philosophy" title="Permanent link">&para;</a></h1>
+<p>The following topics cover some concepts (at a high level) that should
+be first understood if you're curious about where ACE comes from or the
+bigger picture of how ACE is meant to be used.</p>
+<p>I gave a talk on the development of the tool at BSides Cincinnati in
+2015 which covers these topics in detail. You can watch his presentation
+here:</p>
+<iframe width="560" height="315" src="https://www.youtube.com/embed/okMkF-NYCHk?rel=0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+
+<h2 id="driving-behavior">Driving Behavior<a class="headerlink" href="#driving-behavior" title="Permanent link">&para;</a></h2>
+<p>The metric this tool attempts to drive is called <strong>time to
+disposition</strong>, or, <em>how long does it take to figure out you're wasting
+your time?</em> Most people would phrase this as <em>how long does it take to
+work an alert?</em> but I've taken a different approach to how we look at
+alerts.</p>
+<p>Generally, analysts tend to open up whatever alert they're looking at
+and try to figure out if it's "bad" or not. And by "bad", they usually
+mean "Is this an attack?", or, "Is this something I need to worry
+about?"</p>
+<p>Over the years as an analyst, I came to realize that most of the alerts
+I worked ended up being dispositioned as false positive, with the
+following definition of what a false postive actually is.</p>
+<h2 id="false-positive-an-alert-youre-not-going-to-respond-to">False Positive - An alert you're not going to respond to.<a class="headerlink" href="#false-positive-an-alert-youre-not-going-to-respond-to" title="Permanent link">&para;</a></h2>
+<p>I think many people define a false positive more in terms of mismatching
+something, such as a network-based packet alert that pattern matched
+something, but that pattern matched something it wasn't intended to
+match. This is obvious. But I would expand that definition even further.
+For example, suppose you get an alert from your IDS that a remote MySQL
+exploit was attempted against a server you protect, but that server does
+not run MySQL. How would you disposition the alert? It was an attack for
+sure, but it doesn't matter if the target of the attack is not running
+the software the attack is meant to exploit. It would matter even less
+if you didn't run MySQL at all. (Note that I would consider the
+intelligence gained from the attack as another matter entirely and not
+the focus of this topic.)</p>
+<p>So when I applied that definition of what a false positive is, I found
+that almost <strong>all</strong> of the alerts I worked ended up being false
+positive. In my presentation at the Cincinnati b-sides, I even stated
+that <strong>99% of alerts are false positive</strong>.</p>
+<p>For the sake of argument here, we assume this is the case. This changes
+how alerts are analyzed. If 99% of them are false positive, then what is
+the chance that what is being analyzed is something to worry about? So
+rather than answer the question <em>"Is this bad?"</em> we answer the question
+<em>"Am I wasting my time?"</em> because 99% of the time that's exactly what is
+happening!</p>
+<p>This idea gets some resistance. I've seen many security organizations
+take the approach of always attempting to minimize the number of false
+positives their tools are generating, (rightfully) thinking their
+analysts waste their time working them, and thus the <strong>only</strong> alerts
+that <em>should</em> be generated are the true positive alerts that are
+accurately identifying an attack.</p>
+<p>I disagree with that and here is why.</p>
+<h2 id="algorithms-and-metrics">Algorithms and Metrics<a class="headerlink" href="#algorithms-and-metrics" title="Permanent link">&para;</a></h2>
+<p>An analyst can work a certain number of alerts in a given day. How large
+that number is depends on a number of factors such as</p>
 <ul>
-<li>a type.</li>
-<li>a value.</li>
-<li>an optional time at which it was observed.</li>
+<li>how skilled they are.</li>
+<li>how good their tools are.</li>
+<li>how focused they are.</li>
+<li>how much analysis paralysis has set in (aka alert burn-out.)</li>
 </ul>
-<h2 id="analysis">Analysis<a class="headerlink" href="#analysis" title="Permanent link">&para;</a></h2>
-<p>An <a href="../analysis/">Analysis</a> is the output of analysis of an observable. It has</p>
+<p>Say we measure the number of alerts the analysts can work in a given day
+as measurement <strong>W</strong>.</p>
+<p>Now, there are a number of tools deployed that are generating alerts.
+Say we measure the number of alerts generated in a given day as
+measurement <strong>N</strong>. All of the signatures, rules, engines and algorithms
+they use to generate these alerts gives the network being protected
+<strong>coverage</strong>. We define <strong>coverage</strong> as "this is all the places and
+things we're constantly monitoring for evidence of a compromise or
+attack." Say we measure this coverage as measurement <strong>C</strong>.</p>
+<p>So now we have tools generating <strong>N</strong> alerts giving us a coverage of
+<strong>C</strong>, with the analysts able to work <strong>W</strong> of the <strong>N</strong> alerts.</p>
+<p>The metric to drive here is <strong>C</strong>. The higher the value of <strong>C</strong>, the
+more difficult it is for an attacker to have a successful attack
+<em>without being detected.</em> The issue is that an increase in <strong>C</strong> usually
+results in an increase in <strong>N</strong>, but <strong>W</strong> stays the same.</p>
+<p>The goal is to <em>always</em> be increasing <strong>C</strong> while keeping <strong>N</strong> less
+than or equal to <strong>W</strong>. In English that would read as "always increasing
+coverage while keeping the number of alerts manageable."</p>
+<p>This is accomplished by a continuous process of hunting, automation and
+tuning.</p>
+<p>Hunting is how <strong>C</strong> increases. You look somewhere you were not looking
+before. This can be literally anything that makes sense: a new snort
+rule, a new saved search in splunk, a new script that runs that checks
+some weird system you have. Anything that would generate new <strong>alerts</strong>
+to be analyzed by the analysts.</p>
+<p>Automation is how the increase to <strong>C</strong> is actually made permanent. This
+means running the hunt continuously, forever or until it doesn't make
+sense any more. For some tools this is natural, for example, a snort
+rule always runs after it's deployed. But you may need to build
+something to run that splunk search every so often, or to run that
+script on a cron job as certain times.</p>
+<p>Finally, tuning is how to manage the increase in <strong>N</strong>. This is the
+action of <strong>preventing the tools from generating false positive
+alerts.</strong> This is accomplished in one of two ways:</p>
 <ul>
-<li>zero or more observables.</li>
-<li>free form analysis data.</li>
+<li>modifying the hunt to avoid the false positives. For example,
+    tweaking the signature to be more specific in the match, or adding
+    additional boolean logic clauses to queries (such as NOT this AND
+    NOT that AND NOT that.)</li>
+<li>turning off the alert entirely in the case where the hunt is either
+    wrong or not tunable.</li>
 </ul>
-<h2 id="analysis-module">Analysis Module<a class="headerlink" href="#analysis-module" title="Permanent link">&para;</a></h2>
-<p>An <a href="../analysis_module/">Analysis Module</a> is what is responsible for taking an observable and generating analysis. Analysis modules are loaded and executed by <a href="../engine/">Engines</a>.</p>
+<p>At this point, we're constantly increasing <strong>C</strong> by following the
+process of hunting, automating and tuning, keeping the number of alerts
+<strong>N</strong> manageable to a team of analysts that can handle <strong>W</strong> alerts in a
+given day.</p>
+<p>So where does ACE come into play here? It drives the one metric not
+covered yet: <strong>W</strong>.</p>
+<p><em>ACE increases the number of alerts an analyst can work in a given day.</em></p>
+<p>The higher the value of <strong>W</strong> is, the more aggressive a team can get
+with <strong>C</strong>. Teams with a low value of <strong>W</strong> are easily overwhelmed by
+very small increases to <strong>C</strong>. Teams with a high value of <strong>W</strong> can
+handle large increases to <strong>C</strong>.</p>
+<p>If viewed on a chart over time, the value of <strong>N</strong> should look more like
+a sine wave, fluctuating as new hunts are automated and tuning is
+performed on the old hunts. The value of <strong>C</strong> should always be rising,
+even if only gradually.</p>
+<p>Finally, it's worth noting that in this scenario I'm describing the
+number of false positive alerts is very close to <strong>N</strong>, because 99% of
+all alerts are false positive (assuming our definition.) Thus, the
+effort to reduce false positive alerts is merely a function of the
+process, and not a goal in itself.</p>
                 
                   
                 
@@ -1495,7 +1601,7 @@
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../analysis_module/" title="Analysis Module" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../persistence/" title="Persistence Data" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -1504,19 +1610,19 @@
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                Analysis Module
+                Persistence Data
               </span>
             </div>
           </a>
         
         
-          <a href="../brocess/" title="Brocess" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+          <a href="../recursive_analysis/" title="Recursive Analysis" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
             <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
               <span class="md-flex__ellipsis">
                 <span class="md-footer-nav__direction">
                   Next
                 </span>
-                Brocess
+                Recursive Analysis
               </span>
             </div>
             <div class="md-flex__cell md-flex__cell--shrink">
