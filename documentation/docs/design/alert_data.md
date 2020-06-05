@@ -8,7 +8,7 @@
 
 ## Alert Data JSON
 
-Both [Alerts](alerts.md) and [root analysis](root_analysis.md) objects are stored as JSON formatted files named `data.json` inside the storage directory of the object.
+Both [Alerts](alerts.md) and [root analysis](root_analysis.md) objects are stored as JSON formatted files named `data.json` inside the [storage directory](alert_storage.md) of the object.
 
 This JSON contains everything associated to the alert or root analysis except for analysis data and file observable data. The JSON contains references to the locations of these other types of data.
 

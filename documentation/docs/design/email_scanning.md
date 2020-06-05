@@ -20,3 +20,7 @@ The [analysis mode](analysis_modes.md) `email` is defined in the [configuration]
 - analysis_module_message_id_analyzer
 - analysis_module_msoffice_encryption_analyzer
 - analysis_module_smtp_stream_analyzer
+
+## Yara Scanning
+
+ACE does not scan the entire email as-is with [yara](yara.md). The headers of the email are placed into a `NAME.headers` file where `NAME` is the name of the RFC 822 formatted email file. Then each attachment is extracted an analyzed.
