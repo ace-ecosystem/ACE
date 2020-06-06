@@ -32,11 +32,12 @@ import uuid
 
 parser = argparse.ArgumentParser(description="Analysis Correlation Engine")
 parser.add_argument('--saq-home', required=False, dest='saq_home', default=None,
-    help="Sets the SAQ_HOME environment variable.")
+    help="Sets the base directory of ACE.")
 parser.add_argument('-L', '--logging-config-path', required=False, dest='logging_config_path', default=None,
     help="Path to the logging configuration file.")
 parser.add_argument('-c', '--config-path', required=False, dest='config_paths', action='append', default=[],
-    help="ACE configuration files. $SAQ_HOME/etc/saq.default.ini is always loaded, additional override default settings.")
+    help="""ACE configuration files. $SAQ_HOME/etc/saq.default.ini is always loaded, additional override default settings.
+         This option can be specified multiple times and each file is loaded in order.""")
 #parser.add_argument('--single-threaded', required=False, dest='single_threaded', default=False, action='store_true',
     #help="Force execution to take place in a single process and a single thread.  Useful for manual debugging.")
 parser.add_argument('--log-level', required=False, dest='log_level', default=None,
@@ -4087,23 +4088,11 @@ if __name__ == '__main__':
     # parse the command line arguments
     args = parser.parse_args()
 
-    # where is ACE?
-    saq_home = '/opt/ace' # default installation directory
-    if 'SAQ_HOME' in os.environ:
-        saq_home = os.environ['SAQ_HOME'] # should be in this env variable
-    if args.saq_home is not None:
-        saq_home = args.saq_home # otherwise pull it from the command line
-
-    # XXX I would like to get rid of this
-    # adjust search path
-    if args.saq_home is not None:
-        sys.path.append(os.path.join(args.saq_home, 'lib'))
-    elif 'SAQ_HOME' in os.environ:
-        sys.path.append(os.path.join(os.environ['SAQ_HOME'], 'lib'))
-
     # initialize saq
     import saq
-    saq.initialize(saq_home=saq_home, config_paths=[], logging_config_path=None, args=args, relative_dir=args.relative_dir)
+    saq.initialize(
+            args=args,
+            relative_dir=args.relative_dir)
 
     if args.debug_on_error:
         def info(type, value, tb):
