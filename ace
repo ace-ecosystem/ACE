@@ -4082,10 +4082,6 @@ if __name__ == '__main__':
         print("you need at least python version 3.6.* to run ACE")
         sys.exit(1)
 
-    # was this command called as a symlink?
-    if os.path.basename(sys.argv[0]) == 'correlate':
-        sys.argv.insert(1, 'correlate')
-
     # bash tab completion for argparse
     argcomplete.autocomplete(parser)
     # parse the command line arguments
