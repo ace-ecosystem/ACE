@@ -7,6 +7,7 @@ import logging
 import logging.config
 import os
 import os.path
+import pathlib
 import shutil
 import socket
 import sys
@@ -128,11 +129,12 @@ def set_node(name):
         SAQ_NODE_ID = None
         initialize_node()
 
-def initialize(saq_home=None, 
-               config_paths=None, 
-               logging_config_path=None, 
-               args=None, 
-               relative_dir=None):
+def initialize(
+        saq_home=None,
+        config_paths=[],
+        logging_config_path=None,
+        args=None,
+        relative_dir=None):
 
     from saq.database import initialize_database, initialize_node, initialize_automation_user
 
@@ -259,19 +261,24 @@ def initialize(saq_home=None,
     if args:
         FORCED_ALERTS = args.force_alerts
 
-    # what is the root directory of the entire system?
-    if saq_home is not None:
-        SAQ_HOME = saq_home
-    elif 'SAQ_HOME' in os.environ:
+    # where is ACE?
+    # this parent directory of this file is the default
+    # this usually all you need
+    SAQ_HOME = str(pathlib.Path(os.path.abspath(__file__)).parent.parent)
+
+    # optional override from the environment
+    if 'SAQ_HOME' in os.environ: 
         SAQ_HOME = os.environ['SAQ_HOME']
-    else:
-        SAQ_HOME = '.'
+
+    # or you can specify directly
+    if saq_home:
+        SAQ_HOME = saq_home
 
     if not os.path.isdir(SAQ_HOME):
-        sys.stderr.write("invalid root SAQ directory {0}\n".format(SAQ_HOME)) 
-        sys.exit(1)
+        sys.stderr.write(f"invalid root ACE directory {SAQ_HOME}\n")
+        sys.exit(1) # TODO refactor to use exceptions for unit testing instead of sys.exit
 
-    # path to the unix socket for the encryption cache service
+    # path to the unix socket for the optional encryption cache service
     ECS_SOCKET_PATH = os.path.join(SAQ_HOME, '.ecs')
 
     # XXX not sure we need this SAQ_RELATIVE_DIR anymore -- check it out
@@ -285,17 +292,12 @@ def initialize(saq_home=None,
     if relative_dir:
         SAQ_RELATIVE_DIR = relative_dir
 
-    # load configuration file
+    # load configuration files
     # defaults to $SAQ_HOME/etc/saq.ini
-    if args:
-        if args.config_paths:
-            config_paths = args.config_paths
-
     if config_paths is None:
         config_paths = []
     
-    # make each relative config path absolute to SAQ_HOME
-    CONFIG_PATHS = [os.path.join(SAQ_HOME, p) if not os.path.isabs(p) else p for p in config_paths]
+    CONFIG_PATHS = []
 
     # add any config files specified in SAQ_CONFIG_PATHS env var (command separated)
     if 'SAQ_CONFIG_PATHS' in os.environ:
@@ -304,11 +306,22 @@ def initialize(saq_home=None,
             if not os.path.isabs(config_path):
                 config_path = os.path.join(SAQ_HOME, config_path)
             if not os.path.exists(config_path):
-                sys.stderr.write("WARNING: config path {} specified in SAQ_CONFIG_PATHS env var does not exist\n".format(config_path))
+                sys.stderr.write(f"WARNING: config path {config_path} specified in SAQ_CONFIG_PATHS env var does not exist\n")
             else:
                 if config_path not in CONFIG_PATHS:
                     CONFIG_PATHS.append(config_path)
 
+    # and then add any specified on the command line
+    for config_path in config_paths:
+        if not os.path.isabs(config_path):
+            config_path = os.path.join(SAQ_HOME, config_path)
+            if not os.path.exists(config_path):
+                sys.stderr.write(f"WARNING: config path {config_path} specified on the command line does not exist\n")
+            else:
+                if config_path not in CONFIG_PATHS:
+                    CONFIG_PATHS.append(config_path)
+
+    # XXX get rid of this logic
     if UNIT_TESTING:
         # unit testing loads different configurations
         CONFIG_PATHS.append(os.path.join(SAQ_HOME, 'etc', 'saq.unittest.default.ini'))
@@ -317,10 +330,10 @@ def initialize(saq_home=None,
         CONFIG_PATHS.append(os.path.join(SAQ_HOME, 'etc', 'saq.ini'))
 
     try:
-        load_configuration()
+        CONFIG = load_configuration()
     except Exception as e:
-        sys.stderr.write("ERROR: unable to load configuration: {0}".format(str(e)))
-        sys.exit(1)
+        sys.stderr.write(f"ERROR: unable to load configuration: {e}")
+        sys.exit(1) # TODO replace with exception for unit testing
 
     DATA_DIR = os.path.join(SAQ_HOME, CONFIG['global']['data_dir'])
     TEMP_DIR = os.path.join(DATA_DIR, CONFIG['global']['tmp_dir'])
