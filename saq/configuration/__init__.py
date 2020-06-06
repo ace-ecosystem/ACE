@@ -135,17 +135,6 @@ def load_configuration_file(path, config=None):
     apply_config(config, target_config)
     return config
 
-def load_configuration(*args, **kwargs):
-    try:
-        return _load_configuration(*args, **kwargs)
-    except Exception as e:
-        error_message = f"unable to load configuration: {e}"
-
-        sys.stderr.write(f"{error_message}\n")
-        traceback.print_exc()
-        if saq.CONFIG is None:
-            raise ConfigurationException(error_message)
-
 def load_configuration_references(config):
     """Recursively loads configuration files references to other configuration files.
 
@@ -178,12 +167,24 @@ def load_configuration_references(config):
             break
 
     return config
-        
-def _load_configuration():
-    #default_config = ExtendedConfigParser(
-            #allow_no_value=True, 
-            #interpolation=EncryptedPasswordInterpolation())
 
+def load_path_references(config):
+    """Appends any values found in the [path] section to sys.path."""
+    if 'path' not in config:
+        return 
+
+    for key, value in config['path'].items():
+        sys.path.append(value)
+
+def load_configuration():
+    """Loads the entire ACE configuration and returns the resulting ConfigParser object.
+    
+    See https://ace-ecosystem.github.io/ACE/design/configuration/ for details on how configuration data is loaded.
+    This function may also modify sys.path if the configuration contains options under the [path] section.
+
+    Returns:
+        The resulting ConfigParser object with all configuration data loaded.
+    """
     # XXX HACK <-- get rid of these dude
     # optionally when unit testing, the local site passwords can be saved in etc/unittest.passwords.json
     # this will automatically load these passwords, not requiring ecs running
@@ -201,18 +202,11 @@ def _load_configuration():
     default_config = load_configuration_file(
             os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.default.ini'),
             default_config)
-    #default_integration_config = ConfigParser(allow_no_value=True)
-    #default_integration_config.read(default_integration_config_path)
-    #apply_config(default_config, default_integration_config)
 
     # then if a local configuration exists for this integration, also load that
     default_config = load_configuration_file(
             os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.ini'),
             default_config)
-    #if os.path.exists(integration_config_path):
-        #integration_config = ConfigParser(allow_no_value=True)
-        #integration_config.read(integration_config_path)
-        #apply_config(default_config, integration_config)
 
     # load individual integration configurations
     if 'integrations' in default_config:
@@ -226,49 +220,18 @@ def _load_configuration():
                     continue
 
                 default_config = load_configuration_file(target_config_path, default_config)
-                #default_integration_config = ConfigParser(allow_no_value=True)
-                #default_integration_config.read(target_config_path)
-                #apply_config(default_config, default_integration_config)
 
                 # and then load the local site config for this integration, if it exists
                 default_config = load_configuration_file(
                         os.path.join(saq.SAQ_HOME, 'etc', f'saq.{integration}.ini'),
                         default_config)
-                #if not os.path.exists(target_config_path):
-                    #continue
-
-                #integration_config = ConfigParser(allow_no_value=True)
-                #integration_config.read(target_config_path)
-                #apply_config(default_config, integration_config)
 
     for config_path in saq.CONFIG_PATHS:
         default_config = load_configuration_file(config_path, default_config)
-        #override = ConfigParser(allow_no_value=True)
-        #override.read(config_path)
-        #apply_config(default_config, override)
 
     default_config = load_configuration_references(default_config)
-
-    # load additional configuration files specified inside the configuration (recursively)
-    #config_load_map = set() # set of configs already loaded
-    #while True:
-        #loaded_config = False
-        #for config_key, config_path in default_config['config'].items():
-            #if config_key not in config_load_map:
-                #if not os.path.isabs(config_path):
-                    #config_path = os.path.join(saq.SAQ_HOME, config_path)
-
-                #override = ConfigParser(allow_no_value=True)
-                #override.read(config_path)
-                #apply_config(default_config, override)
-                #config_load_map.add(config_key)
-                #loaded_config = True
-
-        # if we didn't load any new configuration files on this pass then we're done
-        #if not loaded_config:
-            #break
-
     verify_config(default_config)
+    load_path_references(default_config)
     return default_config
 
 def export_encrypted_passwords():

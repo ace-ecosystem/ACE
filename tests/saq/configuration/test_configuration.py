@@ -1,10 +1,12 @@
-import os, os.path
 from configparser import ConfigParser
+import os, os.path
+import sys
 
 from saq.configuration import (
         apply_config,
         load_configuration_file,
         load_configuration_references,
+        load_path_references,
         verify_config,
         ConfigurationException)
 
@@ -160,3 +162,20 @@ option = OVERRIDE
     config = load_configuration_file(ini_path_1)
     with pytest.raises(ConfigurationException):
         verify_config(config)
+
+def test_load_path_references(tmp_path):
+    temp_dir = tmp_path / 'temp_dir'
+    temp_dir.mkdir()
+    temp_dir = str(temp_dir)
+
+    ini_path_1 = str(tmp_path / '1.ini')
+    with open(ini_path_1, 'w') as fp:
+        fp.write(f"""
+[path]
+site_config_dir = {temp_dir}
+""")
+
+    config = load_configuration_file(ini_path_1)
+    load_path_references(config)
+    assert temp_dir in sys.path
+
