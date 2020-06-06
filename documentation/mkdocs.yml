@@ -46,19 +46,8 @@ markdown_extensions:
       permalink: true
   - fenced_code
 
-# Page tree
-nav:
-    - Home: index.md
-    - Overview: overview/index.md
-    - Installation: 
-        - Overview: installation/index.md
-    - Analyst Guide: 
-        - Overview: user/index.md
-        - Hunting: user/hunting.md
-    - Administrators Guide: 
-        - Overview: admin/index.md
-    - Development Guide: 
-        - Overview: development/index.md
-        - API: development/api.md
-        - History: development/history.md
+# Plugins
+plugins:
+  - search
+  - awesome-pages
 

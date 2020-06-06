@@ -1,18 +1,12 @@
-Analyst Orientation - Start Here
-================================
+# User Guide
 
-Keep this in mind when working ACE alerts: ACE is meant to enable the
-analyst to QUICKLY disposition false positive alerts and recognize true
-positives.
+Keep this in mind when working ACE alerts: ACE is meant to enable the analyst to QUICKLY disposition false positive alerts and recognize true positives.
 
-For convenience, here is a video recording that provides a tour of the
-ACE GUI and demonstrates how to work some ACE alerts. Many of the
-concepts in this orientation are covered.
+For convenience, here is a video recording that provides a tour of the ACE GUI and demonstrates how to work some ACE alerts. Many of the concepts in this orientation are covered.
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/dg19VBoVesU" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+<a href="http://www.youtube.com/watch?feature=player_embedded&v=dg19VBoVesU" target="_blank"><img src="http://img.youtube.com/vi/dg19VBoVesU/0.jpg" alt="ACE Example Walkthrough" width="240" height="180" border="10"></a>
 
-Quick Concept Touchpoint
-------------------------
+## Quick Concept Touchpoint
 
 There are two core concepts an analyst must be familiar with when
 working ACE alerts: Observables and Dispositioning.

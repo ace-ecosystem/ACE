@@ -1,5 +1,4 @@
-Some Background
-===============
+# Philosophy
 
 The following topics cover some concepts (at a high level) that should
 be first understood if you're curious about where ACE comes from or the
@@ -11,8 +10,7 @@ here:
 
 <iframe width="560" height="315" src="https://www.youtube.com/embed/okMkF-NYCHk?rel=0" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
 
-Driving Behavior
-----------------
+## Driving Behavior
 
 The metric this tool attempts to drive is called **time to
 disposition**, or, *how long does it take to figure out you're wasting
@@ -29,8 +27,7 @@ Over the years as an analyst, I came to realize that most of the alerts
 I worked ended up being dispositioned as false positive, with the
 following definition of what a false postive actually is.
 
-False Positive - An alert you're not going to respond to.
-----------------
+## False Positive - An alert you're not going to respond to.
 
 I think many people define a false positive more in terms of mismatching
 something, such as a network-based packet alert that pattern matched
@@ -66,16 +63,15 @@ accurately identifying an attack.
 
 I disagree with that and here is why.
 
-Algorithms and Metrics 
-----------------
+## Algorithms and Metrics 
 
 An analyst can work a certain number of alerts in a given day. How large
 that number is depends on a number of factors such as
 
--   how skilled they are.
--   how good their tools are.
--   how focused they are.
--   how much analysis paralysis has set in (aka alert burn-out.)
+- how skilled they are.
+- how good their tools are.
+- how focused they are.
+- how much analysis paralysis has set in (aka alert burn-out.)
 
 Say we measure the number of alerts the analysts can work in a given day
 as measurement **W**.
@@ -120,11 +116,11 @@ Finally, tuning is how to manage the increase in **N**. This is the
 action of **preventing the tools from generating false positive
 alerts.** This is accomplished in one of two ways:
 
--   modifying the hunt to avoid the false positives. For example,
+- modifying the hunt to avoid the false positives. For example,
     tweaking the signature to be more specific in the match, or adding
     additional boolean logic clauses to queries (such as NOT this AND
     NOT that AND NOT that.)
--   turning off the alert entirely in the case where the hunt is either
+- turning off the alert entirely in the case where the hunt is either
     wrong or not tunable.
 
 At this point, we're constantly increasing **C** by following the

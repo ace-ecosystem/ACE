@@ -25,6 +25,7 @@ iptools
 ldap3==2.5 
 lxml
 mkdocs
+mkdocs-awesome-pages-plugin
 msoffice_decrypt
 olefile
 oletools
