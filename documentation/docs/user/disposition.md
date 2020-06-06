@@ -1,10 +1,10 @@
 # Disposition
 
-See the [design guide](../design/disposition.md) for an overview of how dispositions are used by ACE.
+See the [design guide](../design/disposition.md) for an overview of what a disposition is and how they are used by ACE.
 
 ## Base Dispositions
 
-The following dispositions come standard with ACE.
+The following dispositions come standard with ACE. Additional dispositions may be added.
 
 ### FALSE POSITIVE
 
@@ -63,8 +63,47 @@ The detection of an attempt to build a cyber attack weapon.
 
 ### DELIVERY
 
-An attack was attempted, and the attack's destination was reached. Even with no indication the attack worked. 
+An attack was attempted, and the attack's destination was reached. Even with no indication the attack worked.
 
 - A user browsed to an exploit kit
 - A phish was delivered to the email inbox
 - AV detected and remediated malware after the malware was written to disk
+
+### EXPLOITATION
+
+An attack was DELIVERED and there is evidence that the EXPLOITATION worked in whole or in part.
+
+- A user clicked on a malicious link from a phish
+- A user opened and ran a malicious email attachment
+- A user hit an exploit kit, a Flash exploit was attempted
+
+### INSTALLATION
+
+An attack was DELIVERED and the attack resulted in the INSTALLATION of something to maintain persistence on an asset/endpoint/system.
+
+- A user browsed to an exploit kit and got malware installed on their system
+- A user executed a malicious email attachment and malware was installed
+- Malware executed off a USB and installed persistence on an endpoint
+
+### COMMAND AND CONTROL
+
+An attacker was able to communicate between their control system and a compromised asset. The adversary has been able to establish a control channel with an asset.
+
+Example Scenario: A phish is DELIVERED to an inbox, and a user opens a malicious Word document that was attached. The Word document EXPLOITS a vulnerability and leads to the INSTALLATION of malware. The malware is able to communicate back to the attackers COMMAND_AND_CONTROL server.
+
+### EXFIL
+
+A form of **action on objectives** where an objective is an adversaries goal for attacking. EXFIL indicates the loss of something important.
+
+- Adversaries steals information by uploading files to their control server
+- A user submits login credentials to a phishing website
+
+### DAMAGE
+
+A form of **action on objectives** where an objective is an adversaries goal for attacking. DAMAGE indicates that damage or disruption was made to an asset, the network, the company, or business operations.
+
+- An attacker steals money by tricking an employee to change the bank account number of a customer
+- Ransomware encrypts multiple files on an asset
+- PLC code is modified and warehouse equipment is broken
+- Process Control Systems are tampered with and a facility must shutdown until repairs are made
+- A public facing website is compromised and defaced or serves malware to other victims
