@@ -169,12 +169,15 @@ def load_configuration_references(config):
     return config
 
 def load_path_references(config):
-    """Appends any values found in the [path] section to sys.path."""
+    """Appends any values found in the [path] section to sys.path.
+    
+    If the value is not an absolute path then it is made absolute using SAQ_HOME."""
+
     if 'path' not in config:
         return 
 
     for key, value in config['path'].items():
-        sys.path.append(value)
+        sys.path.append(abs_path(value))
 
 def load_configuration():
     """Loads the entire ACE configuration and returns the resulting ConfigParser object.
@@ -226,12 +229,20 @@ def load_configuration():
                         os.path.join(saq.SAQ_HOME, 'etc', f'saq.{integration}.ini'),
                         default_config)
 
+    # then finally add the list specified via environment variables, command line
+    # and the site local etc/saq.ini
     for config_path in saq.CONFIG_PATHS:
         default_config = load_configuration_file(config_path, default_config)
 
+    # resolve the configuration references
     default_config = load_configuration_references(default_config)
+
+    # verify the entire configuration
     verify_config(default_config)
+
+    # modify sys.path if needed
     load_path_references(default_config)
+
     return default_config
 
 def export_encrypted_passwords():
