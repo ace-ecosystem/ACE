@@ -26,14 +26,6 @@ class EncryptedPasswordError(Exception):
         super().__init__(*args, **kwargs)
         self.key = key
 
-class ExtendedConfigParser(ConfigParser):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # local cache of decrypted passwords
-        # this is loaded as the passwords are decrypted
-        self.encrypted_password_cache = {}
-
 class EncryptedPasswordInterpolation(Interpolation):
     def before_get(self, parser, section, option, value, defaults):
         # if we have not initialized encryption yet then just return as-is
@@ -64,117 +56,112 @@ class EncryptedPasswordInterpolation(Interpolation):
         parser.encrypted_password_cache[key] = decrypt_password(key)
         return parser.encrypted_password_cache[key]
 
-def verify_config(config):
-    """Verifies the configuration.
-
-    - Ensures that there are no settings left with a value of OVERRIDE.
-
-    Returns:
-        True if the configuration is valid.
-
-    Raises:
-        ConfigurationException: The configuration is invalid.
-    """
-    # make sure all OVERRIDE settings are actually overridden
-    errors = {}
-    for section_name in config:
-        for value_name in config[section_name]:
-            if config[section_name][value_name] == 'OVERRIDE':
-                if section_name not in errors:
-                    errors[section_name] = []
-                errors[section_name].append(value_name)
-
-    if errors:
-        for section_name in errors.keys():
-            sys.stderr.write("[{}]\n".format(section_name))
-            for value_name in errors[section_name]:
-                sys.stderr.write("{} = \n".format(value_name))
-            sys.stderr.write("\n")
-            
-        sys.stderr.write("missing overrides detection in configuration settings\n")
-        sys.stderr.write("you can copy-paste the above into your config file if you do not need these settings\n\n")
-        raise ConfigurationException("missing OVERRIDES in configuration")
-
-    return True
-
-def apply_config(source, override):
-    """Takes the loaded ConfigParser override and applies it to source such that any 
-       configuration values in source are overridden by those specified in override."""
-    for section_name in override:
-        if section_name in source:
-            for value_name in override[section_name]:
-                source[section_name][value_name] = override[section_name][value_name]
-        else:
-            source[section_name] = override[section_name]
-
-def load_configuration_file(path, config=None):
-    """Loads a configuration file into the given configuration settings.
-
-    Args:
-        path: The path to the ini formatted file to load. If the path is a relative path, it is made relative
-            to SAQ_HOME.
-        config: A reference to an existing ConfigParser object, or None which creates a new one.
-
-    Returns:
-        The existing ConfigParser object, or a new one if it wasn't passed in, with the file loaded.
-    """
-    if config is None:
-        config = ExtendedConfigParser(
-            allow_no_value=True, 
+class ACEConfigParser(ConfigParser):
+    def __init__(self):
+        super().__init__(
+            allow_no_value=True,
             interpolation=EncryptedPasswordInterpolation())
-        target_config = config
-    else:
+
+        # local cache of decrypted passwords
+        # this is loaded as the passwords are decrypted
+        self.encrypted_password_cache = {}
+
+        # set of files loaded so far
+        self.loaded_files = set()
+
+    def verify(self):
+        """Verifies the configuration.
+
+        - Ensures that there are no settings left with a value of OVERRIDE.
+
+        Returns:
+            True if the configuration is valid.
+
+        Raises:
+            ConfigurationException: The configuration is invalid.
+        """
+        # make sure all OVERRIDE settings are actually overridden
+        errors = {}
+        for section_name in self:
+            for value_name in self[section_name]:
+                if self[section_name][value_name] == 'OVERRIDE':
+                    if section_name not in errors:
+                        errors[section_name] = []
+                    errors[section_name].append(value_name)
+
+        if errors:
+            for section_name in errors.keys():
+                sys.stderr.write("[{}]\n".format(section_name))
+                for value_name in errors[section_name]:
+                    sys.stderr.write("{} = \n".format(value_name))
+                sys.stderr.write("\n")
+                
+            sys.stderr.write("missing overrides detection in configuration settings\n")
+            sys.stderr.write("you can copy-paste the above into your config file if you do not need these settings\n\n")
+            raise ConfigurationException("missing OVERRIDES in configuration")
+
+        return True
+
+    def apply(self, config):
+        """Takes the loaded ConfigParser override and applies it to source such that any 
+           configuration values in source are overridden by those specified in override."""
+        for section_name in config:
+            if section_name in self:
+                for value_name in config[section_name]:
+                    self[section_name][value_name] = config[section_name][value_name]
+            else:
+                self[section_name] = config[section_name]
+
+    def load_file(self, path):
+        """Loads a configuration file into the given configuration settings with
+            all [config] references are resolved.
+
+        Args:
+            path: The path to the ini formatted file to load. If the path is a
+                relative path, it is made relative to SAQ_HOME.
+
+        Returns:
+            The existing ConfigParser object, or a new one if it wasn't passed in,
+            with the file loaded and all references resolved.
+        """
         target_config = ConfigParser(allow_no_value=True)
+        path = abs_path(path)
+        target_config.read(path)
+        self.apply(target_config)
+        self.loaded_files.add(path)
+        self.resolve_references()
+        return self
 
-    path = abs_path(path)
-    target_config.read(path)
+    def resolve_references(self):
+        """Recursively loads configuration files references to other configuration files.
 
-    if config is None:
-        return target_config
+        See https://ace-ecosystem.github.io/ACE/design/configuration/
+        """
+        if 'config' not in self:
+            return
 
-    apply_config(config, target_config)
-    return config
+        # load additional configuration files specified inside the configuration (recursively)
+        while True:
+            loaded_config = False
+            for config_key, config_path in self['config'].items():
+                if config_path not in self.loaded_files:
+                    config = self.load_file(config_path)
+                    loaded_config = True
 
-def load_configuration_references(config):
-    """Recursively loads configuration files references to other configuration files.
+            # if we didn't load any new configuration files on this pass then we're done
+            if not loaded_config:
+                break
 
-    See https://ace-ecosystem.github.io/ACE/design/configuration/
+    def apply_path_references(self):
+        """Appends any values found in the [path] section to sys.path.
+        
+        If the value is not an absolute path then it is made absolute using SAQ_HOME."""
 
-    Args:
-        config: The existing configuration as returned by load_configuration or load_configuration_file.
+        if 'path' not in self:
+            return 
 
-    Returns:
-        The config object passed in with any referenced configuration files loaded.
-    """
-    if config is None:
-        raise ConfigurationException("None was passed to load_configuration_references")
-
-    if 'config' not in config:
-        return config
-
-    # load additional configuration files specified inside the configuration (recursively)
-    config_load_map = set() # set of configs already loaded
-    while True:
-        loaded_config = False
-        for config_key, config_path in config['config'].items():
-            if config_key not in config_load_map:
-                config = load_configuration_file(config_path, config)
-                config_load_map.add(config_key)
-                loaded_config = True
-
-        # if we didn't load any new configuration files on this pass then we're done
-        if not loaded_config:
-            break
-
-    return config
-
-def load_path_references(config):
-    """Appends any values found in the [path] section to sys.path."""
-    if 'path' not in config:
-        return 
-
-    for key, value in config['path'].items():
-        sys.path.append(value)
+        for key, value in self['path'].items():
+            sys.path.append(abs_path(value))
 
 def load_configuration():
     """Loads the entire ACE configuration and returns the resulting ConfigParser object.
@@ -196,17 +183,14 @@ def load_configuration():
                 #default_config.encrypted_password_cache = json.load(fp)
 
     # etc/saq.default.ini is always loaded first no matter what
-    default_config = load_configuration_file(os.path.join(saq.SAQ_HOME, 'etc', 'saq.default.ini'))
+    default_config = ACEConfigParser()
+    default_config.load_file(os.path.join(saq.SAQ_HOME, 'etc', 'saq.default.ini'))
 
     # first we apply the default configuration for integrations
-    default_config = load_configuration_file(
-            os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.default.ini'),
-            default_config)
+    default_config.load_file(os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.default.ini'))
 
     # then if a local configuration exists for this integration, also load that
-    default_config = load_configuration_file(
-            os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.ini'),
-            default_config)
+    default_config.load_file(os.path.join(saq.SAQ_HOME, 'etc', 'saq.integrations.ini'))
 
     # load individual integration configurations
     if 'integrations' in default_config:
@@ -219,19 +203,24 @@ def load_configuration():
                                       "does not exist\n")
                     continue
 
-                default_config = load_configuration_file(target_config_path, default_config)
+                default_config.load_file(target_config_path)
 
                 # and then load the local site config for this integration, if it exists
-                default_config = load_configuration_file(
-                        os.path.join(saq.SAQ_HOME, 'etc', f'saq.{integration}.ini'),
-                        default_config)
+                #default_config = load_configuration_file(
+                        #os.path.join(saq.SAQ_HOME, 'etc', f'saq.{integration}.ini'),
+                        #default_config)
 
+    # then finally add the list specified via environment variables, command line
+    # and the site local etc/saq.ini
     for config_path in saq.CONFIG_PATHS:
-        default_config = load_configuration_file(config_path, default_config)
+        default_config.load_file(config_path)
 
-    default_config = load_configuration_references(default_config)
-    verify_config(default_config)
-    load_path_references(default_config)
+    # verify the entire configuration
+    default_config.verify()
+
+    # modify sys.path if needed
+    default_config.apply_path_references()
+
     return default_config
 
 def export_encrypted_passwords():

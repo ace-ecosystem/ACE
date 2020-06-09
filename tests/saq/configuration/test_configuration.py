@@ -3,11 +3,7 @@ import os, os.path
 import sys
 
 from saq.configuration import (
-        apply_config,
-        load_configuration_file,
-        load_configuration_references,
-        load_path_references,
-        verify_config,
+        ACEConfigParser,
         ConfigurationException)
 
 import pytest
@@ -30,13 +26,9 @@ test_1 = 4
 test_3 = 3
 """)
 
-    config = ConfigParser(allow_no_value=True)
-    config.read(ini_path_1)
-
-    override = ConfigParser(allow_no_value=True)
-    override.read(ini_path_2)
-
-    apply_config(config, override)
+    config = ACEConfigParser()
+    config.load_file(ini_path_1)
+    config.load_file(ini_path_2)
 
     # test that changes made in override are in config
     assert config['global']['test_1'] == '4'
@@ -54,7 +46,8 @@ def test_load_configuration_file(tmp_path):
 test = yes
 """)
 
-    config = load_configuration_file(ini_path)
+    config = ACEConfigParser()
+    config.load_file(ini_path)
     assert config['global']['test'] == 'yes'
     assert config['global'].getboolean('test')
 
@@ -75,8 +68,9 @@ test = no
 new_option = value
 """)
 
-    config = load_configuration_file(ini_path)
-    load_configuration_file(ini_path_override, config)
+    config = ACEConfigParser()
+    config.load_file(ini_path)
+    config.load_file(ini_path_override)
     assert config['global']['test'] == 'no'
     assert not config['global'].getboolean('test')
     assert config['global']['new_option'] == 'value'
@@ -107,8 +101,8 @@ config_3 = {ini_path_3}
 loaded_3 = yes
 """)
 
-    config = load_configuration_file(ini_path_1)
-    config = load_configuration_references(config)
+    config = ACEConfigParser()
+    config.load_file(ini_path_1)
     assert config['global'].getboolean('loaded_3')
 
 def test_load_configuration_missing_reference(tmp_path):
@@ -124,8 +118,8 @@ def test_load_configuration_missing_reference(tmp_path):
 config_2 = {ini_path_2}
 """)
 
-    config = load_configuration_file(ini_path_1)
-    config = load_configuration_references(config)
+    config = ACEConfigParser()
+    config.load_file(ini_path_1)
 
     assert config['config']['config_2'] == ini_path_2
 
@@ -137,8 +131,8 @@ def test_load_configuration_no_references(tmp_path):
 option = test
 """)
 
-    config = load_configuration_file(ini_path_1)
-    config = load_configuration_references(config)
+    config = ACEConfigParser()
+    config.load_file(ini_path_1)
 
 def test_verify_valid_config(tmp_path):
     ini_path_1 = str(tmp_path / '1.ini')
@@ -148,8 +142,9 @@ def test_verify_valid_config(tmp_path):
 option = test
 """)
 
-    config = load_configuration_file(ini_path_1)
-    assert verify_config(config)
+    config = ACEConfigParser()
+    config.load_file(ini_path_1)
+    assert config.verify()
 
 def test_verify_invalid_config(tmp_path):
     ini_path_1 = str(tmp_path / '1.ini')
@@ -159,9 +154,10 @@ def test_verify_invalid_config(tmp_path):
 option = OVERRIDE
 """)
 
-    config = load_configuration_file(ini_path_1)
+    config = ACEConfigParser()
+    config.load_file(ini_path_1)
     with pytest.raises(ConfigurationException):
-        verify_config(config)
+        config.verify()
 
 def test_load_path_references(tmp_path):
     temp_dir = tmp_path / 'temp_dir'
@@ -175,7 +171,8 @@ def test_load_path_references(tmp_path):
 site_config_dir = {temp_dir}
 """)
 
-    config = load_configuration_file(ini_path_1)
-    load_path_references(config)
+    config = ACEConfigParser()
+    config.load_file(ini_path_1)
+    config.apply_path_references()
     assert temp_dir in sys.path
 
