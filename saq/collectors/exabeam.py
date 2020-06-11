@@ -65,7 +65,7 @@ class ExabeamCollector(ScheduledCollector):
                 description = f"Exabeam Session - {session['id']} - {session['risk']:.0f}",
                 analysis_mode = ANALYSIS_MODE_CORRELATION,
                 tool = 'exabeam',
-                tool_instance = "",
+                tool_instance = saq.CONFIG['exabeam']['base_uri'],
                 type = ANALYSIS_TYPE_EXABEAM,
                 event_time = datetime.datetime.now(),
                 details = session,

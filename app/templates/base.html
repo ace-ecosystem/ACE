@@ -106,7 +106,7 @@
                 {% else %}
                 <li><a href="{{ url_for('auth.login') }}">Sign In</a></li>
                 {% endif %}
-                <li><a href="/ace/docs" target="_blank">Help</a></li>
+                <li><a href="https://ace-ecosystem.github.io/ACE/" target="_blank">Help</a></li>
             </ul>
 	</div>
     </div>
@@ -440,13 +440,13 @@
 
 <!-- remediation activity dialog -->
 <div class="modal" id="remediation_activity_modal" tabindex="-1" role="dialog" aria-labelledby="remediation_activity_label" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="word-break: break-word">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
                 <h4 class="modal-title" id="remediation_activity_label">Remediation Execution</h4>
             </div>
-            <div class="modal-body" id="remediation-activity-body">
+            <div class="modal-body" id="remediation-activity-body" style="word-wrap: break-word">
                 executing...
             </div>
             <div class="modal-footer">
@@ -459,13 +459,13 @@
 
 <!-- remediation selection dialog -->
 <div class="modal fade" id="remediation-selection-modal" tabindex="-1" role="dialog" aria-labelledby="remediation-selection-label" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="word-break: break-word">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
                 <h4 class="modal-title" id="remediation-selection-label">Remediation Selection</h4>
             </div>
-            <div class="modal-body" id="remediation-selection-body">
+            <div class="modal-body" id="remediation-selection-body" style="word-wrap: break-word">
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-default" id="btn-remediation-selection-dismiss" data-dismiss="modal">Nevermind</button>

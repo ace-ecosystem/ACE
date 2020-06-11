@@ -2540,6 +2540,9 @@ class YaraScanner_v3_4(AnalysisModule):
             for tag in yara_result['tags']:
                 #rule_observable.add_tag(tag)
                 _file.add_tag(tag)
+                # if the yara rule is whitelisted, we need to make sure the analysis is whitelisted in ACE
+                if tag == "whitelisted":
+                    _file.mark_as_whitelisted()
 
         return True
 
@@ -3348,6 +3351,31 @@ class URLExtractionAnalyzer(AnalysisModule):
             return extracted_urls
         return interesting_url_order, _groupings
 
+    def filter_excluded_domains(self, url):
+
+        # filter out the stuff that is excluded via configuration
+        fqdns = [_.strip() for _ in self.config['excluded_domains'].split(',')]
+
+        if not fqdns:
+            return True
+
+        try:
+            parsed_url = urlparse(url)
+        except:
+            return True
+
+        if parsed_url.hostname is None:
+            return True
+
+        if '.' not in parsed_url.hostname:
+            return False
+
+        for fqdn in fqdns:
+            if is_subdomain(parsed_url.hostname, fqdn):
+                return False
+
+        return True
+
     def execute_analysis(self, _file):
         from saq.modules.cloudphish import CloudphishAnalyzer
 
@@ -3355,7 +3383,7 @@ class URLExtractionAnalyzer(AnalysisModule):
         file_type_analysis = self.wait_for_analysis(_file, FileTypeAnalysis)
         if file_type_analysis is None:
             return False
-        
+
         local_file_path = get_local_file_path(self.root, _file)
         if not os.path.exists(local_file_path):
             logging.error("cannot find local file path for {}".format(_file.value))
@@ -3371,42 +3399,21 @@ class URLExtractionAnalyzer(AnalysisModule):
             logging.debug("file {} is too large to extract URLs from".format(_file.value))
             return False
 
-        analysis = self.create_analysis(_file)
-        extracted_urls = []
+        # if this file was downloaded from some url then we want all the relative urls to be aboslute to the reference url
         base_url = None
-
         if file_type_analysis.mime_type and 'html' in file_type_analysis.mime_type.lower():
-            # if this file was downloaded from some url then we want all the relative urls to be aboslute to the reference url
             downloaded_from = _file.get_relationship_by_type(R_DOWNLOADED_FROM)
             if downloaded_from:
                 base_url = downloaded_from.target.value
 
         # extract all the URLs out of this file
+        extracted_urls = []
         with open(local_file_path, 'rb') as fp:
             extracted_urls = find_urls(fp.read(), base_url=base_url)
             logging.debug("extracted {} urls from {}".format(len(extracted_urls), local_file_path))
 
-        # filter out the stuff that is excluded via configuration
-        fqdns = [_.strip() for _ in self.config['excluded_domains'].split(',')]
-        def f(url):
-            if not fqdns:
-                return True
-
-            try:
-                parsed_url = urlparse(url)
-            except:
-                return True
-
-            if parsed_url.hostname is None:
-                return True
-
-            for fqdn in fqdns:
-                if is_subdomain(parsed_url.hostname, fqdn):
-                    return False
-
-            return True
-        
-        extracted_urls = list(filter(f, extracted_urls))
+        extracted_urls = list(filter(self.filter_excluded_domains, extracted_urls))
+        analysis = self.create_analysis(_file)
 
         # since cloudphish_request_limit, order urls by our interest in them
         extracted_ordered_urls, analysis.details['urls_grouped_by_domain'] = self.order_urls_by_interest(extracted_urls)

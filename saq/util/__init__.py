@@ -5,6 +5,7 @@
 
 import collections
 import datetime
+import fcntl
 import functools
 import itertools
 import json
@@ -559,3 +560,18 @@ class PreInitCustomSSLAdapter(requests.adapters.HTTPAdapter):
         if proxies is None:
             return super().send(*args, **kwargs)
         return super().send(*args, proxies=self.PROXIES, **kwargs)
+
+# class for opening files after securing a lock
+class atomic_open:
+    def __init__(self, path, *args, **kwargs):
+        self.lock_file = open(f"{path}.lock", 'w')
+        fcntl.lockf(self.lock_file, fcntl.LOCK_EX)
+        self.file = open(path, *args, **kwargs)
+
+    def __enter__(self, *args, **kwargs):
+        return self.file
+
+    def __exit__(self, exc_type=None, exc_value=None, traceback=None):        
+        self.file.close()
+        fcntl.lockf(self.lock_file, fcntl.LOCK_UN)
+        self.lock_file.close()

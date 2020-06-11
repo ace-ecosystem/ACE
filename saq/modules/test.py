@@ -224,6 +224,30 @@ class GenericTestAnalyzer(AnalysisModule):
         analysis = self.create_analysis(observable)
         return True
 
+class CacheTestAnalysis(TestAnalysis):
+    def initialize_details(self):
+        self.details = { "cached": False }
+
+    def generate_summary(self):
+        return "summary"
+
+class CacheTestAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return CacheTestAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return VALID_OBSERVABLE_TYPES
+
+    def execute_analysis(self, observable):
+        analysis = self.create_analysis(observable)
+        # change analysis details depending on if analysis is cached or not
+        path = os.path.join(saq.SAQ_HOME, saq.DATA_DIR, 'analysis_cache', f'{observable.cache_id}.{self.generated_analysis_type.__name__}.v{self.version}.json')
+        if os.path.isfile(path):
+            analysis.details['cached'] = True
+        return True
+
 class ValidQueueAnalysis(TestAnalysis):
     def initialize_details(self):
         self.details = { "success": True }

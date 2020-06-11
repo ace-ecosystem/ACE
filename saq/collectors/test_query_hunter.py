@@ -31,7 +31,6 @@ class TestQueryHunt(QueryHunt):
 def default_hunt(enabled=True, 
                  name='test_hunt', 
                  description='Test Hunt', 
-                 type='test_query',
                  alert_type='test - query',
                  frequency=create_timedelta('00:10'), 
                  tags=[ 'test_tag' ],
@@ -46,7 +45,6 @@ def default_hunt(enabled=True,
     return TestQueryHunt(enabled=enabled, 
                          name=name, 
                          description=description,
-                         type=type,     
                          alert_type=alert_type,
                          frequency=frequency, 
                          tags=tags,
@@ -80,7 +78,7 @@ class TestCase(HunterBaseTestCase):
 enabled = yes
 name = query_test_1
 description = Query Test Description 1
-type = query_test
+type = test_query
 alert_type = test - query
 frequency = 00:01:00
 tags = tag1, tag2
@@ -115,7 +113,8 @@ dst_ip = yes
                  'hunt_cls': TestQueryHunt,
                  'concurrency_limit': 1,
                  'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir']),
-                 'update_frequency': 60 }
+                 'update_frequency': 60 ,
+                 'config': {}}
 
     def test_load_hunt_ini(self):
         manager = HuntManager(**self.manager_kwargs())
@@ -125,7 +124,7 @@ dst_ip = yes
         self.assertTrue(hunt.enabled)
         self.assertEquals(hunt.name, 'query_test_1')
         self.assertEquals(hunt.description, 'Query Test Description 1')
-        self.assertEquals(hunt.type, 'test_query')
+        self.assertEquals(hunt.manager, manager)
         self.assertEquals(hunt.alert_type, 'test - query')
         self.assertEquals(hunt.frequency, create_timedelta('00:01:00'))
         self.assertEquals(hunt.tags, ['tag1', 'tag2'])
@@ -146,7 +145,7 @@ dst_ip = yes
 enabled = yes
 name = query_test_1
 description = Query Test Description 1
-type = query_test
+type = test_query
 alert_type = test - query
 frequency = 00:01:00
 tags = tag1, tag2
@@ -183,7 +182,7 @@ dst_ip = yes
 enabled = yes
 name = query_test_1
 description = Query Test Description 1
-type = query_test
+type = test_query
 alert_type = test - query
 frequency = 00:01:00
 tags = tag1, tag2
@@ -257,6 +256,7 @@ dst_ip = yes
         manager = HuntManager(**self.manager_kwargs())
         hunt = default_hunt(time_range=create_timedelta('01:00:00'), 
                             frequency=create_timedelta('01:00:00'))
+        hunt.manager = manager
         manager.add_hunt(hunt)
 
         # first test that the start time and end time are correct for normal operation
@@ -315,6 +315,7 @@ dst_ip = yes
         hunt = default_hunt(time_range=create_timedelta('01:00:00'), 
                             frequency=create_timedelta('01:00:00'),
                             offset=create_timedelta('00:30:00'))
+        hunt.manager = manager
         manager.add_hunt(hunt)
 
         # set the last time we executed to 3 hours ago

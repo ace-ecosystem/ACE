@@ -279,10 +279,6 @@ def initialize_test_environment():
     if 'SAQ_HOME' in os.environ:
         saq_home = os.environ['SAQ_HOME']
 
-    # adjust search path
-    if os.path.join(saq_home, 'lib') not in sys.path:
-        sys.path.append(os.path.join(saq_home, 'lib'))
-
     # initialize saq
     import saq
     saq.initialize(

@@ -171,6 +171,7 @@ class Worker(object):
 
             except Exception as e:
                 logging.error(f"unable to check memory of process {self.process}: {e}")
+                break
 
             return
 
@@ -1537,6 +1538,12 @@ class Engine(ACEService):
             # then finally tell the remote system to clear this work item
             # we use our lock uuid as kind of password for clearing the work item
             clear(uuid, self.lock_uuid, remote_host=remote_host)
+
+            # load the analysis we moved over and change the location there as well
+            root = RootAnalysis(storage_dir=target_dir)
+            root.load()
+            root.location = saq.SAQ_NODE
+            root.save()
 
             return RootAnalysis(uuid=uuid, storage_dir=target_dir)
             

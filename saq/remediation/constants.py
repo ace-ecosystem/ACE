@@ -15,8 +15,6 @@ REMEDIATION_ACTION_RESTORE = 'restore'
 
 # possible remediation systems
 REMEDIATION_SYSTEM_LEGACY = 'legacy'
-REMEDIATION_SYSTEM_PHISHFRY = 'phishfry'
-
 # Outcomes from a remediation attempt
 class RemediationOutcome:
     REMOVED: str = 'removed'

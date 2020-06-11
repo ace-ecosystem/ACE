@@ -208,6 +208,20 @@ class TestCase(ACEBasicTestCase):
         self.assertIsNotNone(alert.id)
         return alert
 
+    def test_load_alert(self):
+        # since we're storing the data in two places (json and database)
+        # make sure that when we load() and Alert we don't immediately make it "dirty" to the ORM
+
+        alert = self.insert_alert()
+        alert_id = alert.id
+        saq.db.close()
+        self.assertFalse(saq.db.dirty)
+
+        for alert in saq.db.query(Alert).filter(Alert.id == alert_id):
+            self.assertFalse(saq.db.dirty)
+            alert.load()
+            self.assertFalse(saq.db.dirty)
+
     def test_connection(self):
         with get_db_connection() as db:
             c = db.cursor()

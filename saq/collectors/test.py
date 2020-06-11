@@ -207,6 +207,51 @@ class TestCase(CollectorBaseTestCase):
         engine.controlled_stop()
         engine.wait()
 
+        collector = _custom_collector()
+        tg1 = collector.add_group('test_group_1', 100, True, saq.COMPANY_ID, 'ace') # 100% coverage
+        collector.start()
+
+        # we should see 1 of these
+        wait_for_log_count('scheduled test_description mode analysis', 1, 5)
+        wait_for_log_count('submitting 1 items', 1, 5)
+        wait_for_log_count('completed work item', 1, 5)
+
+        collector.stop()
+        collector.wait()
+
+        # both the incoming_workload and work_distribution tables should be empty
+        c.execute("SELECT COUNT(*) FROM work_distribution WHERE group_id = %s", (tg1.group_id,))
+        self.assertEquals(c.fetchone()[0], 0)
+        c.execute("SELECT COUNT(*) FROM incoming_workload")
+        self.assertEquals(c.fetchone()[0], 0)
+
+        # and we should have one item in the engine workload
+        c.execute("SELECT COUNT(*) FROM workload ")
+        self.assertEquals(c.fetchone()[0], 1)
+
+    @use_db
+    def test_submit_api(self, db, c):
+        # same as test_submit except we force the use of the api
+        saq.CONFIG['collection']['force_api'] = 'yes'
+
+        class _custom_collector(TestCollector):
+            def __init__(_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.available_work = [self.create_submission() for _ in range(1)]
+
+            def get_next_submission(_self):
+                if not self.available_work:
+                    return None
+
+                return self.available_work.pop()
+
+        # start an engine to get a node created
+        engine = Engine()
+        engine.start()
+        wait_for_log_count('updated node', 1, 5)
+        engine.controlled_stop()
+        engine.wait()
+
         self.start_api_server()
 
         collector = _custom_collector()
@@ -230,6 +275,155 @@ class TestCase(CollectorBaseTestCase):
         # and we should have one item in the engine workload
         c.execute("SELECT COUNT(*) FROM workload ")
         self.assertEquals(c.fetchone()[0], 1)
+
+    @use_db
+    def test_threaded_remote_node_single_submission(self, db, c):
+        saq.CONFIG['collection']['force_api'] = 'yes'
+
+        # test a single submissions against a remote node group that is
+        # configured with two submission threads 
+
+        class _custom_collector(TestCollector):
+            def __init__(_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.available_work = [self.create_submission() for _ in range(1)]
+
+            def get_next_submission(_self):
+                if not self.available_work:
+                    return None
+
+                return self.available_work.pop()
+
+        # start an engine to get a node created
+        engine = Engine(pool_size_limit=1)
+        engine.start()
+        wait_for_log_count('updated node', 1, 5)
+        engine.controlled_stop()
+        engine.wait()
+
+        self.start_api_server()
+
+        collector = _custom_collector()
+        tg1 = collector.add_group('test_group_1', 100, True, saq.COMPANY_ID, 'ace', thread_count=2)
+        collector.start()
+
+        # we should see 1 of these
+        wait_for_log_count('scheduled test_description mode analysis', 1, 5)
+        wait_for_log_count('submitting 1 items', 1, 5)
+        wait_for_log_count('completed work item', 1, 5)
+
+        collector.stop()
+        collector.wait()
+
+        # both the incoming_workload and work_distribution tables should be empty
+        c.execute("SELECT COUNT(*) FROM work_distribution WHERE group_id = %s", (tg1.group_id,))
+        self.assertEquals(c.fetchone()[0], 0)
+        c.execute("SELECT COUNT(*) FROM incoming_workload")
+        self.assertEquals(c.fetchone()[0], 0)
+
+        # and we should have one item in the engine workload
+        c.execute("SELECT COUNT(*) FROM workload ")
+        self.assertEquals(c.fetchone()[0], 1)
+
+    @use_db
+    def test_threaded_remote_node_multi_submissions(self, db, c):
+        saq.CONFIG['collection']['force_api'] = 'yes'
+
+        # test two submissions against a remote node group that is
+        # configured with two submission threads and a batch size of one
+        # we should see each thread submit a single submission
+
+        class _custom_collector(TestCollector):
+            def __init__(_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.available_work = [self.create_submission() for _ in range(2)]
+
+            def get_next_submission(_self):
+                if not self.available_work:
+                    return None
+
+                return self.available_work.pop()
+
+        # start an engine to get a node created
+        engine = Engine(pool_size_limit=1)
+        engine.start()
+        wait_for_log_count('updated node', 1, 5)
+        engine.controlled_stop()
+        engine.wait()
+
+        self.start_api_server()
+
+        collector = _custom_collector()
+        tg1 = collector.add_group('test_group_1', 100, True, saq.COMPANY_ID, 'ace', batch_size=1, thread_count=2)
+        collector.start()
+
+        # we should see 1 of these
+        wait_for_log_count('scheduled test_description mode analysis', 2, 5)
+        wait_for_log_count('submitting 1 items', 2, 5)
+        wait_for_log_count('completed work item', 2, 5)
+
+        collector.stop()
+        collector.wait()
+
+        # both the incoming_workload and work_distribution tables should be empty
+        c.execute("SELECT COUNT(*) FROM work_distribution WHERE group_id = %s", (tg1.group_id,))
+        self.assertEquals(c.fetchone()[0], 0)
+        c.execute("SELECT COUNT(*) FROM incoming_workload")
+        self.assertEquals(c.fetchone()[0], 0)
+
+        # and we should have two items in the engine workload
+        c.execute("SELECT COUNT(*) FROM workload")
+        self.assertEquals(c.fetchone()[0], 2)
+
+    @use_db
+    def test_threaded_remote_node_multi_submissions_with_large_batch(self, db, c):
+        saq.CONFIG['collection']['force_api'] = 'yes'
+
+        # test two submissions against a remote node group that is
+        # configured with two submission threads and a batch size of 2
+        # we should see one thread submit two and the other thread submit nothing
+
+        class _custom_collector(TestCollector):
+            def __init__(_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.available_work = [self.create_submission() for _ in range(2)]
+
+            def get_next_submission(_self):
+                if not self.available_work:
+                    return None
+
+                return self.available_work.pop()
+
+        # start an engine to get a node created
+        engine = Engine(pool_size_limit=1)
+        engine.start()
+        wait_for_log_count('updated node', 1, 5)
+        engine.controlled_stop()
+        engine.wait()
+
+        self.start_api_server()
+
+        collector = _custom_collector()
+        tg1 = collector.add_group('test_group_1', 100, True, saq.COMPANY_ID, 'ace', batch_size=2, thread_count=2)
+        collector.start()
+
+        # we should see 1 of these
+        wait_for_log_count('scheduled test_description mode analysis', 2, 5)
+        wait_for_log_count('submitting 2 items', 1, 5)
+        wait_for_log_count('completed work item', 2, 5)
+
+        collector.stop()
+        collector.wait()
+
+        # both the incoming_workload and work_distribution tables should be empty
+        c.execute("SELECT COUNT(*) FROM work_distribution WHERE group_id = %s", (tg1.group_id,))
+        self.assertEquals(c.fetchone()[0], 0)
+        c.execute("SELECT COUNT(*) FROM incoming_workload")
+        self.assertEquals(c.fetchone()[0], 0)
+
+        # and we should have two items in the engine workload
+        c.execute("SELECT COUNT(*) FROM workload")
+        self.assertEquals(c.fetchone()[0], 2)
 
     @use_db
     def test_submit_target_nodes(self, db, c):
@@ -306,7 +500,6 @@ class TestCase(CollectorBaseTestCase):
 
     @use_db
     def test_coverage(self, db, c):
-
         class _custom_collector(TestCollector):
             def __init__(_self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -324,8 +517,6 @@ class TestCase(CollectorBaseTestCase):
         wait_for_log_count('updated node', 1, 5)
         engine.controlled_stop()
         engine.wait()
-
-        self.start_api_server()
 
         collector = _custom_collector()
         tg1 = collector.add_group('test_group_1', 100, True, saq.COMPANY_ID, 'ace') # 100% coverage
@@ -371,6 +562,8 @@ class TestCase(CollectorBaseTestCase):
 
     @use_db
     def test_fail_submit_full_coverage(self, db, c):
+        saq.CONFIG['collection']['force_api'] = 'yes'
+
         class _custom_collector(TestCollector):
             def __init__(_self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -419,6 +612,8 @@ class TestCase(CollectorBaseTestCase):
 
     @use_db
     def test_fail_submit_no_coverage(self, db, c):
+        saq.CONFIG['collection']['force_api'] = 'yes'
+
         class _custom_collector(TestCollector):
             def __init__(_self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -595,6 +790,7 @@ class TestCase(CollectorBaseTestCase):
 
     @use_db
     def test_submission_success_fail(self, db, c):
+        saq.CONFIG['collection']['force_api'] = 'yes'
 
         # make sure the collector calls success() on successful submission
         # and fail() on failed submission
@@ -679,8 +875,6 @@ class TestCase(CollectorBaseTestCase):
         engine.controlled_stop()
         engine.wait()
 
-        self.start_api_server()
-
         collector = _custom_collector()
         tg1 = collector.add_group('test_group_1', 100, True, saq.COMPANY_ID, 'ace') # 100% coverage
         collector.start()
@@ -696,6 +890,8 @@ class TestCase(CollectorBaseTestCase):
 
     @use_db
     def test_recovery(self, db, c):
+        saq.CONFIG['collection']['force_api'] = 'yes'
+
         class _custom_collector(TestCollector):
             def __init__(_self, *args, **kwargs):
                 super().__init__(*args, **kwargs)

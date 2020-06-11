@@ -574,6 +574,71 @@ class TestCase(ACEModuleTestCase):
                     value = row[0]
                     self.assertEquals(value, field_value)
 
+    def test_archive_extraction(self):
+
+        from saq.modules.email import MessageIDAnalysis
+
+        # when we have the email already analyzed we don't need to extract it from the archives
+
+        set_encryption_password('test')
+
+        self.reset_email_archive()
+
+        root = create_root_analysis(alert_type='mailbox')
+        root.initialize_storage()
+        shutil.copy(os.path.join('test_data', 'emails', 'pdf_attachment.email.rfc822'), 
+                    os.path.join(root.storage_dir, 'email.rfc822'))
+        file_observable = root.add_observable(F_FILE, 'email.rfc822')
+        file_observable.add_directive(DIRECTIVE_ARCHIVE)
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_file_type', 'test_groups')
+        engine.enable_module('analysis_module_file_hash_analyzer', 'test_groups')
+        engine.enable_module('analysis_module_email_analyzer', 'test_groups')
+        engine.enable_module('analysis_module_email_archiver', 'test_groups')
+        engine.enable_module('analysis_module_message_id_analyzer', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+
+        file_observable = root.get_observable(file_observable.id)
+        self.assertIsNotNone(file_observable)
+        archive_results = file_observable.get_analysis('EmailArchiveResults')
+        self.assertIsNotNone(archive_results)
+        email_analysis = file_observable.get_analysis('EmailAnalysis')
+        self.assertIsNotNone(email_analysis)
+        message_id_observable = email_analysis.get_observables_by_type(F_MESSAGE_ID)[0]
+        self.assertIsNotNone(message_id_observable)
+        self.assertFalse(message_id_observable.get_analysis('MessageIDAnalysis'))
+
+        # but now that the email is archived we should be able to pull it out if we only have the message id
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.initialize_storage()
+        message_id_observable = root.add_observable(F_MESSAGE_ID, message_id_observable.value)
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_message_id_analyzer', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+
+        message_id_observable = root.get_observable(message_id_observable.id)
+        self.assertIsNotNone(message_id_observable)
+        message_id_analysis = message_id_observable.get_analysis('MessageIDAnalysis')
+        self.assertIsInstance(message_id_analysis, MessageIDAnalysis)
+        # should have the encrypted email attached as a file
+        self.assertEquals(len(message_id_analysis.get_observables_by_type(F_FILE)), 1)
+
     def test_archive_2(self):
 
         set_encryption_password('test')
@@ -964,6 +1029,109 @@ class TestCase(ACEModuleTestCase):
                 self.assertTrue(file_observable.has_directive(DIRECTIVE_PREVIEW))
             elif file_observable.value == 'email.rfc822.unknown_text_html_000':
                 self.assertTrue(file_observable.has_directive(DIRECTIVE_EXTRACT_URLS))
+
+    def test_basic_smtp_email_parsing(self):
+
+        # parse a basic email message we got from the smtp collector
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()), alert_type='bro - smtp')
+        root.initialize_storage()
+        shutil.copy(os.path.join('test_data', 'emails', 'smtp.email.rfc822'), 
+                    os.path.join(root.storage_dir, 'email.rfc822'))
+        file_observable = root.add_observable(F_FILE, 'email.rfc822')
+        file_observable.add_directive(DIRECTIVE_ORIGINAL_EMAIL)
+        o = root.add_observable(F_EMAIL_ADDRESS, 'unixfreak0037@gmail.com')
+        o.add_tag('smtp_mail_from')
+        o = root.add_observable(F_EMAIL_ADDRESS, 'John.Davison@company.com')
+        o.add_tag('smtp_rcpt_to')
+        o = root.add_observable(F_EMAIL_ADDRESS, 'Jane.Doe@company.com')
+        o.add_tag('smtp_rcpt_to')
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine()
+        engine.enable_module('analysis_module_file_type', 'test_groups')
+        engine.enable_module('analysis_module_email_analyzer', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+        
+        root.load()
+        from saq.modules.email import EmailAnalysis
+        file_observable = root.get_observable(file_observable.id)
+        self.assertIsNotNone(file_observable)
+        email_analysis = file_observable.get_analysis(EmailAnalysis)
+        self.assertIsNotNone(email_analysis)
+
+        self.assertIsNone(email_analysis.parsing_error)
+        self.assertIsNotNone(email_analysis.email)
+        self.assertEquals(email_analysis.env_mail_from, 'unixfreak0037@gmail.com')
+        self.assertTrue(isinstance(email_analysis.env_rcpt_to, list))
+        self.assertEquals(len(email_analysis.env_rcpt_to), 2)
+        self.assertEquals(email_analysis.env_rcpt_to[0], 'john.davison@company.com')
+        self.assertEquals(email_analysis.env_rcpt_to[1], 'jane.doe@company.com')
+        self.assertEquals(email_analysis.mail_from, 'John Davison <unixfreak0037@gmail.com>')
+        self.assertTrue(isinstance(email_analysis.mail_to, list))
+        self.assertEquals(len(email_analysis.mail_to), 1)
+        self.assertEquals(email_analysis.mail_to[0], '"Davison, John" <John.Davison@company.com>')
+
+        email_address_obervables = email_analysis.get_observables_by_type(F_EMAIL_ADDRESS)
+        self.assertEquals(set([_.value for _ in email_address_obervables]), 
+                          set(['john.davison@company.com', 'unixfreak0037@gmail.com', 'jane.doe@company.com']))
+
+        email_conversation_obervables = email_analysis.get_observables_by_type(F_EMAIL_CONVERSATION)
+        print(email_conversation_obervables)
+        self.assertEquals(set([_.value for _ in email_conversation_obervables]), 
+                          set([create_email_conversation('unixfreak0037@gmail.com', 'john.davison@company.com'),
+                               create_email_conversation('unixfreak0037@gmail.com', 'jane.doe@company.com')]))
+
+        message_id_obervables = email_analysis.get_observables_by_type(F_MESSAGE_ID)
+        self.assertEquals(set([_.value for _ in message_id_obervables]), 
+                          set(['<CANTOGZshnHG073SKFD9aA-TxAu6UVnTwMbYFYMH7iCNhkenwvg@mail.gmail.com>']))
+
+        email_delivery_obervables = email_analysis.get_observables_by_type(F_EMAIL_DELIVERY)
+        self.assertEquals(set([_.value for _ in email_delivery_obervables]), 
+                          set([create_email_delivery('<CANTOGZshnHG073SKFD9aA-TxAu6UVnTwMbYFYMH7iCNhkenwvg@mail.gmail.com>', 'john.davison@company.com'),
+                               create_email_delivery('<CANTOGZshnHG073SKFD9aA-TxAu6UVnTwMbYFYMH7iCNhkenwvg@mail.gmail.com>', 'jane.doe@company.com')]))
+
+        file_observables = email_analysis.get_observables_by_type(F_FILE)
+        self.assertEquals(set([_.value for _ in file_observables]),
+                          set(['email.rfc822.unknown_text_plain_000',
+                               'email.rfc822.unknown_text_html_000',
+                               'email.rfc822.headers']))
+
+        for file_observable in file_observables:
+            if file_observable.value == 'email.rfc822.unknown_text_plain_000':
+                self.assertTrue(file_observable.has_directive(DIRECTIVE_EXTRACT_URLS))
+                self.assertTrue(file_observable.has_directive(DIRECTIVE_PREVIEW))
+            elif file_observable.value == 'email.rfc822.unknown_text_html_000':
+                self.assertTrue(file_observable.has_directive(DIRECTIVE_EXTRACT_URLS))
+
+    def test_alert_renaming(self):
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()), alert_type='mailbox')
+        root.initialize_storage()
+        shutil.copy(os.path.join('test_data', 'emails', 'splunk_logging.email.rfc822'), 
+                    os.path.join(root.storage_dir, 'email.rfc822'))
+        file_observable = root.add_observable(F_FILE, 'email.rfc822')
+        file_observable.add_directive(DIRECTIVE_ORIGINAL_EMAIL)
+        file_observable.add_directive(DIRECTIVE_RENAME_ANALYSIS)
+        root.save()
+        root.schedule()
+        old_description = root.description
+        
+        engine = TestEngine()
+        engine.enable_module('analysis_module_file_type', 'test_groups')
+        engine.enable_module('analysis_module_email_analyzer', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+        
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+
+        # the name of the alert should have changed
+        self.assertTrue(root.description == f'{old_description} - canary #3')
         
     def test_o365_journal_email_parsing(self):
 
@@ -1124,7 +1292,7 @@ class TestCase(ACEModuleTestCase):
 
         import saq
         from saq.database import Remediation
-        from saq.remediation.email import create_email_remediation_key
+        from saq.remediation.mail import create_email_remediation_key
 
         # reduce wait time for checking
         saq.CONFIG['analysis_module_automated_email_remediation']['update_frequency'] = '1'

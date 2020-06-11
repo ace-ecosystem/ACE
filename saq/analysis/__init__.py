@@ -25,6 +25,7 @@ import requests
 import saq
 from saq.constants import *
 from saq.error import report_exception
+from saq.submission import Submission
 from saq.util import *
 
 STATE_KEY_WHITELISTED = 'whitelisted'
@@ -1224,7 +1225,7 @@ class Observable(TaggableObject, DetectableObject):
     KEY_RELATIONSHIPS = 'relationships'
     KEY_GROUPING_TARGET = 'grouping_target'
 
-    def __init__(self, type, value, time=None, json=None, *args, **kwargs):
+    def __init__(self, type=None, value=None, time=None, json=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._directives = []
@@ -1251,6 +1252,8 @@ class Observable(TaggableObject, DetectableObject):
             self._relationships = [] # [ Relationship ]
             self._grouping_target = False
 
+        self.cache_id = str(uuid.uuid3(uuid.NAMESPACE_X500, f"{self.type}:{self.value}"))
+
         # reference to the RootAnalysis object
         self.root = None
 
@@ -1259,6 +1262,14 @@ class Observable(TaggableObject, DetectableObject):
 
         # state variable gets set to True when fetch_tags is called
         self._tags_fetched = False
+
+    @staticmethod
+    def from_json(json_data):
+        """Returns an object inheriting from Observable built from the given json."""
+        from saq.observables import create_observable
+        result = create_observable(json_data[Observable.KEY_TYPE], json_data[Observable.KEY_VALUE])
+        result.json = json_data
+        return result
 
     def matches(self, value):
         """Returns True if the given value matches this value of this observable.  This can be overridden to provide more advanced matching such as CIDR for ipv4."""
@@ -2985,6 +2996,25 @@ class RootAnalysis(Analysis):
 
         return self.record_observable(observable)
 
+    def create_submission(self):
+        """Creates a new Submission object for this RootAnalysis."""
+        from saq.observables import FileObservable
+
+        observables = [ o.json for o in self.observables ]
+        files = [ o.path for o in self.observables if isinstance(o, FileObservable) ]
+
+        return Submission(
+            description = self.description,
+            analysis_mode = self.analysis_mode,
+            tool = self.tool,
+            tool_instance = self.tool_instance,
+            type = self.alert_type,
+            event_time = self.event_time,
+            details = self.details,
+            observables = observables,
+            tags = self.tags,
+            files = files)
+
     def schedule(self, exclusive_uuid=None):
         """See saq.database.add_workload."""
         from saq.database import add_workload
@@ -3014,18 +3044,22 @@ class RootAnalysis(Analysis):
         Analysis.save(self)
 
         # now the rest should encode as JSON with the custom JSON encoder
-        try:
-            # we use a temporary file to deal with very large JSON files taking a long time to encode
-            # if we don't do this then the GUI will occasionally hit 0-byte data.json files
-            temp_path = '{}.tmp'.format(self.json_path)
-            with open(temp_path, 'w') as fp:
-                fp.write(_JSONEncoder().encode(self))
-                _track_writes()
-            shutil.move(temp_path, self.json_path)
-        except Exception as e:
-            logging.error("json encoding for {0} failed: {1}".format(self, str(e)))
-            report_exception()
-            return False
+        # XXX hack
+        for try_count in range(3):
+            try:
+                # we use a temporary file to deal with very large JSON files taking a long time to encode
+                # if we don't do this then the GUI will occasionally hit 0-byte data.json files
+                temp_path = '{}.tmp'.format(self.json_path)
+                with open(temp_path, 'w') as fp:
+                    fp.write(_JSONEncoder().encode(self))
+                    _track_writes()
+                shutil.move(temp_path, self.json_path)
+                break
+            except Exception as e:
+                logging.error("json encoding for {0} failed: {1}".format(self, str(e)))
+                report_exception()
+                if try_count == 2:
+                    return False
 
         return True
 

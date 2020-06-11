@@ -26,10 +26,12 @@ class TestHunt(Hunt):
     def cancel(self):
         pass
 
-def default_hunt(enabled=True, name='test_hunt', description='Test Hunt', type='test', alert_type='test - alert',
+def default_hunt(manager, enabled=True, name='test_hunt', description='Test Hunt', alert_type='test - alert',
                  frequency=create_timedelta('00:10'), tags=[ 'test_tag' ]):
-    return TestHunt(enabled=enabled, name=name, description=description,
-                    type=type, alert_type=alert_type, frequency=frequency, tags=tags)
+    hunt = TestHunt(enabled=enabled, name=name, description=description,
+                    alert_type=alert_type, frequency=frequency, tags=tags)
+    hunt.manager = manager
+    return hunt
 
 class HunterBaseTestCase(CollectorBaseTestCase):
     def setUp(self, *args, **kwargs):
@@ -56,7 +58,8 @@ class HunterBaseTestCase(CollectorBaseTestCase):
                  'hunt_cls': TestHunt,
                  'concurrency_limit': 1,
                  'persistence_dir': os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir']),
-                 'update_frequency': 60}
+                 'update_frequency': 60,
+                 'config': {}}
 
 class TestCase(HunterBaseTestCase):
     def setUp(self, *args, **kwargs):
@@ -82,7 +85,7 @@ class TestCase(HunterBaseTestCase):
 
     def test_hunt_persistence(self):
         hunter = HuntManager(**self.manager_kwargs())
-        hunter.add_hunt(default_hunt())
+        hunter.add_hunt(default_hunt(manager=hunter))
         hunter.hunts[0].last_executed_time = datetime.datetime(2019, 12, 10, 8, 21, 13)
         
         with open_hunt_db(hunter.hunts[0].type) as db:
@@ -101,19 +104,19 @@ class TestCase(HunterBaseTestCase):
         
     def test_add_hunt(self):
         hunter = HuntManager(**self.manager_kwargs())
-        hunter.add_hunt(default_hunt())
+        hunter.add_hunt(default_hunt(manager=hunter))
         self.assertEquals(len(hunter.hunts), 1)
 
     def test_add_duplicate_hunt(self):
         # should not be allowed to add a hunt that already exists
         hunter = HuntManager(**self.manager_kwargs())
-        hunter.add_hunt(default_hunt())
+        hunter.add_hunt(default_hunt(manager=hunter))
         with self.assertRaises(KeyError):
-            hunter.add_hunt(default_hunt())
+            hunter.add_hunt(default_hunt(manager=hunter))
 
     def test_remove_hunt(self):
         hunter = HuntManager(**self.manager_kwargs())
-        hunt = hunter.add_hunt(default_hunt())
+        hunt = hunter.add_hunt(default_hunt(manager=hunter))
         removed = hunter.remove_hunt(hunt)
         self.assertEquals(hunt.name, removed.name)
         self.assertEquals(len(hunter.hunts), 0)
@@ -122,9 +125,9 @@ class TestCase(HunterBaseTestCase):
         hunter = HuntManager(**self.manager_kwargs())
         # test initial hunt order
         # these are added in the wrong order but the should be sorted when we access them
-        hunter.add_hunt(default_hunt(name='test_hunt_3', frequency=create_timedelta('00:30')))
-        hunter.add_hunt(default_hunt(name='test_hunt_2', frequency=create_timedelta('00:20')))
-        hunter.add_hunt(default_hunt(name='test_hunt_1', frequency=create_timedelta('00:10')))
+        hunter.add_hunt(default_hunt(manager=hunter, name='test_hunt_3', frequency=create_timedelta('00:30')))
+        hunter.add_hunt(default_hunt(manager=hunter, name='test_hunt_2', frequency=create_timedelta('00:20')))
+        hunter.add_hunt(default_hunt(manager=hunter, name='test_hunt_1', frequency=create_timedelta('00:10')))
 
         # assume we've executed all of these hunts
         for hunt in hunter.hunts:
@@ -148,6 +151,8 @@ class TestCase(HunterBaseTestCase):
     def test_load_hunts(self):
         hunter = HuntManager(**self.manager_kwargs())
         hunter.load_hunts_from_config()
+        for hunt in hunter.hunts:
+            hunt.manager = hunter
         self.assertEquals(len(hunter.hunts), 2)
         self.assertTrue(isinstance(hunter.hunts[0], TestHunt))
         self.assertTrue(isinstance(hunter.hunts[1], TestHunt))
@@ -215,6 +220,44 @@ tags = tag1, tag2 """)
         hunter.reload_hunts()
         self.assertEquals(len(hunter.hunts), 3)
         self.assertEquals(len(hunter.failed_ini_files), 0)
+
+    def test_load_hunts_wrong_type(self):
+        shutil.rmtree(self.temp_rules_dir)
+        os.mkdir(self.temp_rules_dir)
+        with open(os.path.join(self.temp_rules_dir, 'hunt_invalid.ini'), 'w') as fp:
+            fp.write("""
+[rule]
+enabled = yes
+name = test_wrong_type
+description = Testing Wrong Type
+type = unknown
+alert_type = test - alert
+frequency = 00:00:01
+tags = tag1, tag2 """)
+
+
+        with open(os.path.join(self.temp_rules_dir, 'hunt_valid.ini'), 'w') as fp:
+            fp.write("""
+[rule]
+enabled = yes
+name = unit_test_3 
+description = Unit Test Description 3
+type = test
+alert_type = test - alert
+frequency = 00:00:01
+tags = tag1, tag2 """)
+
+        hunter = HuntManager(**self.manager_kwargs())
+        hunter.load_hunts_from_config()
+        for hunt in hunter.hunts:
+            hunt.manager = hunter
+
+        self.assertEquals(len(hunter.hunts), 1)
+        self.assertFalse(hunter.reload_hunts_flag)
+
+        # nothing has changed so this should still be False
+        hunter.check_hunts()
+        self.assertFalse(hunter.reload_hunts_flag)
 
     def test_hunt_disabled(self):
         hunter = HuntManager(**self.manager_kwargs())

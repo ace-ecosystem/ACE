@@ -30,12 +30,21 @@ class EmailCollectorBaseTestCase(CollectorBaseTestCase):
         self.amc_mda_path = os.path.join(saq.SAQ_HOME, 'bin', 'amc_mda')
 
     def submit_email(self, email_path):
-        p = Popen(['python3', self.amc_mda_path, '--base-dir', saq.SAQ_HOME, '--data-dir', self.email_dir], stdin=PIPE)
+        p = Popen(
+                ['python3', self.amc_mda_path, '--base-dir', saq.SAQ_HOME, '--data-dir', self.email_dir], 
+                stdin=PIPE,
+                stdout=PIPE,
+                stderr=PIPE)
+
         with open(email_path, 'rb') as fp:
             shutil.copyfileobj(fp, p.stdin)
-        p.stdin.close()
-        p.wait()
-    
+
+        _stdout, _stderr = p.communicate()
+        if _stdout:
+            logging.debug(f"submit_email: {_stdout}")
+
+        if _stderr:
+            logging.error("submit_email: {_stderr}")
 
 class EmailCollectorTestCase(EmailCollectorBaseTestCase):
     def test_startup(self):
@@ -51,11 +60,12 @@ class EmailCollectorTestCase(EmailCollectorBaseTestCase):
 
         collector = EmailCollector()
         collector.load_groups()
+        collector.initialize_service_environment()
         collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('found email', 1, 5)
-        wait_for_log_count('copied file from', 1, 5)
+        wait_for_log_count('moved file from', 1, 5)
         wait_for_log_count('scheduled ACE Mailbox Scanner Detection -', 1, 5)
 
         collector.stop()
@@ -73,11 +83,12 @@ class EmailCollectorTestCase(EmailCollectorBaseTestCase):
 
         collector = EmailCollector()
         collector.load_groups()
+        collector.initialize_service_environment()
         collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('found email', email_count, 5)
-        wait_for_log_count('copied file from', email_count, 5)
+        wait_for_log_count('moved file from', email_count, 5)
         wait_for_log_count('scheduled ACE Mailbox Scanner Detection -', email_count, 5)
 
         collector.stop()
@@ -99,6 +110,7 @@ rule blacklist : blacklist {
         saq.CONFIG['service_email_collector']['blacklist_yara_rule_path'] = blacklist_yara_rule_path
         collector = EmailCollector()
         collector.load_groups()
+        collector.initialize_service_environment()
         collector.start_service(threaded=True)
 
         # look for all the expected log entries
@@ -140,11 +152,12 @@ rule assignment: unittest {
         saq.CONFIG['service_email_collector']['assignment_yara_rule_path'] = assignment_yara_rule_path
         collector = EmailCollector()
         collector.initialize_service_environment()
+        collector.execute_extended_collection()
         collector.execute()
 
         # look for all the expected log entries
         wait_for_log_count('found email', 1, 5)
-        wait_for_log_count('copied file from', 1, 5)
+        wait_for_log_count('moved file from', 1, 5)
         wait_for_log_count('scheduled ACE Mailbox Scanner Detection -', 1, 5)
         
         # see that it got assigned
@@ -163,8 +176,6 @@ class EmailCollectorEngineTestCase(EmailCollectorBaseTestCase, ACEEngineTestCase
     def test_complete_processing(self):
         self.submit_email(os.path.join(saq.SAQ_HOME, 'test_data', 'emails', 'pdf_attachment.email.rfc822'))
 
-        self.start_api_server()
-
         engine = TestEngine()
         engine.enable_module('analysis_module_file_type')
         engine.enable_module('analysis_module_email_analyzer')
@@ -172,11 +183,12 @@ class EmailCollectorEngineTestCase(EmailCollectorBaseTestCase, ACEEngineTestCase
 
         collector = EmailCollector()
         collector.load_groups()
+        collector.initialize_service_environment()
         collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('found email', 1, 5)
-        wait_for_log_count('copied file from', 1, 5)
+        wait_for_log_count('moved file from', 1, 5)
         # email analysis module should generate this log entry
         wait_for_log_count('parsing email file', 1, 5)
         wait_for_log_count('scheduled ACE Mailbox Scanner Detection -', 1, 5)
@@ -195,18 +207,17 @@ class EmailCollectorEngineTestCase(EmailCollectorBaseTestCase, ACEEngineTestCase
             email_count += 1
             self.submit_email(os.path.join(test_email_dir, email_file))
 
-        self.start_api_server()
-
         engine = TestEngine()
         engine.start()
 
         collector = EmailCollector()
         collector.load_groups()
+        collector.initialize_service_environment()
         collector.start_service(threaded=True)
 
         # look for all the expected log entries
         wait_for_log_count('found email', email_count, 5)
-        wait_for_log_count('copied file from', email_count, 5)
+        wait_for_log_count('moved file from', email_count, 5)
         wait_for_log_count('scheduled ACE Mailbox Scanner Detection -', email_count, 5)
         wait_for_log_count('completed analysis RootAnalysis', email_count, 20)
 

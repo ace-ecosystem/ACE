@@ -108,7 +108,7 @@ class ExabeamSession(object):
     def get_notable_user_sessions(self):
         sessions = []
         try:
-            params = {'unit': 'd', 'num': 1, 'numberOfResults': 100}
+            params = {'unit': 'd', 'num': 5, 'numberOfResults': 1000000}
             r = self.session.get(f"{self.base_uri}/uba/api/users/notable", verify=self.verify, params=params)
             if r.status_code != requests.codes.ok:
                 r.raise_for_status()
@@ -125,7 +125,7 @@ class ExabeamSession(object):
     def get_watchlist_user_sessions(self, watchlist):
         sessions = []
         try:
-            params = {'unit': 'd', 'num': 1, 'numberOfResults': 100}
+            params = {'unit': 'd', 'num': 5, 'numberOfResults': 1000000}
             watchlistId = self.watchlists[watchlist]
             r = self.session.get(f"{self.base_uri}/uba/api/watchlist/assets/{watchlistId}/", verify=self.verify, params=params)
             if r.status_code != requests.codes.ok:

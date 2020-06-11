@@ -173,11 +173,21 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
             # build command with correct pcap-ng files
             pcap_path = os.path.join(pcap_dir, 'merged.pcap')
             command = ['mergecap', '-w', pcap_path]
-            command.extend(os.path.join(pcap_dir, i) for i in os.listdir(pcap_dir))
+            target_pcap_files = [os.path.join(pcap_dir, i) for i in os.listdir(pcap_dir)]
+            command.extend(target_pcap_files)
 
             # merge all pcaps in pcap_dir to merged_pcap.pcapng
             p = Popen(command, stdout=PIPE, stderr=PIPE)
             _stdout, _stderr = p.communicate()
+
+            # regardless of if it worked or not we don't want to leave any other pcap files around
+            # that we didn't add to the alert
+            for pcap_file in target_pcap_files:
+                if os.path.exists(pcap_file):
+                    try:
+                        os.remove(pcap_file)
+                    except Exception as e:
+                        logging.error(f"unable to remove {pcap_file}: {e}")
 
             if not os.path.exists(pcap_path):
                 analysis.error = "error: failed to merge pcap files"

@@ -31,7 +31,6 @@ olefile
 oletools
 openpyxl
 pcodedmp
-phishfry
 pip
 ply
 psutil 
@@ -40,6 +39,7 @@ pymongo==2.8
 pysip
 pysocks
 pytest
+pytest-datadir
 python-magic
 python-memcached
 pytz 
