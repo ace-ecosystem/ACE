@@ -158,8 +158,9 @@ DEPRECATED_OBSERVABLES = sorted([
 def parse_ipv4_full_conversation(f_ipv4_fc):
     return f_ipv4_fc.split(':', 4)
 
+
 def create_ipv4_full_conversation(src, src_port, dst, dst_port):
-    return '{}:{}:{}:{}'.format(src.strip(), src_port.strip(), dst.strip(), dst_port.strip())
+    return '{}:{}:{}:{}'.format(src.strip(), src_port, dst.strip(), dst_port)
 
 # utility functions to work with F_IPV4_CONVERSATION types
 def parse_ipv4_conversation(f_ipv4_c):
@@ -308,45 +309,26 @@ DISPOSITION_RANK = {
 }
 
 # --- DIRECTIVES
-# archive the file
 DIRECTIVE_ARCHIVE = 'archive'
-# collect the file from the remote endpoint
 DIRECTIVE_COLLECT_FILE = 'collect_file'
-# crawl the url
 DIRECTIVE_CRAWL = 'crawl'
-# download the content of the URL no matter what
-DIRECTIVE_FORCE_DOWNLOAD = 'force_download'
-# extract URLs from the given file
-DIRECTIVE_EXTRACT_URLS = 'extract_urls'
-# extract email from exchange server or O365 (requires email address and message id)
-DIRECTIVE_EXTRACT_EMAIL = 'extract_email'
-# run the observable through a sandbox
-DIRECTIVE_SANDBOX = 'sandbox'
-# treat this file as the original email file
-DIRECTIVE_ORIGINAL_EMAIL = 'original_email'
-# treat this file as the original smtp stream
-DIRECTIVE_ORIGINAL_SMTP = 'original_smtp'
-# do not scan this file with yara
-DIRECTIVE_NO_SCAN = 'no_scan'
-# instructs various analysis modules that supprt this directive
-# to delay the analysis (or to try again)
 DIRECTIVE_DELAY = 'delay'
-# instructs ACE to NOT analyze this observable at all
 DIRECTIVE_EXCLUDE_ALL = 'exclude_all'
-# indicates this observable was whitelisted, causing the entire analysis to also become whitelisted
-DIRECTIVE_WHITELISTED = 'whitelisted'
-# indicates this observable should be tracked across different analysis requests
-DIRECTIVE_TRACKED = 'tracked'
-# indicates that ACE should treat this IP address as an asset and try to figure out the details
-DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
-# download the pcap for the given observable and given time
+DIRECTIVE_EXTRACT_EMAIL = 'extract_email'
 DIRECTIVE_EXTRACT_PCAP = 'extract_pcap'
-# ignores any automation limits when analyzing this observable (also see saq.modules.AnalysisModule.automation_limit)
+DIRECTIVE_EXTRACT_URLS = 'extract_urls'
+DIRECTIVE_FORCE_DOWNLOAD = 'force_download'
 DIRECTIVE_IGNORE_AUTOMATION_LIMITS = 'ignore_automation_limits'
-# hints to whatever system is used to display that this should be previewable
+DIRECTIVE_NO_SCAN = 'no_scan'
+DIRECTIVE_ORIGINAL_EMAIL = 'original_email'
+DIRECTIVE_ORIGINAL_SMTP = 'original_smtp'
 DIRECTIVE_PREVIEW = 'preview'
-# destroy that which is contained within
 DIRECTIVE_REMEDIATE = 'remediate'
+DIRECTIVE_RENAME_ANALYSIS = 'rename_analysis'
+DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
+DIRECTIVE_SANDBOX = 'sandbox'
+DIRECTIVE_TRACKED = 'tracked'
+DIRECTIVE_WHITELISTED = 'whitelisted'
 
 DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'archive the file',
@@ -364,6 +346,7 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
     DIRECTIVE_PREVIEW: 'show this content inline if possible',
     DIRECTIVE_REMEDIATE: 'remediate the target',
+    DIRECTIVE_RENAME_ANALYSIS: 'indicates that the description of the root analysis object should be updated with analysis results',
     DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
     DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
     DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
@@ -386,6 +369,7 @@ VALID_DIRECTIVES = [
     DIRECTIVE_ORIGINAL_SMTP,
     DIRECTIVE_PREVIEW,
     DIRECTIVE_REMEDIATE,
+    DIRECTIVE_RENAME_ANALYSIS,
     DIRECTIVE_SANDBOX,
     DIRECTIVE_TRACKED,
     DIRECTIVE_WHITELISTED,

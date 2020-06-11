@@ -43,6 +43,9 @@ from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
 from saq.util import local_time, create_timedelta, abs_path, create_directory
 
+class InvalidHuntTypeError(ValueError):
+    pass
+
 def get_hunt_db_path(hunt_type):
     return os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['persistence_dir'], 'hunt', f'{hunt_type}.db')
 
@@ -57,8 +60,8 @@ class Hunt(object):
             self, 
             enabled=None, 
             name=None, 
-            description=None, 
-            type=None, 
+            description=None,
+            manager=None,
             alert_type=None,
             analysis_mode=None,
             frequency=None, 
@@ -67,7 +70,7 @@ class Hunt(object):
         self.enabled = enabled
         self.name = name
         self.description = description
-        self.type = type
+        self.manager = manager
         self.alert_type = alert_type
         self.analysis_mode = analysis_mode
         self.frequency = frequency
@@ -98,6 +101,13 @@ class Hunt(object):
         # when we load from an ini file we record the last modified time of the file
         self.ini_path = None
         self.last_mtime = None
+
+    @property
+    def type(self):
+        if self.manager is not None:
+            return self.manager.hunt_type or None
+        else:
+            return None
 
     @property
     def last_executed_time(self):
@@ -203,6 +213,10 @@ class Hunt(object):
 
         section_rule = config['rule']
 
+        # is this a supported type?
+        if section_rule['type'] != self.type:
+            raise InvalidHuntTypeError(section_rule['type'])
+
         self.enabled = section_rule.getboolean('enabled')
 
         # if we don't pass the name then we create it from the name of the ini file
@@ -211,7 +225,6 @@ class Hunt(object):
                 fallback=(os.path.splitext(os.path.basename(path))[0]).replace('_', ' ').title())
 
         self.description = section_rule['description']
-        self.type = section_rule['type']
         # if we don't pass an alert type then we default to the type field
         self.alert_type = section_rule.get('alert_type', fallback=f'hunter - {self.type}')
         self.analysis_mode = section_rule.get('analysis_mode', fallback=ANALYSIS_MODE_CORRELATION)
@@ -302,7 +315,8 @@ class HuntManager(object):
                  hunt_cls,
                  concurrency_limit,
                  persistence_dir,
-                 update_frequency):
+                 update_frequency,
+                 config):
 
         assert isinstance(collector, Collector)
         assert isinstance(hunt_type, str)
@@ -336,6 +350,9 @@ class HuntManager(object):
 
         # the class used to instantiate the rules in the given rules directories
         self.hunt_cls = hunt_cls
+        
+        # when loaded from config, store the entire config so it available to Hunts
+        self.config = config
 
         # sqlite3 database used to keep track of hunt persistence data
         create_directory(os.path.dirname(get_hunt_db_path(self.hunt_type)))
@@ -360,6 +377,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
 
         # the ini files that failed to load
         self.failed_ini_files = {} # key = ini_path, value = os.path.getmtime()
+
+        # the ini files that we skipped
+        self.skipped_ini_files = set() # key = ini_path
 
         # the type of concurrency contraint this type of hunt uses (can be None)
         # use the set_concurrency_limit() function to change it
@@ -508,7 +528,9 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
             # are there any new hunts?
             existing_ini_paths = set([hunt.ini_path for hunt in self._hunts])
             for ini_path in self._list_hunt_ini():
-                if ini_path not in existing_ini_paths and ini_path not in self.failed_ini_files:
+                if ( ini_path not in existing_ini_paths 
+                        and ini_path not in self.failed_ini_files
+                        and ini_path not in self.skipped_ini_files ):
                     logging.info(f"detected new hunt ini {ini_path}")
                     trigger_reload = True
 
@@ -663,11 +685,10 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
            after it is loaded and returns True if the Hunt should be added, False otherwise.
            This is useful for unit testing."""
         for hunt_config in self._list_hunt_ini():
-            hunt = self.hunt_cls()
+            hunt = self.hunt_cls(manager=self)
             logging.debug(f"loading hunt from {hunt_config}")
             try:
                 hunt.load_from_ini(hunt_config)
-                hunt.type = self.hunt_type
 
                 if hunt_filter(hunt):
                     logging.debug(f"loaded {hunt} from {hunt_config}")
@@ -675,6 +696,10 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
                 else:
                     logging.debug(f"not loading {hunt} (hunt_filter returned False)")
 
+            except InvalidHuntTypeError as e:
+                self.skipped_ini_files.add(hunt_config)
+                logging.debug(f"skipping {hunt_config} for {self}: {e}")
+                continue
             except Exception as e:
                 logging.error(f"unable to load hunt {hunt}: {e}")
                 report_exception()
@@ -690,7 +715,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
     def add_hunt(self, hunt):
         assert isinstance(hunt, Hunt)
         if hunt.type != self.hunt_type:
-            raise ValueError(f"hunt {hunt} has wrong type for {self}")
+            raise ValueError(f"hunt {hunt} has wrong type for {self.hunt_type}")
 
         with self.hunt_lock:
             # make sure this hunt doesn't already exist
@@ -719,6 +744,7 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
 
             self._hunts = []
             self.failed_ini_files = {}
+            self.skipped_ini_files = set()
 
         self.wait_control_event.set()
 
@@ -818,7 +844,8 @@ class HunterCollector(Collector):
                             hunt_cls=class_definition,
                             concurrency_limit=section.get('concurrency_limit', fallback=None),
                             persistence_dir=self.persistence_dir,
-                            update_frequency=self.service_config.getint('update_frequency'))
+                            update_frequency=self.service_config.getint('update_frequency'),
+                            config = section)
 
     def extended_collection(self):
         # load each type of hunt from the configuration settings

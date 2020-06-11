@@ -6,3 +6,4 @@
 #0 1 * * * /opt/ace/bin/report-scan-failures >> /opt/ace/data/logs/report-scan-failures-`date '+\%Y-\%m-\%d'`.log 2>&1
 #0 * * * * /opt/ace/bin/update-ssdeep >> /opt/ace/data/logs/update-ssdeep-`date '+\%Y-\%m-\%d'`.log 2>&1
 */2 * * * * /opt/ace/bin/update-crits-cache >> /opt/ace/data/logs/update-crits-cache-`date '+\%Y-\%m-\%d'`.log 2>&1
+0 0 * * * rm -rf /opt/ace/data/analysis_cache 2>&1

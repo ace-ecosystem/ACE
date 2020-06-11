@@ -705,6 +705,40 @@ class TestCase(ACEModuleTestCase):
         crits_id = analysis.get_observables_by_type(F_INDICATOR)
         self.assertEquals(len(crits_id), 1)
 
+    def test_file_analysis_004_yara_005_whitelist(self):
+
+        self.initialize_yss()
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.initialize_storage()
+        shutil.copy('test_data/scan_targets/whitelist', root.storage_dir)
+        _file = root.add_observable(F_FILE, 'whitelist')
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine()
+        engine.enable_module('analysis_module_yara_scanner_v3_4', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # scanned file /opt/saq/var/test/91b55d6f-fe82-4508-ac68-bbc519693d12/scan.target with yss (matches found: True)
+        self.assertEquals(log_count('with yss (matches found: True)'), 1)
+
+        root.load()
+        _file = root.get_observable(_file.id)
+        
+        from saq.modules.file_analysis import YaraScanResults_v3_4
+        analysis = _file.get_analysis(YaraScanResults_v3_4)
+        self.assertTrue(analysis)
+
+        # the file should have a single tag
+        self.assertEquals(len(_file.tags), 1)
+        # the tag should be "whitelisted"
+        self.assertEquals(_file.tags[0].name, "whitelisted")
+        # the root analysis object should be whitelisted
+        self.assertTrue(root.whitelisted)
+
     def test_file_analysis_005_pcode_000_extract_pcode(self):
 
         if not os.path.exists('test_data/ole_files/word2013_macro_stripped.doc'):

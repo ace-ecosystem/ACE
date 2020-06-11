@@ -98,9 +98,6 @@ then
         #saq.engine.test_ace \
         #saq.test_lock \
 
-        # we'll re-introduce these in anoter way... TODO
-        #saq.remediation.phishfry.test \
-
         # these needs to be created
         #saq.modules.test_qradar \
 

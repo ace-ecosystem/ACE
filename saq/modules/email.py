@@ -27,6 +27,7 @@ from saq.database import get_db_connection, execute_with_retry, Alert, use_db
 from saq.email import (
         decode_rfc2822,
         get_email_archive_sections, 
+        is_local_email_domain,
         normalize_email_address, 
         normalize_message_id, 
         search_archive, 
@@ -37,7 +38,7 @@ from saq.modules.remediation import *
 from saq.modules.util import get_email
 from saq.process_server import Popen, PIPE
 from saq.remediation.constants import *
-from saq.remediation.email import request_email_remediation
+from saq.remediation import request_remediation
 from saq.whitelist import BrotexWhitelist, WHITELIST_TYPE_SMTP_FROM, WHITELIST_TYPE_SMTP_TO
 
 import dateutil
@@ -195,9 +196,6 @@ class BroSMTPStreamAnalyzer(AnalysisModule):
         return F_FILE
 
     def execute_analysis(self, _file):
-        # this is ONLY for analysis of type "bro - smtp"
-        if self.root.alert_type != ANALYSIS_TYPE_BRO_SMTP:
-            return False
 
         # did we end up whitelisting the email?
         # this actually shouldn't even fire because if the email is whitelisted then the work queue is ignored
@@ -1296,17 +1294,30 @@ class EmailAnalyzer(AnalysisModule):
                     return False
 
         header_tos = [] # list of header-to addresses
-        env_rcpt_to = [] # list of env-to addresses (should be a list of one)
+        env_rcpt_to = [] # list of env-to addresses 
+        env_mail_from = None # the smtp envelope MAIL FROM
 
         # if this is an office365 email then we know who the email was actually delivered to
-        if 'X-MS-Exchange-Organization-OriginalEnvelopeRecipients' in target_email:
+        if is_office365 and 'X-MS-Exchange-Organization-OriginalEnvelopeRecipients' in target_email:
             name, address = email.utils.parseaddr(target_email['X-MS-Exchange-Organization-OriginalEnvelopeRecipients'])
             if address:
                 env_rcpt_to = [ address ]
 
+        # emails that come from the SMTP collector should already have observables added with tags smtp_mail_from and 
+        # smtp_rctp_to
+        for smtp_rcpt_to in [o.value for o in self.root.find_observables(
+                lambda o: o.type == F_EMAIL_ADDRESS and o.has_tag('smtp_rcpt_to'))]:
+            if smtp_rcpt_to not in env_rcpt_to:
+                env_rcpt_to.append(smtp_rcpt_to)
+
+        mail_from = self.root.find_observable(
+                lambda o: o.type == F_EMAIL_ADDRESS and o.has_tag('smtp_mail_from'))
+        if mail_from:
+            env_mail_from = mail_from.value
+
         # we also have what To: addrsses are in the headers
         for mail_to in target_email.get_all('to', []):
-            name, address = email.utils.parseaddr(mail_to)
+            address = normalize_email_address(mail_to)
             if address:
                 header_tos.append(address)
 
@@ -1317,7 +1328,7 @@ class EmailAnalyzer(AnalysisModule):
 
         # for office365 we check to see if this email is inbound
         # this only applies to the original email, not email attachments
-        if _file.has_directive(DIRECTIVE_ORIGINAL_EMAIL):
+        if is_office365 and _file.has_directive(DIRECTIVE_ORIGINAL_EMAIL):
             if 'X-MS-Exchange-Organization-MessageDirectionality' in target_email:
                 if target_email['X-MS-Exchange-Organization-MessageDirectionality'] != 'Incoming':
                     _file.add_tag(TAG_OUTBOUND_EMAIL)
@@ -1370,31 +1381,30 @@ class EmailAnalyzer(AnalysisModule):
         if 'from' in target_email:
             email_details[KEY_FROM] = decode_rfc2822(target_email['from'])
             
-            name, address = email.utils.parseaddr(email_details[KEY_FROM])
+            address = normalize_email_address(email_details[KEY_FROM])
             if address != '':
                 mail_from = address
                 from_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if from_address:
                     from_address.add_tag('mail_from')
 
-        # do we know who this was actually delivered to?
-        if 'X-MS-Exchange-Organization-OriginalEnvelopeRecipients' in target_email:
-            email_details[KEY_ENV_RCPT_TO] = [target_email['X-MS-Exchange-Organization-OriginalEnvelopeRecipients']]
-            name, address = email.utils.parseaddr(email_details[KEY_ENV_RCPT_TO][0])
-            if address:
-                mail_to = address
-                to_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
-                if to_address:
-                    to_address.add_tag('delivered_to')
-                    if mail_from:
-                        analysis.add_observable(F_EMAIL_CONVERSATION, create_email_conversation(mail_from, address))
+        email_details[KEY_ENV_RCPT_TO] = env_rcpt_to
+        email_details[KEY_ENV_MAIL_FROM] = env_mail_from
 
+        for rcpt_to in email_details[KEY_ENV_RCPT_TO]:
+            address = normalize_email_address(rcpt_to)
+            if address:
+                if mail_to is None:
+                    mail_to = address
+
+                to_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
+                if to_address and mail_from:
+                    analysis.add_observable(F_EMAIL_CONVERSATION, create_email_conversation(mail_from, address))
         
         email_details[KEY_TO] = target_email.get_all('to', [])
         for addr in email_details[KEY_TO]:
-            name, address = email.utils.parseaddr(decode_rfc2822(addr))
+            address = normalize_email_address(decode_rfc2822(addr))
             if address:
-
                 # if we don't know who it was delivered to yet then we grab the first To:
                 if mail_to is None:
                     mail_to = address
@@ -1407,7 +1417,7 @@ class EmailAnalyzer(AnalysisModule):
 
         if 'reply-to' in target_email:
             email_details[KEY_REPLY_TO] = target_email['reply-to']
-            name, address = email.utils.parseaddr(target_email['reply-to'])
+            address = normalize_email_address(target_email['reply-to'])
             if address:
                 reply_to = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if reply_to:
@@ -1417,7 +1427,7 @@ class EmailAnalyzer(AnalysisModule):
 
         if 'return-path' in target_email:
             email_details[KEY_RETURN_PATH] = target_email['return-path']
-            name, address = email.utils.parseaddr(target_email['return-path'])
+            address = normalize_email_address(target_email['return-path'])
             if address:
                 return_path = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if return_path:
@@ -1441,8 +1451,16 @@ class EmailAnalyzer(AnalysisModule):
                 message_id_observable.exclude_analysis(MessageIDAnalyzer)
 
             if mail_to:
-                email_delivery_observable = analysis.add_observable(F_EMAIL_DELIVERY,
-                                            create_email_delivery(email_details[KEY_MESSAGE_ID], mail_to))
+                if is_local_email_domain(mail_to):
+                    email_delivery_observable = analysis.add_observable(F_EMAIL_DELIVERY,
+                                                create_email_delivery(email_details[KEY_MESSAGE_ID], mail_to))
+
+            for rcpt_to in env_rcpt_to:
+                if is_local_email_domain(rcpt_to):
+                    email_delivery_observable = analysis.add_observable(F_EMAIL_DELIVERY,
+                                                create_email_delivery(email_details[KEY_MESSAGE_ID], rcpt_to))
+
+            # when the have the SMTP envelope data
 
         # the rest of these details are for the generate logging output
 
@@ -1682,6 +1700,11 @@ class EmailAnalyzer(AnalysisModule):
                 # we don't want to analyze this with the email analyzer
                 if headers_file: 
                     headers_file.exclude_analysis(self)
+
+        # are we renaming the root analysis?
+        if _file.has_directive(DIRECTIVE_RENAME_ANALYSIS):
+            if KEY_SUBJECT in email_details and email_details[KEY_SUBJECT]:
+                self.root.description += ' - ' + email_details[KEY_SUBJECT]
 
         mail_rcpt_to = log_entry['env_rcpt_to'] if log_entry['env_rcpt_to'] else log_entry['mail_to']
         logging.info("scanning email [{}] {} from {} to {} subject {}".format(
@@ -1950,6 +1973,7 @@ class EmailArchiveAction(AnalysisModule):
             return False
 
         analysis = self.create_analysis(_file)
+        self.initialize_state() # for recording the archive_ids of emails we archive
 
         # if we have the encryption password set then we use it to store an encrypted copy of the email
         if saq.ENCRYPTION_PASSWORD:
@@ -2039,15 +2063,17 @@ class EmailArchiveAction(AnalysisModule):
                     self.server_id = row[0]
                     logging.debug(f"created server_id {self.server_id} for {self.hostname}")
 
-            # have we already started archiving this email?
-            c.execute("SELECT archive_id FROM archive WHERE md5 = UNHEX(%s)", (email_md5,))
-            row = c.fetchone()
-            if row is None:
-                execute_with_retry(db, c, "INSERT IGNORE INTO archive ( server_id, md5 ) VALUES ( %s, UNHEX(%s) )", 
-                                  (self.server_id, email_md5))
-                archive_id = c.lastrowid
+            execute_with_retry(db, c, "INSERT IGNORE INTO archive ( server_id, md5 ) VALUES ( %s, UNHEX(%s) )",
+                              (self.server_id, email_md5))
+            archive_id = c.lastrowid
+
+            # see https://dev.mysql.com/doc/refman/8.0/en/information-functions.html#function_last-insert-id
+            # if we did NOT insert a new entry then we get a 0 back
+            if archive_id != 0:
+                self.state[email_md5] = archive_id
             else:
-                archive_id = row[0]
+                if email_md5 in self.state:
+                    archive_id = self.state[email_md5]
 
             logging.debug(f"got archive_id {archive_id} for email {_file.value}")
 
@@ -2929,6 +2955,11 @@ class MessageIDAnalysis(Analysis):
 
         return "Message ID Analysis - archive file extracted"
 
+    @property
+    def email_extracted(self):
+        """Returns True if the email was extracted from the archives, False if it was not."""
+        return self.details is not None
+
 class MessageIDAnalyzer(AnalysisModule):
 
     @property
@@ -2940,6 +2971,15 @@ class MessageIDAnalyzer(AnalysisModule):
         return F_MESSAGE_ID
 
     def execute_analysis(self, message_id):
+
+        # if we've already analyzed this email then we don't need to extract it
+        from saq.modules.email import EmailAnalysis
+        email_analysis = search_down(message_id, 
+                lambda x: isinstance(x, EmailAnalysis) and x.message_id == message_id.value)
+
+        if email_analysis:
+            logging.debug(f"already have email analysis for {message_id.value}")
+            return False
 
         analysis = message_id.get_analysis(MessageIDAnalysis)
         if analysis is None:
@@ -3773,8 +3813,8 @@ class AutomatedEmailRemediationAnalyzer(RemediationAnalyzer):
     # base class requires DIRECTIVE_REMEDIATE directive
 
     def request_remediation(self, email_delivery):
-        return request_email_remediation(email_delivery.message_id,
-                                         email_delivery.email_address,
-                                         saq.AUTOMATION_USER_ID,
-                                         saq.COMPANY_ID,
-                                         f"auto-remediated for {self.root.uuid}")
+        return request_remediation(REMEDIATION_TYPE_EMAIL,
+                                   f'{email_delivery.message_id}:{email_delivery.email_address}',
+                                   saq.AUTOMATION_USER_ID,
+                                   saq.COMPANY_ID,
+                                   f"auto-remediated for {self.root.uuid}")

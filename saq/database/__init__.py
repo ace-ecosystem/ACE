@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 import warnings
+import random
 import re
 
 from contextlib import closing, contextmanager
@@ -272,7 +273,7 @@ def use_db(method=None, name=None):
 
     return wrapper
 
-def execute_with_retry(db, cursor, sql_or_func, params=(), attempts=2, commit=False):
+def execute_with_retry(db, cursor, sql_or_func, params=(), attempts=3, commit=False):
     """Executes the given SQL or function (and params) against the given cursor with
        re-attempts up to N times (defaults to 2) on deadlock detection.
 
@@ -340,6 +341,7 @@ def execute_with_retry(db, cursor, sql_or_func, params=(), attempts=2, commit=Fa
                     raise e
 
                 count += 1
+                time.sleep(random.uniform(0, 1))
                 continue
             else:
                 if not callable(sql_or_func):
@@ -791,6 +793,26 @@ class Alert(RootAnalysis, Base):
     def init_on_load(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._initialize()
+
+    def load(self, *args, **kwargs):
+        try:
+            result = super().load(*args, **kwargs)
+        finally:
+            # the RootAnalysis object actually loads everything from JSON
+            # this may not exactly match what is in the database (it should)
+            # the data in the json is the authoritative source
+            # see https://ace-ecosystem.github.io/ACE/design/alert_storage/#alert-storage-vs-database-storage
+            session = Session.object_session(self)
+            if session:
+                # so if this alert is attached to a Session, at this point the session becomes dirty
+                # because we've loaded all the values from json that we've already loaded from the database
+                # so we discard those changes
+                session.expire(self)
+                # and then reload from the database
+                session.refresh(self)
+                # XXX inefficient but we'll move to a better design when we're fully containerized
+
+        return result
 
     __tablename__ = 'alerts'
 

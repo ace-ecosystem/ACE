@@ -4,16 +4,19 @@
 # Routines and objects for tuning out False Positive submissions.
 #
 
+import datetime
 import io
 import json
 import logging
 import os
 import os.path
+import shutil
 import tempfile
 import uuid
 
 import saq
-from saq.util import abs_path, local_time, create_timedelta
+from saq.error import report_exception
+from saq.util import abs_path, local_time, create_timedelta, workload_storage_dir
 
 import yara
 import plyara
@@ -33,11 +36,11 @@ class Submission(object):
                  tool,
                  tool_instance,
                  type,
-                 event_time,
-                 details,
-                 observables,
-                 tags,
-                 files,
+                 event_time=None,
+                 details=None,
+                 observables=[],
+                 tags=[],
+                 files=[],
                  queue=saq.constants.QUEUE_DEFAULT,
                  group_assignments=[],
                  instructions=None):
@@ -60,8 +63,18 @@ class Submission(object):
         # empty list means send to all configured groups
         self.group_assignments = group_assignments
 
+        # XXX this is a hack for now...
+        self.files_prepared = False # sets set to True once we've "prepared" the files
+
+    @property
+    def storage_dir(self):
+        """Directory that contains any file attachments to this submission.
+        
+        This directory will not exist if no files were added to the submission."""
+        return os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['incoming_dir'], self.uuid)
+
     def __str__(self):
-        return "{} ({})".format(self.description, self.analysis_mode)
+        return "Submission({} ({}))".format(self.description, self.analysis_mode)
 
     def success(self, group, result):
         """Called by the RemoteNodeGroup when this has been successfully submitted to a remote node group.
@@ -71,6 +84,80 @@ class Submission(object):
     def fail(self, group):
         """Called by the RemoteNodeGroup when this has failed to be submitted and full_delivery is disabled."""
         pass
+
+    def add_observable(self, observable):
+        """Adds the given Observable to the submission data."""
+        from saq.analysis import Observable
+        assert isinstance(observable, Observable)
+        self.observables.append(observable.json)
+
+    def add_file(self, path, dest_path=None):
+        """Adds the given file to be included in the submission.
+
+        Args:
+            path: The path to the file to be included (can be a full path.)
+            dest_path: Optional path relative to the storage directory of the
+            Analysis to place the file into. By default the file is placed into
+            the root directory of the analysis.
+        """
+        if dest_path:
+            self.files.append((path, dest_path))
+        else:
+            self.files.append(path)
+
+    def create_root_analysis(self):
+        """Creates and returns a RootAnalysis object for this Submission object."""
+
+        from saq.analysis import RootAnalysis, Observable
+        from saq.observables import FileObservable
+
+        root = RootAnalysis(
+                desc=self.description,
+                analysis_mode=self.analysis_mode,
+                tool=self.tool,
+                tool_instance=self.tool_instance,
+                alert_type=self.type,
+                event_time=self.event_time,
+                details=self.details,
+                queue=self.queue,
+                instructions=self.instructions)
+
+        root.storage_dir=workload_storage_dir(root.uuid)
+        root.initialize_storage()
+
+        for observable_json in self.observables:
+            root.add_observable(Observable.from_json(observable_json))
+
+        for tag in self.tags:
+            root.add_tag(tag)
+
+        # NOTE that we COPY the files here
+        # as we may be sending the files both locally and remotely
+        try:
+            for f in self.files:
+                # this could be a tuple of (source_file, target_name)
+                if isinstance(f, tuple):
+                    source_path = os.path.join(self.storage_dir, f[0])
+                    target_path = os.path.join(root.storage_dir, f[1])
+                    target_dir = os.path.dirname(target_path)
+                    if not os.path.isdir(target_dir):
+                        os.makedirs(target_dir)
+                else:
+                    source_path = os.path.join(self.storage_dir, f)
+                    target_path = os.path.join(root.storage_dir, os.path.basename(f))
+
+                # TODO use hard link here if possible for I/O performance increase
+                logging.debug(f"copying {f} to {target_path}")
+                shutil.copy2(source_path, target_path)
+                logging.debug(f"copied file from {f} to {target_path}")
+                file_observable = root.add_observable(
+                        FileObservable(os.path.relpath(target_path, start=root.storage_dir)))
+
+        except Exception as e:
+            logging.error(f"unable to copy or move files for {self}: {e}")
+            report_exception()
+
+        return root
 
 #
 # tuning

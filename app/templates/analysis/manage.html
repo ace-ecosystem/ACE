@@ -137,7 +137,17 @@
                     <div class="col-xs-12"><input type="checkbox" name="filter_unowned" {{filter_state['filter_unowned']}}> Not Owned By Others</div>
                 </div>
                 <div class="row">
-                    <div class="col-xs-12"><input type="checkbox" name="filter_users_queue" {{filter_state['filter_users_queue']}}> In {{default_queue}} Queue</div>
+                    <div class="col-xs-12">
+                        Queue
+                        <div>
+                            <select class="form-control" name="filter_alert_queue" id="filter_alert_queue">
+                                <option value="All" {% if filter_state['filter_alert_queue'] == 'All' %}SELECTED{% endif %}>All</option>
+                                {% for alert_queue in alert_queues %}
+                                <option value="{{alert_queue}}" {% if filter_state['filter_alert_queue'] == alert_queue %}SELECTED{% endif %}>{{alert_queue}}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <div class="row">
                     <div class="col-xs-12"><input type="checkbox" name="filter_sla" {{filter_state['filter_sla']}}> Only Alerts Past SLA</div>
@@ -253,6 +263,12 @@
                         <input type="text" class="form-control" id="daterange" name="remediate_daterange" value="{{filter_state['remediate_daterange']}}"/>
                     </div>
                 </div>
+                <div class="row">
+                    <div class="col-xs-12">
+                        Tags
+                        <input type="text" class="form-control" name="tag_filters" value="{{tags|join(', ')}}">
+                    </div>
+                </div>
 
                 {# do we have any observables loaded as filter items #}
                 {% if observables | count > 0 %}
@@ -261,19 +277,6 @@
                         <ul class="list-unstyled">
                             {% for observable in observables %}
                                 <li><input type="checkbox" name="observable_{{observable.id}}" checked> observable {{observable.type}}:{{observable.display_value}}</li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                </div>
-                {% endif %}
-
-                {# do we have any tags loaded as filter items #}
-                {% if tags | count > 0 %}
-                <div class="row">
-                    <div class="col-xs-12">
-                        <ul class="list-unstyled">
-                            {% for tag in tags %}
-                                <li><input type="checkbox" name="tag_{{tag.id}}" checked> tag {{tag.name}}</li>
                             {% endfor %}
                         </ul>
                     </div>

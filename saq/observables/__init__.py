@@ -22,7 +22,7 @@ from saq.integration import integration_enabled
 from saq.intel import query_sip_indicator
 from saq.remediation import RemediationTarget
 from saq.remediation.constants import *
-from saq.remediation.email import create_email_remediation_key
+from saq.remediation.mail import create_email_remediation_key
 from saq.util import is_subdomain
 
 import iptools
@@ -810,6 +810,7 @@ class FireEyeUUIDObservable(Observable):
         self.value = self.value.strip()
 
 class TestObservable(Observable):
+    __test__ = False # tell pytest this is not a test class
     def __init__(self, *args, **kwargs): 
         super().__init__(F_TEST, *args, **kwargs)
 

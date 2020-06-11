@@ -48,7 +48,6 @@ import saq
 import saq.analysis
 import saq.intel
 import saq.remediation
-import saq.remediation.email
 import virustotal
 
 from saq import SAQ_HOME
@@ -69,13 +68,8 @@ from saq.gui import GUIAlert
 from saq.performance import record_execution_time
 from saq.proxy import proxies
 from saq.util import abs_path
-from saq.remediation import execute_remediation, execute_restoration, request_remediation, request_restoration
-import saq.remediation
-from saq.remediation.email import old_request_email_remediation, \
-                                  old_request_email_restoration, \
-                                  remediate_emails, \
-                                  unremediate_emails
 from saq.remediation.constants import REMEDIATION_TYPE_EMAIL
+from saq.remediation import request_remediation, request_restoration, execute_remediation, execute_restoration
 from saq.file_upload import *
 
 import ace_api
@@ -1624,7 +1618,7 @@ def verify_integer(filter_value):
 # NOTE these values ARE EQUAL TO the "name" field in the <form> of the filter dialog
 FILTER_CB_OPEN = 'filter_open'
 FILTER_CB_UNOWNED = 'filter_unowned'
-FILTER_CB_USERS_QUEUE = 'filter_users_queue'
+FILTER_S_ALERT_QUEUE = 'filter_alert_queue'
 FILTER_CB_ONLY_SLA = 'filter_sla'
 FILTER_CB_ONLY_REMEDIATED = 'filter_only_remediated'
 FILTER_CB_REMEDIATE_DATE = 'remediate_date'
@@ -1660,6 +1654,7 @@ FILTER_CB_USE_SEARCH_COMPANY = 'use_search_company'
 FILTER_S_SEARCH_COMPANY = 'search_company'
 FILTER_TXT_MIN_PRIORITY = 'min_priority'
 FILTER_TXT_MAX_PRIORITY = 'max_priority'
+FILTER_TXT_TAGS = 'tag_filters'
 
 # valid fields to sort on
 SORT_FIELD_DATE = 'date'
@@ -1721,7 +1716,7 @@ def manage():
     filters = {
         FILTER_CB_OPEN: SearchFilter('filter_open', FILTER_TYPE_CHECKBOX, True),
         FILTER_CB_UNOWNED: SearchFilter('filter_unowned', FILTER_TYPE_CHECKBOX, True),
-        FILTER_CB_USERS_QUEUE: SearchFilter('filter_users_queue', FILTER_TYPE_CHECKBOX, True),
+        FILTER_S_ALERT_QUEUE: SearchFilter('filter_alert_queue', FILTER_TYPE_SELECT, current_user.queue),
         FILTER_CB_ONLY_SLA: SearchFilter('filter_sla', FILTER_TYPE_CHECKBOX, False),
         FILTER_CB_ONLY_REMEDIATED: SearchFilter('filter_only_remediated', FILTER_TYPE_CHECKBOX, False),
         FILTER_CB_REMEDIATE_DATE: SearchFilter('remediate_date', FILTER_TYPE_CHECKBOX, False),
@@ -1758,7 +1753,8 @@ def manage():
         FILTER_TXT_MIN_PRIORITY: SearchFilter('min_priority', FILTER_TYPE_TEXT, '',
                                               verification_function=verify_integer),
         FILTER_TXT_MAX_PRIORITY: SearchFilter('max_priority', FILTER_TYPE_TEXT, '',
-                                              verification_function=verify_integer)
+                                              verification_function=verify_integer),
+        FILTER_TXT_TAGS: SearchFilter('tag_filters', FILTER_TYPE_TEXT, '')
     }
 
     # are we resetting the filter?
@@ -1879,27 +1875,24 @@ def manage():
                 observable_filter_items.append(filter_item)
 
     # load tag filters
-    tag_filter_items = []
-    if not reset_filter:
-        for key in request.form.keys():
-            if key.startswith('tag_'):
-                filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-                filters[key] = filter_item
-                tag_filter_items.append(filter_item)
-
-    # these can also come from the session
-    for key in session:
+    tag_filters = []
+    for key in request.form.keys():
         if key.startswith('tag_'):
-            # if we are resetting the filter then we need to completely remove these dynamic values
-            if reset_filter:
-                deleted_keys.append(key)
+            try:
+                tag = db.session.query(Tag).filter(Tag.id == key[len('tag_'):]).one()
+                if tag.name not in tag_filters:
+                    tag_filters.append(tag.name)
+            except NoResultFound:
                 continue
 
-            if key not in filters:
-                logging.debug("loading filter {0} from session for user {1}".format(key, current_user))
-                filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-                filters[key] = filter_item
-                tag_filter_items.append(filter_item)
+    if filters[FILTER_TXT_TAGS].value and filters[FILTER_TXT_TAGS].value != '':
+        for tag in filters[FILTER_TXT_TAGS].value.split(','):
+            v = tag.strip()
+            if v != '' and v not in tag_filters:
+                tag_filters.append(v)
+
+    if reset_filter:
+        tag_filters = []
 
     for key in deleted_keys:
         logging.debug("deleting session key {0} for user {1}".format(key, current_user))
@@ -1955,7 +1948,7 @@ def manage():
         # in this case we clear out all other filters except for this observable and disposition
         filters[FILTER_CB_OPEN].value = False
         filters[FILTER_CB_UNOWNED].value = False
-        filters[FILTER_CB_USERS_QUEUE].value = False
+        filters[FILTER_S_ALERT_QUEUE].value = 'All'
 
         key = f'observable_{odh_o.id}'
         filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
@@ -1995,9 +1988,9 @@ def manage():
         query = query.filter(or_(GUIAlert.owner_id == current_user.id, GUIAlert.owner_id == None))
         filter_english.append("not owned by others")
 
-    if filters[FILTER_CB_USERS_QUEUE].value:
-        query = query.filter(GUIAlert.queue == current_user.queue)
-        filter_english.append(f"in {current_user.queue} queue")
+    if filters[FILTER_S_ALERT_QUEUE].value and filters[FILTER_S_ALERT_QUEUE].value != 'All':
+        query = query.filter(GUIAlert.queue == filters[FILTER_S_ALERT_QUEUE].value)
+        filter_english.append(f"in {filters[FILTER_S_ALERT_QUEUE].value} queue")
 
     # what timezone do we display the alerts in?
     # all times MUST be UTC in the database
@@ -2229,30 +2222,11 @@ def manage():
                 #ObservableMapping.observable_id.in_([o.id for o in observables])).subquery()))
         filter_english.extend(observable_filters_english)
 
-    # iterate over the list of tags we're filtering on
-    tags = []
-    tag_filters_english = []
-
-    for filter_item in tag_filter_items:
-        if filter_item.value:
-            tag_id = filter_item.name[len('tag_'):]  # the tag_id is encoded in the name property of the form element
-            try:
-                tag = db.session.query(Tag).filter(Tag.id == tag_id).one()
-            except NoResultFound:
-                continue
-
-            tag_filters_english.append("with tag {}".format(tag.name))
-            tags.append(tag)
-
-    if len(tags) > 0:
+    if len(tag_filters) > 0:
         query = query.join(TagMapping, GUIAlert.id == TagMapping.alert_id)\
                      .join(Tag, Tag.id == TagMapping.tag_id)\
-                     .filter(Tag.id.in_([t.id for t in tags]))
-
-        #query = query.filter(
-            #GUIAlert.id.in_(db.session.query(GUIAlert.id).join(TagMapping, GUIAlert.id == TagMapping.alert_id).filter(
-                #TagMapping.tag_id.in_([t.id for t in tags])).subquery()))
-        filter_english.extend(tag_filters_english)
+                     .filter(Tag.name.in_(tag_filters))
+        filter_english.append(f"has tag in ({', '.join(tag_filters)})")
 
     query = query.options(joinedload('workload'))
     query = query.options(joinedload('delayed_analysis'))
@@ -2266,6 +2240,10 @@ def manage():
     # if alerts are in breach of SLA then we sort by date ascending
     if reset_filter and sla_ids:
         sort_instructions = {SORT_FIELD_DATE: SORT_DIRECTION_ASC}
+
+    # are we only showing alerts on the local node?
+    if saq.CONFIG['gui'].getboolean('local_node_only', fallback=True):
+        query = query.filter(GUIAlert.location == saq.SAQ_NODE)
 
     # finally sort the results
     order_by_clause = []
@@ -2286,7 +2264,7 @@ def manage():
             order_by_clause.append(GUIAlert.disposition.desc() if sort_instructions[
                                                                    sort_field] == SORT_DIRECTION_DESC else GUIAlert.disposition.asc())
 
-    query = query.order_by(*order_by_clause)
+    query = query.group_by(GUIAlert.id).order_by(*order_by_clause)
 
     # pagination calculation
     alert_offset = 0
@@ -2440,7 +2418,7 @@ def manage():
         open_observable_count=open_observable_count,
         all_observable_count=all_observable_count,
         observables=observables,
-        tags=tags,
+        tags=tag_filters,
         sort_arrow_html=sort_arrow_html,
         filter_english=' AND '.join(filter_english),
         observable_types=VALID_OBSERVABLE_TYPES,
@@ -2450,8 +2428,18 @@ def manage():
         alert_limit=alert_limit,
         user_limit=session['limit'] if 'limit' in session else "50",
         alert_offset=alert_offset,
-        default_queue=current_user.queue,
+        alert_queues=get_valid_alert_queues(),
         alert_remediations=alert_remediations)
+
+def get_valid_alert_queues():
+    valid_alert_queues = []
+    with get_db_connection() as db:
+        c = db.cursor()
+        c.execute("SELECT queue FROM alerts GROUP BY queue")
+        for row in c:
+            if row[0]:
+                valid_alert_queues.append(row[0])
+    return valid_alert_queues
 
 
 # begin helper functions for metrics
@@ -3803,9 +3791,13 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
             index = 0
             while index < len(current_path):
                 _has_detection_points = current_path[index].obj.has_detection_points()
-                _has_tags = len(current_path[index].obj.tags) > 0
+                #_has_tags = len(current_path[index].obj.tags) > 0
                 _always_visible = current_path[index].obj.always_visible()
-                _high_fp_freq = current_path[index].obj.has_tag('high_fp_frequency')
+                #_high_fp_freq = current_path[index].obj.has_tag('high_fp_frequency')
+
+                # 5/18/2020 - jdavison - changing how this works -- will refactor these out once these changes are approved
+                _has_tags = False
+                _high_fp_freq = False
 
                 if _has_detection_points or _has_tags or _always_visible:
                     # if we have tags but no detection points and we also have the high_fp_freq tag then we hide that
@@ -3849,12 +3841,17 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
             # root node is visible
             display_tree.visible = True
             # and all observables in the root node
-            for child in display_tree.children:
-                child.visible = True
+            #for child in display_tree.children:
+                #child.visible = True
             _resolve_references(display_tree)
 
-    # go ahead and get the list of all the users, we'll end up using it
-    all_users = db.session.query(User).order_by('username').all()
+    try:
+        # go ahead and get the list of all the users, we'll end up using it
+        all_users = db.session.query(User).order_by('username').all()
+    except Exception as e:
+        logging.error(f"idk why it breaks specifically right here {e}")
+        db.session.rollback()
+        all_users = db.session.query(User).order_by('username').all()
 
     open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all()
     malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
@@ -4462,41 +4459,48 @@ def remediate_emails():
             if not do_it_now:
                 for target in targets.values():
                     try:
-                        r_id = old_request_email_remediation(target.message_id,
-                                                             target.recipient,
-                                                             current_user.id,
-                                                             target.company_id,
-                                                             ','.join(alert_uuids))
 
-                        target.result_text = f"request remediation (id {r_id})"
+                        res = request_remediation(REMEDIATION_TYPE_EMAIL,
+                                                    f'{target.message_id}:{target.email_address}',
+                                                  current_user.id,
+                                                  target.company_id)
+
+                        target.result_text = f"request remediation (id {res.id})"
                         target.result_success = True
 
                     except Exception as e:
                         target.result_text = str(e)
                         target.result_success = False
             else:
-                # TODO refactor this to use the classes of the new system
-                results = saq.remediation.email.remediate_emails(current_user.id, None, params)
+                res = execute_remediation(REMEDIATION_TYPE_EMAIL,
+                                          f'{target.message_id}:{target.email_address}',
+                                          current_user.id,
+                                          target.company_id)
+
+                target.result_success = True
 
         elif action == 'restore':
             if not do_it_now:
                 for target in targets.values():
                     try:
-                        r_id = old_request_email_restoration(target.message_id,
-                                                             target.recipient,
-                                                             current_user.id,
-                                                             target.company_id,
-                                                             ','.join(alert_uuids))
+                        res = request_restoration(REMEDIATION_TYPE_EMAIL,
+                                                  f'{target.message_id}:{target.email_address}',
+                                                  current_user.id,
+                                                  target.company_id )
 
-                        target.result_text = f"request restoration (id {r_id})"
                         target.result_success = True
 
                     except Exception as e:
                         target.result_text = str(e)
                         target.result_success = False
             else:
-                # TODO refactor this to use the classes of the new system
-                results = saq.remediation.email.unremediate_emails(current_user.id, None, params)
+                res = execute_restoration(REMEDIATION_TYPE_EMAIL,
+                                          f'{target.message_id}:{target.email_address}',
+                                          current_user.id,
+                                          target.company_id)
+
+                target.result_text = f"request remediation (id {res.id})"
+                target.result_success = True
 
     except Exception as e:
         logging.error("unable to perform email remediation action {}: {}".format(action, e))
@@ -4527,22 +4531,26 @@ def remediate_emails():
 def query_remediation_targets():
     """Obtains a list of all the remediation targets for the given list of alert uuids."""
     result = {} # key = remediation_key, value = dict (see below)
-    for alert in saq.db.query(Alert).filter(Alert.uuid.in_(json.loads(request.values['alert_uuids']))):
+    storage_dirs = saq.db.query(Alert.storage_dir).filter(Alert.uuid.in_(json.loads(request.values['alert_uuids']))).all()
+    saq.db.close()
+
+    for (storage_dir,) in storage_dirs:
+        root = saq.analysis.RootAnalysis(storage_dir=storage_dir)
         try:
-            alert.load()
-            for observable in alert.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
+            root.load()
+            for observable in root.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
                 result[observable.remediation_key] = {'type': observable.type,
                                                       'remediation_type': observable.remediation_type,
                                                       'value': observable.value,
                                                       'remediation_key': observable.remediation_key,
                                                       'history': []}
         except Exception as e:
-            logging.error(f"unable to load remediation targets: {e}")
+            logging.error(f"unable to load remediation target {root}: {e}")
 
     for history in saq.db.query(Remediation).filter(Remediation.key.in_([key for key, _ in result.items()]))\
-                                            .order_by(Remediation.insert_date.desc()):
+                                        .order_by(Remediation.insert_date.desc()):
         result[history.key]['history'].append(history.json)
-        
+
     from saq.analysis import _JSONEncoder
     response = make_response(json.dumps(result, cls=_JSONEncoder))
     response.mimetype = 'application/json'

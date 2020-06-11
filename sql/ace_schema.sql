@@ -1,8 +1,8 @@
--- MySQL dump 10.13  Distrib 5.7.29, for Linux (x86_64)
+-- MySQL dump 10.13  Distrib 5.7.30, for Linux (x86_64)
 --
 -- Host: localhost    Database: ace
 -- ------------------------------------------------------
--- Server version	5.7.29-0ubuntu0.18.04.1
+-- Server version	5.7.30-0ubuntu0.18.04.1
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -59,6 +59,7 @@ CREATE TABLE `alerts` (
   KEY `idx_disposition` (`disposition`),
   KEY `idx_alert_type` (`alert_type`),
   KEY `idx_location` (`location`(767)),
+  KEY `idx_queue` (`queue`),
   CONSTRAINT `fk_company` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -275,12 +276,12 @@ CREATE TABLE `events` (
   `status` enum('OPEN','CLOSED','IGNORE') NOT NULL,
   `comment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci,
   `campaign_id` int(11) NOT NULL,
-  `event_time` DATETIME DEFAULT NULL,
-  `alert_time` DATETIME DEFAULT NULL,
-  `ownership_time` DATETIME DEFAULT NULL,
-  `disposition_time` DATETIME DEFAULT NULL,
-  `contain_time` DATETIME DEFAULT NULL,
-  `remediation_time` DATETIME DEFAULT NULL,
+  `event_time` datetime DEFAULT NULL,
+  `alert_time` datetime DEFAULT NULL,
+  `ownership_time` datetime DEFAULT NULL,
+  `disposition_time` datetime DEFAULT NULL,
+  `contain_time` datetime DEFAULT NULL,
+  `remediation_time` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `creation_date` (`creation_date`,`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -333,7 +334,8 @@ CREATE TABLE `locks` (
   `lock_owner` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci DEFAULT NULL,
   PRIMARY KEY (`uuid`),
   KEY `idx_lock_time` (`lock_time`),
-  KEY `idx_uuid_locko_uuid` (`uuid`,`lock_uuid`)
+  KEY `idx_uuid_locko_uuid` (`uuid`,`lock_uuid`),
+  KEY `idx_locks_uuid` (`uuid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -434,6 +436,21 @@ CREATE TABLE `node_modes` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `node_modes_excluded`
+--
+
+DROP TABLE IF EXISTS `node_modes_excluded`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `node_modes_excluded` (
+  `node_id` int(11) NOT NULL,
+  `analysis_mode` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'The analysis_mode that this node will NOT support processing.',
+  PRIMARY KEY (`node_id`,`analysis_mode`),
+  CONSTRAINT `fk_nme_id` FOREIGN KEY (`node_id`) REFERENCES `nodes` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `nodes`
 --
 
@@ -523,7 +540,8 @@ CREATE TABLE `observables` (
   `value` blob NOT NULL,
   `md5` varbinary(16) NOT NULL,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `i_type_md5` (`type`,`md5`)
+  UNIQUE KEY `i_type_md5` (`type`,`md5`),
+  KEY `i_obs_md5` (`md5`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -657,7 +675,9 @@ DROP TABLE IF EXISTS `work_distribution`;
 CREATE TABLE `work_distribution` (
   `group_id` int(11) NOT NULL,
   `work_id` bigint(20) NOT NULL,
-  `status` enum('READY','COMPLETED','ERROR') NOT NULL DEFAULT 'READY' COMMENT 'The status of the submission. Defaults to READY until the work has been submitted. \nOn a successful submission the status changes to COMPLETED.\nIf an error is detected, the status will change to ERROR.',
+  `status` enum('READY','COMPLETED','ERROR','LOCKED') NOT NULL DEFAULT 'READY' COMMENT 'The status of the submission. Defaults to READY until the work has been submitted. \\nOn a successful submission the status changes to COMPLETED.\\nIf an error is detected, the status will change to ERROR.',
+  `lock_time` timestamp NULL DEFAULT NULL,
+  `lock_uuid` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`group_id`,`work_id`),
   KEY `fk_work_id_idx` (`work_id`),
   KEY `fk_work_status` (`work_id`,`status`),
@@ -717,4 +737,4 @@ CREATE TABLE `workload` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2020-03-13 17:49:52
+-- Dump completed on 2020-06-08 12:37:30

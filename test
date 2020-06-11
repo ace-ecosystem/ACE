@@ -86,7 +86,6 @@ then
         test_ace_api \
 
         # reintroduce these
-        #saq.collectors.test_smtp \
         #saq.collectors.test_http \
 
         # TODO reintroduce these next two somehow
@@ -102,9 +101,6 @@ then
         #saq.engine.test_email \
         #saq.engine.test_ace \
         #saq.test_lock \
-
-        # we'll re-introduce these in anoter way... TODO
-        #saq.remediation.phishfry.test \
 
         # these needs to be created
         #saq.modules.test_qradar \
@@ -126,11 +122,11 @@ python3 -W ignore -m unittest -f -v "$@"
 #PYTHONPATH=lib python3 -W ignore -m unittest -v saq.test_database.DatabaseTestCase.test_database_007_caching_processes
 
 
-if [ -f logs/unittest.log ]
+if [ -f data/logs/unittest.log ]
 then
-    GREP_COLORS='mt=01;103' grep --color=always \\[WARNING\\] logs/unittest.log | grep -v 'request for unknown encrypted password'
-    GREP_COLORS='mt=01;31' grep --color=always \\[ERROR\\] logs/unittest.log
-    GREP_COLORS='mt=01;32' grep --color=always MARKER logs/unittest.log
+    GREP_COLORS='mt=01;103' grep --color=always \\[WARNING\\] data/logs/unittest.log | grep -v 'request for unknown encrypted password'
+    GREP_COLORS='mt=01;31' grep --color=always \\[ERROR\\] data/logs/unittest.log
+    GREP_COLORS='mt=01;32' grep --color=always MARKER data/logs/unittest.log
 fi
 
 if [ -d $data_dir/error_reports ]

@@ -9,7 +9,7 @@ import saq
 from email.utils import parseaddr
 from email.header import decode_header
 from saq.database import get_db_connection
-from saq import util
+from saq.util import *
 
 import exchangelib
 from exchangelib.errors import DoesNotExist
@@ -59,6 +59,28 @@ def decode_rfc2822(header_value):
         result.append(decoded_value)
 
     return ''.join(result)
+
+def is_local_email_domain(email_address):
+    """Returns True if the given email addresses matches at least one entry in the local_email_domains list 
+       in the [global] section of the configuration."""
+
+    local_domains = [_.strip() for _ in saq.CONFIG['global']['local_email_domains'].split(',') if _.strip()]
+    if not local_domains:
+        return False
+
+    email_address = normalize_email_address(email_address)
+
+    try:
+        email_domain = email_address.split('@', 1)[1]
+    except Exception as e:
+        logging.debug(f"email address {email_address} failed to split on @: {e}")
+        return False
+
+    for local_domain in local_domains:
+        if is_subdomain(email_domain, local_domain):
+            return True
+
+    return False
 
 class EmailArchiveEntry(object):
     def __init__(self, archive_id):
@@ -192,6 +214,11 @@ def search_archive(source, message_ids, excluded_emails=[]):
         for row in c:
             ( _id, _type, _action, _insert_date, _user, _key, _result, _comment, _successful,
               _company_id, _lock, _lock_time, _status ) = row
+
+            if _key not in index:
+                logging.error(f"missing {_key} in item index")
+                continue
+
             index[_key].remediation_history.append({
                 'id': _id,
                 'type': _type,
@@ -385,7 +412,7 @@ def get_ews_api_object(config_section, **kwargs) -> EWSApi:
     if auth_type.upper() == exchangelib.NTLM:
         auth_type = exchangelib.NTLM
 
-    adapter = kwargs.get('pre_init_adapter') or util.PreInitCustomSSLAdapter
+    adapter = kwargs.get('pre_init_adapter') or PreInitCustomSSLAdapter
 
     if certificate:
         adapter.add_cert(server, certificate)

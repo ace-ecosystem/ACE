@@ -254,7 +254,9 @@ class RemediationSystem(object):
             Remediation.status == REMEDIATION_STATUS_NEW)).order_by(
             asc(Remediation.id)).all() # there will only be self.batch_size so the all() call should be OK
 
-        saq.db.expunge_all()
+        for remediation in locked_workload:
+            saq.db.expunge(remediation)
+
         saq.db.commit()
 
         for remediation in locked_workload:
@@ -405,7 +407,7 @@ def execute(action, type, key, user_id, company_id, comment=None):
                           datetime.datetime.now()) # lock_time
     system.execute(saq.db.query(Remediation).filter(Remediation.id == remediation.id).one())
     result = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
-    saq.db.expunge_all()
+    saq.db.expunge(result)
     return result
 
 def execute_remediation(*args, **kwargs):
@@ -438,7 +440,7 @@ def request(action,
     saq.db.add(remediation)
     saq.db.commit()
     saq.db.refresh(remediation)
-    saq.db.expunge_all()
+    saq.db.expunge(remediation)
     return remediation
 
 def request_remediation(*args, **kwargs):

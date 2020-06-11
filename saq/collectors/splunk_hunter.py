@@ -18,7 +18,6 @@ class SplunkHunt(QueryHunt):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.use_index_time = bool()
-        self.tool_instance = saq.CONFIG['splunk']['uri']
 
         # supports hash-style comments
         self.strip_comments = True
@@ -27,6 +26,11 @@ class SplunkHunt(QueryHunt):
         self._query = None
         self.search_id = None
         self.time_spec = None
+
+        # since we have multiple splunk instances, allow config to point to a different one
+        self.splunk_config = self.manager.config.get('splunk_config', 'splunk')
+        
+        self.tool_instance = saq.CONFIG[self.splunk_config]['uri']
 
         # splunk app/user context
         self.namespace_user = '-' # defaults to wildcards
@@ -117,9 +121,9 @@ class SplunkHunt(QueryHunt):
             return unit_test_query_results
         
         searcher = SplunkQueryObject(
-            uri=saq.CONFIG['splunk']['uri'],
-            username=saq.CONFIG['splunk']['username'],
-            password=saq.CONFIG['splunk']['password'],
+            uri=saq.CONFIG[self.splunk_config]['uri'],
+            username=saq.CONFIG[self.splunk_config]['username'],
+            password=saq.CONFIG[self.splunk_config]['password'],
             max_result_count=self.max_result_count,
             query_timeout=self.query_timeout,
             namespace_user=self.namespace_user,
