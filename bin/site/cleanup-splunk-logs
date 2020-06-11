@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+find /opt/ace/data/splunk_logs -type f -mmin +180 -name '*.log' -delete

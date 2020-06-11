@@ -443,3 +443,68 @@ class VirusTotalURLAnalyzer(AnalysisModule):
                                 url.add_tag('malicious')
                                 return True
         return True
+
+class VirusTotalIPAnalysis(Analysis):
+    def initialize_details(self):
+        self.details = {
+        }
+
+    def generate_summary(self):
+        if self.details is not None:
+            return f"VT Analysis - Related to {len(self.details.get('detected_urls', []))} URLs"
+        return None
+
+class VirusTotalIPAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return VirusTotalIPAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_IPV4
+
+    def __init__(self, *args, **kwargs):
+        super(VirusTotalIPAnalyzer, self).__init__(*args, **kwargs)
+        self.api_key = saq.CONFIG['virus_total']['api_key']
+        self.base_uri = saq.CONFIG['virus_total']['base_uri']
+        self.proxies = proxies() if saq.CONFIG.getboolean('virus_total', 'use_proxy') else {}
+        if 'ignored_vendors' in saq.CONFIG['virus_total']:
+            self.ignored_vendors = set([x.strip().lower() for x in saq.CONFIG['virus_total']['ignored_vendors'].split(',')])
+        else:
+            self.ignored_vendors = set()
+
+    def execute_analysis(self, ip): 
+        try:
+            r = requests.get(f'{self.base_uri}/ip-address/report', params={
+                'ip': ip.value,
+                'apikey': self.api_key}, proxies=self.proxies, timeout=5, verify=False)
+        except Exception as e:
+            logging.error("unable to query VT: {}".format(e))
+            return False
+
+        if r.status_code == 403:
+            logging.error("invalid virus total api key!")
+            return False
+
+        if r.status_code != 200:
+            logging.error("got invalid HTTP result {}: {}".format(r.status_code, r.reason))
+            return False
+
+        analysis = self.create_analysis(ip)
+        analysis.details = json.loads(r.content.decode())
+        
+        # 4/28/2016 - looks like they now return an array of results
+        if isinstance(analysis.details, list):
+            analysis.details = analysis.details[0]
+            logging.debug(f"Analysis Details: \n{analysis.details}")
+
+        if not isinstance(analysis.details, dict):
+            logging.error("expecting dict but got {} for analysis.details of vt".format(type(analysis.details)))
+            return False
+
+        if analysis.details.get("detected_urls", False) and len(analysis.details["detected_urls"]) > 0:
+            # sort the related urls and grab the most recent resolution
+            analysis.add_observable(F_URL, analysis.details["detected_urls"][0]["url"])
+
+        return True
+

@@ -6,14 +6,9 @@ from sqlalchemy import func, and_
 
 import saq
 from saq.database import Remediation
-from saq.remediation import mail, RemediationSystemManager
+from saq.remediation import mail, RemediationSystemManager, request_remediation, execute_remediation, request_restoration
 from saq.remediation.constants import *
-from saq.remediation.email import (
-    request_email_remediation,
-    create_email_remediation_key,
-    execute_email_remediation,
-    request_email_restoration,
-)
+from saq.remediation.mail import create_email_remediation_key
 from saq.test import *
 
 
@@ -233,7 +228,7 @@ class TestEmailRemediationSystem(ACEBasicTestCase):
         self.assertEquals(len(manager.systems['email'].remediators), 1)
 
     def test_remediation_request(self):
-        remediation = request_email_remediation('<message_id>', '<recipient@localhost>',
+        remediation = request_remediation(REMEDIATION_TYPE_EMAIL, '<message_id>:<recipient@localhost>',
                                                 saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
         self.assertTrue(isinstance(remediation, Remediation))
         remediation = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
@@ -251,7 +246,7 @@ class TestEmailRemediationSystem(ACEBasicTestCase):
         self.assertIsNone(remediation.lock_time)
         self.assertEquals(remediation.status, REMEDIATION_STATUS_NEW)
 
-        remediation = request_email_restoration('<message_id>', '<recipient@localhost>',
+        remediation = request_restoration(REMEDIATION_TYPE_EMAIL, '<message_id>:<recipient@localhost>',
                                                 saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
         self.assertTrue(isinstance(remediation, Remediation))
         remediation = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
@@ -259,10 +254,9 @@ class TestEmailRemediationSystem(ACEBasicTestCase):
         self.assertEquals(remediation.action, REMEDIATION_ACTION_RESTORE)
 
     def test_remediation_execution(self):
-        remediation = execute_email_remediation('<message_id>', '<recipient@localhost>',
+        remediation = execute_remediation(REMEDIATION_TYPE_EMAIL, '<message_id>:<recipient@localhost>',
                                                 saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
-        self.assertTrue(isinstance(remediation, Remediation))
-        remediation = saq.db.query(Remediation).filter(Remediation.id == remediation.id).one()
+
         self.assertIsNotNone(remediation)
         self.assertEquals(remediation.type, REMEDIATION_TYPE_EMAIL)
         self.assertEquals(remediation.action, REMEDIATION_ACTION_REMOVE)
@@ -279,7 +273,7 @@ class TestEmailRemediationSystem(ACEBasicTestCase):
 
     def test_automation_queue(self):
         manager = self._start_manager()
-        remediation = request_email_remediation('<message_id>', '<recipient@localhost>',
+        remediation = request_remediation(REMEDIATION_TYPE_EMAIL, '<message_id>:<recipient@localhost>',
                                                 saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
         wait_for(
             lambda: len(saq.db.query(Remediation).filter(
@@ -297,7 +291,7 @@ class TestEmailRemediationSystem(ACEBasicTestCase):
         manager.wait_service()
 
         # insert a new work request
-        remediation = request_email_remediation('<message_id>', '<recipient@localhost>',
+        remediation = request_remediation(REMEDIATION_TYPE_EMAIL, '<message_id>:<recipient@localhost>',
                                                 saq.test.UNITTEST_USER_ID, saq.COMPANY_ID)
 
         # pretend it started processing

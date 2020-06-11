@@ -121,16 +121,18 @@ class ACEConfigParser(ConfigParser):
                 relative path, it is made relative to SAQ_HOME.
 
         Returns:
-            The existing ConfigParser object, or a new one if it wasn't passed in,
-            with the file loaded and all references resolved.
+            True if the file was loaded, False if the file was already loaded.
         """
-        target_config = ConfigParser(allow_no_value=True)
         path = abs_path(path)
+        if path in self.loaded_files:
+            return False
+
+        target_config = ConfigParser(allow_no_value=True)
         target_config.read(path)
         self.apply(target_config)
         self.loaded_files.add(path)
         self.resolve_references()
-        return self
+        return True
 
     def resolve_references(self):
         """Recursively loads configuration files references to other configuration files.
@@ -144,9 +146,8 @@ class ACEConfigParser(ConfigParser):
         while True:
             loaded_config = False
             for config_key, config_path in self['config'].items():
-                if config_path not in self.loaded_files:
-                    config = self.load_file(config_path)
-                    loaded_config = True
+                config_path = abs_path(config_path)
+                loaded_config = loaded_config or self.load_file(config_path)
 
             # if we didn't load any new configuration files on this pass then we're done
             if not loaded_config:

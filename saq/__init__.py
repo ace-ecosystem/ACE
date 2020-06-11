@@ -333,7 +333,8 @@ def initialize(
         CONFIG = load_configuration()
     except Exception as e:
         sys.stderr.write(f"ERROR: unable to load configuration: {e}")
-        sys.exit(1) # TODO replace with exception for unit testing
+        raise
+        #sys.exit(1) # TODO replace with exception for unit testing
 
     DATA_DIR = os.path.join(SAQ_HOME, CONFIG['global']['data_dir'])
     TEMP_DIR = os.path.join(DATA_DIR, CONFIG['global']['tmp_dir'])
@@ -548,6 +549,8 @@ def initialize(
         os.path.join(DATA_DIR, CONFIG['elk_logging']['elk_log_dir']),
         os.path.join(TEMP_DIR),
         SERVICES_DIR,
+        os.path.join(DATA_DIR, CONFIG['collection']['persistence_dir']),
+        os.path.join(DATA_DIR, CONFIG['collection']['incoming_dir']),
         DAEMON_DIR, ]: 
         try:
             create_directory(dir_path)

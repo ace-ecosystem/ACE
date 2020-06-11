@@ -266,6 +266,61 @@ class TestCase(ACEEngineTestCase):
         analysis = observable.get_analysis('BasicTestAnalysis')
         self.assertIsNotNone(analysis)
 
+    def test_analysis_cache(self):
+        # run the test module
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.analysis_mode = 'test_cache'
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable = root.add_observable(F_TEST, 'test')
+        # delete cached analysis if it exists
+        path = os.path.join(saq.SAQ_HOME, saq.DATA_DIR, 'analysis_cache')
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        root.save()
+        root.schedule()
+        engine = TestEngine()
+        engine.enable_module('analysis_module_analysis_cache_test')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # validate the results of the run
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+        observable = root.get_observable(observable.id)
+        self.assertIsNotNone(observable)
+
+        analysis = observable.get_analysis('CacheTestAnalysis')
+        self.assertIsNotNone(analysis)
+        self.assertFalse(analysis.details['cached']) # make sure analysis is correct
+        path = os.path.join(path, f"{observable.cache_id}.CacheTestAnalysis.v1.json")
+        self.assertTrue(os.path.isfile(path)) # make sure cache file was created
+
+        # rerun without deleting the cached file and make sure the analysis is the same
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.analysis_mode = 'test_cache'
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable = root.add_observable(F_TEST, 'test')
+        root.save()
+        root.schedule()
+        engine = TestEngine()
+        engine.enable_module('analysis_module_analysis_cache_test')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # validate the results of the run
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+        observable = root.get_observable(observable.id)
+        self.assertIsNotNone(observable)
+        analysis = observable.get_analysis('CacheTestAnalysis')
+        self.assertIsNotNone(analysis)
+        # make sure cached is set to False, if the module ran instead of using the cached analysis then cached would be True
+        self.assertFalse(analysis.details['cached'])
+
     def test_analysis_queues(self):
         root = create_root_analysis(uuid=str(uuid.uuid4()))
         root.analysis_mode = 'test_queues'

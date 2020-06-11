@@ -126,8 +126,8 @@ class UserAnalysis(Analysis):
             self.details['ldap']['l'] if 'l' in self.details['ldap'] else '',
             self.details['ldap']['title'] if 'title' in self.details['ldap'] else '')
 
-    def always_visible(self):
-        return True
+    #def always_visible(self):
+        #return True
 
 class UserAnalyzer(LDAPAnalysisModule):
     def __init__(self, *args, **kwargs):

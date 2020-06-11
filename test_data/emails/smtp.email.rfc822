@@ -1,0 +1,288 @@
+Received: from MN2PR19MB2800.namprd19.prod.outlook.com (2603:10b6:408:80::38)
+ by BN8PR19MB2577.namprd19.prod.outlook.com with HTTPS via
+ BN8PR15CA0061.NAMPRD15.PROD.OUTLOOK.COM; Thu, 28 May 2020 14:53:51 +0000
+Received: from BN6PR11CA0022.namprd11.prod.outlook.com (2603:10b6:405:2::32)
+ by MN2PR19MB2800.namprd19.prod.outlook.com (2603:10b6:208:f3::17) with
+ Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.3045.17; Thu, 28 May
+ 2020 14:53:50 +0000
+Received: from BN8NAM12FT058.eop-nam12.prod.protection.outlook.com
+ (2603:10b6:405:2:cafe::8d) by BN6PR11CA0022.outlook.office365.com
+ (2603:10b6:405:2::32) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.3045.19 via Frontend
+ Transport; Thu, 28 May 2020 14:53:50 +0000
+Authentication-Results: spf=softfail (sender IP is 216.131.54.6)
+ smtp.mailfrom=gmail.com; company.mail.onmicrosoft.com; dkim=fail (body hash did
+ not verify) header.d=gmail.com;company.mail.onmicrosoft.com; dmarc=fail
+ action=none header.from=gmail.com;
+Received-SPF: SoftFail (protection.outlook.com: domain of transitioning
+ gmail.com discourages use of 216.131.54.6 as permitted sender)
+Received: from o365transport.company.com (216.131.54.6) by
+ BN8NAM12FT058.mail.protection.outlook.com (10.13.182.188) with Microsoft SMTP
+ Server (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.20.3066.8 via Frontend Transport; Thu, 28 May 2020 14:53:49 +0000
+Received: from exchangeserver.subdomain.company.com (10.224.163.30) by
+ S7GRAMIHQEXEG01.company.com (216.131.54.6) with Microsoft SMTP Server
+ (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256) id
+ 15.1.1913.5; Thu, 28 May 2020 10:53:39 -0400
+Received: from sogramihqfeye02.company.com (216.131.54.10) by
+ exchangeserver.subdomain.company.com (10.224.163.30) with Microsoft SMTP Server
+ id 14.3.487.0; Thu, 28 May 2020 10:53:42 -0400
+Received: from localhost.localdomain (localhost [127.0.0.1])	by
+ sogramihqfeye02.company.com (Postfix) with SMTP id 49XrL316R6z1Zcq6	for
+ <John.Davison@company.com>; Thu, 28 May 2020 10:53:31 -0400 (EDT)
+Received: from mailserver.company.com (unknown [216.131.54.100])	by
+ sogramihqfeye02.company.com (Postfix) with ESMTPS id 49XrL25ZrQz1ZcmL	for
+ <John.Davison@company.com>; Thu, 28 May 2020 10:53:30 -0400 (EDT)
+Received-SPF: Pass (mailserver.company.com: domain of
+  unixfreak0037@gmail.com designates 209.85.167.52 as permitted
+  sender) identity=mailfrom; client-ip=209.85.167.52;
+  receiver=mailserver.company.com;
+  envelope-from="unixfreak0037@gmail.com";
+  x-sender="unixfreak0037@gmail.com"; x-conformance=spf_only;
+  x-record-type="v=spf1"; x-record-text="v=spf1
+  ip4:35.190.247.0/24 ip4:64.233.160.0/19 ip4:66.102.0.0/20
+  ip4:66.249.80.0/20 ip4:72.14.192.0/18 ip4:74.125.0.0/16
+  ip4:108.177.8.0/21 ip4:173.194.0.0/16 ip4:209.85.128.0/17
+  ip4:216.58.192.0/19 ip4:216.239.32.0/19 ~all"
+Authentication-Results-Original: mailserver.company.com; spf=Pass
+ smtp.mailfrom=unixfreak0037@gmail.com; dkim=pass (signature verified)
+ header.i=@gmail.com; dmarc=pass (p=none dis=none) d=gmail.com
+IronPort-PHdr: =?us-ascii?q?9a23=3A6aiTmxOB6IQjYT68puol6mtUPXoX/o7sNwtQ0K?=
+ =?us-ascii?q?IMzox0Ivn8rarrMEGX3/hxlliBBdydt6sZzbOM7eu6CCQp2tWoiDg6aptCVh?=
+ =?us-ascii?q?sI2409vjcLJ4q7M3D9N+PgdCcgHc5PBxdP9nC/NlVJSo6lPwWB6nK94iQPFR?=
+ =?us-ascii?q?rhKAF7Ovr6GpLIj8Swyuu+54Dfbx9HiTagYb5+Ngi6oRvQu8UZn4dvLrs6xw?=
+ =?us-ascii?q?fUrHdPZ+lY335jK0iJnxb76Mew/Zpj/DpVtvk86cNOUrj0crohQ7BAAzsoL2?=
+ =?us-ascii?q?465MvwtRneVgSP/WcTUn8XkhVTHQfI6gzxU4rrvSv7sup93zSaPdHzQLspVz?=
+ =?us-ascii?q?mu87tnRRn1gyocKTU37H/YhdBxjKJDoRKuuRp/w5LPYIqIMPZyZ77Rcc8GSW?=
+ =?us-ascii?q?ZEWMtaSi5PDZ6mb4YXAOUPPehWoYrgqVUQsRSzHhOjCP/1xzJSmnP6wa833u?=
+ =?us-ascii?q?I8Gg/GxgwgGNcOvWzQotXyNKcSV/2+wqfSwjXdbvNWwjD96I7VeR0mvPGMW7?=
+ =?us-ascii?q?NwcMXfyUk1CQzKlFaQpZD5Mz6b1OkAqGeb7+96WuKuj24rsR1+oj+qxso1jI?=
+ =?us-ascii?q?TCm40axEze+ypj3IY1OcO3SFR9YdO8EJVdqz+XOYR2T84+QWxltyI3x7MatZ?=
+ =?us-ascii?q?O/YiUG1pQpywLeZvGEcoWF/g/uWeWMLTp5hX9oZb2xihWs/EagxeDwSs+520?=
+ =?us-ascii?q?tJoCpditTAqGwB2hjJ5sWESvZx5Fqt1DeN2gzJ6uxIP0Y5nrfBJZE72L4/jJ?=
+ =?us-ascii?q?8TvFzDHiDonEX2i7ebdkA+9eip7+Tre7HmppGBO4NthAHzMroiltawAeQ/NQ?=
+ =?us-ascii?q?gOUGyb9vqm2LL/+k35Ra1GjvwwkqbHrJDXPdoXqrK9DgNP0Ysu6wyzAyqn3d?=
+ =?us-ascii?q?kah3UKLExJdAqCj4fzOlHOJP74De24g1SpiDpr2vbGPrzuA5XDNHjMjq3ufb?=
+ =?us-ascii?q?Vh50JAxgc+z8tS551RCr4bIfLzXlX9u8DfDh88KwC02froCM1h1oMCXmKCGq?=
+ =?us-ascii?q?uXMKTSsV+O/O4hLfODZJEUuDbmLPgl4eXjgH83lFMHYaap2p4XOziEGaEsD0?=
+ =?us-ascii?q?yHYGHrhJNJM2AKuEB2GM7tiFvEfTdNZm21WYphvXcwD4fwXqnZQYX4oruB2m?=
+ =?us-ascii?q?+XF4NXfWdAQgSRF3b4eZ+JUvRUMHnNCsBkmz0AE7OmTtlyhlmVqAbmxu8/fa?=
+ =?us-ascii?q?Lv8SoCuMemjYAtvrCBuTIT0HlZEc2ZzmiRTmZywDlSFSFjhfM3qBln0V7Gyq?=
+ =?us-ascii?q?hx2aEGRpRYsulEVg4qOJKb1eF+AsD/VlGkHJ/BAB7uCp3uDWQ+S9swx5kFZE?=
+ =?us-ascii?q?MuU8731EiagXPyWeJG8t7DTNR8uuqUl3ikIsd4xjPY2bM6jl4gEMVVMmj0iq?=
+ =?us-ascii?q?dj+lrWCpXSmkqU0qemJ78B1izA/3vR0W3d2SMQGEY4Ge2NFXofM2DWrszw71?=
+ =?us-ascii?q?/sf7uqBqUXHghclJWhBrB6Ws3NiGtdQNn4Jt2CPSGMxWq/Dg3dldbuJMKiMy?=
+ =?us-ascii?q?1VlG3XXUQ6rQwhombWcjISXRmsnW/6DBpAO3SoSFzstuJzpyO/Y1U4zQqvS3?=
+ =?us-ascii?q?RIz+WfuR882NOyd/Q245NHuxkC8QVpNUvh2re0Q5LI70IpNO0UWNFk/3l6yk?=
+ =?us-ascii?q?SCvVElIoeMEvBEgQc6UCZ7hHLN/RZpJt9Doegpt1gDxzBwBbu14lJsUh+1ms?=
+ =?us-ascii?q?r1OKHuF1LbpRX1Rvb6/l+7sp7esu9HoLxw41vg4TnuLW0I7UVX0YdL4kuB34?=
+ =?us-ascii?q?/7FjcTaKCsAk8N0QJ4uqznPwwP9oXphF9HIJCeny/P2OogIOYD5EaOcdthPr?=
+ =?us-ascii?q?ucNiLZdq9ST4DmYKRi0xD1QBYHGOZtpJARPNyHR6Of9oiZM8swhBy4knkawd?=
+ =?us-ascii?q?pB0lmC73dgS7Tu9b8E89OkhDGNcg3OsFyig/yqoodZNAMWPTP46k2GTMYZLu?=
+ =?us-ascii?q?U6Nc5DNG33CPDr3M9+qrDkfn5e2QGbDW0hypaQVCqUM2Dc4ilM+FoloHC4si?=
+ =?us-ascii?q?uUlBNrvQt0nrvD8jzW47TvSz8LOmJKHlltt1qJQ8D8x5hSFADgJwZ4mSLwsB?=
+ =?us-ascii?q?Wy1+1avqN5N27JXQJScjPrK303SqKrrenfMeJqwakD6HwJArz4TVWTULXHrh?=
+ =?us-ascii?q?AdyS+xV3MLwjc9enXiop7lykUi0CbVN24mtWfQY8h22RbZ6ZiUTPJS3z9TXm?=
+ =?us-ascii?q?0wgCLPCA2me5Gz4NzBpNeMt+m/U2u8Sp0WayTzypmcrwO04mplBRD5lPe21Z?=
+ =?us-ascii?q?mvSFBmgXKkiYErYGHOqxDxONO5/rmmMe9hYkhjDUP97Mw/IIxlj48sn8hNhy?=
+ =?us-ascii?q?ofj5SR8mVW1zqod95c3PG2d2IDEAYC2MWd+w35wAtmJ3ONyZj+UyCAxMpxac?=
+ =?us-ascii?q?O3a2BOgnlix89PAaaQqrdDmHg9rlm5qFfJaONm1ncGyPQo4WIHmexBpgc3zy?=
+ =?us-ascii?q?ucD7xTVUlVNCDhjVKJuvixqaxWYCCkdr3jnEZ7lMqqWamLuRoUGG6sfJAkEG?=
+ =?us-ascii?q?d8794qNlXK3Ty75tTrfdDRaZQYsRjNyUX6guNYKYw8mr8xvQQ6Zz+vhXQ+0K?=
+ =?us-ascii?q?Z7iBVv2Z6l7c7acCNm+6frShJfMzT0YYsU9FSPxe5DmMeG0ZqiF5Y5Qm5UdJ?=
+ =?us-ascii?q?TtRPOsVjkVsLzrOh2PHzs1tnqAUeCHTEnPtQE/8S2JTsrjPmrfPHQDyNR+WB?=
+ =?us-ascii?q?SRQS4XyBsZWjk3hN9xFwynwtDgbFYs4zkQ4lDirR4fgulsNhT5TiLevFLyMm?=
+ =?us-ascii?q?ZyGMXZdUQJqFwYtCK3eYSE4+l+Hj9V5MikpQ2JJXPKIVkTS2oOXx/hZRirM7?=
+ =?us-ascii?q?+w6N3H6+XdCPC5Kq6EfLOPueJEWv6Lncr0jaNp+j+NMoOEOXwoXJhZkgJTGG?=
+ =?us-ascii?q?t0HcjUgWBFVioWhyzXYseY/E/npQV4q8m+9LLgXweltsOfTrBVN9to4RW/h6?=
+ =?us-ascii?q?yOYvWIihF+LzJJhfZujTfYjaIS11kIh2RyZiGgRP4e4DXVQvuayedHSgQWYC?=
+ =?us-ascii?q?RpOI5U4rIgi0NTbNXDhIqQtPYwj+ZpWQwYEwWwwofzOZNMeybnaBvGHBrZau?=
+ =?us-ascii?q?jAf2aQhZipOeXkDuQBxORM60/u53DCSxWlZnLb0GOxMnLneeBU0HPFYloE5N?=
+ =?us-ascii?q?D7Ik4rUS+5FJrnckHpb4Ux1GFwmOxuwCuNbD5UMCAgIRwR6OTKsGUAxK04Qj?=
+ =?us-ascii?q?IkjDItLPHYyX/Bv6+BdclQ4b0zRX4t3+NCvCZjlOATtXAYAqQzwGyL8JZvuw?=
+ =?us-ascii?q?30yLHejGo6FkMU+nATw9vU2CcqcaTBqssaACiCoUJLtDTKTUxN/ootC8Wz6f?=
+ =?us-ascii?q?oJlJ6Vz/O1c20Eq5WNrIMKDszQYpvWYkpkCgLgHXvvNCVASDeqMW/FgEkEya?=
+ =?us-ascii?q?Od83SUqt4xrZ2+wZc=3D?=
+X-IronPort-Anti-Spam-Filtered: true
+X-IronPort-Anti-Spam-Result: =?us-ascii?q?A0D9AwAa0M9efzSnVdFmHQEBAQEJARI?=
+ =?us-ascii?q?BBQUBggqCImhiJAcILIQlgRyCXotJCQaBM06FAoQcJAMGgTaEUIEXA4IsiBE?=
+ =?us-ascii?q?LAQMBAQEKBSoEAQGGYQIjAUsCAQ8BAQUBAQECAQMDBAETAQEJCwsIJ4VgDII?=
+ =?us-ascii?q?7KQGDJhEdARseAxIIAQIFNwIjAQERAQUBIhMihU8BAwkloFmBDIERgQQ9iyi?=
+ =?us-ascii?q?BFQUBF4MCBYRfChkoDWWBNAIHEoEmh12EZ4ETgQeBR4QmgRCFRIJgBIFBAQE?=
+ =?us-ascii?q?BoVGPWUsBBgJEgW4MGJQFhF4eglMBmzmdFJFGDyODPzMaI4EBbYFLUBgNkEC?=
+ =?us-ascii?q?DcopyKDA3AgYIAQEDCY1bAQE?=
+X-IronPort-AV: E=Sophos;i="5.73,445,1583211600"; 
+   d="scan'208,217";a="221715906"
+x-ExternalSender: TRUE
+Received: from mail-lf1-f52.google.com ([209.85.167.52])  by mailserver.company.com
+ with ESMTP/TLS/AES128-GCM-SHA256; 28 May 2020 10:53:21 -0400
+Received: by mail-lf1-f52.google.com with SMTP id x27so16720941lfg.9
+        for <John.Davison@company.com>; Thu, 28 May 2020 07:53:21 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20161025;
+        h=mime-version:from:date:message-id:subject:to;
+        bh=ChkpaatFXllgyXDku53KDsXXxLmVslFsva46+U6egcs=;
+        b=dVVdZ7x8/RD3VeVeLhNFFN/Cwh/ceg8lErdjcMLQAp7B+iA5GFToMUI+kVK2XuAu4m
+         Qj1wFUwN3b50tsDU8No1LKJdSYKBkvD2kXHksCAcRjDqEZiEMDE/2mjtQUSA1m2E0DLf
+         fk5P/SOBvXXj6vYXuQrYrUiQZ58aRNrjuuU5MZynU9JCyQBExekPaLeNF8FfdVfppJEC
+         4FlkLnW8VMkwIX0qFNZgE8pFvwu5I2Thsfp5ti2NBAiXJT2RbMRZTckYT5Sou9ZlK1/K
+         Ub1CU4rrhEFaMhnE7PbVOz1QEXn4TIWLtEvZidwChD3GwFR5Xy4FxpH8eWMdhdi2XgRe
+         f9eQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20161025;
+        h=x-gm-message-state:mime-version:from:date:message-id:subject:to;
+        bh=ChkpaatFXllgyXDku53KDsXXxLmVslFsva46+U6egcs=;
+        b=ASFUjw5CTvI2dDvgfzbeO/jtcw4avm4ebcwODiu3Kx58pLWshMuzMv9RxEKsHObqTy
+         zbCk5imuvS/i+5DvR1Hyhakh5ool7oti8iSPygk3KvBpEmhNfRsH9HjQ6Jgg1kX0PUfQ
+         hjxdh4ZSQGuksU1gsxKuipFZtl9hslM90fPdhxovIjsSleFW8NxJiAhV+ZoyvzHnjtRn
+         G3VqfXemxBvzfCnS59v4an3jdV5/igMeshIFlMpl+8GiJ5JIiuSyxz4pBNwas5pX3Ar6
+         eFb/wcPeFPsbVYK1ff9F8oVvIp7iXmsSlOR70JazunrhV1omszUCeYdylxEQ4zYE//Wq
+         d0Lw==
+X-Gm-Message-State: AOAM531l7eonQDsg669HEML2BO3ycCknk4GSZuK/PlugYEvymDk9eYZn
+	Fx99prwQ6Pl/ggF6wsQlyHQ9R7riLWcYzuHecPxLYUOQ
+X-Google-Smtp-Source: ABdhPJxJYcU3C1OWUYQGlzPxH0YDY3cyMPGnnycgFhgWBq5wejsdX7jX/wLDRxfjx0hCpDxq2E8hx5BnjnQSaXAQR+c=
+X-Received: by 2002:a19:c7d6:: with SMTP id x205mr1863039lff.113.1590677598692;
+ Thu, 28 May 2020 07:53:18 -0700 (PDT)
+MIME-Version: 1.0
+From: John Davison <unixfreak0037@gmail.com>
+Date: Thu, 28 May 2020 10:53:06 -0400
+Message-ID: <CANTOGZshnHG073SKFD9aA-TxAu6UVnTwMbYFYMH7iCNhkenwvg@mail.gmail.com>
+Subject: test canary #1
+To: "Davison, John" <John.Davison@company.com>
+Return-Path: unixfreak0037@gmail.com
+X-OrganizationHeadersPreserved: exchangeserver.subdomain.company.com
+X-MS-Exchange-Organization-ExpirationStartTime: 28 May 2020 14:53:49.9120
+ (UTC)
+X-MS-Exchange-Organization-ExpirationStartTimeReason: OriginalSubmit
+X-MS-Exchange-Organization-ExpirationInterval: 1:00:00:00.0000000
+X-MS-Exchange-Organization-ExpirationIntervalReason: OriginalSubmit
+X-MS-Exchange-Organization-Network-Message-Id:
+ a4d196d0-028d-4f06-2655-08d80316ee8a
+X-EOPAttributedMessage: 0
+X-MS-Exchange-Organization-MessageDirectionality: Originating
+X-CrossPremisesHeadersPromoted:
+ BN8NAM12FT058.eop-nam12.prod.protection.outlook.com
+X-CrossPremisesHeadersFiltered:
+ BN8NAM12FT058.eop-nam12.prod.protection.outlook.com
+X-Forefront-Antispam-Report:
+ CIP:216.131.54.6;CTRY:US;LANG:en;SCL:-1;SRV:;IPV:NLI;SFV:SKN;H:o365transport.company.com;PTR:o365transport.company.com;CAT:NONE;SFTY:;SFS:;DIR:INB;SFP:;
+X-MS-PublicTrafficType: Email
+X-MS-Exchange-Organization-AuthSource: exchangeserver.subdomain.company.com
+X-MS-Exchange-Organization-AuthAs: Anonymous
+X-OriginatorOrg: company.onmicrosoft.com
+X-MS-Office365-Filtering-Correlation-Id: a4d196d0-028d-4f06-2655-08d80316ee8a
+X-MS-TrafficTypeDiagnostic: MN2PR19MB2800:
+X-MS-Exchange-Organization-SCL: -1
+X-MS-Oob-TLC-OOBClassifiers: OLM:2399;
+X-Microsoft-Antispam: BCL:0;
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 28 May 2020 14:53:49.7810
+ (UTC)
+X-MS-Exchange-CrossTenant-Network-Message-Id: a4d196d0-028d-4f06-2655-08d80316ee8a
+X-MS-Exchange-CrossTenant-Id: cfddba29-ca2a-450c-a415-595e7fcce8e5
+X-MS-Exchange-CrossTenant-OriginalAttributedTenantConnectingIp: TenantId=cfddba29-ca2a-450c-a415-595e7fcce8e5;Ip=[216.131.54.6];Helo=[o365transport.company.com]
+X-MS-Exchange-CrossTenant-FromEntityHeader: HybridOnPrem
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: MN2PR19MB2800
+X-MS-Exchange-Transport-EndToEndLatency: 00:00:01.3139884
+X-MS-Exchange-Processed-By-BccFoldering: 15.20.3045.014
+X-Microsoft-Antispam-Mailbox-Delivery:
+	ucf:0;jmr:0;auth:0;dest:I;ENG:(750128)(520011016)(944506432)(944626604);
+X-Microsoft-Antispam-Message-Info:
+	=?us-ascii?Q?K1O8ZlVgeG+GLVCr5br3ykeY/C9gNvUfrbTO5NRUoo7pGx9Nxb5cnKg6h/0Y?=
+ =?us-ascii?Q?TeQ+iLBJnWvTir99sbgQip/FOoYyO1AHx2l69z0PEdCZtVfRM5QikyfInmxX?=
+ =?us-ascii?Q?wrW5t7DOh7b2RIyQjJOJJVzwLmWnMPBjJWZFht5l0G6sgHgKf3esNHnxBum9?=
+ =?us-ascii?Q?dIE7kwYNvSAllIKwsz5JFjNULxRU/QXPsf+YoBDtO16MosWJEi6hT/q4qebG?=
+ =?us-ascii?Q?ptWaEP7cPSL7x8o1hL65o42RNYr8WkhvLg5ViwWUPNkra4ohZzwggohISF6o?=
+ =?us-ascii?Q?QmS6B8AVVFRNXVzORhggv/Ghu2Ud0bAuPk5/OzC7XLCj2QAB04KVaDdF/RDR?=
+ =?us-ascii?Q?s3ebviycQpCISDBzEyJr7yJw49YEy/1QUul0bV/F5d8NBU30KwcJdB5XXVWQ?=
+ =?us-ascii?Q?L7KIPFZccSCSPrnryRs1Wiw5xUjRUTZluEebdnBoacnlqAYEF0iYtF7j9TSb?=
+ =?us-ascii?Q?ZCkIhi1XQy+FY/baO5c/IjWBWNmlC+UWOGIjLrrsE1kEQqENa8Kma6Hp5+Is?=
+ =?us-ascii?Q?IYOJoQZoP0UnHsdAZjoLWz/ca2lB/BlNJF/bB06b/pw6zieO3aU/slW2Zw+1?=
+ =?us-ascii?Q?TU8OWNi9UV0Duzdepd2P/Vt1RbksU61Yhk/u1j/ldUHpFeSuRi2Fpk4EsMw9?=
+ =?us-ascii?Q?p+XII8cWAigGWaYs98iQ5XMUVbtCaOUeOqP/7Vqg6xIZuSXlsN62Jbmti6Ie?=
+ =?us-ascii?Q?i8eOEClLIelHNcgjN9AUlsQdZ0UpJ9tgZNhGV18yQhWiLRhL71I+cK+S1Gbi?=
+ =?us-ascii?Q?zawySEM9CZ5tPBoU3rS/7NmT8CMGOj9mq/ewY/wmvDhFMpz4O+qVFHKST4gG?=
+ =?us-ascii?Q?183MjAid31+t0pVW11q1xv/s0eL0Mvtw1a2Dr4bXuNNWCAAqw5/pqIU2Kxsu?=
+ =?us-ascii?Q?QZxAnOUkTlbpWX1aF5KKQVXEqPpgXrjOVvZ23tkBhLHghJmodNgpFz7wEGti?=
+ =?us-ascii?Q?o/LPLuymgN34D7xH7Q8DtjPxR74cgRt76pXhHJ3Q93Zj9Wi10AxdsIaASTZL?=
+ =?us-ascii?Q?Q3jMMRoBuuw9fM2Low9atF8CH49nja4QGKpcG6UY07aHRSxuVUP9S22/Hb7D?=
+ =?us-ascii?Q?D5dPly2ghhRqI75s1z/u0VQhQuRoMhSsvWb0r6tWrbpBsoDF5OQ74UGDAOdb?=
+ =?us-ascii?Q?DLpbfAEoKYpg4tOjmSWGz6KgEW4c3bIMqw=3D=3D?=
+Content-type: multipart/alternative;
+	boundary="B_3673507989_1940279413"
+
+> This message is in MIME format. Since your mail reader does not understand
+this format, some or all of this message may not be legible.
+
+--B_3673507989_1940279413
+Content-type: text/plain;
+	charset="UTF-8"
+Content-transfer-encoding: 7bit
+
+CAUTION EXTERNAL EMAILDO NOT open attachments or click on links from unknown senders or unexpected emails
+Testing.
+
+-- 
+John W. Davison
+unixfreak0037@gmail.com
+CAUTION EXTERNAL EMAILDO NOT open attachments or click on links from unknown senders or unexpected emails
+
+--B_3673507989_1940279413
+Content-type: text/html;
+	charset="UTF-8"
+Content-transfer-encoding: quoted-printable
+
+<html><head>
+
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Dutf-8"></head><=
+
+body><table width=3D"100%" class=3D"MsoNormalTable" style=3D"border: 2.25pt outset=
+
+ currentColor; width: 100%; border-image: none;" border=3D"1" cellspacing=3D"0" =
+
+cellpadding=3D"0"><tbody><tr><td style=3D"background: #0018a8; padding: 2.4pt;">=
+
+<p align=3D"center" class=3D"MsoNormal" style=3D"text-align: center;"><strong><spa=
+
+n style=3D"color: white; font-family: &quot;Times New Roman&quot;,&quot;serif&=
+
+quot;; font-size: 12pt;">CAUTION EXTERNAL EMAIL<o:p></o:p></span></strong></=
+
+p><p align=3D"center" class=3D"MsoNormal" style=3D"text-align: center;"><strong><s=
+
+pan style=3D"color: white; font-family: &quot;Times New Roman&quot;,&quot;seri=
+
+f&quot;; font-size: 12pt;">DO NOT open attachments or click on links from un=
+
+known senders or unexpected emails<o:p></o:p></span></strong></p></td></tr><=
+
+/tbody></table><div dir=3D"ltr">Testing.<br clear=3D"all"><div><br>-- <br><div d=
+
+ir=3D"ltr" class=3D"gmail_signature" data-smartmail=3D"gmail_signature">John W. Da=
+
+vison<br><a href=3D"mailto:unixfreak0037@gmail.com" target=3D"_blank">unixfreak0=
+
+037@gmail.com</a></div></div></div><table width=3D"100%" class=3D"MsoNormalTable=
+
+" style=3D"border: 2.25pt outset currentColor; width: 100%; border-image: none=
+
+;" border=3D"1" cellspacing=3D"0" cellpadding=3D"0"><tbody><tr><td style=3D"backgrou=
+
+nd: #0018a8; padding: 2.4pt;"><p align=3D"center" class=3D"MsoNormal" style=3D"tex=
+
+t-align: center;"><strong><span style=3D"color: white; font-family: &quot;Time=
+
+s New Roman&quot;,&quot;serif&quot;; font-size: 12pt;">CAUTION EXTERNAL EMAI=
+
+L<o:p></o:p></span></strong></p><p align=3D"center" class=3D"MsoNormal" style=3D"t=
+
+ext-align: center;"><strong><span style=3D"color: white; font-family: &quot;Ti=
+
+mes New Roman&quot;,&quot;serif&quot;; font-size: 12pt;">DO NOT open attachm=
+
+ents or click on links from unknown senders or unexpected emails<o:p></o:p><=
+
+/span></strong></p></td></tr></tbody></table></body></html>
+
+--B_3673507989_1940279413--
+

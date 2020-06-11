@@ -39,3 +39,12 @@ rule crits_rule
     condition:
         any of them
 }
+
+rule test_whitelist : whitelisted
+{
+    strings:
+        $a = "This should be whitelisted"
+
+    condition:
+        any of them
+}

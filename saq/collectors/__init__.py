@@ -21,10 +21,12 @@ import uuid
 import ace_api
 
 import saq
+from saq.constants import *
 from saq.database import (
         use_db,
         execute_with_retry,
-        get_db_connection
+        get_db_connection,
+        ALERT
 )
 
 from saq.error import report_exception
@@ -97,47 +99,72 @@ class RemoteNode(object):
         return "RemoteNode(id={},name={},location={})".format(self.id, self.name, self.location)
 
     def submit(self, submission):
-        """Attempts to submit the given Submission to this node."""
         assert isinstance(submission, Submission)
+
+        # if we are submitting locally then we can bypass the API layer
+        if self.name == saq.SAQ_NODE and not saq.CONFIG['collection'].getboolean('force_api'):
+            return self.submit_local(submission)
+        else:
+            return self.submit_remote(submission)
+
+    def submit_local(self, submission):
+        """Attempts to submit the given the local engine node."""
+        logging.debug(f"submitting {submission} locally")
+        root = submission.create_root_analysis()
+        root.save()
+
+        # if we received a submission for correlation mode then we go ahead and add it to the database
+        if root.analysis_mode == ANALYSIS_MODE_CORRELATION:
+            ALERT(root)
+
+        root.schedule()
+
+        return { 'result': root.uuid }
+
+    def submit_remote(self, submission):
+        """Attempts to submit the given remote Submission to this node."""
         # we need to convert the list of files to what is expected by the ace_api.submit function
+        logging.debug(f"submitting {submission} remotely")
+
         _files = []
         for f in submission.files:
+            # we can optionally designate a path in the remote storage_dir for files by using a tuple if (src, dest)
             if isinstance(f, tuple):
                 src_path, dest_name = f
                 _files.append((dest_name, open(os.path.join(self.incoming_dir, submission.uuid, os.path.basename(src_path)), 'rb')))
             else:
                 _files.append((os.path.basename(f), open(os.path.join(self.incoming_dir, submission.uuid, os.path.basename(f)), 'rb')))
 
-        #files = [ (os.path.basename(f), open(os.path.join(self.incoming_dir, submission.uuid, os.path.basename(f)), 'rb')) for f in submission.files]
-        result = ace_api.submit(
-            submission.description,
-            remote_host=self.location,
-            ssl_verification=saq.CONFIG['SSL']['ca_chain_path'],
-            analysis_mode=submission.analysis_mode,
-            tool=submission.tool,
-            tool_instance=submission.tool_instance,
-            type=submission.type,
-            event_time=submission.event_time,
-            details=submission.details,
-            observables=submission.observables,
-            tags=submission.tags,
-            queue=submission.queue,
-            instructions=submission.instructions,
-            company_id=self.company_id,
-            files=_files)
-
         try:
-            result = result['result']
-            logging.info("submit remote {} submission {} uuid {}".format(self.location, submission, result['uuid']))
-        except Exception as e:
-            logging.warning("submission irregularity for {}: {}".format(submission, e))
+            result = ace_api.submit(
+                submission.description,
+                remote_host=self.location,
+                ssl_verification=saq.CONFIG['SSL']['ca_chain_path'],
+                analysis_mode=submission.analysis_mode,
+                tool=submission.tool,
+                tool_instance=submission.tool_instance,
+                type=submission.type,
+                event_time=submission.event_time,
+                details=submission.details,
+                observables=submission.observables,
+                tags=submission.tags,
+                queue=submission.queue,
+                instructions=submission.instructions,
+                company_id=self.company_id,
+                files=_files)
 
-        # clean up our file descriptors
-        for name, fp in _files:
             try:
-                fp.close()
+                result = result['result']
+                logging.info("submit remote {} submission {} uuid {}".format(self.location, submission, result['uuid']))
             except Exception as e:
-                logging.error("unable to close file descriptor for {}: {}".format(name, e))
+                logging.warning("submission irregularity for {}: {}".format(submission, e))
+        finally:
+            # make sure we clean up our file descriptors
+            for name, fp in _files:
+                try:
+                    fp.close()
+                except Exception as e:
+                    logging.error("unable to close file descriptor for {}: {}".format(name, e))
 
         return result
 
@@ -157,7 +184,8 @@ class RemoteNodeGroup(object):
             shutdown_event,
             batch_size=32,
             target_node_as_company_id=None,
-            target_nodes=[]):
+            target_nodes=[],
+            thread_count=1):
 
         assert isinstance(name, str) and name
         assert isinstance(coverage, int) and coverage > 0 and coverage <= 100
@@ -168,6 +196,7 @@ class RemoteNodeGroup(object):
         assert isinstance(workload_type_id, int)
         assert isinstance(shutdown_event, threading.Event)
         assert isinstance(target_nodes, list)
+        assert isinstance(thread_count, int)
 
         self.name = name
 
@@ -203,8 +232,10 @@ class RemoteNodeGroup(object):
         self.skipped_count = 0 # how many emails have skipped due to coverage rules
         self.delivery_failures = 0 # how many emails failed to delivery when full_delivery is disabled
 
-        # main thread of execution for this group
-        self.thread = None
+        # total number of threads to run for submission
+        self.thread_count = thread_count
+        # main threads of execution for this group
+        self.threads = []
 
         # reference to Controller.shutdown_event, used to synchronize a clean shutdown
         self.shutdown_event = shutdown_event
@@ -224,21 +255,28 @@ class RemoteNodeGroup(object):
 
     def start(self):
         self.shutdown_event.clear()
+        self.clear_work_locks()
 
-        # main thread of execution for this group
-        self.thread = threading.Thread(target=self.loop, name="RemoteNodeGroup {}".format(self.name))
-        self.thread.start()
+        # main threads of execution for this group
+        for index in range(self.thread_count):
+            thread = threading.Thread(target=self.loop, args=(str(uuid.uuid4()),), name=f"RemoteNodeGroup {self.name} - {index}")
+            thread.start()
+            self.threads.append(thread)
 
     def stop(self):
         self.shutdown_event.set()
 
     def wait(self):
-        self.thread.join()
+        for thread in self.threads:
+            logging.debug(f"waiting for {thread} to complete")
+            thread.join()
 
-    def loop(self):
+        self.threads = []
+
+    def loop(self, work_lock_uuid):
         while True:
             try:
-                result = self.execute()
+                result = self.execute(work_lock_uuid)
 
                 # if we did something then we immediately look for more work unless we're shutting down
                 if result == WORK_SUBMITTED:
@@ -262,8 +300,11 @@ class RemoteNodeGroup(object):
                 if self.shutdown_event.wait(1):
                     break
 
+            finally:
+                saq.db.remove()
+
     @use_db(name='collection')
-    def execute(self, db, c):
+    def execute(self, work_lock_uuid, db, c):
         # first we get a list of all the distinct analysis modes available in the work queue
         c.execute("""
 SELECT DISTINCT(incoming_workload.mode)
@@ -272,7 +313,7 @@ FROM
 WHERE
     incoming_workload.type_id = %s
     AND work_distribution.group_id = %s
-    AND work_distribution.status = 'READY'
+    AND work_distribution.status IN ( 'READY', 'LOCKED' )
 """, (self.workload_type_id, self.group_id,))
         available_modes = c.fetchall()
         db.commit()
@@ -395,6 +436,48 @@ ORDER BY
             logging.debug("no nodes are available that support the available analysis modes")
             return NO_NODES_AVAILABLE
 
+        # do we have anything locked yet?
+        c.execute("SELECT COUNT(*) FROM work_distribution WHERE lock_uuid = %s AND status IN ( 'READY', 'LOCKED' )", (work_lock_uuid,))
+        result = c.fetchone()
+        lock_count = result[0]
+
+        if lock_count > 0:
+            logging.debug(f"already have {lock_count} work items locked by {work_lock_uuid}")
+
+        # if we don't have any locks yet, go make some
+        if lock_count == 0:
+            sql = """
+UPDATE work_distribution
+SET
+    status = 'LOCKED',
+    lock_time = NOW(),
+    lock_uuid = %s
+WHERE 
+    group_id = %s
+    AND work_id IN ( SELECT * FROM ( 
+        SELECT
+            incoming_workload.id
+        FROM
+            incoming_workload JOIN work_distribution ON incoming_workload.id = work_distribution.work_id
+        WHERE
+            incoming_workload.type_id = %s
+            AND work_distribution.group_id = %s
+            AND incoming_workload.mode IN ( {} )
+            AND (
+                work_distribution.status = 'READY'
+                OR ( work_distribution.status = 'LOCKED' AND TIMESTAMPDIFF(minute, work_distribution.lock_time, NOW()) >= 10 )
+            )
+        ORDER BY
+            incoming_workload.id ASC
+        LIMIT %s ) AS t1 )
+""".format(','.join(['%s' for _ in available_modes]))
+            params = [ work_lock_uuid, self.group_id, self.workload_type_id, self.group_id ]
+            params.extend(available_modes)
+            params.append(self.batch_size)
+
+            #logging.info(f"MARKER: {sql} {params}")
+            execute_with_retry(db, c, sql, tuple(params), commit=True)
+
         # now we get the next things to submit from the database that have an analysis mode that is currently
         # available to be submitted to
 
@@ -406,28 +489,24 @@ SELECT
 FROM
     incoming_workload JOIN work_distribution ON incoming_workload.id = work_distribution.work_id
 WHERE
-    incoming_workload.type_id = %s
-    AND work_distribution.group_id = %s
-    AND incoming_workload.mode IN ( {} )
-    AND work_distribution.status = 'READY'
+    work_distribution.lock_uuid = %s AND work_distribution.status = 'LOCKED'
 ORDER BY
     incoming_workload.id ASC
-LIMIT %s""".format(','.join(['%s' for _ in available_modes]))
-        params = [ self.workload_type_id, self.group_id ]
-        params.extend(available_modes)
-        params.append(self.batch_size)
-
+"""
+        params = [ work_lock_uuid ]
         c.execute(sql, tuple(params))
         work_batch = c.fetchall()
         db.commit()
 
-        logging.info("submitting {} items".format(len(work_batch)))
+        if len(work_batch) > 0:
+            logging.info("submitting {} items".format(len(work_batch)))
 
         # simple flag that gets set if ANY submission is successful
         submission_success = False
 
         # we should have a small list of things to submit to remote nodes for this group
         for work_id, analysis_mode, submission_blob in work_batch:
+            logging.info(f"preparing workload {work_id}")
             # first make sure we can un-pickle this
             try:
                 submission = pickle.loads(submission_blob)
@@ -517,6 +596,18 @@ LIMIT %s""".format(','.join(['%s' for _ in available_modes]))
 
         return NO_WORK_SUBMITTED
 
+    @use_db(name="collection")
+    def clear_work_locks(self, db, c):
+        """Clears any work locks set with work assigned to this group."""
+        c.execute("""
+        UPDATE work_distribution SET 
+            status = 'READY', 
+            lock_uuid = NULL, 
+            lock_time = NULL 
+        WHERE 
+            status = 'LOCKED' AND group_id = %s
+        """, (self.group_id,))
+        db.commit()
 
     def __str__(self):
         return "RemoteNodeGroup(name={}, coverage={}, full_delivery={}, company_id={}, database={})".format(
@@ -614,11 +705,8 @@ class Collector(ACEService, Persistable):
     def queue_submission(self, submission):
         """Adds the given Submission object to the queue."""
         assert isinstance(submission, Submission)
+        self.prepare_submission_files(submission)
         self.submission_list.put(submission)
-
-    def get_submission_target_dir(self, submission):
-        """Returns the target incoming directory for a given submission."""
-        return os.path.join(self.incoming_dir, submission.uuid)
 
     # 
     # ACEService implementation
@@ -676,7 +764,7 @@ class Collector(ACEService, Persistable):
         self.cleanup_thread = threading.Thread(target=self.cleanup_loop, name="Collector Cleanup")
         self.cleanup_thread.start()
 
-        self.extended_collection_thread = threading.Thread(target=self.extended_collection_wrapper, name="Extended")
+        self.extended_collection_thread = threading.Thread(target=self.extended_collection, name="Extended")
         self.extended_collection_thread.start()
 
         # start the node groups
@@ -725,8 +813,10 @@ class Collector(ACEService, Persistable):
         full_delivery, 
         company_id, 
         database, 
+        batch_size=32,
         target_node_as_company_id=None,
-        target_nodes=[]):
+        target_nodes=[],
+        thread_count=1):
 
         with get_db_connection('collection') as db:
             c = db.cursor()
@@ -748,8 +838,10 @@ class Collector(ACEService, Persistable):
                 group_id, 
                 self.workload_type_id, 
                 self.service_shutdown_event, 
+                batch_size=batch_size,
                 target_node_as_company_id=target_node_as_company_id,
-                target_nodes=target_nodes)
+                target_nodes=target_nodes,
+                thread_count=thread_count)
             self.remote_node_groups.append(remote_node_group)
             logging.info("added {}".format(remote_node_group))
             return remote_node_group
@@ -769,6 +861,8 @@ class Collector(ACEService, Persistable):
             full_delivery = saq.CONFIG[section].getboolean('full_delivery')
             company_id = saq.CONFIG[section].getint('company_id')
             database = saq.CONFIG[section]['database']
+            batch_size = saq.CONFIG[section].getint('batch_size', fallback=32)
+            thread_count = saq.CONFIG[section].getint('thread_count', fallback=1)
             
             target_node_as_company_id = None
             if 'target_node_as_company_id' in saq.CONFIG[section]:
@@ -785,10 +879,19 @@ class Collector(ACEService, Persistable):
 
                     target_nodes.append(node)
 
-            logging.info("loaded group {} coverage {} full_delivery {} company_id {} database {} target_node_as_company_id {} target_nodes {}".format(
-                         group_name, coverage, full_delivery, company_id, database, target_node_as_company_id, target_nodes))
-            self.add_group(group_name, coverage, full_delivery, company_id, database, target_node_as_company_id, target_nodes)
+            logging.info("loaded group {} coverage {} full_delivery {} company_id {} database {} target_node_as_company_id {} target_nodes {} thread_count {} batch_size {}".format(
+                         group_name, coverage, full_delivery, company_id, database, target_node_as_company_id, target_nodes, thread_count, batch_size))
 
+            self.add_group(
+                    group_name,
+                    coverage,
+                    full_delivery,
+                    company_id,
+                    database,
+                    batch_size=batch_size,
+                    target_node_as_company_id=target_node_as_company_id,
+                    target_nodes=target_nodes,
+                    thread_count=thread_count)
 
     def _signal_handler(self, signum, frame):
         self.stop()
@@ -816,7 +919,7 @@ class Collector(ACEService, Persistable):
     @use_db(name='collection')
     def execute_workload_cleanup(self, db, c):
         # look up all the work that is currently completed
-        # a completed work item has no entries in the work_distribution table with a status of 'READY'
+        # a completed work item has no entries in the work_distribution table with a status in ('READY', 'LOCKED')
         c.execute("""
 SELECT 
     i.id, 
@@ -829,13 +932,15 @@ WHERE
 GROUP BY 
     i.id, i.work
 HAVING
-    SUM(IF(w.status = 'READY', 1, 0)) = 0""", (self.workload_type_id,))
+    SUM(IF(w.status IN ('READY', 'LOCKED'), 1, 0)) = 0
+LIMIT 100""", (self.workload_type_id,))
 
         submission_count = 0
-        for work_id, submission_blob in c:
-            submission_count += 1
-            logging.debug(f"completed work item {work_id}")
+        rows = c.fetchall()
+        db.commit()
 
+        for work_id, submission_blob in rows:
+            submission_count += 1
             submission = None
 
             try:
@@ -854,6 +959,7 @@ HAVING
 
             # we finally clear the database entry for this workload item
             execute_with_retry(db, c, "DELETE FROM incoming_workload WHERE id = %s", (work_id,), commit=True)
+            logging.info(f"completed work item {work_id}")
 
         return submission_count
 
@@ -866,6 +972,8 @@ HAVING
                 report_exception()
                 if self.service_shutdown_event.wait(1):
                     break
+            finally:
+                saq.db.remove()
 
             if self.is_service_shutdown:
                 break
@@ -903,41 +1011,53 @@ HAVING
         self.cleanup_submission(next_submission)
 
     def prepare_submission_files(self, submission):
-        # we COPY the files over to another directory for transfer
-        # we'll DELETE them later if we are able to copy them all and then insert the entry into the database
-        if submission.files:
-            target_dir = self.get_submission_target_dir(submission)
-            if os.path.exists(target_dir):
-                logging.warning(f"target directory {target_dir} already exists")
-            else:
-                try:
-                    os.mkdir(target_dir)
-                    for f in submission.files:
-                        # this could be a tuple of (source_file, target_name)
-                        if isinstance(f, tuple):
-                            f = f[0]
+        if not submission.files:
+            return
 
-                        target_path = os.path.join(target_dir, os.path.basename(f))
-                        # TODO use hard links instead of copies to reduce I/O
-                        shutil.copy2(f, target_path)
-                        logging.debug(f"copied file from {f} to {target_path}")
+        # XXX hack -- refactor out
+        if submission.files_prepared:
+            return
 
-                except Exception as e:
-                    logging.error(f"I/O error moving files into {target_dir}: {e}")
-                    report_exception()
+        try:
+            if not os.path.exists(submission.storage_dir):
+                create_directory(submission.storage_dir)
+
+            # move or copy the files into the storage directory of the submission
+            # then update the file list with the new paths
+            updated_files = []
+            for file_submission in submission.files:
+                # this could be a tuple of (source_file, target_name)
+                if isinstance(file_submission, tuple):
+                    source_path, dest_path = file_submission
+                else:
+                    source_path = file_submission
+
+                target_path = os.path.join(submission.storage_dir, os.path.basename(source_path))
+                if source_path != target_path:
+                    if self.delete_files:
+                        shutil.move(source_path, target_path)
+                        logging.debug(f"moved file from {source_path} to {target_path}")
+                    else:
+                        shutil.copy2(source_path, target_path)
+                        logging.debug(f"copied file from {source_path} to {target_path}")
+
+                if isinstance(file_submission, tuple):
+                    updated_files.append((target_path, dest_path))
+                else:
+                    updated_files.append(target_path)
+
+            submission.files = updated_files
+
+        except Exception as e:
+            logging.error(f"I/O error moving files into {submission.storage_dir}: {e}")
+            report_exception()
 
     @use_db(name='collection')
     def schedule_submission(self, submission, db, c):
-
-        # we don't really need to change the file paths that are stored in the Submission object
-        # we just remember where we've moved them to (later)
-
         try:
             # add this as a workload item to the database queue
             work_id = execute_with_retry(db, c, self.insert_workload, (submission,), commit=True)
-            assert isinstance(work_id, int)
-
-            logging.info(f"scheduled {submission.description} mode {submission.analysis_mode}")
+            logging.info(f"scheduled {submission.description} mode {submission.analysis_mode} work_id {work_id}")
             
         except Exception as e:
             # something went wrong -- delete our incoming directory if we created one
@@ -954,17 +1074,8 @@ HAVING
 
     def cleanup_submission(self, submission):
         """Cleans up the given submission."""
-        if self.delete_files:
-            # delete the files we've copied into our incoming directory
-            for f in submission.files:
-                # this could be a tuple of (source_file, target_name)
-                if isinstance(f, tuple):
-                    f = f[0]
-
-                try:
-                    os.remove(f)
-                except Exception as e:
-                    logging.error(f"unable to delete file {f}: {e}")
+        # if we are deleting files we add then we would have moved the file instead of copying it
+        pass 
 
     def insert_workload(self, db, c, next_submission):
         c.execute("INSERT INTO incoming_workload ( type_id, mode, work ) VALUES ( %s, %s, %s )",
@@ -993,9 +1104,6 @@ HAVING
 
         return work_id
 
-    def extended_collection_wrapper(self):
-        self.extended_collection()
-
     # subclasses can override this function to provide additional functionality
     def extended_collection(self):
         self.execute_in_loop(self.execute_extended_collection)
@@ -1019,6 +1127,8 @@ HAVING
                 report_exception()
                 self.service_shutdown_event.wait(1)
                 continue
+            finally:
+                saq.db.remove()
 
     def execute_extended_collection(self):
         """Executes custom collection routines. 

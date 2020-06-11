@@ -22,7 +22,7 @@ from saq.error import report_exception
 import saq.ldap
 from saq.network_semaphore import NetworkSemaphoreClient
 from saq.splunk import SplunkQueryObject
-from saq.util import create_timedelta, parse_event_time
+from saq.util import create_timedelta, parse_event_time, create_directory, atomic_open
 
 
 import pytz
@@ -530,6 +530,66 @@ class AnalysisModule(object):
 
         return [_.strip() for _ in self.config['required_tags'].split(',')]
 
+    @property
+    def cache(self):
+        return self.config.getboolean('cache') if 'cache' in self.config else False
+
+    @property
+    def version(self):
+        return self.config.getint('version') if 'version' in self.config else 1
+
+    @property
+    def cache_expiration(self):
+        return create_timedelta(self.config['cache_expiration']) if 'cache_expiration' in self.config else datetime.timedelta(hours=24)
+
+    def load_cached_analysis(self, observable):
+        try:
+            # do not load cached analysis if caching is not enabled
+            if not self.cache:
+                return False
+
+            # path to cached analysis
+            path = os.path.join(saq.SAQ_HOME, saq.DATA_DIR, 'analysis_cache', f'{observable.cache_id}.{self.generated_analysis_type.__name__}.v{self.version}.json')
+
+            # return false if there is no cached analysis at the cached analysis path
+            if not os.path.isfile(path):
+                return False
+
+            # do not use cached analysis if it is expired
+            if os.path.getmtime(path) + self.cache_expiration.total_seconds() < time.time():
+                return False
+
+            # create analysis from cached analysis
+            with atomic_open(path) as f:
+                cached_analysis = json.load(f)
+                analysis = self.create_analysis(observable)
+                analysis.details = cached_analysis['details']
+                for cached_observable in cached_analysis['observables']:
+                    analysis.add_observable(cached_observable['type'], cached_observable['value'])
+
+        # do not use cacheed analysis if it fails to load for any reason
+        except Exception as e:
+            return False
+
+        # cached analysis successfully loaded
+        return True
+
+    def cache_analysis(self, observable):
+        try:
+            base_path = os.path.join(saq.SAQ_HOME, saq.DATA_DIR, "analysis_cache")
+            create_directory(base_path)
+            path = os.path.join(base_path, f'{observable.cache_id}.{self.generated_analysis_type.__name__}.v{self.version}.json')
+            with atomic_open(path, 'w') as f:
+                analysis = observable.get_analysis(self.generated_analysis_type, instance=self.instance)
+                cached_analysis = {
+                    "details": analysis.details,
+                    "observables": [ {"type":o.type, "value":o.value} for o in analysis.observables ]
+                }
+                json.dump(cached_analysis, f)
+
+        except Exception as e:
+            logging.warn(f"failed to cache analysis: {e}")
+
     def custom_requirement(self, observable):
         """Optional function is called as an additional check to see if this observalbe should be
            analyzed by this module. Returns True if it should be, False if not.
@@ -726,11 +786,19 @@ class AnalysisModule(object):
             if self.analysis_covered(obj):
                 return False
 
-        # if we are executing in "final analysis mode" then we call this function instead
-        if final_analysis:
-            analysis_result = self.execute_final_analysis(obj)
+        # try to load analysis from cache first
+        if self.load_cached_analysis(obj):
+            analysis_result = True
         else:
-            analysis_result = self.execute_analysis(obj)
+            # if we are executing in "final analysis mode" then we call this function instead
+            if final_analysis:
+                analysis_result = self.execute_final_analysis(obj)
+            else:
+                analysis_result = self.execute_analysis(obj)
+
+            # cache analysis if enabled
+            if analysis_result and self.cache:
+                self.cache_analysis(obj)
 
         # if we are grouping by time then we mark this Observable as a future target for other grouping
         # (if we got an analysis result)

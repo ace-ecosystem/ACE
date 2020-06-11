@@ -1213,7 +1213,7 @@ def execute_remediation(args):
     sys.exit(0)
 
 def execute_email_remediation(args):
-    from saq.remediation.email import create_email_remediation_key
+    from saq.remediation.mail import create_email_remediation_key
     setattr(args, 'type', 'email')
     setattr(args, 'targets', [create_email_remediation_key(args.message_id, args.email_address)])
     execute_remediation(args)
@@ -2516,30 +2516,34 @@ clear_remediation_request_parser.set_defaults(func=clear_remediation_request)
 
 def remediate_emails(args):
     from saq.database import User
-    from saq.remediation import get_remediation_targets, initialize_remediation_system_manager, request_remediation, \
-                                REMEDIATION_TYPE_EMAIL, request_restoration
+    from saq.remediation import execute_remediation, execute_restoration, REMEDIATION_TYPE_EMAIL
+    from saq.remediation.mail import get_remediation_targets, create_email_remediation_key
 
-    initialize_remediation_system_manager()
-
+    # get a user-id to execute remediation
     user_id = saq.db.query(User).filter(User.username == args.user_name).one().id
 
+    # clean input
     if args.from_stdin:
         args.targets.extend([_.strip() for _ in sys.stdin])
 
+    # get targets
+    targets = args.targets[:]
     if args.message_id_only:
-        remediation_targets = get_remediation_targets(args.targets)
-    else:
-        targets = args.targets[:]
-        remediation_targets = []
-        while targets:
-            recipient = targets.pop()
-            message_id = targets.pop()
-            target_func = request_remediation
-            if args.restore:
-                target_func = request_restoration
-            result = target_func(REMEDIATION_TYPE_EMAIL, message_id, recipient, 
-                                         user_id=user_id, comment=args.comment, company_id=saq.COMPANY_ID)
-            print(f"got result {result}")
+        # attempt to build targets from message-ids only 
+        targets = get_remediation_targets(args.targets)
+    while targets:
+        # pull out parameters for remediation
+        recipient = targets.pop()
+        message_id = targets.pop()
+        # generate a key from parameters
+        key = create_email_remediation_key(message_id, recipient)
+        # remediate or restore?
+        target_func = execute_remediation
+        if args.restore:
+            target_func = execute_restoration
+        # execute the remediation
+        result = target_func(REMEDIATION_TYPE_EMAIL, key, user_id, saq.COMPANY_ID, comment=args.comment)
+        print(f"got result {result.id}")
 
     sys.exit(0)
 
@@ -2551,8 +2555,6 @@ remediate_email_parser.add_argument('--from-stdin', required=False, dest='from_s
     help="Read the message-ids and/or recipients from standard input.")
 remediate_email_parser.add_argument('-m', '--message-id-only', required=False, default=False, action='store_true',
     help="Assume all parameters are message-ids. Use email archive database to determine recipients automatically.")
-remediate_email_parser.add_argument('--remediation-system', required=False, default='phishfry', choices=['phishfry'],
-    help="Select which remediation system to use. Defaults to phishfry.")
 remediate_email_parser.add_argument('-c', '--comment', required=False, default=None,
     help="An optional comment to add to the remediation.")
 remediate_email_parser.add_argument('-u', '--user-name', required=False,
@@ -2560,69 +2562,6 @@ remediate_email_parser.add_argument('-u', '--user-name', required=False,
 remediate_email_parser.add_argument('targets', nargs='*',
     help="One or more message-ids to remediate. You can also specify --from-stdin.")
 remediate_email_parser.set_defaults(func=remediate_emails)
-
-def remediate_email_old(args):
-    from saq.remediation import _create_remediation_email, _remediate_email_lotus, _remediate_email_o365
-    message_ids = args.message_ids
-    if args.from_stdin:
-        for message_id in sys.stdin:
-            message_ids.append(message_id.strip())
-
-    logging.debug("remediating {} emails")
-    
-    env_mail_from = args.env_mail_from
-    env_rcpt_to = []
-    if args.env_rcpt_to:
-        env_rcpt_to.append(args.env_rcpt_to)
-    mail_from = args.mail_from
-    mail_to = []
-    if args.mail_to:
-        mail_to.append(args.mail_to)
-    subject = args.subject
-    decoded_subject = args.decoded_subject
-
-    for message_id in message_ids:
-        try:
-            _remediate_email_lotus([_create_remediation_email(env_mail_from=env_mail_from,
-                                                              env_rcpt_to=env_rcpt_to,
-                                                              mail_from=mail_from,
-                                                              decoded_mail_from=None,
-                                                              mail_to=mail_to,
-                                                              subject=subject,
-                                                              decoded_subject=decoded_subject,
-                                                              message_id=message_id)])
-        except Exception as e:
-            logging.error("unable to remediate {} in lotus: {}".format(message_id, e))
-            report_exception()
-
-    try:
-        _remediate_email_o365(message_ids)
-    except Exception as e:
-        logging.error("unable to remediate in office365: {}".format(e))
-        report_exception()
-
-    sys.exit(0)
-
-# remediate-email
-remediate_email_parser = subparsers.add_parser('remediate-email',
-    help="Remediate the given emails by message-id.")
-remediate_email_parser.add_argument('--from-stdin', required=False, dest='from_stdin', action='store_true', default=False,
-    help="Read the message-ids from standard input.")
-remediate_email_parser.add_argument('--env-mail-from', required=False, dest='env_mail_from', default=None,
-    help="(LOTUS NOTES ONLY) Envelope MAIL FROM")
-remediate_email_parser.add_argument('--env-rcpt-to', required=False, dest='env_rcpt_to', default=None,
-    help="(LOTUS NOTES ONLY) Envelope RCPT TO")
-remediate_email_parser.add_argument('--mail-from', required=False, dest='mail_from', default=None,
-    help="(LOTUS NOTES ONLY) Mail From")
-remediate_email_parser.add_argument('--mail-to', required=False, dest='mail_to', default=None,
-    help="(LOTUS NOTES ONLY) Mail To")
-remediate_email_parser.add_argument('--subject', required=False, dest='subject', default=None,
-    help="(LOTUS NOTES ONLY) Subject")
-remediate_email_parser.add_argument('--decoded-subject', required=False, dest='decoded_subject', default=None,
-    help="(LOTUS NOTES ONLY) Subject (Decoded)")
-remediate_email_parser.add_argument('message_ids', nargs='*',
-    help="One or more message-ids to remediate. You can also specify --from-stdin.")
-remediate_email_parser.set_defaults(func=remediate_email_old)
 
 def submit_phishme_response(args):
     from saq.phishme import submit_response

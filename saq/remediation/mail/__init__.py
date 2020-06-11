@@ -4,7 +4,7 @@ import configparser
 import logging
 
 import saq
-from saq.email import normalize_email_address
+from saq.email import normalize_email_address, get_email_archive_sections, search_archive
 from saq import database
 from saq.remediation import RemediationSystem, BaseRemediator
 from saq.remediation.constants import REMEDIATION_STATUS_COMPLETED, RemediationOutcome, RemediatorType, MailOutcome
@@ -15,6 +15,32 @@ REMEDIATOR_SETUP_MAP = {
     RemediatorType.EWS: ews.get_ews_remediator,
     RemediatorType.GRAPH: graph.get_graph_remediator,
 }
+
+
+def create_email_remediation_key(message_id, recipient):
+    """Returns the value to be used for the key column of the remediation table for email remediations."""
+    return f'{message_id}:{recipient}'
+
+
+def get_remediation_targets(message_ids):
+    """Given a list of message-ids, return a list of tuples of (message_id, recipient)
+       suitable for the remediate_emails command."""
+
+    if not message_ids:
+        return []
+
+    result = []  # of ( message-id, recipient )
+
+    logging.info("searching for remediation targets for {} message-ids".format(len(message_ids)))
+
+    # first search email archives for all delivered emails that had this message-id
+    for source in get_email_archive_sections():
+        search_result = search_archive(source, message_ids, excluded_emails=saq.CONFIG['remediation']['excluded_emails'].split(','))
+        for archive_id in search_result:
+            result.append((search_result[archive_id].message_id, search_result[archive_id].recipient))
+
+    logging.info("found {} remediation targets for {} message-ids".format(len(result), len(message_ids)))
+    return result
 
 
 def get_email_remediator(section: configparser.SectionProxy, **kwargs) -> BaseRemediator:
