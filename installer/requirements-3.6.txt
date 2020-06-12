@@ -58,3 +58,4 @@ argcomplete==1.10.0
 msal
 ip-inspector
 croniter
+uwsgi
