@@ -1,5 +1,11 @@
 version: '3.4'
 services:
+    ace-ssl:
+        build:
+            context: .
+            dockerfile: Dockerfile.ssl
+        image: ace-ssl:latest
+
     ace-db:
         image: mysql:5.7
         command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_520_ci
@@ -8,6 +14,8 @@ services:
             MYSQL_ROOT_PASSWORD: 'ace'
         expose:
             - '3306'
+        depends_on:
+            - ace-ssl
         volumes:
             - ace-db-volume:/var/lib/mysql
             - ./docker/mounts/mysql/init:/docker-entrypoint-initdb.d
@@ -34,6 +42,7 @@ services:
             dockerfile: Dockerfile.ace
         image: ace:latest
         depends_on:
+            - ace-ssl
             - ace-db
         command: docker/provision/ace/setup
         restart: always
