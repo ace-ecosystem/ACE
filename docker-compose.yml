@@ -18,7 +18,7 @@ services:
             - ace-ssl
         volumes:
             - ace-db-volume:/var/lib/mysql
-            - ./docker/mounts/mysql/init:/docker-entrypoint-initdb.d
+            - ./sql:/docker-entrypoint-initdb.d
         hostname: ace-db
 
     ace-http:
@@ -36,11 +36,12 @@ services:
         volumes:
             - ace-data-volume:/opt/ace/data
         hostname: ace-http
+        
     ace:
         build:
             context: .
-            dockerfile: Dockerfile.ace
-        image: ace:latest
+            dockerfile: Dockerfile.ace-prod
+        image: ace-prod:latest
         depends_on:
             - ace-ssl
             - ace-db

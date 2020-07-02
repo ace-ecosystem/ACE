@@ -24,7 +24,7 @@ done
 
 # set up environment
 cat >> ~ace/.profile<<EOF
-source venv/bin/activate
+source /home/ace/venv/bin/activate
 source $SAQ_HOME/load_environment
 EOF
 
@@ -32,7 +32,7 @@ cat >> $SAQ_HOME/load_local_environment<<EOF
 export SAQ_ENC=ace
 EOF
 
-source venv/bin/activate
+source /home/ace/venv/bin/activate
 source $SAQ_HOME/load_environment
 
 #cp -a etc/saq.example.ini etc/saq.ini || fail "unable to configure saq.local.ini"
@@ -66,11 +66,11 @@ then
     cp etc/amc_client.example.ini etc/amc_client.ini
 fi
 
-echo "generating random secret key for flask"
-tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1 > .gui_secret_key.sed
-sed -i -e 's;^;s/ACE_SECRET_KEY/;' -e 's;$;/g;' .gui_secret_key.sed
-sed -i -f .gui_secret_key.sed etc/saq.ini
-rm .gui_secret_key.sed
+#echo "generating random secret key for flask"
+#tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1 > .gui_secret_key.sed
+#sed -i -e 's;^;s/ACE_SECRET_KEY/;' -e 's;$;/g;' .gui_secret_key.sed
+#sed -i -f .gui_secret_key.sed etc/saq.ini
+#rm .gui_secret_key.sed
 
 # create various directories and files
 # XXX clean this up
@@ -82,16 +82,18 @@ done
 if [ ! -e etc/organization.json ]; then echo '{}' > etc/organization.json; fi
 if [ ! -e etc/local_networks.csv ]; then echo 'Indicator,Indicator_Type' > etc/local_networks.csv; fi
 
-# create our ssl certs
-#./docker/provision/ace/install_ssl_certs.sh
-
-# build the documentation
-#( cd docs && make html )
-
 #activate-global-python-argcomplete
 ln -s /opt/signatures /opt/ace/etc/yara
+cat > etc/saq.ini <<EOF
+[config]
+docker_default = etc/saq.docker.ini
+EOF
 cp etc/saq.docker.ini etc/saq.ini
 cp etc/saq.docker.unittest.ini etc/saq.unittest.ini
+
+cp docker/provision/ace/etc/mysql_defaults etc/
+cp docker/provision/ace/etc/mysql_defaults.root etc/
+cp docker/provision/ace/etc/saq.docker.passwords.ini etc/
 
 for l in api apache
 do
