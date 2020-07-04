@@ -14,10 +14,10 @@ $prefix mysqladmin $options create ace-unittest-2
 $prefix mysqldump $options --comments --no-data ace | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql $options --database=ace-unittest
 $prefix mysqldump $options --comments --no-data ace | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql $options --database=ace-unittest-2
 
-if [ -e sql/ace_init.sql ]
+if [ -e sql/50-ace-init.sql ]
 then
-    $prefix mysql $options --database=ace-unittest < sql/ace_init.sql
-    $prefix mysql $options --database=ace-unittest-2 < sql/ace_init.sql
+    grep -v '^USE' sql/50-ace-init.sql | $prefix mysql $options --database=ace-unittest
+    grep -v '^USE' sql/50-ace-init.sql | $prefix mysql $options --database=ace-unittest-2
 fi
 
 $prefix mysql $options -e 'ALTER DATABASE `ace-unittest` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci'
