@@ -89,6 +89,7 @@ chmod 400 ssl/root/ca/.intermediate_ca.pwd
     echo "DNS.2 = ace" >> intermediate/ace.openssl.cnf && \ 
     echo "DNS.3 = ace-http" >> intermediate/ace.openssl.cnf && \
     echo "DNS.4 = ace-db" >> intermediate/ace.openssl.cnf && \
+    echo "DNS.5 = ace-dev" >> intermediate/ace.openssl.cnf && \
     echo 'IP.1 = 127.0.0.1' >> intermediate/ace.openssl.cnf && \
     openssl genrsa -out intermediate/private/ace.key.pem 2048 && \
     chmod 400 intermediate/private/ace.key.pem && \

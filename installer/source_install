@@ -158,7 +158,6 @@ password = $ACE_DB_USER_PASSWORD
 
 [api]
 secret_key = $GUI_SECRET_KEY
-<<<<<<< HEAD
 
 [gui]
 secret_key = $GUI_SECRET_KEY

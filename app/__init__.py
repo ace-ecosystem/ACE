@@ -89,6 +89,10 @@ def create_app():
         # this deals with that without breaking anything
         return base64.b64decode(s + '===')
 
+    def btoa(b):
+        return b.decode('ascii')
+
+    app.jinja_env.filters['btoa'] = btoa
     app.jinja_env.filters['b64decode'] = b64decode_wrapper
     app.jinja_env.filters['b64encode'] = base64.b64encode
     app.jinja_env.filters['s64decode'] = s64decode

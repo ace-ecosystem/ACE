@@ -55,7 +55,7 @@ yara_scanner==1.0.15
 python-whois
 gglsbl-rest-client
 argcomplete==1.10.0
-msal
+msal==1.3.0
 ip-inspector
 croniter
 uwsgi

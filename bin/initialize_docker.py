@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
+#
+# initializes your docker development environment by creating
+# random passwords for the database connections
+# and then updating the configuration files with those passwords
+#
 
+import os
 import os.path
 import random
 import string
 
+def generate_password() -> str:
+    return ''.join(random.choices(string.ascii_letters, k=random.randint(23, 32))) 
+
 def main(): 
-    user_password = ''.join(random.choices(string.ascii_letters, k=random.randint(23, 32)))
+    user_password = generate_password()
     target_path = os.path.join('sql', 'templates', 'create_db_user.sql')
     with open(target_path, 'r') as fp_in:
         sql = fp_in.read().replace('ACE_DB_USER_PASSWORD', user_password)
@@ -15,6 +24,7 @@ def main():
         print(f"created {target_path}")
 
     target_path = os.path.join('docker', 'provision', 'ace', 'etc', 'mysql_defaults')
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
     with open(target_path, 'w') as fp:
         fp.write(f"""[client]
 host=localhost
@@ -23,7 +33,7 @@ password={user_password}""")
 
     print(f"created {target_path}")
 
-    admin_password = ''.join(random.choices(string.ascii_letters, k=random.randint(23, 32)))
+    admin_password = generate_password()
     target_path = os.path.join('sql', 'templates', 'create_db_super_user.sql')
     with open(target_path, 'r') as fp_in:
         sql = fp_in.read().replace('ACE_SUPERUSER_DB_USER_PASSWORD', admin_password)
@@ -33,6 +43,7 @@ password={user_password}""")
     print(f"created {target_path}")
 
     target_path = os.path.join('docker', 'provision', 'ace', 'etc', 'mysql_defaults.root')
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
     with open(target_path, 'w') as fp:
         fp.write(f"""[client]
 host=localhost
@@ -42,6 +53,7 @@ password={admin_password}""")
     print(f"created {target_path}")
 
     target_path = os.path.join('docker', 'provision', 'ace', 'etc', 'saq.docker.passwords.ini')
+    os.makedirs(os.path.dirname(target_path), exist_ok=True)
     with open(target_path, 'w') as fp:
         fp.write(f"""
 [database_ace]
@@ -61,5 +73,5 @@ password = {user_password}""")
 
     print(f"created {target_path}")
 
- if __name__ == '__main__':
+if __name__ == '__main__':
     main()

@@ -666,7 +666,46 @@ class TestCase(ACEModuleTestCase):
         # and we should have an extra directive
         self.assertTrue(_file.has_directive(DIRECTIVE_EXTRACT_URLS))
 
-    def test_file_analysis_004_yara_004_crits(self):
+    def test_file_analysis_004_yara_004_directives_redirection(self):
+        
+        self.initialize_yss()
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.initialize_storage()
+        shutil.copy('test_data/scan_targets/add_directive', root.storage_dir)
+        shutil.copy('test_data/scan_targets/parent_file', root.storage_dir)
+        parent_file = root.add_observable(F_FILE, 'parent_file')
+        child_file = root.add_observable(F_FILE, 'add_directive')
+        child_file.redirection = parent_file
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_yara_scanner_v3_4', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        self.assertEquals(log_count('with yss (matches found: True)'), 1)
+
+        root.load()
+        child_file_observable = root.get_observable(child_file.id)
+        parent_file_observable = root.get_observable(parent_file.id)
+        
+        from saq.modules.file_analysis import YaraScanResults_v3_4
+        analysis = child_file_observable.get_analysis(YaraScanResults_v3_4)
+        self.assertTrue(analysis)
+
+        # the parent file should be instructed to go to the sandbox
+        self.assertTrue(parent_file_observable.has_directive(DIRECTIVE_SANDBOX))
+        # the child file analysis should have a yara_rule observable
+        yara_rule = analysis.get_observables_by_type(F_YARA_RULE)
+        self.assertEquals(len(yara_rule), 1)
+        yara_rule = yara_rule[0]
+        # the yara rule should have detections
+        self.assertTrue(yara_rule.detections)
+
+    def test_file_analysis_004_yara_005_crits(self):
         
         self.initialize_yss()
 
@@ -705,7 +744,7 @@ class TestCase(ACEModuleTestCase):
         crits_id = analysis.get_observables_by_type(F_INDICATOR)
         self.assertEquals(len(crits_id), 1)
 
-    def test_file_analysis_004_yara_005_whitelist(self):
+    def test_file_analysis_004_yara_006_whitelist(self):
 
         self.initialize_yss()
 

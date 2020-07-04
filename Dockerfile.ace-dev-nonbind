@@ -1,0 +1,6 @@
+FROM ace-base:latest
+USER root
+RUN apt -y install git vim screen man
+USER ace
+WORKDIR /opt/ace
+VOLUME [ "/opt", "/home/ace" ]

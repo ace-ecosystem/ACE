@@ -2,8 +2,7 @@
 
 function get_all_checked_alerts() {
     // returns the list of all checked alert IDs
-    var result = Array();
-    $("input[name^='detail_']").each(function(index) {
+    var result = Array(); $("input[name^='detail_']").each(function(index) {
         var $this = $(this);
         if ($this.is(":checked")){
             result.push($this.prop("name").replace(/^detail_/, ""));
@@ -135,6 +134,25 @@ $(document).ready(function() {
         timeFormat: 'HH:mm:ss'
     });
 
+    $('.daterange').val(
+        moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
+        moment().format("MM-DD-YYYY HH:mm"));
+
+    $('.daterange').daterangepicker({
+        timePicker: true,
+        format: 'MM-DD-YYYY HH:mm',
+        startDate:  moment().subtract(6, 'days').startOf('day'),
+        endDate: moment(),
+        ranges: {
+           'Today': [moment().startOf('day'), moment().endOf('day')],
+           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
+           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
+           'This Month': [moment().startOf('month').startOf('day'), moment()],
+           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
+        }
+    });
+
     if ($('input[name="daterange"]').val() == '') {
         $('input[name="daterange"]').val(
             moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
@@ -213,13 +231,22 @@ $(document).ready(function() {
     $("#btn-take-ownership").click(function(e) {
         all_alert_uuids = get_all_checked_alerts();
         if (all_alert_uuids.length == 0) {
-            // XXX do this on the disposition button
             alert("You must select one or more alerts to disposition.");
             return;
         }
 
-        // add a hidden field to the form
-        $("#ownership-form").append('<input type="hidden" name="alert_uuids" value="' + all_alert_uuids.join(",") + '" />').submit();
+        $.ajax({
+            dataType: "html",
+            url: 'set_owner',
+            traditional: true,
+            data: { alert_uuids: all_alert_uuids },
+            success: function(data, textStatus, jqXHR) {
+                window.location.replace("/ace/manage")
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                alert(jqXHR.responseText);
+            }
+        });
     });
 
     $("#btn-assign-ownership").click(function(e) {
@@ -295,6 +322,172 @@ function observable_link_clicked(observable_id) {
 // gets called when the user clicks on a tag link
 function tag_link_clicked(tag_id) {
     $("#frm-filter").append('<input type="checkbox" name="tag_' + tag_id + '" CHECKED>').submit();
+}
+
+// reset all filters
+function reset_filters() {
+    $.ajax({
+        dataType: "html",
+        url: 'reset_filters',
+        data: { },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage")
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+}
+
+// adds a filter
+function add_filter(name, values) {
+    $.ajax({
+        dataType: "html",
+        url: 'add_filter',
+        traditional: true,
+        data: { filter: JSON.stringify({"name":name, "values":values}) },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage")
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+}
+
+// adds selected filter from filter modal
+function apply_filter() {
+    name = document.getElementById("filter_name").value;
+    filter_inputs = $("[name='filter_value_" + name + "']");
+    if (filter_inputs.length == 1) {
+        val = filter_inputs.val();
+        if (Array.isArray(val)) {
+            add_filter(name, val);
+        } else {
+            add_filter(name, [val]);
+        }
+    } else {
+        val = []
+        filter_inputs.each(function(index) {
+            val.push($(this).val())
+        });
+        add_filter(name, [val]);
+    }
+    return false; // prevents form from submitting
+}
+
+// removes a filter
+function remove_filter(name, index) {
+    $.ajax({
+        dataType: "html",
+        url: 'remove_filter',
+        data: { name: name, index: index },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage")
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+}
+
+// removes all filters of type name
+function remove_filter_category(name) {
+    $.ajax({
+        dataType: "html",
+        url: 'remove_filter_category',
+        data: { name: name },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage")
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+}
+
+// sets the sort order
+function set_sort_filter(name) {
+    $.ajax({
+        dataType: "html",
+        url: 'set_sort_filter',
+        data: { name: name },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage")
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+}
+
+// sets page offset
+function set_page_offset(offset) {
+    $.ajax({
+        dataType: "html",
+        url: 'set_page_offset',
+        data: { offset: offset },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage")
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+}
+
+// sets page size
+function set_page_size(current_size) {
+    limit = prompt("Page size", String(current_size));
+    if (limit == null) return;
+    err = function() {
+        alert("error: enter an integer value between 1 and 1000");
+    };
+
+    try {
+        limit = parseInt(limit);
+    } catch (e) {
+        alert(e);
+        return;
+    }
+
+    if (limit < 1 || limit > 1000) {
+        err();
+        return;
+    }
+
+    $.ajax({
+        dataType: "html",
+        url: 'set_page_size',
+        data: { size: limit },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage")
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+}
+
+// hides/shows correct filter value input based on filter name selection
+function on_filter_changed(filter_name) {
+    filters = document.getElementsByName("filter_value_container");
+    for (i = 0; i < filters.length; i++) {
+        if (filters[i].id == "filter_value_container_" + filter_name.value) {
+            filters[i].style.display = "block";
+        } else {
+            filters[i].style.display = "none";
+        }
+    }
+}
+
+// hides/shows correct input options
+function toggle_options(input, options_id) {
+    if (input.value.length > 1) {
+        input.setAttribute('list', options_id)
+    } else {
+        input.setAttribute('list', null)
+    }
 }
 
 // gets called when the user clicks on the right triangle button next to each alert

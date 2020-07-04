@@ -321,3 +321,11 @@ class ObservableActionRestore(ObservableAction):
         self.description = "Undo Remediation"
         self.jinja_action_path = 'analysis/observable_actions/restore.html'
         self.icon = 'ok-circle'
+
+class ObservableActionUrlCrawl(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_URL_CRAWL
+        self.description = "Grab HTML content of URL"
+        self.jinja_action_path = 'analysis/observable_actions/url_crawl.html'
+        self.icon = 'download-alt'

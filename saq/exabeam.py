@@ -12,15 +12,17 @@ from saq.error import report_exception
 import traceback
 
 class ExabeamSession(object):
-    def __init__(self):
+    def __init__(self, load_watchlists=True):
         self.verify = False
         self.auth = {'username': saq.CONFIG['exabeam']['user'], 'password': saq.CONFIG['exabeam']['pass']}
         self.base_uri = saq.CONFIG['exabeam']['base_uri']
+        self.load_watchlists = load_watchlists
 
     def __enter__(self):
         self.session = requests.Session()
         self.login()
-        self.watchlists = self.get_all_watchlists()
+        if self.load_watchlists:
+            self.watchlists = self.get_all_watchlists()
         return self
 
     def __exit__(self, type, value, traceback):
@@ -91,9 +93,11 @@ class ExabeamSession(object):
         except Exception as e:
             raise Exception(f"Failed to clear Exabeam watchlist: watchlist - {e}")
 
-    def AddWatchlistUsers(self, watchlist, users):
+    def AddWatchlistUsers(self, watchlist, users, days=None):
         try:
             data = { "category": "Users", "items": users }
+            if days:
+                data["watchUntilDays"] = days
             r = self.session.put(f"{self.base_uri}/uba/api/watchlist/{self.watchlists[watchlist]}/add", json=data, verify=self.verify)
             if r.status_code != requests.codes.ok:
                 r.raise_for_status()

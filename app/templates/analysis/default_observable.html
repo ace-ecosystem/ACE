@@ -5,9 +5,7 @@
 {% if _observable.display_time %} @ {{ _observable.display_time }} {% endif %}</span>
 <script type="text/javascript">
     $('#o_filter_{{unique_reference}}').on('click', function() {
-        $('#frm-observable-filter-type').val(atob('{{_observable.type | s64encode}}'));
-        $('#frm-observable-filter-value').val(atob('{{_observable.value | s64encode}}'));
-        $('#frm-observable-filter').submit();
+        set_filters({'Observable':[['{{_observable.type}}',atob('{{_observable.value | s64encode}}')]]});
     });
 </script>
 {% endblock %}

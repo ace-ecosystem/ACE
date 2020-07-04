@@ -13,7 +13,7 @@
         <button type="submit" name="disposition" value="IGNORE" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('dispositioning') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-ok-sign"></span> Ignore</button>
         <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#disposition_modal" {%if not ace_config['gui'].getboolean('dispositioning') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-thumbs-up"></span> Disposition</button>
         <button id="add_comment_button_alert" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#comment_modal" uuid="{{alert.uuid}}"><span class="glyphicon glyphicon-comment"></span> Add Comment</button>
-        <button id="btn-take-ownership" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-lock"></span> Take Ownership</button>
+        <button onclick="set_owner('{{alert.uuid}}')" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-lock"></span> Take Ownership</button>
         <button id="btn-assign-ownership-dialog" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#assign_ownership_modal" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-user"></span> Assign Ownership</button>
         <button id="btn-add-observable" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#add_observable_modal" {% if alert.is_locked() or not ace_config['gui'].getboolean('add_observable') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add Observable</button>
         <button type="button" name="btn-show-add-tags" class="btn btn-default btn-sm" data-toggle="modal" data-target="#tag_modal"><span class="glyphicon glyphicon-tags"></span> Add Tag(s)</button>
@@ -173,10 +173,6 @@
         <input type="hidden" id="frm-observable-filter-type" name="search_observable_type" value="">
     </form>
 </div>
-
-<form id="ownership-form" action="{{url_for('analysis.take_ownership')}}" method="POST">
-    <input type="hidden" name="alert_uuid" value="{{alert.uuid}}"/>
-</form>
 
 <form id="analyze-alert-form" action="{{url_for('analysis.analyze_alert')}}" method="POST">
     <input type="hidden" name="alert_uuid" value="{{alert.uuid}}"/>

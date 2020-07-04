@@ -1175,19 +1175,14 @@ class ProtectedURLAnalysis(Analysis):
 
         return "Protected URL Analysis: detected type {}".format(self.protection_type)
 
-PROTECTION_TYPE_OUTLOOK_SAFELINKS = 'outlook safelinks'
-PROTECTION_TYPE_DROPBOX = 'dropbox'
-PROTECTION_TYPE_ONE_DRIVE = 'one drive'
-PROTECTION_TYPE_GOOGLE_DRIVE = 'google drive'
-PROTECTION_TYPE_SHAREPOINT = 'sharepoint'
-PROTECTION_TYPE_EGNYTE = 'egnyte'
-PROTECTION_TYPE_FIREEYE = 'fireeye'
 
-REGEX_GOOGLE_DRIVE = re.compile(r'drive\.google\.com/file/d/([^/]+)/view')
-REGEX_SHAREPOINT = re.compile(r'^/:b:/g/(.+)/([^/]+)$')
+PROTECTION_TYPE_ONE_DRIVE = 'one drive'
+
 
 class ProtectedURLAnalyzer(AnalysisModule):
     """Is this URL protected by another company by wrapping it inside another URL they check first?"""
+    """Most of this AnalysisModule has been moved to URLObservable.sanitize_protected_urls, OneDrive analysis remains
+        as it relies on CrawlPhish analysis"""
     
     @property
     def generated_analysis_type(self):
@@ -1207,50 +1202,6 @@ class ProtectedURLAnalyzer(AnalysisModule):
         except Exception as e:
             logging.error("unable to parse url {}: {}".format(url.value, e))
             return False
-
-        # egnyte links
-        if parsed_url.netloc.lower().endswith('egnyte.com'):
-            if parsed_url.path.startswith('/dl/'):
-                extracted_url = url.value.replace('/dl/', '/dd/')
-                protection_type = PROTECTION_TYPE_EGNYTE
-                logging.info("translated egnyte.com url {} to {}".format(url.value, extracted_url))
-
-        # fireeye links
-        if parsed_url.netloc.lower().endswith('fireeye.com'):
-            if parsed_url.netloc.lower().startswith('protect'):
-                qs = parse_qs(parsed_url.query)
-                if 'u' in qs:
-                    protection_type = PROTECTION_TYPE_FIREEYE
-                    extracted_url = qs['u'][0]
-
-        # "safelinks" by outlook
-        if parsed_url.netloc.lower().endswith('safelinks.protection.outlook.com'):
-            qs = parse_qs(parsed_url.query)
-            if 'url' in qs:
-                protection_type = PROTECTION_TYPE_OUTLOOK_SAFELINKS
-                extracted_url = qs['url'][0]
-
-        # dropbox links
-        if parsed_url.netloc.lower().endswith('.dropbox.com'):
-            qs = parse_qs(parsed_url.query)
-            modified = False
-            if 'dl' in qs:
-                if qs['dl'] == ['0']:
-                    qs['dl'] = '1'
-                    modified = True
-            else:
-                qs['dl'] = '1'
-                modified = True
-
-            if modified:
-                # rebuild the query
-                protection_type = PROTECTION_TYPE_DROPBOX
-                extracted_url = urlunparse((parsed_url.scheme, 
-                                           parsed_url.netloc,
-                                           parsed_url.path,
-                                           parsed_url.params,
-                                           urlencode(qs),
-                                           parsed_url.fragment))
 
         # one drive links
         if parsed_url.netloc.lower().endswith('1drv.ms'):
@@ -1283,45 +1234,6 @@ class ProtectedURLAnalyzer(AnalysisModule):
                             _qs['authkey'][0], _qs['resid'][0])
 
             logging.info("translated one drive url {} to {}".format(url.value, extracted_url))
-
-        # google drive links
-        m = REGEX_GOOGLE_DRIVE.search(url.value)
-        if m:
-            # sample
-            # https://drive.google.com/file/d/1ls_eBCsmf3VG_e4dgQiSh_5VUM10b9s2/view
-            # turns into
-            # https://drive.google.com/uc?authuser=0&id=1ls_eBCsmf3VG_e4dgQiSh_5VUM10b9s2&export=download
-
-            google_id = m.group(1)
-
-            protection_type = PROTECTION_TYPE_GOOGLE_DRIVE
-            extracted_url = 'https://drive.google.com/uc?authuser=0&id={}&export=download'.format(google_id)
-            logging.info("translated google drive url {} to {}".format(url.value, extracted_url))
-
-        # sharepoint download links
-        if parsed_url.netloc.lower().endswith('.sharepoint.com'):
-            # user gets this link in an email
-            # https://lahia-my.sharepoint.com/:b:/g/personal/secure_onedrivemsw_bid/EVdjoBiqZTxMnjAcDW6yR4gBqJ59ALkT1C2I3L0yb_n0uQ?e=naeXYD
-            # needs to turn into this link
-            # https://lahia-my.sharepoint.com/personal/secure_onedrivemsw_bid/_layouts/15/download.aspx?e=naeXYD&share=EVdjoBiqZTxMnjAcDW6yR4gBqJ59ALkT1C2I3L0yb_n0uQ
-
-            # so the URL format seems to be this
-            # https://SITE.shareponit.com/:b:/g/PATH/ID?e=DATA
-            # not sure if NAME can contain subdirectories so we'll assume it can
-            m = REGEX_SHAREPOINT.match(parsed_url.path)
-            parsed_qs = parse_qs(parsed_url.query)
-            if m and 'e' in parsed_qs:
-                protection_type = PROTECTION_TYPE_SHAREPOINT
-                extracted_url = urlunparse((parsed_url.scheme,
-                                            parsed_url.netloc,
-                                            '/{}/_layouts/15/download.aspx'.format(m.group(1)),
-                                            parsed_url.params,
-                                            urlencode({'e': parsed_qs['e'][0], 'share': m.group(2)}),
-                                            parsed_url.fragment))
-
-                logging.info("translated sharepoint url {} to {}".format(url.value, extracted_url))
-                
-        # do others here...
 
         if not extracted_url or not protection_type:
             return False

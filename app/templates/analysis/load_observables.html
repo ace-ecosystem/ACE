@@ -5,7 +5,7 @@
         {% for o in data[type_] %}
             <li><span style="cursor:pointer" onmouseover="this.style.textDecoration='underline';"
                       onmouseleave="this.style.textDecoration='';"
-                      onmousedown="observable_link_clicked({{ o.id }})">{{ o.value.decode(errors='ignore') }} ({{ o.count }})</a>
+                      onmousedown="add_filter('Observable', [['{{type_}}', atob('{{o.value | b64encode | btoa}}')]])">{{ o.value.decode(errors='ignore') }} ({{ o.count }})</a>
             </li>
         {% endfor %}
     </ul>

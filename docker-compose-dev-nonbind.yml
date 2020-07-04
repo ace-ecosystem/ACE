@@ -17,19 +17,22 @@ services:
     ace:
         build:
             context: .
-            dockerfile: Dockerfile.ace-dev
-        image: ace-dev:latest
+            dockerfile: Dockerfile.ace-dev-nonbind
+        image: ace-dev-nonbind:latest
         depends_on:
             - ace-db
         command: /bin/sh -c "while sleep 1000; do :; done"
         volumes:
-            - .:/opt/ace
-            - ace-data-volume:/opt/ace/data
+            - ace-opt-volume:/opt
+            - ace-home-volume:/home/ace
         hostname: ace
         container_name: ace-dev
 volumes:
-    ace-data-volume:
-        name: ace-data-dev
+    ace-opt-volume:
+        name: ace-opt-dev
+
+    ace-home-volume:
+        name: ace-home-dev
 
     ace-db-volume:
         name: ace-db-dev

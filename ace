@@ -2264,7 +2264,7 @@ submit_failed_submissions_parser.set_defaults(func=submit_failed_submissions)
 
 def search_archive(args):
     import saq
-    from saq.database import _get_db_connection
+    from saq.database import get_db_connection
 
     # are we exporting into a directory?
     if args.output_dir:
@@ -2276,157 +2276,157 @@ def search_archive(args):
                 sys.exit(0)
 
     search_items = args.search_items
-    
+
     # are we reading search from standard input?
     if args.from_stdin:
         for search_item in sys.stdin:
             search_items.append(search_item.strip())
 
-    db = _get_db_connection('email_archive')
-    c = db.cursor()
-    query = """
+    with get_db_connection(name="email_archive") as db:
+        c = db.cursor()
+        query = """
 SELECT
     archive_server.hostname, HEX(archive.md5)
 FROM
     archive JOIN archive_server ON archive.server_id = archive_server.server_id
     {extended_from_clause}
-WHERE 
+WHERE
     {where_clauses}
 """
-    
-    where_clauses = []
-    parameters = []
 
-    extended_from_clause = "JOIN archive_search ON archive.archive_id = archive_search.archive_id"
-    if args.exact:
-        extended_from_clause = "JOIN archive_index ON archive.archive_id = archive_index.archive_id"
-    
-    for search_item in search_items:
-        if not any([args.env_from, args.env_to, args.mail_from, args.mail_to, args.subject, args.message_id]):
-            if args.exact:
-                where_clauses.append("archive_index.hash = UNHEX(MD5(%s))")
-                parameters.append(search_item)
+        where_clauses = []
+        parameters = []
+
+        extended_from_clause = "JOIN archive_search ON archive.archive_id = archive_search.archive_id"
+        if args.exact:
+            extended_from_clause = "JOIN archive_index ON archive.archive_id = archive_index.archive_id"
+
+        for search_item in search_items:
+            if not any([args.env_from, args.env_to, args.mail_from, args.mail_to, args.subject, args.message_id]):
+                if args.exact:
+                    where_clauses.append("archive_index.hash = UNHEX(MD5(%s))")
+                    parameters.append(search_item)
+                else:
+                    where_clauses.append("archive_search.value LIKE %s")
+                    parameters.append('%%{}%%'.format(search_item))
             else:
-                where_clauses.append("archive_search.value LIKE %s")
-                parameters.append('%%{}%%'.format(search_item))
-        else:
-            _archive_index_template = "(archive_index.field = '{field}' AND archive_index.hash = UNHEX(MD5(%s)))"
-            _archive_index_value = search_item
-            _archive_search_template = "(archive_search.field = '{field}' AND archive_search.value LIKE %s)"
-            _archive_search_value = '%%{}%%'.format(search_item)
+                _archive_index_template = "(archive_index.field = '{field}' AND archive_index.hash = UNHEX(MD5(%s)))"
+                _archive_index_value = search_item
+                _archive_search_template = "(archive_search.field = '{field}' AND archive_search.value LIKE %s)"
+                _archive_search_value = '%%{}%%'.format(search_item)
 
-            if args.env_from:
-                if args.exact:
-                    where_clauses.append(_archive_index_template.format(field='env_from'))
-                    parameters.append(_archive_index_value)
-                else:
-                    where_clauses.append(_archive_search_template.format(field='env_from'))
-                    parameters.append(_archive_search_value)
+                if args.env_from:
+                    if args.exact:                        
+                        where_clauses.append(_archive_index_template.format(field='env_from'))
+                        parameters.append(_archive_index_value)
+                    else:
+                        where_clauses.append(_archive_search_template.format(field='env_from'))
+                        parameters.append(_archive_search_value)
 
-            if args.env_to:
-                if args.exact:
-                    where_clauses.append(_archive_index_template.format(field='env_to'))
-                    parameters.append(_archive_index_value)
-                else:
-                    where_clauses.append(_archive_search_template.format(field='env_to'))
-                    parameters.append(_archive_search_value)
+                if args.env_to:
+                    if args.exact:
+                        where_clauses.append(_archive_index_template.format(field='env_to'))
+                        parameters.append(_archive_index_value)
+                    else:
+                        where_clauses.append(_archive_search_template.format(field='env_to'))
+                        parameters.append(_archive_search_value)
 
-            if args.mail_from:
-                if args.exact:
-                    where_clauses.append(_archive_index_template.format(field='mail_from'))
-                    parameters.append(_archive_index_value)
-                else:
-                    where_clauses.append(_archive_search_template.format(field='mail_from'))
-                    parameters.append(_archive_search_value)
+                if args.mail_from:
+                    if args.exact:
+                        where_clauses.append(_archive_index_template.format(field='mail_from'))
+                        parameters.append(_archive_index_value)
+                    else:
+                        where_clauses.append(_archive_search_template.format(field='mail_from'))
+                        parameters.append(_archive_search_value)
 
-            if args.mail_to:
-                if args.exact:
-                    where_clauses.append(_archive_index_template.format(field='mail_to'))
-                    parameters.append(_archive_index_value)
-                else:
-                    where_clauses.append(_archive_search_template.format(field='mail_to'))
-                    parameters.append(_archive_search_value)
+                if args.mail_to:
+                    if args.exact:
+                        where_clauses.append(_archive_index_template.format(field='mail_to'))
+                        parameters.append(_archive_index_value)
+                    else:
+                        where_clauses.append(_archive_search_template.format(field='mail_to'))
+                        parameters.append(_archive_search_value)
 
-            if args.subject:
-                if args.exact:
-                    where_clauses.append(_archive_index_template.format(field='subject'))
-                    parameters.append(_archive_index_value)
-                else:
-                    where_clauses.append(_archive_search_template.format(field='subject'))
-                    parameters.append(_archive_search_value)
+                if args.subject:
+                    if args.exact:
+                        where_clauses.append(_archive_index_template.format(field='subject'))
+                        parameters.append(_archive_index_value)
+                    else:
+                        where_clauses.append(_archive_search_template.format(field='subject'))
+                        parameters.append(_archive_search_value)
 
-            if args.url:
-                if args.exact:
-                    where_clauses.append(_archive_index_template.format(field='url'))
-                    parameters.append(_archive_index_value)
-                else:
-                    where_clauses.append(_archive_search_template.format(field='url'))
-                    parameters.append(_archive_search_value)
+                if args.url:
+                    if args.exact:
+                        where_clauses.append(_archive_index_template.format(field='url'))
+                        parameters.append(_archive_index_value)
+                    else:
+                        where_clauses.append(_archive_search_template.format(field='url'))
+                        parameters.append(_archive_search_value)
 
-            if args.message_id:
-                if args.exact:
-                    where_clauses.append(_archive_index_template.format(field='message_id'))
-                    parameters.append(_archive_index_value)
-                else:
-                    where_clauses.append(_archive_search_template.format(field='message_id'))
-                    parameters.append(_archive_search_value)
+                if args.message_id:
+                    if args.exact:
+                        where_clauses.append(_archive_index_template.format(field='message_id'))
+                        parameters.append(_archive_index_value)
+                    else:
+                        where_clauses.append(_archive_search_template.format(field='message_id'))
+                        parameters.append(_archive_search_value)        
+        
+        query = query.format(extended_from_clause=extended_from_clause,
+                            where_clauses=' OR '.join(where_clauses))
+       # print(query)
+       # print(','.join(parameters))
+        c.execute(query, parameters)
 
-    query = query.format(extended_from_clause=extended_from_clause, 
-                         where_clauses=' OR '.join(where_clauses))
-    #print(query)
-    #print(','.join(parameters))
-    c.execute(query, parameters)
-    for server, md5 in c:
-        # does this archive file exist?
-        archive_base_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['analysis_module_email_archiver']['archive_dir'])
-        if args.archive_dir:
-            archive_base_dir = args.archive_dir
+        for server, md5 in c:
+            # does this archive file exist?
+            archive_base_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['analysis_module_email_archiver']['archive_dir'])
+            if args.archive_dir:
+                archive_base_dir = args.archive_dir
 
-        if not os.path.isdir(archive_base_dir):
-            logging.error("archive directory {} does not exist".format(archive_base_dir))
-            sys.exit(1)
+            if not os.path.isdir(archive_base_dir):
+                logging.error("archive directory {} does not exist".format(archive_base_dir))
+                sys.exit(1)
 
-        archive_path = os.path.join(archive_base_dir, server.lower(), md5.lower()[0:3], 
-                                    '{}.gz.gpg'.format(md5.lower()))
-        if not os.path.exists(archive_path):
-            logging.warning("archive email {} does not exist at {}".format(md5, archive_path))
-            continue
-
-        # are we just listing the paths?
-        if not args.output_dir:
-            print(archive_path)
-            continue
-
-        # are we just copying the entire encrypted email?
-        if not saq.ENCRYPTION_PASSWORD:
-            try:
-                shutil.copy(archive_path, args.output_dir)
-            except Exception as e:
-                logging.warning("unable to copy {} to {}: {}".format(archive_path, args.output_dir, e))
+            archive_path = os.path.join(archive_base_dir, server.lower(), md5.lower()[0:3],
+                                        '{}.gz.gpg'.format(md5.lower()))
+            if not os.path.exists(archive_path):
+                logging.warning("archive email {} does not exist at {}".format(md5, archive_path))
                 continue
 
-            print(os.path.join(args.output_dir, os.path.basename(archive_path)))
-            continue
-
-        # decrypt and decompress the emails
-        dest_path = os.path.join(args.output_dir, md5.lower())
-        with open(dest_path, 'wb') as fp:
-            gpg_p = Popen(['gpg', '--no-tty', '-d', '--passphrase-fd', '0', archive_path], 
-                          stdout=PIPE, stderr=PIPE, stdin=PIPE)
-            gunzip_p = Popen(['zcat'], stdin=gpg_p.stdout, stdout=fp)
-            gpg_p.stdin.write('{}\n'.format(saq.ENCRYPTION_PASSWORD).encode())
-            gpg_p.stdin.close()
-            gpg_p.stdout.close()
-            gunzip_p.communicate()
-            gpg_p.wait()
-
-            if gpg_p.returncode != 0:
-                logging.warning("gpg decryption failed for {} (return code {})".format(archive_path, gpg_p.returncode))
+            # are we just listing the paths?
+            if not args.output_dir:
+                print(archive_path)
                 continue
 
-        print(dest_path)
+            # are we just copying the entire encrypted email?
+            if not saq.ENCRYPTION_PASSWORD:
+                try:
+                    shutil.copy(archive_path, args.output_dir)
+                except Exception as e:
+                    logging.warning("unable to copy {} to {}: {}".format(archive_path, args.output_dir, e))
+                    continue
 
-    db.close()
+                print(os.path.join(args.output_dir, os.path.basename(archive_path)))
+                continue
+
+            # decrypt and decompress the emails
+            dest_path = os.path.join(args.output_dir, md5.lower())
+            with open(dest_path, 'wb') as fp:
+                gpg_p = Popen(['gpg', '--no-tty', '-d', '--passphrase-fd', '0', archive_path],
+                            stdout=PIPE, stderr=PIPE, stdin=PIPE)
+                gunzip_p = Popen(['zcat'], stdin=gpg_p.stdout, stdout=fp)
+                gpg_p.stdin.write('{}\n'.format(saq.ENCRYPTION_PASSWORD).encode())
+                gpg_p.stdin.close()
+                gpg_p.stdout.close()
+                gunzip_p.communicate()
+                gpg_p.wait()
+
+                if gpg_p.returncode != 0:
+                    logging.warning("gpg decryption failed for {} (return code {})".format(archive_path, gpg_p.returncode))
+                    continue
+
+            print(dest_path)
+
     sys.exit(0)
 
 # search-archive
@@ -2526,15 +2526,18 @@ def remediate_emails(args):
     if args.from_stdin:
         args.targets.extend([_.strip() for _ in sys.stdin])
 
-    # get targets
-    targets = args.targets[:]
+    tuples = []
     if args.message_id_only:
         # attempt to build targets from message-ids only 
-        targets = get_remediation_targets(args.targets)
-    while targets:
-        # pull out parameters for remediation
-        recipient = targets.pop()
-        message_id = targets.pop()
+        tuples = get_remediation_targets(args.targets)
+    else:
+        # turn targets into array of tuples
+        targets = args.targets
+        skip_every_other = range(0, len(targets), 2)
+        tuples = [(targets[i], targets[i+1]) for i in skip_every_other]
+    print(tuples)
+    for message_id, recipient in tuples:
+        print(message_id, recipient)
         # generate a key from parameters
         key = create_email_remediation_key(message_id, recipient)
         # remediate or restore?
@@ -3488,21 +3491,24 @@ set_encryption_password_parser.set_defaults(func=set_encryption_password)
 
 def test_encryption_password(args):
     import saq.crypto
-    password = getpass.getpass("Enter the decryption password:")
+    if args.password is None:
+        password = getpass.getpass("Enter the decryption password:")
+    else:
+        password = args.password
+
     try:
         saq.crypto.get_aes_key(password)
         logging.info("password OK")
     except saq.crypto.InvalidPasswordError:
         logging.error("invalid password")
+        sys.exit(1)
 
     sys.exit(0)
 
-test_encryption_password_parser = subparsers.add_parser('test-encryption-password',
-    help="Tests the given password to see if it matches what is currently set as the encryption password.")
-test_encryption_password_parser.set_defaults(func=test_encryption_password)
-
 test_encryption_password_parser = encryption_sp.add_parser('test',
     help="Tests the given password to see if it matches what is currently set as the encryption password.")
+test_encryption_password_parser.add_argument('-p', '--password',
+        help="Provide the password on the command line. Only recommended for automation purposes.")
 test_encryption_password_parser.set_defaults(func=test_encryption_password)
 
 def encrypt_file(args):

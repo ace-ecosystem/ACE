@@ -22,20 +22,14 @@ do
     fi
 done
 
-# set up environment
-cat >> ~ace/.profile<<EOF
-source /home/ace/venv/bin/activate
-source $SAQ_HOME/load_environment
-EOF
-
-cat >> $SAQ_HOME/load_local_environment<<EOF
-export SAQ_ENC=ace
-EOF
+if grep SAQ_ENC $SAQ_HOME/load_local_environment > /dev/null 2>&1
+then
+	echo 'export SAQ_ENC=ace'  >> $SAQ_HOME/load_local_environment
+fi
 
 source /home/ace/venv/bin/activate
 source $SAQ_HOME/load_environment
 
-#cp -a etc/saq.example.ini etc/saq.ini || fail "unable to configure saq.local.ini"
 if [ ! -e etc/brotex.whitelist ]
 then
     cp -a etc/brotex.whitelist.sample etc/brotex.whitelist || fail "unable to configure brotex.whitelist"
@@ -82,18 +76,32 @@ done
 if [ ! -e etc/organization.json ]; then echo '{}' > etc/organization.json; fi
 if [ ! -e etc/local_networks.csv ]; then echo 'Indicator,Indicator_Type' > etc/local_networks.csv; fi
 
-#activate-global-python-argcomplete
-ln -s /opt/signatures /opt/ace/etc/yara
-cat > etc/saq.ini <<EOF
+if [ ! -s /opt/signatures ]
+then
+    ln -s /opt/signatures /opt/ace/etc/yara
+fi
+
+if [ ! -e etc/saq.ini ]
+then
+    if [ "$(hostname)" -eq "ace-dev" ]
+    then
+        cat > etc/saq.ini <<EOF
+[config]
+docker_default = etc/saq.docker-dev.ini
+EOF
+    else
+        cat > etc/saq.ini <<EOF
 [config]
 docker_default = etc/saq.docker.ini
 EOF
-cp etc/saq.docker.ini etc/saq.ini
+    fi
+fi
+
 cp etc/saq.docker.unittest.ini etc/saq.unittest.ini
 
-cp docker/provision/ace/etc/mysql_defaults etc/
-cp docker/provision/ace/etc/mysql_defaults.root etc/
-cp docker/provision/ace/etc/saq.docker.passwords.ini etc/
+if [ ! -e etc/mysql_defaults ]; then cp docker/provision/ace/etc/mysql_defaults etc/; fi
+if [ ! -e etc/mysql_defaults.root ]; then cp docker/provision/ace/etc/mysql_defaults.root etc/; fi
+if [ ! -e etc/saq.docker.passwords.ini ]; then cp docker/provision/ace/etc/saq.docker.passwords.ini etc/; fi
 
 for l in api apache
 do
@@ -102,3 +110,10 @@ do
 		cp -a etc/$l\_logging.example.ini etc/$l\_logging.ini || fail "unable to copy logging config for $l"
 	fi
 done
+
+if ace enc test ace > /dev/null 2>&1
+then
+    ace enc set -p ace
+fi
+
+docker/provision/ace/install_ssl_certs.sh

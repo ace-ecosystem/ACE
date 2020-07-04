@@ -11,7 +11,29 @@ import requests
 import saq
 from saq.extractors import RESULT_MESSAGE_NOT_FOUND, RESULT_MESSAGE_FOUND
 from saq import proxy
+import time
 
+class GraphApiAuth(requests.auth.AuthBase):
+    def __init__(self, client_id, tenant_id, thumbprint, private_key_path, auth_url="https://login.microsoftonline.com", scope="https://graph.microsoft.com/.default"):
+        authority = f"{auth_url}/{tenant_id}"
+        with open(private_key_path) as f:
+            private_key = f.read()
+        client_credential = { "thumbprint": thumbprint, "private_key": private_key }
+        self.client_app = msal.ConfidentialClientApplication(client_id, authority=authority, client_credential=client_credential, timeout=5)
+        self.scope = scope
+        self.token = None
+        self.token_expiration_time = 0
+
+    def __call__(self, request):
+        # fetch token if we do not have a fresh one
+        if self.token is None or self.token_expiration_time < time.time():
+            start = time.time()
+            self.token = self.client_app.acquire_token_for_client(self.scope)
+            self.token_expiration_time = start + self.token['expires_in']
+
+        # add token to Authorization header of request
+        request.headers['Authorization'] = f"Bearer {self.token['access_token']}"
+        return request
 
 def read_private_key(key_path, **kwargs):
     """Helper function to return private key read from .pem file."""
@@ -84,12 +106,9 @@ class GraphAPI:
         return urllib.parse.urljoin(self.base_url, path)
 
     def get_token(self, **kwargs):
-        logging.info("getting azure ad token from cache")
-        result = self.client_app.acquire_token_silent(self.config.scopes, account=None)
-
-        if not result:
-            logging.info("token not found in cache: will attempt to acquire new token from azure ad")
-            result = self.client_app.acquire_token_for_client(self.config.scopes)
+        """Get auth token for Graph API."""
+        logging.info("acquiring new auth token for graph api")
+        result = self.client_app.acquire_token_for_client(self.config.scopes)
 
         self.token = result
 
