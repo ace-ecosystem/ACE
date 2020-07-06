@@ -38,6 +38,7 @@ RUN groupadd ace \
         node-esprima \
         python2.7 \
         python-pip \
+        dnsutils \
     && mkdir /opt/signatures \
     && chown ace:ace /opt/signatures \
     && mkdir /opt/ace \

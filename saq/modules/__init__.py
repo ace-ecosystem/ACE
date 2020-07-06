@@ -204,7 +204,7 @@ class AnalysisModule(object):
         """Called when saq.CONFIG changes."""
         pass
 
-    # TODO use the library we wrote for monitor the files
+    # TODO use a modern library or method to do this
     def watch_file(self, path, callback):
         """Watches the given file and executes callback when it detects that the file has been modified."""
         if path in self.watched_files:
@@ -227,6 +227,9 @@ class AnalysisModule(object):
 
         for watched_file in self.watched_files.values():
             try:
+                if not os.path.exists(watched_file.path):
+                    continue
+                
                 current_mtime = os.stat(watched_file.path).st_mtime
                 if watched_file.last_mtime != current_mtime:
                     if watched_file.last_mtime != 0:

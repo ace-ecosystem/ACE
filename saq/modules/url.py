@@ -631,11 +631,11 @@ class CrawlphishAnalyzer(AnalysisModule):
 
     def verify_environment(self):
         self.verify_config_exists('whitelist_path')
-        self.verify_path_exists(self.config['whitelist_path'])
+        #self.verify_path_exists(self.config['whitelist_path'])
         self.verify_config_exists('regex_path')
-        self.verify_path_exists(self.config['regex_path'])
+        #self.verify_path_exists(self.config['regex_path'])
         self.verify_config_exists('blacklist_path')
-        self.verify_path_exists(self.config['blacklist_path'])
+        #self.verify_path_exists(self.config['blacklist_path'])
         self.verify_config_exists('uncommon_network_threshold')
         self.verify_config_exists('user-agent')
         self.verify_config_exists('timeout')

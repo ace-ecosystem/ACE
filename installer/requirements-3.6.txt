@@ -35,6 +35,7 @@ pip
 ply
 psutil 
 pyasn1 
+pylint
 pymongo==2.8
 pysip
 pysocks
