@@ -21,7 +21,7 @@ Windows is a little tricky because bind mounts are mounted as root:root with 755
 - Execute `& .\bin\build-docker-images.ps1` to build the Docker images.
 - Make sure you have python on your PATH.
 - Execute `python .\bin\initialize_docker.py`
-- Execute `docker-compose -f docker-compose-dev.yml up -d' which launches the containers into the background.
+- Execute `docker-compose -f docker-compose-dev.yml up -d` which launches the containers into the background.
 - Execute `docker exec -it -u root ace-dev /bin/bash -c 'chown -R ace:ace /opt/ace/data'`
 - Execute `docker exec -it -u root ace-dev /bin/bash -c 'docker/provision/ace/install -r'` to finish the installation.
 - Execute `& .\bin\attach-dev-container.ps1` to attach to the running container.

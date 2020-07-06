@@ -5,11 +5,15 @@ source bin/mysql_common.sh
 
 echo "re-creating unit test database..."
 
-for db in ace amc brocess email-archive vt-hash-cache:
+for db in ace amc brocess email-archive vt-hash-cache
 do
-    echo "building $db"
-    $prefix mysqladmin $options drop -f $db-unittest
-    $prefix mysqladmin $options drop -f $db-unittest-2
+    echo "creating $db"
+    if $prefix mysql $options -N --batch -e 'show databases' | grep "^$db-unittest\$" > /dev/null 2>&1
+    then
+        echo "dropping $db"
+        $prefix mysqladmin $options drop -f $db-unittest
+        $prefix mysqladmin $options drop -f $db-unittest-2
+    fi
 
     $prefix mysqladmin $options create $db-unittest
     $prefix mysqladmin $options create $db-unittest-2
