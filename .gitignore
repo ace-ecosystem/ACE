@@ -140,6 +140,8 @@ etc/crawlphish.unittest.regex
 etc/crawlphish.unittest.whitelist
 
 # config files
+etc/amc_client.ini
+etc/saq.docker.passwords.ini
 etc/api_logging.ini
 etc/blacklist.yar
 etc/remote_assignments.yar
@@ -147,6 +149,14 @@ etc/saq.ini.saved
 etc/startupd
 etc/phishfry.ini
 etc/mysql_defaults.root
+docker/provision/ace/etc
+
+# generated SQL files
+sql/70-create-db-user.sql
+sql/71-create-db-super-user.sql
+
+# yara signatures
+etc/yara
 
 # java decompiler
 bin/procyon-decompiler*

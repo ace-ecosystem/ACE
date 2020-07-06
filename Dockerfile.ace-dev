@@ -1,6 +1,6 @@
 FROM ace-base:latest
 USER root
-RUN apt -y install git vim screen
+RUN apt -y install git vim screen default-mysql-client
 USER ace
 COPY --chown=ace:ace etc/vimrc /home/ace/.vimrc
 WORKDIR /opt/ace

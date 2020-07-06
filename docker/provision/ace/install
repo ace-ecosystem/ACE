@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
 #
-# this scripts configures a source installation of ACE
-# which is just ACE running directly from a clone of the repository
-# instead of being "installed" into some other directory
-#
+
+RESET=""
+while getopts "r" opt
+do
+    case ${opt} in
+        r)
+            RESET="Y"
+            ;;
+        *)
+            echo "invalid command line option ${opt}"
+            exit 1
+            ;;
+    esac
+done
 
 function fail() {
     echo "installation failed: $1"
     exit 1
 }
+
+cd $SAQ_HOME || { echo "cannot cd to $SAQ_HOME"; exit 1; }
 
 for d in \
     data \
@@ -27,35 +39,32 @@ then
 	echo 'export SAQ_ENC=ace'  >> $SAQ_HOME/load_local_environment
 fi
 
-source /home/ace/venv/bin/activate
-source $SAQ_HOME/load_environment
-
-if [ ! -e etc/brotex.whitelist ]
+if [ ! -e etc/brotex.whitelist -o -n "$RESET" ]
 then
     cp -a etc/brotex.whitelist.sample etc/brotex.whitelist || fail "unable to configure brotex.whitelist"
 fi
 
-if [ ! -e etc/startup ]
+if [ ! -e etc/startup -o -n "$RESET" ]
 then
     cp -a etc/startup.example etc/startup || fail "unable to configure startup"
 fi
 
-if [ ! -e etc/remote_assignments.yar ]
+if [ ! -e etc/remote_assignments.yar -o -n "$RESET" ]
 then
     cp etc/remote_assignments.example.yar etc/remote_assignments.yar
 fi
 
-if [ ! -e etc/blacklist.yar ]
+if [ ! -e etc/blacklist.yar -o -n "$RESET" ]
 then
     cp etc/blacklist.example.yar etc/blacklist.yar
 fi
 
-if [ ! -e etc/amc_mda.ini ]
+if [ ! -e etc/amc_mda.ini -o -n "$RESET" ]
 then
     cp etc/amc_mda.example.ini etc/amc_mda.ini
 fi
 
-if [ ! -e etc/amc_client.ini ]
+if [ ! -e etc/amc_client.ini -o -n "$RESET" ]
 then
     cp etc/amc_client.example.ini etc/amc_client.ini
 fi
@@ -73,17 +82,17 @@ do
 	if [ ! -e "${path}" ]; then touch "${path}"; fi
 done
 
-if [ ! -e etc/organization.json ]; then echo '{}' > etc/organization.json; fi
-if [ ! -e etc/local_networks.csv ]; then echo 'Indicator,Indicator_Type' > etc/local_networks.csv; fi
+if [ ! -e etc/organization.json -o -n "$RESET" ]; then echo '{}' > etc/organization.json; fi
+if [ ! -e etc/local_networks.csv -o -n "$RESET" ]; then echo 'Indicator,Indicator_Type' > etc/local_networks.csv; fi
 
-if [ ! -s /opt/signatures ]
-then
-    ln -s /opt/signatures /opt/ace/etc/yara
-fi
+#if [ ! -s /opt/signatures ]
+#then
+    #ln -s /opt/signatures /opt/ace/etc/yara
+#fi
 
-if [ ! -e etc/saq.ini ]
+if [ ! -e etc/saq.ini -o -n "$RESET" ]
 then
-    if [ "$(hostname)" -eq "ace-dev" ]
+    if [ "$(hostname)" == "ace-dev" ]
     then
         cat > etc/saq.ini <<EOF
 [config]
@@ -99,21 +108,21 @@ fi
 
 cp etc/saq.docker.unittest.ini etc/saq.unittest.ini
 
-if [ ! -e etc/mysql_defaults ]; then cp docker/provision/ace/etc/mysql_defaults etc/; fi
-if [ ! -e etc/mysql_defaults.root ]; then cp docker/provision/ace/etc/mysql_defaults.root etc/; fi
-if [ ! -e etc/saq.docker.passwords.ini ]; then cp docker/provision/ace/etc/saq.docker.passwords.ini etc/; fi
+if [ ! -e etc/mysql_defaults -o -n "$RESET" ]; then cp docker/provision/ace/etc/mysql_defaults etc/; fi
+if [ ! -e etc/mysql_defaults.root -o -n "$RESET" ]; then cp docker/provision/ace/etc/mysql_defaults.root etc/; fi
+if [ ! -e etc/saq.docker.passwords.ini -o -n "$RESET" ]; then cp docker/provision/ace/etc/saq.docker.passwords.ini etc/; fi
 
 for l in api apache
 do
-	if [ ! -e etc/$l\_logging.ini ]
+	if [ ! -e etc/$l\_logging.ini -o -n "$RESET" ]
 	then
 		cp -a etc/$l\_logging.example.ini etc/$l\_logging.ini || fail "unable to copy logging config for $l"
 	fi
 done
 
-if ace enc test ace > /dev/null 2>&1
-then
-    ace enc set -p ace
-fi
+#if ace enc test ace > /dev/null 2>&1
+#then
+    #ace enc set -p ace
+#fi
 
 docker/provision/ace/install_ssl_certs.sh

@@ -15,6 +15,15 @@ def generate_password() -> str:
 
 def main(): 
     user_password = generate_password()
+    source_path = os.path.join('sql', 'templates', 'create_db_user.sql')
+    target_path = os.path.join('sql', '70-create-db-user.sql')
+    with open(source_path, 'r') as fp_in:
+        sql = fp_in.read().replace('ACE_DB_USER_PASSWORD', user_password)
+        with open(target_path, 'w') as fp:
+            fp.write(sql)
+
+        print(f"created {target_path}")
+
     target_path = os.path.join('sql', 'templates', 'create_db_user.sql')
     with open(target_path, 'r') as fp_in:
         sql = fp_in.read().replace('ACE_DB_USER_PASSWORD', user_password)
@@ -27,7 +36,7 @@ def main():
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     with open(target_path, 'w') as fp:
         fp.write(f"""[client]
-host=localhost
+host=ace-db
 user=ace-user
 password={user_password}""")
 
@@ -46,7 +55,7 @@ password={user_password}""")
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     with open(target_path, 'w') as fp:
         fp.write(f"""[client]
-host=localhost
+host=ace-db
 user=ace-superuser
 password={admin_password}""")
 

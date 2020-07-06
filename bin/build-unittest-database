@@ -5,14 +5,20 @@ source bin/mysql_common.sh
 
 echo "re-creating unit test database..."
 
-$prefix mysqladmin $options drop -f ace-unittest
-$prefix mysqladmin $options drop -f ace-unittest-2
+for db in ace amc brocess email-archive vt-hash-cache:
+do
+    echo "building $db"
+    $prefix mysqladmin $options drop -f $db-unittest
+    $prefix mysqladmin $options drop -f $db-unittest-2
 
-$prefix mysqladmin $options create ace-unittest
-$prefix mysqladmin $options create ace-unittest-2
+    $prefix mysqladmin $options create $db-unittest
+    $prefix mysqladmin $options create $db-unittest-2
 
-$prefix mysqldump $options --comments --no-data ace | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql $options --database=ace-unittest
-$prefix mysqldump $options --comments --no-data ace | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql $options --database=ace-unittest-2
+    $prefix mysqldump $options --comments --no-data $db | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql $options --database=$db-unittest
+    $prefix mysqldump $options --comments --no-data $db | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' | $prefix mysql $options --database=$db-unittest-2
+    $prefix mysql $options -e "ALTER DATABASE \`$db-unittest\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci"
+    $prefix mysql $options -e "ALTER DATABASE \`$db-unittest-2\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci"
+done
 
 if [ -e sql/50-ace-init.sql ]
 then
@@ -20,11 +26,4 @@ then
     grep -v '^USE' sql/50-ace-init.sql | $prefix mysql $options --database=ace-unittest-2
 fi
 
-$prefix mysql $options -e 'ALTER DATABASE `ace-unittest` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci'
-$prefix mysql $options -e 'ALTER DATABASE `ace-unittest-2` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci'
-
 echo "finished re-creating unit test database"
-
-#$prefix mysqldump $options --comments --no-data brocess | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' > sql/brocess_schema.sql
-#$prefix mysqldump $options --comments --no-data email-archive | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' > sql/email-archive_schema.sql
-#$prefix mysqldump $options --comments --no-data vt-hash-cache | sed -e 's/\s*AUTO_INCREMENT=[0-9]*\s*/ /g' > sql/vt-hash-cache_schema.sql
