@@ -1413,6 +1413,8 @@ def main():
         for env_var in [ 'http_proxy', 'https_proxy', 'ftp_proxy' ]:
             if env_var in os.environ:
                 del os.environ[env_var]
+            if env_var.upper() in os.environ:
+                del os.environ[env_var.upper()]
 
     try:
         result = args.func(args)

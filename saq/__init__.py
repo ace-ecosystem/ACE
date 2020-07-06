@@ -563,6 +563,9 @@ def initialize(
         if proxy_key in os.environ:
             logging.debug("removing proxy environment variable for {}".format(proxy_key))
             del os.environ[proxy_key]
+        if proxy_key.upper() in os.environ:
+            logging.debug("removing proxy environment variable for {}".format(proxy_key.upper()))
+            del os.environ[proxy_key.upper()]
 
     # load any additional proxies specified in the config sections proxy_*
     for section in CONFIG.keys():
