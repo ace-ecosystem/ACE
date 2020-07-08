@@ -133,8 +133,9 @@ class UserAnalyzer(LDAPAnalysisModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tag_mappings = {}
-        for tag in saq.CONFIG['ldap_group_tags']:
-            self.tag_mappings[tag] = saq.CONFIG['ldap_group_tags'][tag].split(',')
+        if 'ldap_group_tags' in saq.CONFIG:
+            for tag in saq.CONFIG['ldap_group_tags']:
+                self.tag_mappings[tag] = saq.CONFIG['ldap_group_tags'][tag].split(',')
 
     @property
     def generated_analysis_type(self):

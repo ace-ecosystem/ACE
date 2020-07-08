@@ -60,10 +60,6 @@ $(document).ready(function() {
         //graph_alert($("#visualization")[0]);
     //});
 
-    $('#btn-take-ownership').click(function(e) {
-        $('#ownership-form').submit();
-    });
-
     $('#btn-assign-ownership').click(function(e) {
         // add a hidden field to the form and then submit
         $("#assign-ownership-form").append('<input type="hidden" name="alert_uuid" value="' + current_alert_uuid + '" />').submit();
@@ -248,4 +244,36 @@ function delete_comment(comment_id) {
     }
 
     $("#delete_comment_form").submit();
+}
+
+// sets all filters
+function set_filters(filters) {
+    $.ajax({
+        dataType: "html",
+        url: 'set_filters',
+        traditional: true,
+        data: { filters: JSON.stringify(filters) },
+        success: function(data, textStatus, jqXHR) {
+            window.location = "/ace/manage"
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+}
+
+// sets the owner of the alert
+function set_owner(alert_uuid) {
+    $.ajax({
+        dataType: "html",
+        url: 'set_owner',
+        traditional: true,
+        data: { alert_uuids: alert_uuid },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace(window.location)
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert(jqXHR.responseText);
+        }
+    });
 }

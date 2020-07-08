@@ -6,6 +6,7 @@ import pickle
 import shutil
 import tempfile
 import threading
+import unittest
 
 import saq
 from saq.constants import *
@@ -375,6 +376,9 @@ class TestCase(CollectorBaseTestCase):
         c.execute("SELECT COUNT(*) FROM workload")
         self.assertEquals(c.fetchone()[0], 2)
 
+    # XXX sometimes it updates a single work item and sometimes it updates 2 of them
+    # XXX issue might be timing based on performance
+    @unittest.skip("timing issue needs to be resolved")
     @use_db
     def test_threaded_remote_node_multi_submissions_with_large_batch(self, db, c):
         saq.CONFIG['collection']['force_api'] = 'yes'

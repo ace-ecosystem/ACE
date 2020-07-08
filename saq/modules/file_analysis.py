@@ -2457,7 +2457,15 @@ class YaraScanner_v3_4(AnalysisModule):
                 # if any rule matches (that does not have the no_alert modifier) then the whole thing becomes an alert
                 if alertable:
                     #_file.add_tag('yara')
-                    _file.add_directive(DIRECTIVE_SANDBOX)
+
+                    # Some file types get decomposed into other files (ie, PDFAnalyzer->PDFTextAnalyzer)
+                    # When this is the case, the FileObservable's redirection property is set to reference the
+                    # original, un-decomposed file. *That* is the file that should be sandboxed, not the decomposed file.
+                    if _file.redirection:
+                        _file.redirection.add_directive(DIRECTIVE_SANDBOX)
+                    else:
+                        _file.add_directive(DIRECTIVE_SANDBOX)
+
                 else:
                     logging.debug("yara results for {} only include rules with no_alert modifiers".format(local_file_path))
             else:
@@ -3306,7 +3314,8 @@ class URLExtractionAnalyzer(AnalysisModule):
         """The max file size to extract URLs from (in bytes.)"""
         return self.config.getint("max_file_size") * 1024 * 1024
 
-    def order_urls_by_interest(self, extracted_urls):
+    @staticmethod
+    def order_urls_by_interest(extracted_urls):
         """Sort the extracted urls into a list by their domain+TLD frequency and path extension.
         Baically, we want the urls that are more likely to be malicious to come first.
         """
@@ -3364,9 +3373,11 @@ class URLExtractionAnalyzer(AnalysisModule):
         except:
             return True
 
+        # empty URL
         if parsed_url.hostname is None:
             return True
 
+        # invalid URL; ex. http://center, http://blue
         if '.' not in parsed_url.hostname:
             return False
 

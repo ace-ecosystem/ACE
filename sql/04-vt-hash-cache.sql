@@ -19,6 +19,10 @@
 -- Table structure for table `result_cache`
 --
 
+CREATE DATABASE IF NOT EXISTS `vt-hash-cache`;
+ALTER DATABASE `vt-hash-cache` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;
+USE `vt-hash-cache`;
+
 DROP TABLE IF EXISTS `result_cache`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;

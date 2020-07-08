@@ -1,0 +1,36 @@
+version: '3.4'
+services:
+    ace-db:
+        image: mysql:5.7
+        command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_520_ci
+        restart: always
+        environment:
+            MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+        expose:
+            - '3306'
+        volumes:
+            - ace-db-volume:/var/lib/mysql
+            - ./sql:/docker-entrypoint-initdb.d
+        hostname: ace-db
+        container_name: ace-db-dev
+        
+    ace:
+        build:
+            context: .
+            dockerfile: Dockerfile.ace-dev
+        image: ace-dev:latest
+        depends_on:
+            - ace-db
+        command: /bin/sh -c "while sleep 1000; do :; done"
+        volumes:
+            - .:/opt/ace
+            - ace-data-volume:/opt/ace/data
+        hostname: ace
+        container_name: ace-dev
+volumes:
+    ace-data-volume:
+        name: ace-data-dev
+
+    ace-db-volume:
+        name: ace-db-dev
+        

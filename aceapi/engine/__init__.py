@@ -45,27 +45,28 @@ def download(uuid):
     # create the tar file we're going to send back
     fp, path = tempfile.mkstemp(prefix="download_{}".format(uuid), suffix='.tar', dir=saq.TEMP_DIR)
 
-    try:
-        tar = tarfile.open(fileobj=os.fdopen(fp, 'wb'), mode='w|')
-        tar.add(target_dir, '.')
-        tar.close()
+    tar = tarfile.open(fileobj=os.fdopen(fp, 'wb'), mode='w|')
+    tar.add(target_dir, '.')
+    tar.close()
 
-        os.lseek(fp, 0, os.SEEK_SET)
+    os.close(fp)
+    #os.lseek(fp, 0, os.SEEK_SET)
 
-        def _iter_send():
+    def _iter_send(_path):
+        with open(_path, 'rb') as fp:
             while True:
-                data = os.read(fp, io.DEFAULT_BUFFER_SIZE)
+                data = fp.read(io.DEFAULT_BUFFER_SIZE)
                 if data == b'':
-                    return
+                    break
+
                 yield data
 
-        return Response(_iter_send(), mimetype='application/octet-stream')
-            
-    finally:
         try:
-            os.remove(path)
-        except:
-            pass
+            os.remove(_path)
+        except Exception as e:
+            logging.error(f"unable to remove {path}: {e}")
+
+    return Response(_iter_send(path), mimetype='application/octet-stream')
 
 KEY_UPLOAD_MODIFIERS = 'upload_modifiers'
 KEY_OVERWRITE = 'overwrite'

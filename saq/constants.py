@@ -453,6 +453,7 @@ ACTION_TAG_OBSERVABLE = 'tag_observable'
 ACTION_UN_WHITELIST = 'un_whitelist'
 ACTION_UPLOAD_TO_CRITS = 'upload_crits'
 ACTION_WHITELIST = 'whitelist'
+ACTION_URL_CRAWL = 'crawl'
 
 # recorded metrics
 METRIC_THREAD_COUNT = 'thread_count'

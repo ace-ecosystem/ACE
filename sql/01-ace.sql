@@ -15,6 +15,10 @@
 /*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
+CREATE DATABASE IF NOT EXISTS `ace`;
+ALTER DATABASE `ace` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci;
+USE `ace`;
+
 --
 -- Table structure for table `alerts`
 --

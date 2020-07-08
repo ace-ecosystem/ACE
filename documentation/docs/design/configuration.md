@@ -22,6 +22,7 @@ ACE loads configuration files in a particular order. There are two different set
 6. configuration files specified on the command line
 7. configuration files specified in the `SAQ_CONFIG_PATHS` environment variable
 8. `etc/saq.ini`
+9. configuration files specified in the config section.
 
 ### Load Order (Unit Testing)
 
@@ -32,6 +33,39 @@ ACE loads configuration files in a particular order. There are two different set
 5. local [integration](integration.md) files as configured in `etc/saq.integrations.ini` (if they exist)
 6. `etc/saq.unittest.default.ini`
 7. `etc/saq.unittest.ini`
+8. configuration files specified in the config section.
+
+## Referencing Configuration Files
+
+Additional configuration files can be loaded by referencing them in the `[config]` section. The value of each option is interpreted as another configuration file load. Configuration files that are loaded this way can reference other configuration files by adding more options to the `[config]` section. This allows chaining of configuration files.
+
+## Modifying `sys.path`
+
+The value of each option in the `[path]` configuration section is appended to `sys.path`. This allows loading additional python libraries at runtime.
+
+## Example: Site Configuration Settings
+
+The following ini settings in `etc/saq.ini` would load teh `etc/site.ini` configuration file.
+
+```ini
+[config]
+site_local = etc/site.ini
+```
+
+`etc/site.ini` could define a modification to `sys.path` that could add the `site` directory to the path allowing python modules inside that directory to be referenced in the config.
+
+```ini
+[path]
+site_local = /opt/site
+
+[analysis_module_some_site_module]
+module = site
+class = MySiteModule
+enables = yes
+
+[analysis_group_correlation]
+analysis_module_some_site_module = yes
+```
 
 ## Encrypted Passwords
 

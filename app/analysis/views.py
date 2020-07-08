@@ -76,6 +76,7 @@ import ace_api
 
 from app import db
 from app.analysis import *
+from app.analysis.filters import *
 from flask import jsonify, render_template, redirect, request, url_for, flash, session, \
                   make_response, g, send_from_directory, send_file
 from flask_login import login_user, logout_user, login_required, current_user
@@ -947,46 +948,6 @@ def assign_ownership():
 
     return redirect(url_for('analysis.manage'))
 
-@analysis.route('/take_ownership', methods=['POST'])
-@login_required
-def take_ownership():
-    analysis_page = False
-    management_page = False
-    alert_uuids = []
-
-    if 'alert_uuid' in request.form:
-        analysis_page = True
-        alert_uuids.append(request.form['alert_uuid'])
-    elif 'alert_uuids' in request.form:
-        # otherwise we will have an alert_uuids field with one or more alert UUIDs set
-        management_page = True
-        alert_uuids = request.form['alert_uuids'].split(',')
-        session['checked'] = alert_uuids
-    else:
-        logging.error("neither of the expected request fields were present")
-        flash("internal error")
-        return redirect(url_for('analysis.index'))
-
-    test_uuids=list(alert_uuids)
-    for alert_uuid in alert_uuids:
-        alert = db.session.query(GUIAlert).filter_by(uuid=alert_uuid).one()
-        if alert.disposition is not None:
-            test_uuids.remove(alert_uuid)
-            flash("uuid " + alert_uuid + "has already been dispositioned and cannot transfer ownership.")
-
-    alert_uuids=list(test_uuids)
-    if len(alert_uuids):
-        db.session.execute(GUIAlert.__table__.update().where(GUIAlert.uuid.in_(alert_uuids)).values(
-            owner_id=current_user.id,
-            owner_time=datetime.datetime.now()))
-        db.session.commit()
-
-    flash("took ownership of {0} alert{1}".format(len(alert_uuids), "" if len(alert_uuids) == 1 else "s"))
-    if analysis_page:
-        return redirect(url_for('analysis.index', direct=alert_uuids[0]))
-
-    return redirect(url_for('analysis.manage'))
-
 @analysis.route('/remediate', methods=['POST'])
 @login_required
 def remediate():
@@ -1688,646 +1649,252 @@ def is_valid_sort_direction(sort_direction):
 def make_sort_instruction(sort_field, sort_direction):
     return '{0}:{1}'.format(sort_field, sort_direction)
 
+def _reset_filters():
+    session['filters'] = {
+        'Disposition': [ None ],
+        'Owner': [ None, current_user.display_name ],
+        'Queue': [ current_user.queue ],
+    }
+
+def reset_checked_alerts():
+    session['checked'] = []
+
+def reset_sort_filter():
+    session['sort_filter'] = 'Alert Date'
+    session['sort_filter_desc'] = True
+
+def reset_pagination():
+    session['page_offset'] = 0
+    if 'page_size' not in session:
+        session['page_size'] = 50
+
+@analysis.route('/set_sort_filter', methods=['GET', 'POST'])
+@login_required
+def set_sort_filter():
+    # reset page options
+    reset_pagination()
+    reset_checked_alerts()
+
+    # flip direction if same as current, otherwise start asc
+    name = request.args['name'] if request.method == 'GET' else request.form['name']
+    if 'sort_filter' in session and 'sort_filter_desc' in session and session['sort_filter'] == name:
+        session['sort_filter_desc'] = not session['sort_filter_desc']
+    else:
+        session['sort_filter'] = name
+        session['sort_filter_desc'] = False
+
+    # return empy page
+    return ('', 204)
+
+@analysis.route('/reset_filters', methods=['GET'])
+@login_required
+def reset_filters():
+    # reset page options
+    _reset_filters()
+    reset_pagination()
+    reset_sort_filter()
+    reset_checked_alerts()
+
+    # return empy page
+    return ('', 204)
+
+@analysis.route('/set_filters', methods=['GET', 'POST'])
+@login_required
+def set_filters():
+    # reset page options
+    reset_pagination()
+    reset_sort_filter()
+    reset_checked_alerts()
+
+    # get filters
+    filters_json = request.args['filters'] if request.method == 'GET' else request.form['filters']
+    session['filters'] = json.loads(filters_json)
+
+    # return empy page
+    return ('', 204)
+
+@analysis.route('/add_filter', methods=['GET', 'POST'])
+@login_required
+def add_filter():
+    # reset page options
+    reset_sort_filter()
+    reset_pagination()
+    reset_checked_alerts()
+    if 'filters' not in session:
+        session['filters'] = {}
+
+    # add filter to session
+    new_filter_json = request.args['filter'] if request.method == 'GET' else request.form['filter']
+    new_filter = json.loads(new_filter_json)
+    name = new_filter['name']
+    if name not in session['filters']:
+        session['filters'][name] = []
+    values = new_filter['values']
+    for v in values:
+        if isinstance(v, str):
+            value = None if v == 'None' else v
+            if value not in session['filters'][name]:
+                session['filters'][name].append(value)
+        elif not v in session['filters'][name]:
+            session['filters'][name].append(v)
+
+    # return empy page
+    return ('', 204)
+
+@analysis.route('/remove_filter', methods=['GET'])
+@login_required
+def remove_filter():
+    # reset page options
+    reset_sort_filter()
+    reset_pagination()
+    reset_checked_alerts()
+
+    # remove filter from session
+    name = request.args['name']
+    index = int(request.args['index'])
+    if 'filters' in session and name in session['filters'] and index >= 0 and index < len(session['filters'][name]):
+        del session['filters'][name][index]
+
+    # return empy page
+    return ('', 204)
+
+@analysis.route('/remove_filter_category', methods=['GET'])
+@login_required
+def remove_filter_category():
+    # reset page options
+    reset_sort_filter()
+    reset_pagination()
+    reset_checked_alerts()
+
+    # remove filter from session
+    name = request.args['name']
+    if 'filters' in session and name in session['filters']:
+        del session['filters'][name]
+
+    # return empy page
+    return ('', 204)
+
+@analysis.route('/set_page_offset', methods=['GET', 'POST'])
+@login_required
+def set_page_offset():
+    # reset page options
+    reset_checked_alerts()
+
+    # set page offset
+    session['page_offset'] = int(request.args['offset']) if request.method == 'GET' else int(request.form['offset'])
+
+    # return empy page
+    return ('', 204)
+
+@analysis.route('/set_page_size', methods=['GET', 'POST'])
+@login_required
+def set_page_size():
+    # reset page options
+    reset_checked_alerts()
+
+    # set page size
+    session['page_size'] = int(request.args['size']) if request.method == 'GET' else int(request.form['size'])
+
+    # return empy page
+    return ('', 204)
+
+@analysis.route('/set_owner', methods=['GET', 'POST'])
+@login_required
+def set_owner():
+    session['checked'] = request.args.getlist('alert_uuids') if request.method == 'GET' else request.form.getlist('alert_uuids')
+    if len(db.session.query(GUIAlert).filter(GUIAlert.uuid.in_(session['checked'])).filter(GUIAlert.disposition != None).all()) > 0:
+        return ('Unable to transfer ownership for alerts that are already dispositioned', 409)
+    db.session.execute(GUIAlert.__table__.update().where(and_(GUIAlert.uuid.in_(session['checked']), GUIAlert.disposition == None)).values(owner_id=current_user.id,owner_time=datetime.datetime.now()))
+    db.session.commit()
+    return ('', 204)
+
+def hasFilter(name):
+    return 'filters' in session and name in session['filters'] and len(session['filters'][name]) > 0
 
 @analysis.route('/manage', methods=['GET', 'POST'])
 @login_required
 def manage():
+    # use default page settings if first visit
+    if 'filters' not in session:
+        _reset_filters()
+    if 'checked' not in session:
+        reset_checked_alerts()
+    if 'page_offset' not in session or 'page_size' not in session:
+        reset_pagination()
+    if 'sort_filter' not in session or 'sort_filter_desc' not in session:
+        reset_sort_filter()
 
-    # we'll need all these things to display
-    open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all()
-    malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
-    companies = db.session.query(Company).order_by(Company.name.asc()).all()
-    campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all()
-
-    # we want to display alerts that are either approaching or exceeding SLA
-    sla_ids = [] # list of alert IDs that need to be displayed
-    if saq.GLOBAL_SLA_SETTINGS.enabled or any([s.enabled for s in saq.OTHER_SLA_SETTINGS]):
-        _query = db.session.query(GUIAlert).filter(GUIAlert.disposition == None)
-        for alert_type in saq.EXCLUDED_SLA_ALERT_TYPES:
-            _query = _query.filter(GUIAlert.alert_type != alert_type)
-        for alert in _query:
-            if alert.is_over_sla or alert.is_approaching_sla:
-                sla_ids.append(alert.id)
-
-    logging.debug("{} alerts in breach of SLA".format(len(sla_ids)))
-
-    # object representations of the filters to define types and value verification routines
-    # this later gets augmented with the dynamic filters
-    filters = {
-        FILTER_CB_OPEN: SearchFilter('filter_open', FILTER_TYPE_CHECKBOX, True),
-        FILTER_CB_UNOWNED: SearchFilter('filter_unowned', FILTER_TYPE_CHECKBOX, True),
-        FILTER_S_ALERT_QUEUE: SearchFilter('filter_alert_queue', FILTER_TYPE_SELECT, current_user.queue),
-        FILTER_CB_ONLY_SLA: SearchFilter('filter_sla', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_ONLY_REMEDIATED: SearchFilter('filter_only_remediated', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_REMEDIATE_DATE: SearchFilter('remediate_date', FILTER_TYPE_CHECKBOX, False),
-        FILTER_TXT_REMEDIATE_DATERANGE: SearchFilter('remediate_daterange', FILTER_TYPE_TEXT, ''),
-        FILTER_CB_ONLY_UNREMEDIATED: SearchFilter('filter_only_unremediated', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_USE_DATERANGE: SearchFilter('use_daterange', FILTER_TYPE_CHECKBOX, False),
-        FILTER_TXT_DATERANGE: SearchFilter('daterange', FILTER_TYPE_TEXT, ''),
-        FILTER_CB_USE_SEARCH_OBSERVABLE: SearchFilter('use_search_observable', FILTER_TYPE_CHECKBOX, False),
-        FILTER_S_SEARCH_OBSERVABLE_TYPE: SearchFilter('search_observable_type', FILTER_TYPE_SELECT, False),
-        FILTER_TXT_SEARCH_OBSERVABLE_VALUE: SearchFilter('search_observable_value', FILTER_TYPE_TEXT, ''),
-        FILTER_CB_USE_DISPLAY_TEXT: SearchFilter('use_display_text', FILTER_TYPE_CHECKBOX, False),
-        FILTER_TXT_DISPLAY_TEXT: SearchFilter('display_text', FILTER_TYPE_TEXT, ''),
-        FILTER_CB_DIS_NONE: SearchFilter('dis_none', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_FALSE_POSITIVE: SearchFilter('dis_false_positive', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_IGNORE: SearchFilter('dis_ignore', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_UNKNOWN: SearchFilter('dis_unknown', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_REVIEWED: SearchFilter('dis_reviewed', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_GRAYWARE: SearchFilter('dis_grayware', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_POLICY_VIOLATION: SearchFilter('dis_policy_violation', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_RECONNAISSANCE: SearchFilter('dis_reconnaissance', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_WEAPONIZATION: SearchFilter('dis_weaponization', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_DELIVERY: SearchFilter('dis_delivery', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_EXPLOITATION: SearchFilter('dis_exploitation', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_INSTALLATION: SearchFilter('dis_installation', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_COMMAND_AND_CONTROL: SearchFilter('dis_command_and_control', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_EXFIL: SearchFilter('dis_exfil', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_DAMAGE: SearchFilter('dis_damage', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_INSIDER_DATA_CONTROL: SearchFilter('dis_insider_data_control', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_DIS_INSIDER_DATA_EXFIL: SearchFilter('dis_insider_data_exfil', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_USE_DIS_DATERANGE: SearchFilter('use_disposition_daterange', FILTER_TYPE_CHECKBOX, False),
-        FILTER_CB_USE_SEARCH_COMPANY: SearchFilter('use_search_company', FILTER_TYPE_CHECKBOX, False),
-        FILTER_S_SEARCH_COMPANY: SearchFilter('search_company', FILTER_TYPE_SELECT, False),
-        FILTER_TXT_DIS_DATERANGE: SearchFilter('disposition_daterange', FILTER_TYPE_TEXT, ''),
-        FILTER_TXT_MIN_PRIORITY: SearchFilter('min_priority', FILTER_TYPE_TEXT, '',
-                                              verification_function=verify_integer),
-        FILTER_TXT_MAX_PRIORITY: SearchFilter('max_priority', FILTER_TYPE_TEXT, '',
-                                              verification_function=verify_integer),
-        FILTER_TXT_TAGS: SearchFilter('tag_filters', FILTER_TYPE_TEXT, '')
-    }
-
-    # are we resetting the filter?
-    reset_filter = ('reset-filters' in request.form) or ('reset-filters' in request.args)
-
-    if reset_filter:
-        #logging.debug("user {0} reset filter".format(current_user))
-        if 'sort_fields' in session:
-            del session['sort_fields']
-
-        if 'checked' in session:
-            del session['checked']
-
-        if 'offset' in session:
-            del session['offset']
-    
-        if 'limit' in session:
-            del session['limit']
-
-    checked = []
-    if 'checked' in session:
-        checked = session['checked']
-
-    # go ahead and get the list of all the users, we'll end up using it
-    all_users = db.session.query(User).order_by('username').all()
-
-    # by default we sort by date desc
-    # key = sort_field, value = direction to sort
-    sort_instructions = {SORT_FIELD_DATE: SORT_DIRECTION_DEFAULT}
-
-    # the current sort fields are stored in the session
-    if not reset_filter:
-        if 'sort_fields' in session:
-            # the fields are stored field_1:direction,field_2:direction,...
-            # where field_1 is a valid SORT_FIELD_ constant
-            # and direction is a valid SORT_DIRECTION constant
-            sort_instructions = {}
-            for sort_spec in session['sort_fields'].split(','):
-                sort_field, sort_direction = sort_spec.split(':')
-                sort_instructions[sort_field] = sort_direction
-                #logging.debug("loaded sort field {0} direction {1} from session for user {2}".format(
-                    #sort_field, sort_direction, current_user))
-
-        # new sort fields and direction can be submitted by the form
-        if request.method == 'POST':
-            if 'sort_field' in request.form:
-                sort_field = request.form['sort_field']  # this is the field we're either changing or adding
-                if 'sort_field_add' in request.form:  # this is set to 1 if the user held in SHIFT when clicking on the link
-                    # this causes a field to get ADDED to the sort or REMOVED if we have multiple fields selected
-                    if sort_field in sort_instructions:
-                        del sort_instructions[sort_field]
-                        logging.debug("removed sort field {0} for user {1}".format(sort_field, current_user))
-                    else:
-                        sort_instructions[sort_field] = SORT_DIRECTION_DEFAULT
-                        logging.debug("added sort field {0} for user {1}".format(sort_field, current_user))
-                else:
-                    # otherwise we only use the field that was clicked on
-                    # does this sort field already exist?
-                    if sort_field in sort_instructions:
-                        # invert the direction of the sort
-                        sort_instructions[sort_field] = SORT_DIRECTION_ASC if sort_instructions[
-                                                                                  sort_field] == SORT_DIRECTION_DESC else SORT_DIRECTION_DESC
-                        logging.debug("inverted sort direction on field {0} for user {1}".format(
-                            sort_field, current_user))
-                    else:
-                        # otherwise we just use the default sort direction
-                        sort_instructions = {sort_field: SORT_DIRECTION_DEFAULT}
-                        logging.debug("set sort field to {0} for user {1}".format(sort_field, current_user))
-
-    # load any dynamic filters available
-    # dynamic filters are ones that are generated from data instead of hard coded
-
-    # load analyst and owner filters
-    # these are treated more like static values on the form even though they are dynamically generated
-    analyst_filter_items = []
-    owner_filter_items = []
-    for user in all_users:
-        key = 'analyst_{0}'.format(user.id)
-        filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-        analyst_filter_items.append(filter_item)
-        filters[key] = filter_item
-
-        key = 'owner_{0}'.format(user.id)
-        filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-        owner_filter_items.append(filter_item)
-        filters[key] = filter_item
-
-    filter_item = SearchFilter('analyst_none', FILTER_TYPE_CHECKBOX, False)
-    filters['analyst_none'] = filter_item
-    analyst_filter_items.append(filter_item)
-
-    filter_item = SearchFilter('owner_none', FILTER_TYPE_CHECKBOX, False)
-    filters['owner_none'] = filter_item
-    owner_filter_items.append(filter_item)
-
-    # load observable filters
-    observable_filter_items = []
-    if not reset_filter:
-        for key in request.form.keys():
-            if key.startswith('observable_'):
-                filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-                filters[key] = filter_item
-                observable_filter_items.append(filter_item)
-
-    # these can also come from the session
-    deleted_keys = []
-    for key in session:
-        if key.startswith('observable_'):
-            # if we are resetting the filter then we need to completely remove these dynamic values
-            if reset_filter:
-                deleted_keys.append(key)
-                continue
-
-            if key not in filters:
-                logging.debug("loading filter {0} from session for user {1}".format(key, current_user))
-                filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-                filters[key] = filter_item
-                observable_filter_items.append(filter_item)
-
-    # load tag filters
-    tag_filters = []
-    for key in request.form.keys():
-        if key.startswith('tag_'):
-            try:
-                tag = db.session.query(Tag).filter(Tag.id == key[len('tag_'):]).one()
-                if tag.name not in tag_filters:
-                    tag_filters.append(tag.name)
-            except NoResultFound:
-                continue
-
-    if filters[FILTER_TXT_TAGS].value and filters[FILTER_TXT_TAGS].value != '':
-        for tag in filters[FILTER_TXT_TAGS].value.split(','):
-            v = tag.strip()
-            if v != '' and v not in tag_filters:
-                tag_filters.append(v)
-
-    if reset_filter:
-        tag_filters = []
-
-    for key in deleted_keys:
-        logging.debug("deleting session key {0} for user {1}".format(key, current_user))
-        del session[key]
-
-    # are we resetting the filter to the default?
-    if reset_filter:
-        #logging.debug("resetting filters for {}".format(current_user))
-        for filter_item in filters.values():
-            filter_item.reset()
-
-        # if there are alerts in SLA then a reset defaults to only showing core alerts past sla
-        if sla_ids:
-            filters[FILTER_CB_ONLY_SLA].value = True
-            filters[FILTER_S_SEARCH_COMPANY].value = 'Core'
-            filters[FILTER_CB_USE_SEARCH_COMPANY].value = True
-
-    # are we drilling down into observable disposition history?
-    while 'odh_d' in request.args and 'odh_md5' in request.args:
-        odh_d = request.args['odh_d']
-        odh_md5 = request.args['odh_md5']
-
-        # look up the ID we need to use for this observable by the md5
-        odh_o = db.session.query(Observable).filter(Observable.md5 == func.unhex(odh_md5)).first()
-        if odh_o is None:
-            logging.warning(f"observable md5 {odh_md5} does not exist")
-            break
-
-        # map disposition to key
-        disp_map = {
-            DISPOSITION_FALSE_POSITIVE: FILTER_CB_DIS_FALSE_POSITIVE,
-            DISPOSITION_IGNORE: FILTER_CB_DIS_IGNORE,
-            DISPOSITION_UNKNOWN: FILTER_CB_DIS_UNKNOWN,
-            DISPOSITION_REVIEWED: FILTER_CB_DIS_REVIEWED,
-            DISPOSITION_GRAYWARE: FILTER_CB_DIS_GRAYWARE,
-            DISPOSITION_POLICY_VIOLATION: FILTER_CB_DIS_POLICY_VIOLATION,
-            DISPOSITION_RECONNAISSANCE: FILTER_CB_DIS_RECONNAISSANCE,
-            DISPOSITION_WEAPONIZATION: FILTER_CB_DIS_WEAPONIZATION,
-            DISPOSITION_DELIVERY: FILTER_CB_DIS_DELIVERY,
-            DISPOSITION_EXPLOITATION: FILTER_CB_DIS_EXPLOITATION,
-            DISPOSITION_INSTALLATION: FILTER_CB_DIS_INSTALLATION,
-            DISPOSITION_COMMAND_AND_CONTROL: FILTER_CB_DIS_COMMAND_AND_CONTROL,
-            DISPOSITION_EXFIL: FILTER_CB_DIS_EXFIL,
-            DISPOSITION_DAMAGE: FILTER_CB_DIS_DAMAGE,
-            DISPOSITION_INSIDER_DATA_CONTROL: FILTER_CB_DIS_INSIDER_DATA_CONTROL,
-            DISPOSITION_INSIDER_DATA_CONTROL: FILTER_CB_DIS_INSIDER_DATA_EXFIL
-            }
-
-        if odh_d not in disp_map:
-            logging.error(f"invalid disposition {odh_d}")
-            break
-
-        # in this case we clear out all other filters except for this observable and disposition
-        filters[FILTER_CB_OPEN].value = False
-        filters[FILTER_CB_UNOWNED].value = False
-        filters[FILTER_S_ALERT_QUEUE].value = 'All'
-
-        key = f'observable_{odh_o.id}'
-        filter_item = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-        filters[key] = filter_item
-        filters[key].value = True
-        observable_filter_items.append(filter_item)
-
-        # override setting for target disp
-        filters[disp_map[odh_d]].value = True
-        break
-
-    # initialize filter state (passed to the view to set up the form controls)
-    filter_state = {filters[f].name: filters[f].state for f in filters}
-
-    # as we build the filter we also build a string to display to the user
-    # that describes the current filter in english
-    filter_english = []
-
-    # to keep the page more aesthetically pleaseing, we will only display the disposition column if disposition is not None
-    display_disposition = True
-
-    # build the SQL query based on the filter settings
+    # create alert view by joining required tables
     query = db.session.query(GUIAlert).with_labels()
+    Owner = aliased(User)
+    query = query.outerjoin(Owner, GUIAlert.owner_id == Owner.id)
+    DispositionBy = aliased(User)
+    if hasFilter('Disposition By'):
+        query = query.outerjoin(DispositionBy, GUIAlert.disposition_user_id == DispositionBy.id)
+    RemediatedBy = aliased(User)
+    if hasFilter('Remediated By'):
+        query = query.outerjoin(RemediatedBy, GUIAlert.removal_user_id == RemediatedBy.id)
+    if hasFilter('Tag'):
+        query = query.join(TagMapping, GUIAlert.id == TagMapping.alert_id).join(Tag, TagMapping.tag_id == Tag.id)
+    if hasFilter('Observable'):
+        query = query.join(ObservableMapping, GUIAlert.id == ObservableMapping.alert_id).join(Observable, ObservableMapping.observable_id == Observable.id)
 
-    if filters[FILTER_CB_OPEN].value:
-        # query = query.join(UserWorkload, GUIAlert.id == UserWorkload.alert_id).filter(UserWorkload.user_id == current_user.id)
-        query = query.filter(GUIAlert.disposition == None)
-        filter_english.append("open alerts")
-        display_disposition = False
+    # apply filters
+    filters = {
+        'Alert Date': DateRangeFilter(GUIAlert.insert_date),
+        'Description': TextFilter(GUIAlert.description),
+        'Disposition': MultiSelectFilter(GUIAlert.disposition, nullable=True, options=VALID_ALERT_DISPOSITIONS),
+        'Disposition By': SelectFilter(DispositionBy.display_name, nullable=True),
+        'Disposition Date': DateRangeFilter(GUIAlert.disposition_time),
+        'Event Date': DateRangeFilter(GUIAlert.event_time),
+        'Observable': TypeValueFilter(Observable.type, Observable.value, options=VALID_OBSERVABLE_TYPES),
+        'Owner': SelectFilter(Owner.display_name, nullable=True),
+        'Queue': SelectFilter(GUIAlert.queue),
+        'Remediated By': SelectFilter(RemediatedBy.display_name, nullable=True),
+        'Remediated Date': DateRangeFilter(GUIAlert.removal_time),
+        'Tag': AutoTextFilter(Tag.name),
+    }
+    for name in session['filters']:
+        if session['filters'][name] and len(session['filters'][name]) > 0:
+            query = filters[name].apply(query, session['filters'][name])
 
-    if filters[FILTER_CB_ONLY_SLA].value:
-        query = query.filter(GUIAlert.id.in_(sla_ids))
-        filter_english.append("only alerts past SLA")
-        filters[FILTER_CB_UNOWNED].value = False
-
-    if filters[FILTER_CB_UNOWNED].value:
-        query = query.filter(or_(GUIAlert.owner_id == current_user.id, GUIAlert.owner_id == None))
-        filter_english.append("not owned by others")
-
-    if filters[FILTER_S_ALERT_QUEUE].value and filters[FILTER_S_ALERT_QUEUE].value != 'All':
-        query = query.filter(GUIAlert.queue == filters[FILTER_S_ALERT_QUEUE].value)
-        filter_english.append(f"in {filters[FILTER_S_ALERT_QUEUE].value} queue")
-
-    # what timezone do we display the alerts in?
-    # all times MUST be UTC in the database
-    display_timezone = pytz.utc # defaults to UTC
-    if current_user.timezone:
-        display_timezone = pytz.timezone(current_user.timezone)
-    user_timezone_offset = datetime.datetime.now(display_timezone).strftime("%z")
-
-    if filters[FILTER_CB_ONLY_REMEDIATED].value and filters[FILTER_CB_ONLY_UNREMEDIATED].value:
-        flash("You cannot select both 'Only Remediated GUIAlerts' and 'Only Unremediated GUIAlerts'")
-    else:
-        if filters[FILTER_CB_ONLY_REMEDIATED].value:
-            query = query.filter(and_(GUIAlert.removal_user_id != None))
-            filter_english.append("remediated alerts")
-            if filters[FILTER_CB_REMEDIATE_DATE].value and filters[FILTER_TXT_REMEDIATE_DATERANGE].value.strip() != '':
-                try:
-                    daterange_start, daterange_end = filters[FILTER_TXT_REMEDIATE_DATERANGE].value.split(' - ')
-                    daterange_start = "{} {}".format(daterange_start, user_timezone_offset)
-                    daterange_end = "{} {}".format(daterange_end, user_timezone_offset)
-                    daterange_start = datetime.datetime.strptime(daterange_start, '%m-%d-%Y %H:%M %z').astimezone(pytz.utc)
-                    daterange_end = datetime.datetime.strptime(daterange_end, '%m-%d-%Y %H:%M %z').astimezone(pytz.utc)
-                except Exception as error:
-                    flash("error parsing date range, using default 7 days: {0}".format(str(error)))
-                    daterange_end = datetime.datetime.now()
-                    daterange_start = daterange_end - datetime.timedelta(days=7)
-
-                query = query.filter(and_(GUIAlert.removal_time >= daterange_start, GUIAlert.removal_time <= daterange_end))
-                filter_english.append("alert remediated between {0} and {1}".format(daterange_start.astimezone(display_timezone), daterange_end.astimezone(display_timezone)))
-        if filters[FILTER_CB_ONLY_UNREMEDIATED].value:
-            query = query.filter(and_(GUIAlert.removal_user_id == None))
-            filter_english.append("unremediated alerts")
-
-    if filters[FILTER_CB_USE_DATERANGE].value and filters[FILTER_TXT_DATERANGE].value != '':
-        try:
-            daterange_start, daterange_end = filters[FILTER_TXT_DATERANGE].value.split(' - ')
-            daterange_start = "{} {}".format(daterange_start, user_timezone_offset)
-            daterange_end = "{} {}".format(daterange_end, user_timezone_offset)
-            daterange_start = datetime.datetime.strptime(daterange_start, '%m-%d-%Y %H:%M %z').astimezone(pytz.utc)
-            daterange_end = datetime.datetime.strptime(daterange_end, '%m-%d-%Y %H:%M %z').astimezone(pytz.utc)
-        except Exception as error:
-            flash("error parsing date range, using default 7 days: {0}".format(str(error)))
-            daterange_end = datetime.datetime.now()
-            daterange_start = daterange_end - datetime.timedelta(days=7)
-
-        query = query.filter(and_(GUIAlert.insert_date >= daterange_start, GUIAlert.insert_date <= daterange_end))
-        filter_english.append("alert received between {0} and {1}".format(daterange_start.astimezone(display_timezone), daterange_end.astimezone(display_timezone)))
-
-    if filters[FILTER_CB_USE_SEARCH_OBSERVABLE].value and filters[FILTER_S_SEARCH_OBSERVABLE_TYPE].value != '' and \
-                    filters[FILTER_TXT_SEARCH_OBSERVABLE_VALUE].value != '':
-        
-        observable_mapping_search = aliased(ObservableMapping)
-        observable_search = aliased(saq.database.Observable)
-        query = query.join(observable_mapping_search, GUIAlert.id == observable_mapping_search.alert_id)\
-                     .join(observable_search, observable_mapping_search.observable_id == observable_search.id)\
-                     .filter(and_(True if filters[FILTER_S_SEARCH_OBSERVABLE_TYPE].value == 'ANY' 
-                                       else observable_search.type == filters[FILTER_S_SEARCH_OBSERVABLE_TYPE].value,
-                                  observable_search.value.like('%{}%'.format(filters[FILTER_TXT_SEARCH_OBSERVABLE_VALUE].value).encode('utf8', errors='ignore'))))
-
-        filter_english.append("has observable of type {0} with value {1}".format(
-            filters[FILTER_S_SEARCH_OBSERVABLE_TYPE].value,
-            filters[FILTER_TXT_SEARCH_OBSERVABLE_VALUE].value))
-
-    if filters[FILTER_CB_USE_DISPLAY_TEXT].value and filters[FILTER_TXT_DISPLAY_TEXT].value != '':
-        query = query.filter(GUIAlert.description.ilike("%{0}%".format(filters[FILTER_TXT_DISPLAY_TEXT].value)))
-        filter_english.append("matching {0}".format(filters[FILTER_TXT_DISPLAY_TEXT].value))
-
-    dis_filters = []
-    dis_filter_english = []
-    if filters[FILTER_CB_DIS_NONE].value:
-        dis_filters.append(GUIAlert.disposition == None)
-        dis_filter_english.append("no disposition")
-    if filters[FILTER_CB_DIS_FALSE_POSITIVE].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_FALSE_POSITIVE)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_FALSE_POSITIVE))
-    if filters[FILTER_CB_DIS_IGNORE].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_IGNORE)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_IGNORE))
-    if filters[FILTER_CB_DIS_UNKNOWN].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_UNKNOWN)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_UNKNOWN))
-    if filters[FILTER_CB_DIS_REVIEWED].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_REVIEWED)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_REVIEWED))
-    if filters[FILTER_CB_DIS_GRAYWARE].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_GRAYWARE)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_GRAYWARE))
-    if filters[FILTER_CB_DIS_POLICY_VIOLATION].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_POLICY_VIOLATION)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_POLICY_VIOLATION))
-    if filters[FILTER_CB_DIS_RECONNAISSANCE].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_RECONNAISSANCE)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_RECONNAISSANCE))
-    if filters[FILTER_CB_DIS_WEAPONIZATION].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_WEAPONIZATION)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_WEAPONIZATION))
-    if filters[FILTER_CB_DIS_DELIVERY].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_DELIVERY)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_DELIVERY))
-    if filters[FILTER_CB_DIS_EXPLOITATION].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_EXPLOITATION)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_EXPLOITATION))
-    if filters[FILTER_CB_DIS_INSTALLATION].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_INSTALLATION)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_INSTALLATION))
-    if filters[FILTER_CB_DIS_COMMAND_AND_CONTROL].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_COMMAND_AND_CONTROL)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_COMMAND_AND_CONTROL))
-    if filters[FILTER_CB_DIS_EXFIL].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_EXFIL)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_EXFIL))
-    if filters[FILTER_CB_DIS_DAMAGE].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_DAMAGE)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_DAMAGE))
-    if filters[FILTER_CB_DIS_INSIDER_DATA_CONTROL].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_INSIDER_DATA_CONTROL)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_INSIDER_DATA_CONTROL))
-    if filters[FILTER_CB_DIS_INSIDER_DATA_EXFIL].value:
-        dis_filters.append(GUIAlert.disposition == saq.constants.DISPOSITION_INSIDER_DATA_EXFIL)
-        dis_filter_english.append("disposition is {0}".format(saq.constants.DISPOSITION_INSIDER_DATA_EXFIL))
-
-    if len(dis_filters) > 0:
-        query = query.filter(or_(*dis_filters))
-        filter_english.append(' OR '.join(dis_filter_english))
-
-    # if we have alerts in SLA then we force the filter to only show alerts from core companies
-    # (only core companies will have alerts in SLA)
-    if filters[FILTER_CB_USE_SEARCH_COMPANY].value and filters[FILTER_S_SEARCH_COMPANY].value != '':
-        if filters[FILTER_S_SEARCH_COMPANY].value == 'Core':
-            query = query.filter(GUIAlert.company_id.in_(map(int, saq.CONFIG['gui']['core_companies'].split(','))))
-            filter_english.append("belongs to a core company")
-        else:
-            query = query.filter(GUIAlert.company_id == int(filters[FILTER_S_SEARCH_COMPANY].value))
-            for company in companies:
-                if company.id == int(filters[FILTER_S_SEARCH_COMPANY].value):
-                    filter_english.append("belongs to {}".format(company.name))
-                    break
-
-    analyst_filters = []
-    analyst_filter_english = []
-
-    # XXX there might be a race condition here when new users are added
-    for filter_item in analyst_filter_items:
-        if filter_item.value:
-            if filter_item.name == 'analyst_none':
-                analyst_filters.append(GUIAlert.disposition_user_id == None)
-                analyst_filter_english.append("analyzed by nobody")
-            else:
-                analyst_id = int(
-                    filter_item.name[len('analyst_'):])  # the user id is encoded in the name of the form element
-                analyst_filters.append(GUIAlert.disposition_user_id == analyst_id)
-                # find the user with this user ID so we can display the name
-                for user in all_users:
-                    if user.id == analyst_id:
-                        analyst_filter_english.append("analyzed by {0}".format(user.username))
-
-    if len(analyst_filters) > 0:
-        query = query.filter(or_(*analyst_filters))
-        filter_english.append(" OR ".join(analyst_filter_english))
-
-    owner_filters = []
-    owner_filter_english = []
-
-    # XXX there might be a race condition here when new users are added
-    for filter_item in owner_filter_items:
-        if filter_item.value:
-            if filter_item.name == 'owner_none':
-                owner_filters.append(GUIAlert.owner_id == None)
-                owner_filter_english.append("owned by nobody")
-            else:
-                owner_id = int(
-                    filter_item.name[len('owner_'):])  # the user id is encoded in the name of the form element
-                owner_filters.append(GUIAlert.owner_id == owner_id)
-                # find the user with this user ID so we can display the name
-                for user in all_users:
-                    if user.id == owner_id:
-                        owner_filter_english.append("owned by {0}".format(user.username))
-
-    if len(owner_filters) > 0:
-        query = query.filter(or_(*owner_filters))
-        filter_english.append(" OR ".join(owner_filter_english))
-
-    if filters[FILTER_CB_USE_DIS_DATERANGE].value and filters[FILTER_TXT_DIS_DATERANGE].value != '':
-        try:
-            daterange_start, daterange_end = filters[FILTER_TXT_DIS_DATERANGE].value.split(' - ')
-            daterange_start = "{} {}".format(daterange_start, user_timezone_offset)
-            daterange_end = "{} {}".format(daterange_end, user_timezone_offset)
-            daterange_start = datetime.datetime.strptime(daterange_start, '%m-%d-%Y %H:%M %z').astimezone(pytz.utc)
-            daterange_end = datetime.datetime.strptime(daterange_end, '%m-%d-%Y %H:%M %z').astimezone(pytz.utc)
-        except Exception as error:
-            flash("error parsing disposition date range, using default 7 days: {0}".format(str(error)))
-            daterange_end = datetime.datetime.now()
-            daterange_start = daterange_end - datetime.timedelta(days=7)
-
-        query = query.filter(and_(GUIAlert.disposition_time >= daterange_start, GUIAlert.disposition_time <= daterange_end))
-        filter_english.append("alert reviewed between {0} and {1}".format(daterange_start.astimezone(display_timezone), daterange_end.astimezone(display_timezone)))
-
-    if filters[FILTER_TXT_MIN_PRIORITY].value != '':
-        query = query.filter(GUIAlert.priority > filters[FILTER_TXT_MIN_PRIORITY].value)
-        filter_english.append("minimum priority of {0}".format(filters[FILTER_TXT_MIN_PRIORITY].value))
-
-    if filters[FILTER_TXT_MAX_PRIORITY].value != '':
-        query = query.filter(GUIAlert.priority > filters[FILTER_TXT_MAX_PRIORITY].value)
-        filter_english.append("maximum priority of {0}".format(filters[FILTER_TXT_MAX_PRIORITY].value))
-
-    # iterate over the list of observables we're filtering on
-    observables = []
-    observable_filters_english = []
-
-    for filter_item in observable_filter_items:
-        if filter_item.value:
-            observable_id = filter_item.name[len(
-                'observable_'):]  # the observable_id is encoded in the name property of the form element
-            try:
-                observable = db.session.query(Observable).filter(Observable.id == observable_id).one()
-            except NoResultFound:
-                logging.warning("cannot find observable {0}".format(observable_id))
-                continue
-
-            observable_filters_english.append(
-                "with observable type {0} value {1}".format(observable.type, observable.value.decode('utf8', errors='ignore')))
-            observables.append(observable)
-
-    if len(observables) > 0:
-        query = query.join(ObservableMapping, GUIAlert.id == ObservableMapping.alert_id)\
-                     .join(saq.database.Observable, ObservableMapping.observable_id == saq.database.Observable.id)\
-                     .filter(ObservableMapping.observable_id.in_([o.id for o in observables]))
-        #query = query.filter(GUIAlert.id.in_(
-            #db.session.query(GUIAlert.id).join(ObservableMapping, GUIAlert.id == ObservableMapping.alert_id).filter(
-                #ObservableMapping.observable_id.in_([o.id for o in observables])).subquery()))
-        filter_english.extend(observable_filters_english)
-
-    if len(tag_filters) > 0:
-        query = query.join(TagMapping, GUIAlert.id == TagMapping.alert_id)\
-                     .join(Tag, Tag.id == TagMapping.tag_id)\
-                     .filter(Tag.name.in_(tag_filters))
-        filter_english.append(f"has tag in ({', '.join(tag_filters)})")
-
-    query = query.options(joinedload('workload'))
-    query = query.options(joinedload('delayed_analysis'))
-    query = query.options(joinedload('lock'))
-    #query = query.options(joinedload('observable_mappings'))
-    query = query.options(joinedload('event_mapping'))
-
-    count_query = query.statement.with_only_columns([func.count(distinct(saq.database.Alert.id))]).order_by(None)
-    total_alerts = db.session.execute(count_query).scalar()
-
-    # if alerts are in breach of SLA then we sort by date ascending
-    if reset_filter and sla_ids:
-        sort_instructions = {SORT_FIELD_DATE: SORT_DIRECTION_ASC}
-
-    # are we only showing alerts on the local node?
+    # only show alerts from this node
+    # NOTE: this will not be necessary once alerts are stored externally
     if saq.CONFIG['gui'].getboolean('local_node_only', fallback=True):
         query = query.filter(GUIAlert.location == saq.SAQ_NODE)
 
-    # finally sort the results
-    order_by_clause = []
-    for sort_field in sort_instructions.keys():
-        if sort_field == SORT_FIELD_DATE:
-            order_by_clause.append(GUIAlert.insert_date.desc() if sort_instructions[
-                                                                   sort_field] == SORT_DIRECTION_DESC else GUIAlert.insert_date.asc())
-        elif sort_field == SORT_FIELD_PRIORITY:
-            order_by_clause.append(
-                GUIAlert.priority.desc() if sort_instructions[sort_field] == SORT_DIRECTION_DESC else GUIAlert.priority.asc())
-        elif sort_field == SORT_FIELD_ALERT:
-            order_by_clause.append(GUIAlert.description.desc() if sort_instructions[
-                                                                   sort_field] == SORT_DIRECTION_DESC else GUIAlert.description.asc())
-        elif sort_field == SORT_FIELD_OWNER:
-            order_by_clause.append(
-                GUIAlert.owner_id.desc() if sort_instructions[sort_field] == SORT_DIRECTION_DESC else GUIAlert.owner_id.asc())
-        elif sort_field == SORT_FIELD_DISPOSITION:
-            order_by_clause.append(GUIAlert.disposition.desc() if sort_instructions[
-                                                                   sort_field] == SORT_DIRECTION_DESC else GUIAlert.disposition.asc())
+    # get total number of alerts
+    count_query = query.statement.with_only_columns([func.count(distinct(GUIAlert.id))])
+    total_alerts = db.session.execute(count_query).scalar()
 
-    query = query.group_by(GUIAlert.id).order_by(*order_by_clause)
+    # group by id to prevent duplicates
+    query = query.group_by(GUIAlert.id)
 
-    # pagination calculation
-    alert_offset = 0
-    alert_limit = 227
+    # apply sort filter
+    sort_filters = {
+        'Alert Date': GUIAlert.insert_date,
+        'Description': GUIAlert.description,
+        'Disposition': GUIAlert.disposition,
+        'Owner': Owner.display_name,
+    }
+    if session['sort_filter_desc']:
+        query = query.order_by(sort_filters[session['sort_filter']].desc(), GUIAlert.id.desc())
+    else:
+        query = query.order_by(sort_filters[session['sort_filter']].asc(), GUIAlert.id.asc())
 
-    # did the user modify the view limit?
-    if 'modify_limit' in request.values:
-        try:
-            value = int(request.values['modify_limit'])
-            if value < 1 or value > 1000:
-                raise ValueError("limit must be between 1 and 1000")
-            session['limit'] = value
-        except Exception as e:
-            logging.error("invalid limit: {}".format(e))
+    # apply pagination
+    query = query.limit(session['page_size'])
+    if session['page_offset'] >= total_alerts:
+        session['page_offset'] = (total_alerts // session['page_size']) * session['page_size']
+    if session['page_offset'] < 0:
+        session['page_offset'] = 0
+    query = query.offset(session['page_offset'])
 
-    if 'limit' in session:
-        try:
-            user_limit = alert_limit = int(session['limit'])
-        except Exception as e:
-            logging.warning("invalid alert limit in session: {}".format(e))
-
-    # where are we starting from?
-    try:
-        if 'offset' in session:
-            alert_offset = int(session['offset'])
-
-        if 'navigate' in request.values:
-            if request.values['navigate'] == 'start':
-                alert_offset = 0
-            elif request.values['navigate'] == 'prev':
-                alert_offset -= alert_limit
-                if alert_offset < 0:
-                    alert_offset = 0
-            elif request.values['navigate'] == 'next':
-                alert_offset += alert_limit
-                if alert_offset + alert_limit > total_alerts:
-                    alert_offset = total_alerts - alert_limit
-                    if alert_offset < 0:
-                        alert_offset = 0
-            elif request.values['navigate'] == 'last':
-                alert_offset = total_alerts - alert_limit
-                if alert_offset < 0:
-                    alert_offset = 0
-
-            session['offset'] = alert_offset
-
-    except Exception as e:
-        logging.error("navigation failed: {}".format(e))
-        alert_offset = 0
-
-    if alert_limit > total_alerts:
-        alert_limit = total_alerts
-
-    query = query.limit(alert_limit)
-    query = query.offset(alert_offset)
-
-    # load all the alerts into memory
+    # execute query to get all alerts
     alerts = query.all()
 
-    # if we have alerts in breach of SLA then we need to modify our main query to include those
-    #if sla_ids:
-        #query = db.session.query(GUIAlert).filter(or_(query.whereclause, GUIAlert.id.in_(sla_ids)))
-
+    # load alert comments
+    # NOTE: We should have the alert class do this automatically
     comments = {}
     if alerts:
         for comment in db.session.query(Comment).filter(Comment.uuid.in_([a.uuid for a in alerts])):
@@ -2335,68 +1902,27 @@ def manage():
                 comments[comment.uuid] = []
             comments[comment.uuid].append(comment)
 
+    # load alert tags
+    # NOTE: We should have the alert class do this automatically
     alert_tags = {}
-    # we don't show "special" or "hidden" tags in the display
-    special_tag_names = [tag for tag in saq.CONFIG['tags'].keys() if saq.CONFIG['tags'][tag] in ['special', 'hidden' ]]
     if alerts:
-        for tag, alert_uuid in db.session.query(Tag, GUIAlert.uuid).\
-                                                   join(TagMapping, Tag.id == TagMapping.tag_id).\
-                                                   join(GUIAlert, GUIAlert.id == TagMapping.alert_id).\
-                                                   filter(GUIAlert.id.in_([a.id for a in alerts])):
-            if tag.name in special_tag_names:
-                continue
-
+        tag_query = db.session.query(Tag, GUIAlert.uuid).join(TagMapping, Tag.id == TagMapping.tag_id).join(GUIAlert, GUIAlert.id == TagMapping.alert_id)
+        tag_query = tag_query.filter(GUIAlert.id.in_([a.id for a in alerts]))
+        ignore_tags = [tag for tag in saq.CONFIG['tags'].keys() if saq.CONFIG['tags'][tag] in ['special', 'hidden' ]]
+        tag_query = tag_query.filter(Tag.name.notin_(ignore_tags))
+        tag_query = tag_query.order_by(Tag.name.asc())
+        for tag, alert_uuid in tag_query:
             if alert_uuid not in alert_tags:
                 alert_tags[alert_uuid] = []
-
             alert_tags[alert_uuid].append(tag)
 
-    for alert_uuid in alert_tags.keys():
-        alert_tags[alert_uuid] = sorted(alert_tags[alert_uuid], key=lambda x: (-x.score, x.name.lower()))
-        #alert_tags[item.uuid] = [tag_mapping for tag_mapping in alert_tags[item.uuid] if tag_mapping.tag.name not in special_tag_names]
-
-    # for each observable we want to show how many there are (in all) and (in all open alerts)
-    open_observable_count = defaultdict(lambda: 0)
-    all_observable_count = defaultdict(lambda: 0)
-
-    # save the current filter to the session
-    for filter_name in filters.keys():
-        form_value = filters[filter_name].form_value
-        if form_value is not None:
-            session[filter_name] = form_value
-        else:
-            if filter_name in session:
-                del session[filter_name]
-
-    # and also save the current sort
-    sort_specs = []
-    for sort_field in sort_instructions:
-        sort_specs.append(make_sort_instruction(sort_field, sort_instructions[sort_field]))
-
-    session['sort_fields'] = ','.join(sort_specs)
-
-    # we pass a dictionary of key = sort_field, value = html to use for the arrow up or down
-    # depending on how the user is currently sorting things
-    sort_arrow_html = {}
-    for sort_field in VALID_SORT_FIELDS:
-        sort_arrow_html[sort_field] = ''
-        if sort_field in sort_instructions:
-            sort_arrow_html[sort_field] = '&darr;' if sort_instructions[sort_field] == SORT_DIRECTION_ASC else '&uarr;'
-
-    # what timezone do we display the alerts in?
-    # all times MUST be UTC in the database
-    display_timezone = pytz.utc # defaults to UTC
-    if user.timezone:
-        display_timezone = pytz.timezone(user.timezone)
-        for alert in alerts:
-            alert.display_timezone = display_timezone
-
+    # load alert remediations
+    # NOTE: We should have the alert class do this automatically
     _alert_remediations = db.session.query(GUIAlert.uuid, Remediation.result, Remediation.key).\
         join(Observable, Remediation.key == func.replace(Observable.value, '|', ':')).filter(Observable.type == 'email_delivery').\
         join(ObservableMapping, ObservableMapping.observable_id == Observable.id).\
         join(GUIAlert, GUIAlert.id == ObservableMapping.alert_id).\
         filter(GUIAlert.id.in_([a.id for a in alerts if len(alerts) > 0])).order_by(Remediation.id.desc()).all()
-
     alert_remediations = {k[0]: [] for k in _alert_remediations}
     for k in _alert_remediations:
         alert_remediations[k[0]].extend([{'result': k[1] if k[1] in ['removed', 'restored'] else 'Remediation failed: not cleaned',
@@ -2404,32 +1930,28 @@ def manage():
 
     return render_template(
         'analysis/manage.html',
-        alerts=alerts,
+        # settings
         ace_config=saq.CONFIG,
-        checked=checked,
+        session=session,
+
+        # filter
+        filters=filters,
+        
+        # alert data
+        alerts=alerts,
         comments=comments,
         alert_tags=alert_tags,
-        filter_state=filter_state,
-        all_users=all_users,
-        open_events=open_events,
-        malware=malware,
-        companies=companies,
-        campaigns=campaigns,
-        open_observable_count=open_observable_count,
-        all_observable_count=all_observable_count,
-        observables=observables,
-        tags=tag_filters,
-        sort_arrow_html=sort_arrow_html,
-        filter_english=' AND '.join(filter_english),
-        observable_types=VALID_OBSERVABLE_TYPES,
-        has_sla=len(sla_ids) > 0,
-        display_disposition=display_disposition,
+        alert_remediations=alert_remediations,
+        display_disposition=not ('Disposition' in session['filters'] and len(session['filters']['Disposition']) == 1 and session['filters']['Disposition'][0] is None),
         total_alerts=total_alerts,
-        alert_limit=alert_limit,
-        user_limit=session['limit'] if 'limit' in session else "50",
-        alert_offset=alert_offset,
-        alert_queues=get_valid_alert_queues(),
-        alert_remediations=alert_remediations)
+
+        # event data
+        open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all(),
+        campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all(),
+
+        # user data
+        all_users = db.session.query(User).all(),
+    )
 
 def get_valid_alert_queues():
     valid_alert_queues = []
@@ -4220,6 +3742,29 @@ def observable_action():
             else:
                 return "File uploaded", 200
 
+        elif action_id == ACTION_URL_CRAWL:
+            # make sure alert is locked before starting new analysis
+            if alert.is_locked():
+                try:
+                    observable.add_directive(DIRECTIVE_CRAWL)
+                    logging.info("user {} added directive {} to {}".format(current_user, DIRECTIVE_CRAWL, observable))
+
+                    alert.analysis_mode = ANALYSIS_MODE_CORRELATION
+                    alert.sync()
+
+                    add_workload(alert)
+
+                except:
+                    logging.error("unable to mark observable {} for crawl".format(observable))
+                    report_exception()
+                    return "Error: Crawl Request failed - Check logs", 500
+
+                else:
+                    return "URL crawl successfully requested.", 200
+
+            else:
+                return "Alert wasn't locked for crawling, try again later", 500
+
         return "invalid action_id", 500
 
     except Exception as e:
@@ -4461,7 +4006,7 @@ def remediate_emails():
                     try:
 
                         res = request_remediation(REMEDIATION_TYPE_EMAIL,
-                                                    f'{target.message_id}:{target.email_address}',
+                                                    f'{target.message_id}:{target.recipient}',
                                                   current_user.id,
                                                   target.company_id)
 
@@ -4473,10 +4018,11 @@ def remediate_emails():
                         target.result_success = False
             else:
                 res = execute_remediation(REMEDIATION_TYPE_EMAIL,
-                                          f'{target.message_id}:{target.email_address}',
+                                          f'{target.message_id}:{target.recipient}',
                                           current_user.id,
                                           target.company_id)
 
+                target.result_text = f"remediation {res.result}"
                 target.result_success = True
 
         elif action == 'restore':
@@ -4484,10 +4030,11 @@ def remediate_emails():
                 for target in targets.values():
                     try:
                         res = request_restoration(REMEDIATION_TYPE_EMAIL,
-                                                  f'{target.message_id}:{target.email_address}',
+                                                  f'{target.message_id}:{target.recipient}',
                                                   current_user.id,
                                                   target.company_id )
 
+                        target.result_text = f"request remediation (id {res.id})"
                         target.result_success = True
 
                     except Exception as e:
@@ -4495,11 +4042,11 @@ def remediate_emails():
                         target.result_success = False
             else:
                 res = execute_restoration(REMEDIATION_TYPE_EMAIL,
-                                          f'{target.message_id}:{target.email_address}',
+                                          f'{target.message_id}:{target.recipient}',
                                           current_user.id,
                                           target.company_id)
 
-                target.result_text = f"request remediation (id {res.id})"
+                target.result_text = f"remediation {res.result}"
                 target.result_success = True
 
     except Exception as e:
@@ -4539,17 +4086,17 @@ def query_remediation_targets():
         try:
             root.load()
             for observable in root.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
-                result[observable.remediation_key] = {'type': observable.type,
-                                                      'remediation_type': observable.remediation_type,
-                                                      'value': observable.value,
-                                                      'remediation_key': observable.remediation_key,
-                                                      'history': []}
+                result[observable.remediation_key.lower()] = {'type': observable.type,
+                                                              'remediation_type': observable.remediation_type,
+                                                              'value': observable.value,
+                                                              'remediation_key': observable.remediation_key,
+                                                              'history': []}
         except Exception as e:
             logging.error(f"unable to load remediation target {root}: {e}")
 
     for history in saq.db.query(Remediation).filter(Remediation.key.in_([key for key, _ in result.items()]))\
                                         .order_by(Remediation.insert_date.desc()):
-        result[history.key]['history'].append(history.json)
+        result[history.key.lower()]['history'].append(history.json)
 
     from saq.analysis import _JSONEncoder
     response = make_response(json.dumps(result, cls=_JSONEncoder))

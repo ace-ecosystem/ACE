@@ -11,6 +11,7 @@ import re
 import unicodedata
 
 from subprocess import Popen, PIPE
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 import saq
 from saq.analysis import Observable, DetectionPoint
@@ -214,6 +215,11 @@ class URLObservable(Observable):
         super().__init__(F_URL, *args, **kwargs)
         self.value = self.value.strip()
 
+        # Extract URL from known protected URLs, if necessary
+        if any(url in self.value for url in ['egnyte.com', 'fireeye.com', 'safelinks.protection.outlook.com', 'dropbox.com',
+                                             'drive.google.com', '.sharepoint.com']):
+            self.sanitize_protected_urls()
+
         try:
             # sometimes URL extraction pulls out invalid URLs
             self.value.encode('ascii') # valid URLs are ASCII
@@ -233,9 +239,104 @@ class URLObservable(Observable):
 
     @property
     def jinja_available_actions(self):
-        result = [ ObservableActionClearCloudphishAlert(), ObservableActionSeparator() ]
+        result = [ ObservableActionUrlCrawl(), ObservableActionSeparator() ]
         result.extend(super().jinja_available_actions)
         return result
+
+    def sanitize_protected_urls(self):
+        """Is this URL protected by another company by wrapping it inside another URL they check first?"""
+
+        extracted_url = None
+
+        try:
+            parsed_url = urlparse(self.value)
+        except Exception as e:
+            logging.error("unable to parse url {}: {}".format(self.value, e))
+            return
+
+        # egnyte links
+        if parsed_url.netloc.lower().endswith('egnyte.com'):
+            if parsed_url.path.startswith('/dl/'):
+                extracted_url = self.value.replace('/dl/', '/dd/')
+                logging.info("translated egnyte.com url {} to {}".format(self.value, extracted_url))
+
+        # fireeye links
+        elif parsed_url.netloc.lower().endswith('fireeye.com'):
+            if parsed_url.netloc.lower().startswith('protect'):
+                qs = parse_qs(parsed_url.query)
+                if 'u' in qs:
+                    extracted_url = qs['u'][0]
+
+        # "safelinks" by outlook
+        elif parsed_url.netloc.lower().endswith('safelinks.protection.outlook.com'):
+            qs = parse_qs(parsed_url.query)
+            if 'url' in qs:
+                extracted_url = qs['url'][0]
+
+        # dropbox links
+        elif parsed_url.netloc.lower().endswith('.dropbox.com'):
+            qs = parse_qs(parsed_url.query)
+            modified = False
+            if 'dl' in qs:
+                if qs['dl'] == ['0']:
+                    qs['dl'] = '1'
+                    modified = True
+            else:
+                qs['dl'] = '1'
+                modified = True
+
+            if modified:
+                # rebuild the query
+                extracted_url = urlunparse((parsed_url.scheme,
+                                           parsed_url.netloc,
+                                           parsed_url.path,
+                                           parsed_url.params,
+                                           urlencode(qs),
+                                           parsed_url.fragment))
+
+        # sharepoint download links
+        elif parsed_url.netloc.lower().endswith('.sharepoint.com'):
+            # user gets this link in an email
+            # https://lahia-my.sharepoint.com/:b:/g/personal/secure_onedrivemsw_bid/EVdjoBiqZTxMnjAcDW6yR4gBqJ59ALkT1C2I3L0yb_n0uQ?e=naeXYD
+            # needs to turn into this link
+            # https://lahia-my.sharepoint.com/personal/secure_onedrivemsw_bid/_layouts/15/download.aspx?e=naeXYD&share=EVdjoBiqZTxMnjAcDW6yR4gBqJ59ALkT1C2I3L0yb_n0uQ
+
+            # so the URL format seems to be this
+            # https://SITE.shareponit.com/:b:/g/PATH/ID?e=DATA
+            # not sure if NAME can contain subdirectories so we'll assume it can
+            regex_sharepoint = re.compile(r'^/:b:/g/(.+)/([^/]+)$')
+            m = regex_sharepoint.match(parsed_url.path)
+            parsed_qs = parse_qs(parsed_url.query)
+            if m and 'e' in parsed_qs:
+                extracted_url = urlunparse((parsed_url.scheme,
+                                            parsed_url.netloc,
+                                            '/{}/_layouts/15/download.aspx'.format(m.group(1)),
+                                            parsed_url.params,
+                                            urlencode({'e': parsed_qs['e'][0], 'share': m.group(2)}),
+                                            parsed_url.fragment))
+
+                logging.info("translated sharepoint url {} to {}".format(self.value, extracted_url))
+
+        # google drive links
+        regex_google_drive = re.compile(r'drive\.google\.com/file/d/([^/]+)/view')
+        m = regex_google_drive.search(self.value)
+        if m:
+            # sample
+            # https://drive.google.com/file/d/1ls_eBCsmf3VG_e4dgQiSh_5VUM10b9s2/view
+            # turns into
+            # https://drive.google.com/uc?authuser=0&id=1ls_eBCsmf3VG_e4dgQiSh_5VUM10b9s2&export=download
+
+            google_id = m.group(1)
+
+            extracted_url = 'https://drive.google.com/uc?authuser=0&id={}&export=download'.format(google_id)
+            logging.info("translated google drive url {} to {}".format(self.value, extracted_url))
+
+        # Add additional simple protected URL sanitizaitons here
+        # If sanitization requires redirect/additional analysis, add to saq.modules.url.ProtectedURLAnalyzer
+
+        if extracted_url:
+            self.value = extracted_url
+
 
 class FileObservable(Observable):
 

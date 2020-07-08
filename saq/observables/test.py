@@ -130,3 +130,48 @@ class ObservableTestCase(ACEBasicTestCase):
         root = create_root_analysis()
         observable = root.add_observable(F_MAC_ADDRESS, '00112233445Z')
         self.assertIsNone(observable)
+
+    def test_protected_url_sanitization(self):
+        root = create_root_analysis()
+
+        # FireEye
+        # taken from an actual sample
+        observable = root.add_observable(F_URL, 'https://protect2.fireeye.com/url?k=80831952-dcdfed5d-808333ca-0cc47a33347c-b424c0fc7973027a&u=https://mresearchsurveyengine.modernsurvey.com/Default.aspx?cid=201c1f2c-2bdc-11ea-a81b-000d3aaced43')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, 'https://mresearchsurveyengine.modernsurvey.com/Default.aspx?cid=201c1f2c-2bdc-11ea-a81b-000d3aaced43')
+
+        # Outlook Safelinks
+        # taken from an actual sample
+        observable = root.add_observable(F_URL, 'https://na01.safelinks.protection.outlook.com/?url=http%3A%2F%2Fwww.getbusinessready.com.au%2FInvoice-Number-49808%2F&data=02%7C01%7Ccyoung%40northernaviationservices.aero%7C8a388036cbf34f90ec5808d5724be7ed%7Cfc01978435d14339945c4161ac91c300%7C0%7C0%7C636540592704791165&sdata=%2FNQGqAp09WTNgnVnpoWIPcYNVAYsJ11ULuSS7cCsS3Q%3D&reserved=0')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, 'http://www.getbusinessready.com.au/Invoice-Number-49808/')
+
+        # Dropbox w/ dl0
+        # taken from an actual sample
+        observable = root.add_observable(F_URL, 'https://www.dropbox.com/s/ezdhsvdxf6wrxk6/RFQ-012018-000071984-13-Rev.1.zip?dl=0')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, 'https://www.dropbox.com/s/ezdhsvdxf6wrxk6/RFQ-012018-000071984-13-Rev.1.zip?dl=1')
+
+        # Dropbox w/ dl1
+        # taken from an actual sample
+        observable = root.add_observable(F_URL, 'https://www.dropbox.com/s/ezdhsvdxf6wrxk6/RFQ-012018-000071984-13-Rev.1.zip?dl=1')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, 'https://www.dropbox.com/s/ezdhsvdxf6wrxk6/RFQ-012018-000071984-13-Rev.1.zip?dl=1')
+
+        # Dropbox w/0 dl
+        # taken from an actual sample
+        observable = root.add_observable(F_URL, 'https://www.dropbox.com/s/ezdhsvdxf6wrxk6/RFQ-012018-000071984-13-Rev.1.zip?dl=1')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, 'https://www.dropbox.com/s/ezdhsvdxf6wrxk6/RFQ-012018-000071984-13-Rev.1.zip?dl=1')
+
+        # Google Drive
+        # taken from an actual sample
+        observable = root.add_observable(F_URL, 'https://drive.google.com/file/d/1ls_eBCsmf3VG_e4dgQiSh_5VUM10b9s2/view')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, 'https://drive.google.com/uc?authuser=0&id=1ls_eBCsmf3VG_e4dgQiSh_5VUM10b9s2&export=download')
+
+        # Sharepoint
+        # taken from an actual sample
+        observable = root.add_observable(F_URL, 'https://lahia-my.sharepoint.com/:b:/g/personal/secure_onedrivemsw_bid/EVdjoBiqZTxMnjAcDW6yR4gBqJ59ALkT1C2I3L0yb_n0uQ?e=naeXYD')
+        self.assertIsNotNone(observable)
+        self.assertEquals(observable.value, 'https://lahia-my.sharepoint.com/personal/secure_onedrivemsw_bid/_layouts/15/download.aspx?e=naeXYD&share=EVdjoBiqZTxMnjAcDW6yR4gBqJ59ALkT1C2I3L0yb_n0uQ')

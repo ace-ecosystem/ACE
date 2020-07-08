@@ -1,4 +1,4 @@
-FROM python:3.8-slim-buster
+FROM python:3.8-buster
 ENV SAQ_HOME /opt/ace
 ENV SAQ_USER ace
 ENV SAQ_GROUP ace
@@ -11,6 +11,7 @@ RUN groupadd ace \
     && apt -y install --no-install-recommends apt-utils \
     && mkdir -p /usr/share/man/man1/ \
     && apt -y install --no-install-recommends \
+        ca-certificates \
         nmap \
         libldap2-dev \
         libsasl2-dev \
@@ -37,16 +38,27 @@ RUN groupadd ace \
         node-esprima \
         python2.7 \
         python-pip \
+        dnsutils \
     && mkdir /opt/signatures \
     && chown ace:ace /opt/signatures \
     && mkdir /opt/ace \
     && chown ace:ace /opt/ace \
+    && mkdir /venv \
+    && chown ace:ace /venv 
+RUN mkdir /usr/local/share/ca-certificates/extra
+COPY ssl/extra /usr/local/share/ca-certificates/extra
+RUN update-ca-certificates \
+    && python3 -m pip config set global.cert /etc/ssl/certs/ca-certificates.crt \
+    && python2.7 -m pip config set global.cert /etc/ssl/certs/ca-certificates.crt \ 
     && python3 -m pip install pip virtualenv --upgrade \
-    && python2.7 -m pip install officeparser
+    && python2.7 -m pip install officeparser  
+SHELL ["/bin/bash", "-c"]
 USER ace
-WORKDIR /opt/ace
-COPY --chown=ace:ace docker/provision/ace/python-requirements-3.6.txt docker/provision/ace/python-requirements-3.6.txt
-RUN /bin/bash -c "python3 -m virtualenv --python=python3 /opt/ace/venv && source /opt/ace/venv/bin/activate && python3 -m pip install -r docker/provision/ace/python-requirements-3.6.txt"
-COPY --chown=ace:ace . /opt/ace
-COPY --from=ace-ssl:latest --chown=ace:ace /ssl /opt/ace/ssl
-RUN docker/provision/ace/install
+COPY --chown=ace:ace installer/requirements-3.6.txt /venv/python-requirements-3.6.txt
+RUN python3 -m virtualenv --python=python3 /venv \
+    && source /venv/bin/activate \
+    && python3 -m pip config set global.cert /etc/ssl/certs/ca-certificates.crt \
+    && python3 -m pip install -r /venv/python-requirements-3.6.txt \
+    && echo 'source /venv/bin/activate' >> /home/ace/.bashrc \
+    && echo 'export PATH="$PATH:/opt/ace/bin:/opt/ace"' >> /home/ace/.bashrc \
+    && echo 'if [ -e /opt/ace/load_environment ]; then source /opt/ace/load_environment; fi' >> /home/ace/.bashrc

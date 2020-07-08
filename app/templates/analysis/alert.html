@@ -145,7 +145,7 @@
                 {% for tag in observable_node.obj.tags %}{% if tag.level != 'hidden' %}<span class="label {{tag.css_class}}">{{ tag }}</span>{% if tag.name.lower().startswith('atos') %} 🤡 {% endif %}{% endif %}{% endfor %}
                 {% if observable_node.disposition_history %}
                     {% for disposition, count, percentage in observable_node.disposition_history %}
-                        <a href="{{ url_for('analysis.manage', odh_md5=observable_node.obj.md5_hex, odh_d=disposition) }}"><span class="label label-{{disposition_css_mapping[disposition]}}">{{disposition}} {{percentage | int}}% ({{count}})</span></a>
+                        <span onmouseover="this.style.textDecoration='underline';" onmouseleave="this.style.textDecoration='';" onmousedown="set_filters({'Observable':[['{{observable_node.obj.type}}',atob('{{observable_node.obj.value | s64encode}}')]],'Disposition':['{{disposition}}']})" class="label label-{{disposition_css_mapping[disposition]}}">{{disposition}} {{percentage | int}}% ({{count}})</span>
                     {% endfor %}
                 {% endif %}
                 {# XXX hack to refactor out #}
