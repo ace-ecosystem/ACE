@@ -851,6 +851,27 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#referencing-configuration-files" class="md-nav__link">
+    Referencing Configuration Files
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#modifying-syspath" class="md-nav__link">
+    Modifying sys.path
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-site-configuration-settings" class="md-nav__link">
+    Example: Site Configuration Settings
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#encrypted-passwords" class="md-nav__link">
     Encrypted Passwords
   </a>
@@ -1330,8 +1351,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1498,6 +1543,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1557,6 +1614,27 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#referencing-configuration-files" class="md-nav__link">
+    Referencing Configuration Files
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#modifying-syspath" class="md-nav__link">
+    Modifying sys.path
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-site-configuration-settings" class="md-nav__link">
+    Example: Site Configuration Settings
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#encrypted-passwords" class="md-nav__link">
     Encrypted Passwords
   </a>
@@ -1604,6 +1682,7 @@
 <li>configuration files specified on the command line</li>
 <li>configuration files specified in the <code>SAQ_CONFIG_PATHS</code> environment variable</li>
 <li><code>etc/saq.ini</code></li>
+<li>configuration files specified in the config section.</li>
 </ol>
 <h3 id="load-order-unit-testing">Load Order (Unit Testing)<a class="headerlink" href="#load-order-unit-testing" title="Permanent link">&para;</a></h3>
 <ol>
@@ -1614,10 +1693,37 @@
 <li>local <a href="../integration/">integration</a> files as configured in <code>etc/saq.integrations.ini</code> (if they exist)</li>
 <li><code>etc/saq.unittest.default.ini</code></li>
 <li><code>etc/saq.unittest.ini</code></li>
+<li>configuration files specified in the config section.</li>
 </ol>
+<h2 id="referencing-configuration-files">Referencing Configuration Files<a class="headerlink" href="#referencing-configuration-files" title="Permanent link">&para;</a></h2>
+<p>Additional configuration files can be loaded by referencing them in the <code>[config]</code> section. The value of each option is interpreted as another configuration file load. Configuration files that are loaded this way can reference other configuration files by adding more options to the <code>[config]</code> section. This allows chaining of configuration files.</p>
+<h2 id="modifying-syspath">Modifying <code>sys.path</code><a class="headerlink" href="#modifying-syspath" title="Permanent link">&para;</a></h2>
+<p>The value of each option in the <code>[path]</code> configuration section is appended to <code>sys.path</code>. This allows loading additional python libraries at runtime.</p>
+<h2 id="example-site-configuration-settings">Example: Site Configuration Settings<a class="headerlink" href="#example-site-configuration-settings" title="Permanent link">&para;</a></h2>
+<p>The following ini settings in <code>etc/saq.ini</code> would load teh <code>etc/site.ini</code> configuration file.</p>
+<div class="codehilite"><pre><span></span><code><span class="k">[config]</span>
+<span class="na">site_local</span> <span class="o">=</span> <span class="s">etc/site.ini</span>
+</code></pre></div>
+
+
+<p><code>etc/site.ini</code> could define a modification to <code>sys.path</code> that could add the <code>site</code> directory to the path allowing python modules inside that directory to be referenced in the config.</p>
+<div class="codehilite"><pre><span></span><code><span class="k">[path]</span>
+<span class="na">site_local</span> <span class="o">=</span> <span class="s">/opt/site</span>
+
+<span class="k">[analysis_module_some_site_module]</span>
+<span class="na">module</span> <span class="o">=</span> <span class="s">site</span>
+<span class="na">class</span> <span class="o">=</span> <span class="s">MySiteModule</span>
+<span class="na">enables</span> <span class="o">=</span> <span class="s">yes</span>
+
+<span class="k">[analysis_group_correlation]</span>
+<span class="na">analysis_module_some_site_module</span> <span class="o">=</span> <span class="s">yes</span>
+</code></pre></div>
+
+
 <h2 id="encrypted-passwords">Encrypted Passwords<a class="headerlink" href="#encrypted-passwords" title="Permanent link">&para;</a></h2>
 <p>ACE supports <a href="../encryption/">encrypting passwords</a> used by the configuration file. These passwords are referenced by using the following format as the value of the configuration option.</p>
-<pre class="codehilite"><code class="language-ini">some_option = encrypted:key</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="na">some_option</span> <span class="o">=</span> <span class="s">encrypted:key</span>
+</code></pre></div>
 
 
 <p>The configuration system ACE uses is instrumented to recognize these specially formatted values. If the <a href="../encryption/">encryption key</a> has been decrypted then these values are automatically decrypted and made available to ACE.</p>

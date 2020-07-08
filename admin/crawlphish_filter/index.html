@@ -1303,8 +1303,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1471,6 +1495,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1539,12 +1575,13 @@
 <p>In this design we define <em>whitelisted</em> to mean URLs we want to analyze and <em>blacklisted</em> to mean URLs we do <strong>not</strong> want to analyze.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p>The location of the files that contain the filtering patterns is stored in the <code>[analysis_module_crawlphish]</code> section of the <a href="../../design/configuration/">configuration</a>. All file paths are relative to the <a href="../../design/saq_home/">installation directory</a>.</p>
-<pre class="codehilite"><code class="language-ini">; path to whitelisted netloc
-whitelist_path = etc/crawlphish.whitelist
-; path to whitelisted path regexes
-regex_path = etc/crawlphish.path_regex
-; path to blacklisted netloc
-blacklist_path = etc/crawlphish.blacklist</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="c1">; path to whitelisted netloc</span>
+<span class="na">whitelist_path</span> <span class="o">=</span> <span class="s">etc/crawlphish.whitelist</span>
+<span class="c1">; path to whitelisted path regexes</span>
+<span class="na">regex_path</span> <span class="o">=</span> <span class="s">etc/crawlphish.path_regex</span>
+<span class="c1">; path to blacklisted netloc</span>
+<span class="na">blacklist_path</span> <span class="o">=</span> <span class="s">etc/crawlphish.blacklist</span>
+</code></pre></div>
 
 
 <p>The <code>whitelist_path</code> file contains a list of domain names that should be <em>whitelisted</em>. Any URL that has a hostname that matches anything in this list will always be analyzed by ACE.</p>

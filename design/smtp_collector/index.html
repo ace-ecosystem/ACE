@@ -1303,8 +1303,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1471,6 +1495,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1534,19 +1570,22 @@
 <h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
 <p><a href="https://zeek.org/">Zeek</a> scripts stored in the <code>bro</code> directory are used to extract SMTP session data into files. Each file is named after the zeek <a href="https://docs.zeek.org/en/current/scripts/base/protocols/conn/main.zeek.html#type-Conn::Info">connection ID</a>. Most (not all) of the SMTP session data is recorded to the file.</p>
 <p>The SMTP session data file has the following format.</p>
-<pre class="codehilite"><code class="language-text">originating IP address
+<div class="codehilite"><pre><span></span><code>originating IP address
 originating port
 epoch network time
 
-data</code></pre>
+data
+</code></pre></div>
 
 
 <p>Each SMTP transaction <em>request</em> is formatted as follows.</p>
-<pre class="codehilite"><code class="language-text">&gt; command argument</code></pre>
+<div class="codehilite"><pre><span></span><code>&gt; command argument
+</code></pre></div>
 
 
 <p>Each SMTP transaction <em>response</em> is formatted as follows.</p>
-<pre class="codehilite"><code class="language-text">&lt; command code message</code></pre>
+<div class="codehilite"><pre><span></span><code>&lt; command code message
+</code></pre></div>
 
 
 <p>SMTP session <code>DATA</code> is written to the file with a single <code>line-feed</code> appended.</p>

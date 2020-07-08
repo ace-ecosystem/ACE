@@ -1386,8 +1386,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1544,6 +1568,18 @@
   <li class="md-nav__item">
     <a href="../../user/disposition/" title="Disposition" class="md-nav__link">
       Disposition
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
     </a>
   </li>
 
@@ -1719,15 +1755,16 @@
 <p>Submissions are routed by collectors to <a href="../engine/">remote ACE nodes</a> using <a href="../configuration/">configuration</a> settings called <strong>collection groups</strong>. A configuration section that starts with <code>[collection_group_]</code> is recognized by ACE as the definition of a collection group.</p>
 <p>Each collection group identifies an ACE <a href="../engine_cluster/">cluster</a> to send to.</p>
 <p>All collection groups that are enabled have submissions routed to them. The configuration settings of each group define how those submissions are handled.</p>
-<pre class="codehilite"><code class="language-ini">[collection_group_local]
-enabled = yes
-coverage = 100
-full_delivery = yes
-database = ace
-company_id = 1 ; deprecated
-secondary_company_ids = 2,3 ; deprecated
-target_node_company_id = 1 ; deprecated
-target_nodes = LOCAL</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[collection_group_local]</span>
+<span class="na">enabled</span> <span class="o">=</span> <span class="s">yes</span>
+<span class="na">coverage</span> <span class="o">=</span> <span class="s">100</span>
+<span class="na">full_delivery</span> <span class="o">=</span> <span class="s">yes</span>
+<span class="na">database</span> <span class="o">=</span> <span class="s">ace</span>
+<span class="na">company_id</span> <span class="o">=</span> <span class="s">1 ; deprecated</span>
+<span class="na">secondary_company_ids</span> <span class="o">=</span> <span class="s">2,3 ; deprecated</span>
+<span class="na">target_node_company_id</span> <span class="o">=</span> <span class="s">1 ; deprecated</span>
+<span class="na">target_nodes</span> <span class="o">=</span> <span class="s">LOCAL</span>
+</code></pre></div>
 
 
 <h2 id="coverage-and-delivery-options">Coverage and Delivery Options<a class="headerlink" href="#coverage-and-delivery-options" title="Permanent link">&para;</a></h2>
@@ -1736,13 +1773,14 @@ target_nodes = LOCAL</code></pre>
 <p>The <code>full_delivery</code> setting is a boolean option that controls how ACE treats submission failures. Setting this value to <code>yes</code> will ensure that ACE continues to try to submit when submission fails. Setting the value to <code>no</code> will allow ACE to try to submit it once and only once.</p>
 <h2 id="target-cluster-identification">Target Cluster Identification<a class="headerlink" href="#target-cluster-identification" title="Permanent link">&para;</a></h2>
 <p>The ACE node <a href="../engine_cluster/">cluster</a> is identified by providing the name of the database section to the <code>database</code> option. For example:</p>
-<pre class="codehilite"><code class="language-ini">[database_ace]
-username = ace
-password = ace
-...
+<div class="codehilite"><pre><span></span><code><span class="k">[database_ace]</span>
+<span class="na">username</span> <span class="o">=</span> <span class="s">ace</span>
+<span class="na">password</span> <span class="o">=</span> <span class="s">ace</span>
+<span class="na">...</span>
 
-[collection_group_local]
-database = ace</code></pre>
+<span class="k">[collection_group_local]</span>
+<span class="na">database</span> <span class="o">=</span> <span class="s">ace</span>
+</code></pre></div>
 
 
 <p>The value <code>ace</code> is the <code>ace</code> part of <code>[database_ace]</code> and tells ACE to use those database settings to connect to that ACE <a href="../engine_cluster/">cluster</a>.</p>
@@ -1757,9 +1795,10 @@ database = ace</code></pre>
 <p>The <code>[node_translation]</code> configuration section contains zero or more key, value pairs where each value is formatted as follows.</p>
 <p><em>source_host</em>:<em>source_port</em>,<em>target_host</em>,<em>target_port</em></p>
 <p>Nodes with a target location of <em>source_host</em>:<em>source_port</em> will be remapped to <em>target_host</em>,<em>target_port</em> when the submission is made.</p>
-<pre class="codehilite"><code class="language-ini">[node_translation]
-; here we map anything going to 10.1.1.2 port 443 to go to 192.168.1.2 port 443
-example_mapping = 10.1.1.2:443,192.168.1.2:443</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[node_translation]</span>
+<span class="c1">; here we map anything going to 10.1.1.2 port 443 to go to 192.168.1.2 port 443</span>
+<span class="na">example_mapping</span> <span class="o">=</span> <span class="s">10.1.1.2:443,192.168.1.2:443</span>
+</code></pre></div>
 
 
 <h3 id="node-submission">Node Submission<a class="headerlink" href="#node-submission" title="Permanent link">&para;</a></h3>
@@ -1778,13 +1817,14 @@ example_mapping = 10.1.1.2:443,192.168.1.2:443</code></pre>
 <p>One of the key requirements of collection is that submission data is not lost in the event of system failure. There are two types of submission storage available for collection.</p>
 <p>Collectors can use local file storage to help keep track of state. The base directory for this storage is defined by the <a href="../configuration/">configuration</a> setting <code>persistence_dir</code>.</p>
 <p>Additional collection data such as external file attachments are stored in the directory defined by the <code>incoming_dir</code> <a href="../configuration/">configuration</a> setting.</p>
-<pre class="codehilite"><code class="language-ini">[collection]
-; contains various persistant information used by collectors (relative to DATA_DIR)
-persistence_dir = var/collection/persistence
-; some a submission is presented to the saq.collectors.Collector it moves
-; all the files attached to the submission into this directory
-; (relative to DATA_DIR)
-incoming_dir = var/collection/incoming</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[collection]</span>
+<span class="c1">; contains various persistant information used by collectors (relative to DATA_DIR)</span>
+<span class="na">persistence_dir</span> <span class="o">=</span> <span class="s">var/collection/persistence</span>
+<span class="c1">; some a submission is presented to the saq.collectors.Collector it moves</span>
+<span class="c1">; all the files attached to the submission into this directory</span>
+<span class="c1">; (relative to DATA_DIR)</span>
+<span class="na">incoming_dir</span> <span class="o">=</span> <span class="s">var/collection/incoming</span>
+</code></pre></div>
 
 
 <h2 id="persistent-storage-database">Persistent Storage - Database<a class="headerlink" href="#persistent-storage-database" title="Permanent link">&para;</a></h2>

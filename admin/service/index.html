@@ -1351,8 +1351,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1519,6 +1543,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1626,12 +1662,13 @@
 <h2 id="configuration-options">Configuration Options<a class="headerlink" href="#configuration-options" title="Permanent link">&para;</a></h2>
 <p>Services are identified in the <a href="../../design/configuration/">ACE configuration</a> by sections formatted as <code>[service_NAME]</code> where <code>NAME</code> is unique.</p>
 <p>The following service configuration is used as an example.</p>
-<pre class="codehilite"><code class="language-ini">[service_email_collector]
-enabled = yes
-module = saq.collectors.email
-class = EmailCollector
-description = Email Collector (AMS) - collects emails from remote AMS systems
-dependencies =</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[service_email_collector]</span>
+<span class="na">enabled</span> <span class="o">=</span> <span class="s">yes</span>
+<span class="na">module</span> <span class="o">=</span> <span class="s">saq.collectors.email</span>
+<span class="na">class</span> <span class="o">=</span> <span class="s">EmailCollector</span>
+<span class="na">description</span> <span class="o">=</span> <span class="s">Email Collector (AMS) - collects emails from remote AMS systems</span>
+<span class="na">dependencies</span> <span class="o">=</span>
+</code></pre></div>
 
 
 <p>The <strong>enabled</strong> boolean options allows you to enable and disable services.</p>
@@ -1641,7 +1678,8 @@ dependencies =</code></pre>
 <h2 id="service-management">Service Management<a class="headerlink" href="#service-management" title="Permanent link">&para;</a></h2>
 <p>You can start, stop and view the status of a service using the <code>ace</code> command.</p>
 <h3 id="listing-services">Listing Services<a class="headerlink" href="#listing-services" title="Permanent link">&para;</a></h3>
-<pre class="codehilite"><code class="language-bash">ace service status</code></pre>
+<div class="codehilite"><pre><span></span><code>ace service status
+</code></pre></div>
 
 
 <p>All services are listed along with their current status. The status can be any of the following values.</p>
@@ -1652,18 +1690,21 @@ dependencies =</code></pre>
 <li><strong>disabled</strong>: the service is disabled in the <a href="../../design/configuration/">configuration</a></li>
 </ul>
 <h3 id="starting-a-service">Starting A Service<a class="headerlink" href="#starting-a-service" title="Permanent link">&para;</a></h3>
-<pre class="codehilite"><code class="language-bash">ace service start NAME</code></pre>
+<div class="codehilite"><pre><span></span><code>ace service start NAME
+</code></pre></div>
 
 
 <p>A service can be started in <strong>debug</strong>, <strong>foreground</strong>, or <strong>background (daemon)</strong> mode as documented <a href="../../design/service/#execution-modes">here</a>.</p>
 <h3 id="stopping-a-service">Stopping A Service<a class="headerlink" href="#stopping-a-service" title="Permanent link">&para;</a></h3>
 <p>This only applies to services running in the background.</p>
-<pre class="codehilite"><code class="language-bash">ace service stop NAME</code></pre>
+<div class="codehilite"><pre><span></span><code>ace service stop NAME
+</code></pre></div>
 
 
 <h3 id="restarting-a-service">Restarting A Service<a class="headerlink" href="#restarting-a-service" title="Permanent link">&para;</a></h3>
 <p>This only applies to services running in the background.</p>
-<pre class="codehilite"><code class="language-bash">ace service restart NAME</code></pre>
+<div class="codehilite"><pre><span></span><code>ace service restart NAME
+</code></pre></div>
 
 
 <h2 id="logging-configurations-for-background-services">Logging Configurations for Background Services<a class="headerlink" href="#logging-configurations-for-background-services" title="Permanent link">&para;</a></h2>

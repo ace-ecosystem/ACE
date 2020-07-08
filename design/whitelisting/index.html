@@ -1345,8 +1345,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1513,6 +1537,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1618,8 +1654,9 @@
 <p>The current set of whitelisted observables cannot be viewed or managed.</p>
 <h2 id="limiting-analyst-user-whitelisting">Limiting Analyst (User) Whitelisting<a class="headerlink" href="#limiting-analyst-user-whitelisting" title="Permanent link">&para;</a></h2>
 <p>Certain <a href="../observable/">observable</a> types should not be whitelisted. The configuration setting <code>whitelist_excluded_observable_types</code> in the <code>[gui]</code> <a href="../configuration/">configuration</a> settings contains a comma separated list of observable types that <strong>cannot</strong> be whitelisted in this way.</p>
-<pre class="codehilite"><code class="language-ini">[gui]
-whitelist_excluded_observable_types = ipv4_full_conversation,yara_rule,indicator,snort_sig</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[gui]</span>
+<span class="na">whitelist_excluded_observable_types</span> <span class="o">=</span> <span class="s">ipv4_full_conversation,yara_rule,indicator,snort_sig</span>
+</code></pre></div>
 
 
 <p>Note that these can still be whitelisted by analysis.</p>

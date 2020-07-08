@@ -1324,8 +1324,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1492,6 +1516,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1571,40 +1607,45 @@
                 <h1 id="persistence-data">Persistence Data<a class="headerlink" href="#persistence-data" title="Permanent link">&para;</a></h1>
 <p>See the <a href="../../design/persistence/">design guide</a> for an overview of persistence data.</p>
 <h2 id="viewing-persistence">Viewing Persistence<a class="headerlink" href="#viewing-persistence" title="Permanent link">&para;</a></h2>
-<pre class="codehilite"><code class="language-bash">ace persistence list --help</code></pre>
+<div class="codehilite"><pre><span></span><code>ace persistence list --help
+</code></pre></div>
 
 
 <p>This command is used to view persistence data and <a href="../design/persistence#persistence-sources">sources</a>.</p>
 <h2 id="viewing-persistence-sources">Viewing Persistence Sources<a class="headerlink" href="#viewing-persistence-sources" title="Permanent link">&para;</a></h2>
-<pre class="codehilite"><code class="language-bash">ace persistence list</code></pre>
+<div class="codehilite"><pre><span></span><code>ace persistence list
+</code></pre></div>
 
 
 <p>Without any options this command lists all current defined <a href="../design/persistence#persistence-sources">persistence sources</a>.</p>
 <h2 id="viewing-persistence-data">Viewing Persistence Data<a class="headerlink" href="#viewing-persistence-data" title="Permanent link">&para;</a></h2>
-<pre class="codehilite"><code class="language-bash"># search for persistence key for a given source
-# NOTE that by default only volatile keys are displayed
+<div class="codehilite"><pre><span></span><code><span class="c1"># search for persistence key for a given source</span>
+<span class="c1"># NOTE that by default only volatile keys are displayed</span>
 ace persistence list -s SOURCE
 
-# adding -k option also displays permanent keys
+<span class="c1"># adding -k option also displays permanent keys</span>
 ace persistence list -k -s SOURCE
 
-# search for keys by name using the -n option
-ace persistence list -k -s SOURCE -n NAME</code></pre>
+<span class="c1"># search for keys by name using the -n option</span>
+ace persistence list -k -s SOURCE -n NAME
+</code></pre></div>
 
 
 <h2 id="managing-persistence-data">Managing Persistence Data<a class="headerlink" href="#managing-persistence-data" title="Permanent link">&para;</a></h2>
-<pre class="codehilite"><code class="language-bash">ace persistence clear --help</code></pre>
+<div class="codehilite"><pre><span></span><code>ace persistence clear --help
+</code></pre></div>
 
 
 <p>This command allows you to clear persistence keys according to some criteria. You can use the <code>--dry-run</code> option to test options before actually committing the changes.</p>
-<pre class="codehilite"><code class="language-bash"># clear a single persistence key (volatile or permanent)
+<div class="codehilite"><pre><span></span><code><span class="c1"># clear a single persistence key (volatile or permanent)</span>
 ace persistence clear SOURCE KEY
-# clear all persistence data for the given source (volatile and permanent)
+<span class="c1"># clear all persistence data for the given source (volatile and permanent)</span>
 ace persistence clear SOURCE --all
-# clear volatile data that is older than some date
-# the format of the date can by any date specification that is understood by dateparser
-# see https://dateparser.readthedocs.io/en/latest/#features
-ace persistence clear SOURCE --older-than &quot;two weeks ago&quot;</code></pre>
+<span class="c1"># clear volatile data that is older than some date</span>
+<span class="c1"># the format of the date can by any date specification that is understood by dateparser</span>
+<span class="c1"># see https://dateparser.readthedocs.io/en/latest/#features</span>
+ace persistence clear SOURCE --older-than <span class="s2">&quot;two weeks ago&quot;</span>
+</code></pre></div>
                 
                   
                 

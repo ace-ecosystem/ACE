@@ -1316,8 +1316,32 @@
 
 
   <li class="md-nav__item">
+    <a href="docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1484,6 +1508,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1596,16 +1632,17 @@ from saq.util import RegexObservableParserGroup</p>
 <h1 id="you-can-also-add-directives-to-control-analysisactions-taken-on-your">You can also add directives to control analysis/actions taken on your<a class="headerlink" href="#you-can-also-add-directives-to-control-analysisactions-taken-on-your" title="Permanent link">&para;</a></h1>
 <h1 id="observable">observable.<a class="headerlink" href="#observable" title="Permanent link">&para;</a></h1>
 <p>parser_group.add(r'url: ([^\n]+)', F_URL, directives=[DIRECTIVE_CRAWL])</p>
-<pre class="codehilite"><code>Once you've added your parsers, you can parse the data:
+<div class="codehilite"><pre><span></span><code>Once you&#39;ve added your parsers, you can parse the data:
 
 ``` {.sourceCode .python}
-parser_group.parse_content(sample_log)</code></pre>
+parser_group.parse_content(sample_log)
+</code></pre></div>
 
 
 <p>Then you can access the observables:</p>
 <p>``` {.sourceCode .python}
 observables = parser_group.observables</p>
-<pre class="codehilite"><code>The extractions from this example would create the following list of
+<div class="codehilite"><pre><span></span><code>The extractions from this example would create the following list of
 dictionairies which are in an appropriate format to be submitted to the
 collector:
 
@@ -1653,7 +1690,8 @@ collector:
             &quot;crawl&quot;
         ]
     }
-]</code></pre>
+]
+</code></pre></div>
 
 
 <p>What if you've created your own observable type? Or maybe you want to
@@ -1673,7 +1711,7 @@ from saq.util import RegexObservableParserGroup, RegexObservableParser</p>
 <p>parser_group = RegexObservableParserGroup()</p>
 <p>parser_group.add(r'ip: ([0-9.]+)', override_class=MyParser)</p>
 <p>parser_group.parse_content(my_log)</p>
-<pre class="codehilite"><code>When you're ready to submit to the collector:
+<div class="codehilite"><pre><span></span><code>When you&#39;re ready to submit to the collector:
 
 ``` {.sourceCode .python}
 observables = parser_group.observables
@@ -1684,15 +1722,16 @@ from saq.constanants import ANALYSIS_MODE_CORRELATION
 submission = Submission(
     description=&quot;My custom alert&quot;,
     analysis_mode=ANALYSIS_MODE_CORRELATION,
-    tool = 'my custom tool',
-    tool_instance = 'my custom tool instance',
-    type = 'custom_type',
-    event_time = 'datetime_from_alert',
+    tool = &#39;my custom tool&#39;,
+    tool_instance = &#39;my custom tool instance&#39;,
+    type = &#39;custom_type&#39;,
+    event_time = &#39;datetime_from_alert&#39;,
     details = [],
     observables = observables,
     tags=[],
     files=[],
-)</code></pre>
+)
+</code></pre></div>
                 
                   
                 

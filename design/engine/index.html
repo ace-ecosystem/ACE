@@ -1352,8 +1352,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1520,6 +1544,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1638,8 +1674,9 @@
 <p>Workers are grouped together into pools. Each pool can optionally be assigned a <em>priority</em>. When the worker pulls the next workload item it first checks for work with an analysis module that matches the priority if one is set. If none are available (or if no priority is set) then it pulls the oldest workload item.</p>
 <p>The number of analysis pools an engine uses is configurable. If these configuration options are not set (this is the default) then a default pool with a size equal to the number of CPU cores on the current system is created with no priority.</p>
 <p>To define analysis pools add options under the <code>[service_engine]</code> section with the following format.</p>
-<pre class="codehilite"><code class="language-ini">[service_engine]
-analysis_pool_size_MODE = int</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[service_engine]</span>
+<span class="na">analysis_pool_size_MODE</span> <span class="o">=</span> <span class="s">int</span>
+</code></pre></div>
 
 
 <p><code>MODE</code> is the priority <a href="../analysis_modes/">analysis mode</a> for the pool.</p>

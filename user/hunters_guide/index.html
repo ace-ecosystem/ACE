@@ -1263,8 +1263,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1431,6 +1455,18 @@
           
           
 
+
+  <li class="md-nav__item">
+    <a href="../email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
   
 
 
@@ -1484,12 +1520,14 @@
                 <h1 id="hunters-guide">Hunters Guide<a class="headerlink" href="#hunters-guide" title="Permanent link">&para;</a></h1>
 <p>A hunt can be added, modified or deleted while the <a href="../../design/service/">service</a> is running. ACE detects these changes and reloads the hunts as needed.</p>
 <p>A hunt can be manually executed by using the <code>execute</code> sub-command of the <code>hunt</code> command.</p>
-<pre class="codehilite"><code class="language-bash">ace hunt execute --help</code></pre>
+<div class="codehilite"><pre><span></span><code>ace hunt execute --help
+</code></pre></div>
 
 
 <p>For example, to execute the <strong>query_stuff</strong> hunt in the <strong>splunk</strong> hunting
 system you would issue the following command.</p>
-<pre class="codehilite"><code class="language-bash">ace hunt execute -s 04/17/2020:00:00:00 -e /04/18/2020:00:00:00 -z US/Eastern splunk:query_stuff</code></pre>
+<div class="codehilite"><pre><span></span><code>ace hunt execute -s <span class="m">04</span>/17/2020:00:00:00 -e /04/18/2020:00:00:00 -z US/Eastern splunk:query_stuff
+</code></pre></div>
 
 
 <p>By default what gets displayed is a list of the alerts that would have been generated. There are additional options to display more details of the alerts.</p>
@@ -1514,7 +1552,7 @@ system you would issue the following command.</p>
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../disposition/" title="Disposition" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../email_remediation/" title="Email Remediation" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -1523,7 +1561,7 @@ system you would issue the following command.</p>
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                Disposition
+                Email Remediation
               </span>
             </div>
           </a>

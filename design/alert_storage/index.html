@@ -1303,8 +1303,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1471,6 +1495,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1529,7 +1565,8 @@
                 <h1 id="alert-storage">Alert Storage<a class="headerlink" href="#alert-storage" title="Permanent link">&para;</a></h1>
 <p><a href="../alerts/">Alerts</a> are stored in the <a href="../data_dir/">data directory</a>. The UUID and <a href="../engine/#node">engine node name</a> are used to create the path to the storage directory. This path is stored along with the alert and recorded in the database as the <code>storage_dir</code> property of the alert.</p>
 <p>The structure of the directory is as follows and is relative to the <a href="../data_dir/">data directory</a>.</p>
-<pre class="codehilite"><code class="language-text">NODE_LOCATION/UUID[:3]/UUID/</code></pre>
+<div class="codehilite"><pre><span></span><code>NODE_LOCATION/UUID[:3]/UUID/
+</code></pre></div>
 
 
 <p><code>NODE_LOCATION</code> is the name of the <a href="../engine/#node">engine node</a> that hosts the alert. Typically this is the local node name.</p>

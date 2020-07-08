@@ -1351,8 +1351,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1519,6 +1543,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1626,35 +1662,41 @@
 <p>See the <a href="../../design/encryption/">design guide</a> for how encryption is implemented and used in ACE.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
 <p>The <code>encrypted_passwords_db</code> option in the <code>[global]</code> <a href="../../design/configuration/">configuration</a> section specifies which <a href="../../database/">database</a> connection to use to access the encryption settings. The value of this option corresponds to the database configuration section. By default this is set to <code>ace</code> which uses the <code>[database_ace]</code> configuration settings.</p>
-<pre class="codehilite"><code class="language-ini">[global]
-encrypted_passwords_db = ace</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[global]</span>
+<span class="na">encrypted_passwords_db</span> <span class="o">=</span> <span class="s">ace</span>
+</code></pre></div>
 
 
 <h2 id="setting-the-encryption-password">Setting the Encryption Password<a class="headerlink" href="#setting-the-encryption-password" title="Permanent link">&para;</a></h2>
 <p>The primary encryption password can be set using the following command. The password is prompted for.</p>
-<pre class="codehilite"><code class="language-bash">ace enc set</code></pre>
+<div class="codehilite"><pre><span></span><code>ace enc <span class="nb">set</span>
+</code></pre></div>
 
 
 <h2 id="changing-the-encryption-password">Changing the Encryption Password<a class="headerlink" href="#changing-the-encryption-password" title="Permanent link">&para;</a></h2>
 <p>The same command can be used to change the password at any time.</p>
 <h3 id="listing-encrypted-passwords">Listing Encrypted Passwords<a class="headerlink" href="#listing-encrypted-passwords" title="Permanent link">&para;</a></h3>
-<pre class="codehilite"><code class="language-bash">ace enc config list</code></pre>
+<div class="codehilite"><pre><span></span><code>ace enc config list
+</code></pre></div>
 
 
 <p>The current list of passwords can be viewed by listing them. If the <a href="./">encryption key</a> is loaded then the actual (decrypted) values of the passwords are displayed.</p>
 <h3 id="adding-encrypted-passwords">Adding Encrypted Passwords<a class="headerlink" href="#adding-encrypted-passwords" title="Permanent link">&para;</a></h3>
-<pre class="codehilite"><code class="language-bash">ace enc config set key</code></pre>
+<div class="codehilite"><pre><span></span><code>ace enc config <span class="nb">set</span> key
+</code></pre></div>
 
 
 <p>Stores a password in the <a href="../../database/">database</a> using encryption. <code>key</code> is the name of the password to be stored. The value is prompted for.</p>
 <h3 id="removing-encrypted-passwords">Removing Encrypted Passwords<a class="headerlink" href="#removing-encrypted-passwords" title="Permanent link">&para;</a></h3>
-<pre class="codehilite"><code class="language-bash">ace enc config delete key</code></pre>
+<div class="codehilite"><pre><span></span><code>ace enc config delete key
+</code></pre></div>
 
 
 <p>Removes an encrypted password from the <a href="../../database/">database</a>. <code>key</code> is the name of the password to be deleted.</p>
 <h3 id="importing-and-exporting-passwords-in-bulk">Importing and Exporting Passwords In Bulk<a class="headerlink" href="#importing-and-exporting-passwords-in-bulk" title="Permanent link">&para;</a></h3>
-<pre class="codehilite"><code class="language-bash">ace enc config export output_file.json
-ace enc config import output_file.json</code></pre>
+<div class="codehilite"><pre><span></span><code>ace enc config <span class="nb">export</span> output_file.json
+ace enc config import output_file.json
+</code></pre></div>
 
 
 <p>The entire list of encrypted passwords can be exported into a JSON formatted file. This file can then be imported into ACE.</p>

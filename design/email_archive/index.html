@@ -1324,8 +1324,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1492,6 +1516,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1582,14 +1618,16 @@
 <p>Emails are stored as <a href="../encryption/">encrypted blobs</a> in the directory specified by the <code>archive_dir</code> <a href="../configuration/">configuration</a> setting in the <code>[analysis_module_email_archiver]</code> section.</p>
 <h2 id="searching-the-archive-and-extracting-emails">Searching the Archive and Extracting Emails<a class="headerlink" href="#searching-the-archive-and-extracting-emails" title="Permanent link">&para;</a></h2>
 <p>The archive can be searched <strong>by exact value</strong> by using the ace command <code>search-archive</code>. Any matches to the search string are extracted into the directory specified by the <code>-d</code> option.</p>
-<pre class="codehilite"><code class="language-bash">ace search-archive --help</code></pre>
+<div class="codehilite"><pre><span></span><code>ace search-archive --help
+</code></pre></div>
 
 
 <p>Any other type of searching must be accomplished with external tools.</p>
 <h2 id="managing-the-archive">Managing the Archive<a class="headerlink" href="#managing-the-archive" title="Permanent link">&para;</a></h2>
 <p>The ace command <code>cleanup-email-archive</code> is used to manage the archive. Any emails that exceed the time limit set by the <code>expiration_days</code> <a href="../configuration/">configuration</a> setting in the <code>[analysis_module_automated_email_remediation]</code> section are removed from the system.</p>
 <p>This is typically executed by a <a href="cron_management.md">cron job</a>.</p>
-<pre class="codehilite"><code class="language-bash">ace cleanup-email-archive --help</code></pre>
+<div class="codehilite"><pre><span></span><code>ace cleanup-email-archive --help
+</code></pre></div>
                 
                   
                 

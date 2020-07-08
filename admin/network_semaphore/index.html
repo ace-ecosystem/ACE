@@ -1310,8 +1310,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1478,6 +1502,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1544,25 +1580,26 @@
 <p>The overview and design of the network semaphore <a href="../../design/service/">service</a> is documented in the <a href="../../design/network_semaphore/">design guide</a>.</p>
 <h2 id="configuration-options">Configuration Options<a class="headerlink" href="#configuration-options" title="Permanent link">&para;</a></h2>
 <p>The <code>[service_network_semaphore]</code> <a href="../../design/configuration/">configuration</a> section contains the settings for the network semaphore service.</p>
-<pre class="codehilite"><code class="language-ini">[service_network_semaphore]
-module = saq.network_semaphore
-class = NetworkSemaphoreServer
-description = Network Semaphore - global network service for controlling concurrent access to limited resources
-enabled = yes
+<div class="codehilite"><pre><span></span><code><span class="k">[service_network_semaphore]</span>
+<span class="na">module</span> <span class="o">=</span> <span class="s">saq.network_semaphore</span>
+<span class="na">class</span> <span class="o">=</span> <span class="s">NetworkSemaphoreServer</span>
+<span class="na">description</span> <span class="o">=</span> <span class="s">Network Semaphore - global network service for controlling concurrent access to limited resources</span>
+<span class="na">enabled</span> <span class="o">=</span> <span class="s">yes</span>
 
-; the address of the network semaphore server (used to bind and listen)
-bind_address = 127.0.0.1
-bind_port = 53559
+<span class="c1">; the address of the network semaphore server (used to bind and listen)</span>
+<span class="na">bind_address</span> <span class="o">=</span> <span class="s">127.0.0.1</span>
+<span class="na">bind_port</span> <span class="o">=</span> <span class="s">53559</span>
 
-; the address of the network semaphore server to the clients that want to use them
-; could be the same as the bind_adress and bind_port above
-remote_address = 127.0.0.1
-remote_port = 53559
+<span class="c1">; the address of the network semaphore server to the clients that want to use them</span>
+<span class="c1">; could be the same as the bind_adress and bind_port above</span>
+<span class="na">remote_address</span> <span class="o">=</span> <span class="s">127.0.0.1</span>
+<span class="na">remote_port</span> <span class="o">=</span> <span class="s">53559</span>
 
-; comma separated list of source IP addresses that are allowed to connect
-allowed_ipv4 = 127.0.0.1
-; directory that contains metrics and current status of semaphores
-stats_dir = var/network_semaphore</code></pre>
+<span class="c1">; comma separated list of source IP addresses that are allowed to connect</span>
+<span class="na">allowed_ipv4</span> <span class="o">=</span> <span class="s">127.0.0.1</span>
+<span class="c1">; directory that contains metrics and current status of semaphores</span>
+<span class="na">stats_dir</span> <span class="o">=</span> <span class="s">var/network_semaphore</span>
+</code></pre></div>
 
 
 <p>The service can be found to a specific interface and port as defined by the <code>bind_address</code> and <code>bind_port</code> options. A value of <code>0.0.0.0</code> for the <code>bind_address</code> option binds the service to all available network interfaces.</p>

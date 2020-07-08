@@ -1344,8 +1344,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1512,6 +1536,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1615,8 +1651,9 @@
 <li>by the <a href="link">api</a> upon receiving a submission.</li>
 </ul>
 <p><a href="../../design/yara/">Yara</a> rules are used to filter out matching submissions. The locations of these yara rules are set in the <code>[collection]</code> section of the <a href="../../design/configuration/">configuration</a>. Options have the format <code>tuning_dir_NAME</code> where <code>NAME</code> is a unique value. Each of these options specifies a <a href="../../design/yara/">yara</a> directory of rules to load for submission filtering.</p>
-<pre class="codehilite"><code class="language-ini">[collection]
-tuning_dir_default = etc/tuning/submission</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[collection]</span>
+<span class="na">tuning_dir_default</span> <span class="o">=</span> <span class="s">etc/tuning/submission</span>
+</code></pre></div>
 
 
 <h2 id="submission-filtering-buffers">Submission Filtering Buffers<a class="headerlink" href="#submission-filtering-buffers" title="Permanent link">&para;</a></h2>
@@ -1629,25 +1666,27 @@ tuning_dir_default = etc/tuning/submission</code></pre>
 <li><a href="../../design/analysis/">analysis</a> details</li>
 </ul>
 <p>The submission data is formatted as follows. Note that this format is <strong>not</strong> JSON format.</p>
-<pre class="codehilite"><code class="language-text">description = text
+<div class="codehilite"><pre><span></span><code>description = text
 analysis_mode = text
 tool = text
 tool_instance = text
 type = text
 event_time = YYYY-MM-DDTmm:HH:SS.FFFFFF+ZZZZ
-tags =</code></pre>
+tags =
+</code></pre></div>
 
 
 <p><code>tags</code> is a comma separated list of tags.</p>
 <p>Observable data is formatted as a list of JSON objects. The JSON data is formatted in a human-readable format.</p>
-<pre class="codehilite"><code class="language-json">[
- {
-  &quot;directives&quot;: [],
-  &quot;tags&quot;: [],
-  &quot;type&quot;: &quot;type&quot;,
-  &quot;value&quot;: &quot;text&quot;
- }
-]</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="p">[</span>
+ <span class="p">{</span>
+  <span class="nt">&quot;directives&quot;</span><span class="p">:</span> <span class="p">[],</span>
+  <span class="nt">&quot;tags&quot;</span><span class="p">:</span> <span class="p">[],</span>
+  <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;type&quot;</span><span class="p">,</span>
+  <span class="nt">&quot;value&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span>
+ <span class="p">}</span>
+<span class="p">]</span>
+</code></pre></div>
 
 
 <p>Analysis data is formatted as the JSON object it is. The JSON data is formatted in a human-readable format. The exact contents of this data depend on the source of the submission.</p>
@@ -1659,11 +1698,12 @@ tags =</code></pre>
 <p>The <strong>all</strong> buffer contains a combination of the <strong>submission</strong> and <strong>files</strong> buffers together into one buffer.</p>
 <h2 id="submission-filtering-with-yara-rules">Submission Filtering with Yara Rules<a class="headerlink" href="#submission-filtering-with-yara-rules" title="Permanent link">&para;</a></h2>
 <p>The <code>meta</code> directive <code>targets</code> of yara rules is used to apply a yara rule against a given buffer type. This value is a comma separated list of submission buffer types this rule should be used against.</p>
-<pre class="codehilite"><code class="language-text">rule tuning_blah {
+<div class="codehilite"><pre><span></span><code>rule tuning_blah {
     meta:
         targets = &quot;submission,file&quot;
         author = &quot;John Davison&quot;
-        description = &quot;Tuning out this thing blah blah&quot;</code></pre>
+        description = &quot;Tuning out this thing blah blah&quot;
+</code></pre></div>
 
 
 <p>In the above example the rule would apply to the <strong>submission</strong> and <strong>file</strong> buffers.</p>

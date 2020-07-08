@@ -1310,8 +1310,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1478,6 +1502,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1544,23 +1580,24 @@
 <p>ACE receives analysis work via the <a href="link">api</a> in the format of a submission. This object is a simple subset of an entire <a href="../root_analysis/">root analysis</a> object.</p>
 <h2 id="json-schema">JSON Schema<a class="headerlink" href="#json-schema" title="Permanent link">&para;</a></h2>
 <p>The submission is a JSON object with the following schema.</p>
-<pre class="codehilite"><code class="language-json">{
-    &quot;analysis&quot;:
-    {
-        &quot;analysis_mode&quot;: analysis_mode,
-        &quot;tool&quot;: tool,
-        &quot;tool_instance&quot;: tool_instance,
-        &quot;type&quot;: type,
-        &quot;company_id&quot;: company_id,
-        &quot;description&quot;: description,
-        &quot;event_time&quot;: formatted_event_time,
-        &quot;details&quot;: details,
-        &quot;observables&quot;: observables,
-        &quot;tags&quot;: tags,
-        &quot;queue&quot;: queue,
-        &quot;instructions&quot;: instructions
-    }
-}</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="p">{</span>
+    <span class="nt">&quot;analysis&quot;</span><span class="p">:</span>
+    <span class="p">{</span>
+        <span class="nt">&quot;analysis_mode&quot;</span><span class="p">:</span> <span class="err">analysis_mode</span><span class="p">,</span>
+        <span class="nt">&quot;tool&quot;</span><span class="p">:</span> <span class="err">tool</span><span class="p">,</span>
+        <span class="nt">&quot;tool_instance&quot;</span><span class="p">:</span> <span class="err">tool_instance</span><span class="p">,</span>
+        <span class="nt">&quot;type&quot;</span><span class="p">:</span> <span class="err">type</span><span class="p">,</span>
+        <span class="nt">&quot;company_id&quot;</span><span class="p">:</span> <span class="err">company_id</span><span class="p">,</span>
+        <span class="nt">&quot;description&quot;</span><span class="p">:</span> <span class="err">description</span><span class="p">,</span>
+        <span class="nt">&quot;event_time&quot;</span><span class="p">:</span> <span class="err">formatted_event_time</span><span class="p">,</span>
+        <span class="nt">&quot;details&quot;</span><span class="p">:</span> <span class="err">details</span><span class="p">,</span>
+        <span class="nt">&quot;observables&quot;</span><span class="p">:</span> <span class="err">observables</span><span class="p">,</span>
+        <span class="nt">&quot;tags&quot;</span><span class="p">:</span> <span class="err">tags</span><span class="p">,</span>
+        <span class="nt">&quot;queue&quot;</span><span class="p">:</span> <span class="err">queue</span><span class="p">,</span>
+        <span class="nt">&quot;instructions&quot;</span><span class="p">:</span> <span class="err">instructions</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
 
 
 <h2 id="submission-filtering">Submission Filtering<a class="headerlink" href="#submission-filtering" title="Permanent link">&para;</a></h2>

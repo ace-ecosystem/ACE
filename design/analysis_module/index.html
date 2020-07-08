@@ -1317,8 +1317,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1485,6 +1509,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1562,19 +1598,20 @@
 <p>An analysis module is defined in the <a href="../configuration/">configuration</a> settings by sections with the format <code>[analysis_module_NAME]</code> where <code>NAME</code> is a unique name for the module in the configuration.</p>
 <p>This <code>NAME</code> is often used to reference the analysis module in the available <a href="../command_tooling/">command line tooling</a>.</p>
 <p>The configuration settings support a number of base options as defined below.</p>
-<pre class="codehilite"><code class="language-ini">[analysis_module_NAME]
-module =
-class =
-instance =
-enabled =
-module_groups = ; deprecated
-exclude_UNIQUE_NAME =
-expect_UNIQUE_NAME =
+<div class="codehilite"><pre><span></span><code><span class="k">[analysis_module_NAME]</span>
+<span class="na">module</span> <span class="o">=</span>
+<span class="na">class</span> <span class="o">=</span>
+<span class="na">instance</span> <span class="o">=</span>
+<span class="na">enabled</span> <span class="o">=</span>
+<span class="na">module_groups</span> <span class="o">=</span> <span class="s">; deprecated</span>
+<span class="na">exclude_UNIQUE_NAME</span> <span class="o">=</span>
+<span class="na">expect_UNIQUE_NAME</span> <span class="o">=</span>
 
-; optional parameters
-priority =
-threaded =
-threaded_execution_frequency =</code></pre>
+<span class="c1">; optional parameters</span>
+<span class="na">priority</span> <span class="o">=</span>
+<span class="na">threaded</span> <span class="o">=</span>
+<span class="na">threaded_execution_frequency</span> <span class="o">=</span>
+</code></pre></div>
 
 
 <p>The <code>module</code> and <code>class</code> values define the <a href="../module_class_spec/">module-class specification</a> which tells ACE what python class to load for the module.</p>

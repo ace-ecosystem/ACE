@@ -1317,8 +1317,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1485,6 +1509,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1558,11 +1594,12 @@
 <p>See the <a href="../../design/hunting/">design guide</a> for an overview of the hunting system.</p>
 <h2 id="hunt-manager-configuration">Hunt Manager Configuration<a class="headerlink" href="#hunt-manager-configuration" title="Permanent link">&para;</a></h2>
 <p>A <a href="../../design/hunting/#hunt-manager">hunt manager</a> is defined by a <a href="../../design/configuration/">configuration</a> section in the following format.</p>
-<pre class="codehilite"><code class="language-ini">[hunt_type_TYPE]
-module = saq.collectors.TYPE_hunter
-class = TYPEHunt
-rule_dirs = hunts/type
-concurrency_limit = type</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="k">[hunt_type_TYPE]</span>
+<span class="na">module</span> <span class="o">=</span> <span class="s">saq.collectors.TYPE_hunter</span>
+<span class="na">class</span> <span class="o">=</span> <span class="s">TYPEHunt</span>
+<span class="na">rule_dirs</span> <span class="o">=</span> <span class="s">hunts/type</span>
+<span class="na">concurrency_limit</span> <span class="o">=</span> <span class="s">type</span>
+</code></pre></div>
 
 
 <p><code>TYPE</code> is the type of the hunts it manages and should match the <code>type</code> configuration setting for the hunt (see below.) There can only be one hunt manager per type.</p>
@@ -1574,139 +1611,140 @@ concurrency_limit = type</code></pre>
 <p>Each hunt is defined by an ini file. There is no limit
 on the number of hunts that can be defined.</p>
 <p>The following provides an example as well as the documentation of the fields in a hunt configuration.</p>
-<pre class="codehilite"><code class="language-ini">[rule]
-; set this to either yes or no to enable or disable the hunt
-; hunts that are disabled are not executed
-enabled = yes
+<div class="codehilite"><pre><span></span><code><span class="k">[rule]</span>
+<span class="c1">; set this to either yes or no to enable or disable the hunt</span>
+<span class="c1">; hunts that are disabled are not executed</span>
+<span class="na">enabled</span> <span class="o">=</span> <span class="s">yes</span>
 
-; OPTIONAL
-; a unique name for the hunt
-; this also becomes the prefix for the name of the alert in ACE
-; by default the name for the hunt is derived from the file name
-name = Super Awesome Hunt
+<span class="c1">; OPTIONAL</span>
+<span class="c1">; a unique name for the hunt</span>
+<span class="c1">; this also becomes the prefix for the name of the alert in ACE</span>
+<span class="c1">; by default the name for the hunt is derived from the file name</span>
+<span class="na">name</span> <span class="o">=</span> <span class="s">Super Awesome Hunt</span>
 
-; a useful description for the hunt
-; this is a free-form text value that will be included as the
-; &quot;instructions&quot; field in the alert
-; you can use this field to describe what this hunt is looking for
-; as well as ways to analyze the results
-description = This looks for a thing and then you have to analyze it.
+<span class="c1">; a useful description for the hunt</span>
+<span class="c1">; this is a free-form text value that will be included as the</span>
+<span class="c1">; &quot;instructions&quot; field in the alert</span>
+<span class="c1">; you can use this field to describe what this hunt is looking for</span>
+<span class="c1">; as well as ways to analyze the results</span>
+<span class="na">description</span> <span class="o">=</span> <span class="s">This looks for a thing and then you have to analyze it.</span>
 
-; OPTIONAL
-; defines what analysis mode submissions will be in when they reach ACE
-; this controls what analysis modules run on the hunt results
-; by default this is set to **correlation** which forces the hunts results
-; to become alerts by default
-analysis_mode = correlation
+<span class="c1">; OPTIONAL</span>
+<span class="c1">; defines what analysis mode submissions will be in when they reach ACE</span>
+<span class="c1">; this controls what analysis modules run on the hunt results</span>
+<span class="c1">; by default this is set to **correlation** which forces the hunts results</span>
+<span class="c1">; to become alerts by default</span>
+<span class="na">analysis_mode</span> <span class="o">=</span> <span class="s">correlation</span>
 
-; defines what hunter should execute this hunt
-; use the ace hunt list-types to get the full list of supported types
-type = qradar
+<span class="c1">; defines what hunter should execute this hunt</span>
+<span class="c1">; use the ace hunt list-types to get the full list of supported types</span>
+<span class="na">type</span> <span class="o">=</span> <span class="s">qradar</span>
 
-; OPTIONAL 
-; this maps to the type field of an ACE alert
-; this is used to define custom templates to view the data in ACE
-; by default this takes the value of hunter - [type] 
-alert_type = hunter - qradar - bluecoat
+<span class="c1">; OPTIONAL </span>
+<span class="c1">; this maps to the type field of an ACE alert</span>
+<span class="c1">; this is used to define custom templates to view the data in ACE</span>
+<span class="c1">; by default this takes the value of hunter - [type] </span>
+<span class="na">alert_type</span> <span class="o">=</span> <span class="s">hunter - qradar - bluecoat</span>
 
-; how often to execute the hunt
-; this can be either a timespec in HH:MM:SS format
-; or it can be a crontab entry format if you want to hunt to execute
-; at a specific time of the day
-; keep in mind that ACE uses UTC
-frequency = 00:30:00
+<span class="c1">; how often to execute the hunt</span>
+<span class="c1">; this can be either a timespec in HH:MM:SS format</span>
+<span class="c1">; or it can be a crontab entry format if you want to hunt to execute</span>
+<span class="c1">; at a specific time of the day</span>
+<span class="c1">; keep in mind that ACE uses UTC</span>
+<span class="na">frequency</span> <span class="o">=</span> <span class="s">00:30:00</span>
 
-; a comma separated list of tags to add to the analysis if submitted to ACE
-tags = tag1, tag2, tag3
+<span class="c1">; a comma separated list of tags to add to the analysis if submitted to ACE</span>
+<span class="na">tags</span> <span class="o">=</span> <span class="s">tag1, tag2, tag3</span>
 
-;
-; the following configuration options are valid only for query-based hunts
-;
+<span class="c1">;</span>
+<span class="c1">; the following configuration options are valid only for query-based hunts</span>
+<span class="c1">;</span>
 
-; set to yes to enable full coverage, no to disable
-; this option ensures that the starting time of the next execution will be
-; equal to the ending time of the last time the hunt successfully executed
-; this will effectively bypass the time_range setting and use the frequency
-; to determine the search times, except for the first time it runs
-full_coverage = yes
+<span class="c1">; set to yes to enable full coverage, no to disable</span>
+<span class="c1">; this option ensures that the starting time of the next execution will be</span>
+<span class="c1">; equal to the ending time of the last time the hunt successfully executed</span>
+<span class="c1">; this will effectively bypass the time_range setting and use the frequency</span>
+<span class="c1">; to determine the search times, except for the first time it runs</span>
+<span class="na">full_coverage</span> <span class="o">=</span> <span class="s">yes</span>
 
-; set to yes to enable, no to disable
-; use whatever is considered the &quot;index time&quot; for this hunt type
-; events that are collected by log systems often record when they received
-; the event, which is separate from when the event actually occurred
-; this can be very different when logs are sent by batch methods
-; use this method in conjunction with full_coverage to ensure that you
-; search all of the log records with your hunts
-use_index_time = yes
+<span class="c1">; set to yes to enable, no to disable</span>
+<span class="c1">; use whatever is considered the &quot;index time&quot; for this hunt type</span>
+<span class="c1">; events that are collected by log systems often record when they received</span>
+<span class="c1">; the event, which is separate from when the event actually occurred</span>
+<span class="c1">; this can be very different when logs are sent by batch methods</span>
+<span class="c1">; use this method in conjunction with full_coverage to ensure that you</span>
+<span class="c1">; search all of the log records with your hunts</span>
+<span class="na">use_index_time</span> <span class="o">=</span> <span class="s">yes</span>
 
-; set the time range for the query in HH:MM:SS format
-; specifies how far back to look when performing a query (by controlling
-; the time field in whatever system is executing the hunt)
-; if full_coverage is yes, then this value is only used the first time the
-; hunt is executed
-time_range = 00:30:00
+<span class="c1">; set the time range for the query in HH:MM:SS format</span>
+<span class="c1">; specifies how far back to look when performing a query (by controlling</span>
+<span class="c1">; the time field in whatever system is executing the hunt)</span>
+<span class="c1">; if full_coverage is yes, then this value is only used the first time the</span>
+<span class="c1">; hunt is executed</span>
+<span class="na">time_range</span> <span class="o">=</span> <span class="s">00:30:00</span>
 
-; specified a maximum time range for a single query in [DD:]HH:MM:SS format
-; queries that would exceed this time range are split into chunks and
-; executed in series with time ranges no larger than max_time_range
-max_time_range = 24:00:00
+<span class="c1">; specified a maximum time range for a single query in [DD:]HH:MM:SS format</span>
+<span class="c1">; queries that would exceed this time range are split into chunks and</span>
+<span class="c1">; executed in series with time ranges no larger than max_time_range</span>
+<span class="na">max_time_range</span> <span class="o">=</span> <span class="s">24:00:00</span>
 
-; OPTIONAL
-; specifies an offset in HH:MM:SS format to execute queries on
-; the final time range of all queries is offset by this value
-; this option is useful if your logging system is slow to index data
-offset = 00:05:00
+<span class="c1">; OPTIONAL</span>
+<span class="c1">; specifies an offset in HH:MM:SS format to execute queries on</span>
+<span class="c1">; the final time range of all queries is offset by this value</span>
+<span class="c1">; this option is useful if your logging system is slow to index data</span>
+<span class="na">offset</span> <span class="o">=</span> <span class="s">00:05:00</span>
 
-; when a query hunt executes and returns multiple results, these results
-; are then grouped together by the field specified in this option
-; this also becomes part of the name of the alert
-; by appending the value of the grouped field to the name of the hunt
-group_by = root_domain
+<span class="c1">; when a query hunt executes and returns multiple results, these results</span>
+<span class="c1">; are then grouped together by the field specified in this option</span>
+<span class="c1">; this also becomes part of the name of the alert</span>
+<span class="c1">; by appending the value of the grouped field to the name of the hunt</span>
+<span class="na">group_by</span> <span class="o">=</span> <span class="s">root_domain</span>
 
-; OPTIONAL 
-; specifies a path (relative to SAQ_HOME) to a file that contains the
-; actual hunt to execute
-search = hunts/site/qradar/bluecoat-malicious_domain.sql
+<span class="c1">; OPTIONAL </span>
+<span class="c1">; specifies a path (relative to SAQ_HOME) to a file that contains the</span>
+<span class="c1">; actual hunt to execute</span>
+<span class="na">search</span> <span class="o">=</span> <span class="s">hunts/site/qradar/bluecoat-malicious_domain.sql</span>
 
-; OPTIONAL
-; specifies the actual hunt to execute
-query = SELECT * FROM whatever WHERE something = 'this_or_that'
+<span class="c1">; OPTIONAL</span>
+<span class="c1">; specifies the actual hunt to execute</span>
+<span class="na">query</span> <span class="o">=</span> <span class="s">SELECT * FROM whatever WHERE something = &#39;this_or_that&#39;</span>
 
-;
-; the following configuration options are valid only for SPLUNK hunts
-;
+<span class="c1">;</span>
+<span class="c1">; the following configuration options are valid only for SPLUNK hunts</span>
+<span class="c1">;</span>
 
-; OPTIONAL
-; puts the splunk search into the context of the given user and/or app
-; by default the splunk hunter uses the default (wildcard) user and app namespace
-splunk_user_context = user_name
-splunk_app_context = app_name
+<span class="c1">; OPTIONAL</span>
+<span class="c1">; puts the splunk search into the context of the given user and/or app</span>
+<span class="c1">; by default the splunk hunter uses the default (wildcard) user and app namespace</span>
+<span class="na">splunk_user_context</span> <span class="o">=</span> <span class="s">user_name</span>
+<span class="na">splunk_app_context</span> <span class="o">=</span> <span class="s">app_name</span>
 
-; OPTIONAL
-; maps the fields to observable types in ACE
-; using the format field_name = observable_type
-[observable_mapping]
-root_domain = fqdn
-BluecoatProxy-URL = url
-userName = user
-sourceip = ipv4
-destinationip = ipv4
+<span class="c1">; OPTIONAL</span>
+<span class="c1">; maps the fields to observable types in ACE</span>
+<span class="c1">; using the format field_name = observable_type</span>
+<span class="k">[observable_mapping]</span>
+<span class="na">root_domain</span> <span class="o">=</span> <span class="s">fqdn</span>
+<span class="na">BluecoatProxy-URL</span> <span class="o">=</span> <span class="s">url</span>
+<span class="na">userName</span> <span class="o">=</span> <span class="s">user</span>
+<span class="na">sourceip</span> <span class="o">=</span> <span class="s">ipv4</span>
+<span class="na">destinationip</span> <span class="o">=</span> <span class="s">ipv4</span>
 
-; OPTIONAL
-; by default all observations are assumed to have happened when the hunt
-; was executed which is probably not what you want
-; any field set to yes in this section will also record the event time
-; along with the added observable so that correlation targets the correct time
-[temporal_fields]
-sourceip = yes
-destinationip = yes
-ipv4_conversation = yes
+<span class="c1">; OPTIONAL</span>
+<span class="c1">; by default all observations are assumed to have happened when the hunt</span>
+<span class="c1">; was executed which is probably not what you want</span>
+<span class="c1">; any field set to yes in this section will also record the event time</span>
+<span class="c1">; along with the added observable so that correlation targets the correct time</span>
+<span class="k">[temporal_fields]</span>
+<span class="na">sourceip</span> <span class="o">=</span> <span class="s">yes</span>
+<span class="na">destinationip</span> <span class="o">=</span> <span class="s">yes</span>
+<span class="na">ipv4_conversation</span> <span class="o">=</span> <span class="s">yes</span>
 
-; OPTIONAL
-; use this section to add any number of directives (comma separated) to any
-; observable that is added
-[directives]
-ipv4_conversation = extract_pcap</code></pre>
+<span class="c1">; OPTIONAL</span>
+<span class="c1">; use this section to add any number of directives (comma separated) to any</span>
+<span class="c1">; observable that is added</span>
+<span class="k">[directives]</span>
+<span class="na">ipv4_conversation</span> <span class="o">=</span> <span class="s">extract_pcap</span>
+</code></pre></div>
 
 
 <h2 id="managing-hunts">Managing Hunts<a class="headerlink" href="#managing-hunts" title="Permanent link">&para;</a></h2>

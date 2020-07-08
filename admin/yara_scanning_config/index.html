@@ -1317,8 +1317,32 @@
 
 
   <li class="md-nav__item">
+    <a href="../../development/docker/" title="Docker Development" class="md-nav__link">
+      Docker Development
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../development/history/" title="History" class="md-nav__link">
       History
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../development/o365/" title="Office 365 API" class="md-nav__link">
+      Office 365 API
     </a>
   </li>
 
@@ -1485,6 +1509,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../user/email_remediation/" title="Email Remediation" class="md-nav__link">
+      Email Remediation
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../user/hunters_guide/" title="Hunters Guide" class="md-nav__link">
       Hunters Guide
     </a>
@@ -1556,19 +1592,20 @@
                 
                 <h1 id="yara-scanning-configuration">Yara Scanning Configuration<a class="headerlink" href="#yara-scanning-configuration" title="Permanent link">&para;</a></h1>
 <p><a href="../../design/yara/">Yara</a> <a href="../../design/configuration/">configuration</a> settings are in the <code>[service_yara]</code> section.</p>
-<pre class="codehilite"><code class="language-ini">; relative directory where the unix sockets for the yara scanner server are located (relative to DATA_DIR)
-socket_dir = var/yss/sockets
-; global configuration of yara rules (relative to SAQ_HOME or absolute path)
-; each subdirectory in this directory has any yara rules loaded in the scanner
-signature_dir = etc/yara
-; how often to check the yara rules for changes (in seconds)
-update_frequency = 60
-; parameter to the socket.listen() function (how many connections to backlog)
-backlog = 50
-; the blacklist contains a list of rule names (one per line) to exclude from the results
-blacklist_path = etc/yara.blacklist
-; a directory that contains all the files that fail to scan (relative to DATA_DIR)
-scan_failure_dir = scan_failures</code></pre>
+<div class="codehilite"><pre><span></span><code><span class="c1">; relative directory where the unix sockets for the yara scanner server are located (relative to DATA_DIR)</span>
+<span class="na">socket_dir</span> <span class="o">=</span> <span class="s">var/yss/sockets</span>
+<span class="c1">; global configuration of yara rules (relative to SAQ_HOME or absolute path)</span>
+<span class="c1">; each subdirectory in this directory has any yara rules loaded in the scanner</span>
+<span class="na">signature_dir</span> <span class="o">=</span> <span class="s">etc/yara</span>
+<span class="c1">; how often to check the yara rules for changes (in seconds)</span>
+<span class="na">update_frequency</span> <span class="o">=</span> <span class="s">60</span>
+<span class="c1">; parameter to the socket.listen() function (how many connections to backlog)</span>
+<span class="na">backlog</span> <span class="o">=</span> <span class="s">50</span>
+<span class="c1">; the blacklist contains a list of rule names (one per line) to exclude from the results</span>
+<span class="na">blacklist_path</span> <span class="o">=</span> <span class="s">etc/yara.blacklist</span>
+<span class="c1">; a directory that contains all the files that fail to scan (relative to DATA_DIR)</span>
+<span class="na">scan_failure_dir</span> <span class="o">=</span> <span class="s">scan_failures</span>
+</code></pre></div>
 
 
 <h2 id="yara-rules">Yara Rules<a class="headerlink" href="#yara-rules" title="Permanent link">&para;</a></h2>
