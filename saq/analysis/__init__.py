@@ -2764,6 +2764,8 @@ class RootAnalysis(Analysis):
     def company_name(self, value):
         self._company_name = value
         self._company_id = self._get_company_id(value)
+        if not self._company_id:
+            self._company_id = saq.CONFIG['global'].getint('company_id')
         self.set_modified()
 
     @property
@@ -2774,6 +2776,8 @@ class RootAnalysis(Analysis):
     def company_id(self, value):
         self._company_id = value
         self._company_name = self._get_company_name(value)
+        if not self._company_name:
+            self._company_name = saq.CONFIG['global'].get('company_name')
         self.set_modified()
 
     @property
