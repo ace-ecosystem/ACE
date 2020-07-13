@@ -1515,6 +1515,9 @@ def modify_user(args):
         if args.default_queue:
             c.execute("""UPDATE users SET queue = %s WHERE id = %s""", ( args.default_queue, user_id ))
 
+        if args.display_name:
+            c.execute("""UPDATE users SET display_name = %s WHERE id = %s""", ( args.display_name, user_id ))
+
         db.commit()
 
     logging.info("modified user {0}".format(u.username))
@@ -1526,6 +1529,7 @@ modify_user_parser.add_argument('-e', '--email', dest='email', default=None, hel
 modify_user_parser.add_argument('-p', '--password', action='store_true', dest='password', default=False, help="Prompt for a new password.")
 modify_user_parser.add_argument('-z', '--timezone', required=False, default=None, help="The timezone the user is in. Defaults to UTC.")
 modify_user_parser.add_argument('-q', '--default_queue', required=False, default=None, help="Change the default queue the user is assigned to.")
+modify_user_parser.add_argument('-n', '--display-name', required=False, default=None, help="Change the user's display name.")
 modify_user_parser.set_defaults(func=modify_user)
 
 # XXX DEPRECATED
