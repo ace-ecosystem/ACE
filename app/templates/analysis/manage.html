@@ -43,7 +43,7 @@
                         <th></th>
                         <th><input type="checkbox" id="master_checkbox"></th>
                         <th><span onmousedown='set_sort_filter("Alert Date")' style="cursor:pointer;white-space: nowrap;">Date{% if session['sort_filter'] == 'Alert Date' %}{% if session['sort_filter_desc'] %}&uarr;{% else %}&darr;{% endif %}{% endif %}</span></th>
-                        <th><span onmousedown='set_sort_filter("Description")' style="cursor:pointer">Alert{% if session['sort_filter'] == 'Description' %}{% if session['sort_filter_desc'] %}&uarr;{% else %}&darr;{% endif %}{% endif %}</span></th>
+			<th><span onmousedown='set_sort_filter("Description")' style="cursor:pointer">Alert{% if session['sort_filter'] == 'Description' %}{% if session['sort_filter_desc'] %}&uarr;{% else %}&darr;{% endif %}{% endif %}{%if ace_config['gui'].getboolean('show_total_alert_count') %} ({{total_alerts}}){% endif %}</span></th>
                         <th><span onmousedown='set_sort_filter("Owner")' style="cursor:pointer">Owner{% if session['sort_filter'] == 'Owner' %}{% if session['sort_filter_desc'] %}&uarr;{% else %}&darr;{% endif %}{% endif %}</span></th>
                         {% if display_disposition %}
                             <th><span onmousedown='set_sort_filter("Disposition")' style="cursor:pointer">Disposition{% if session['sort_filter'] == 'Disposition' %}{% if session['sort_filter_desc'] %}&uarr;{% else %}&darr;{% endif %}{% endif %}</span></th>
@@ -114,7 +114,7 @@
 </div> <!-- end container -->
 
 <!-- display pagination options if not all alerts are shown -->
-{% if total_alerts > session['page_size'] %}
+{% if total_alerts > session['page_size']  %}
 <div style="white-space: nowrap;text-align: center;margin-bottom:20px;">
     <button onclick="set_page_offset(0)" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-step-backward"></span></button>
     <button onclick="set_page_offset({{session['page_offset'] - session['page_size']}})" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-backward"></span></button>
