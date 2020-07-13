@@ -1928,6 +1928,12 @@ def manage():
         alert_remediations[k[0]].extend([{'result': k[1] if k[1] in ['removed', 'restored'] else 'Remediation failed: not cleaned',
                                           'css_class': 'label-success' if k[1] in ['removed', 'restored'] else 'label-danger'}])
 
+
+    # alert display timezone
+    if current_user.timezone and pytz.timezone(current_user.timezone) != pytz.utc:
+        for alert in alerts:
+            alert.display_timezone = pytz.timezone(current_user.timezone)
+
     return render_template(
         'analysis/manage.html',
         # settings
