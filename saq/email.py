@@ -9,6 +9,7 @@ import saq
 from email.utils import parseaddr
 from email.header import decode_header
 from saq.database import get_db_connection
+from saq.proxy import proxies
 from saq.util import *
 
 import exchangelib
@@ -417,8 +418,9 @@ def get_ews_api_object(config_section, **kwargs) -> EWSApi:
     if certificate:
         adapter.add_cert(server, certificate)
 
-    if not use_proxy:
-        adapter.PROXIES = {}
+    # default is defined as None in PreInitCustomSSLAdapter
+    if use_proxy:
+        adapter.PROXIES = proxies()
 
     try:
         api_object = _api_class(
