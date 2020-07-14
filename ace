@@ -1590,7 +1590,8 @@ test_sp = test_parser.add_subparsers(dest='test_cmd')
 def test_proxy(args):
     try:
         import requests
-        requests.get(args.url, proxies=saq.PROXIES, verify=saq.CONFIG['proxy']['verify'] if 'verify' in saq.CONFIG['proxy'] else False)
+        from saq import proxy
+        requests.get(args.url, proxies=proxy.proxies(), verify=saq.CONFIG['proxy']['verify'] if 'verify' in saq.CONFIG['proxy'] else False)
         sys.exit(0)
     except Exception as e:
         traceback.print_exc()
@@ -2714,11 +2715,11 @@ update_organization_parsers = subparsers.add_parser('update-organization',
 update_organization_parsers.set_defaults(func=update_organization)
 
 def update_maxmind_databases(args):
-    import saq
+    from saq import proxy
     from ip_inspector import maxmind
 
     config = saq.CONFIG['analysis_module_ip_inspector']
-    proxies = saq.PROXIES if 'use_proxy' in config and config.getboolean('use_proxy') else None
+    proxies = proxy.proxies() if 'use_proxy' in config and config.getboolean('use_proxy') else None
     license_key = config['license_key'] if 'license_key' in config else args.license_key
     if license_key:
         if not maxmind.update_databases(license_key=license_key, proxies=proxies):
@@ -3301,7 +3302,7 @@ def test_proxies(args):
     import requests
     import saq
     proxy_configs = saq.OTHER_PROXIES.copy()
-    proxy_configs['GLOBAL'] = saq.PROXIES
+    proxy_configs['GLOBAL'] = saq.CONFIG['proxy']
 
     for proxy_name, proxy_config in proxy_configs.items():
         print("testing proxy {} ({})".format(proxy_name, proxy_config))
