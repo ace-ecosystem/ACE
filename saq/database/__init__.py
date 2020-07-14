@@ -2062,6 +2062,10 @@ class Remediation(Base):
             'status': self.status,
         }
 
+    def __str__(self):
+        return f"Remediation: {self.action} - {self.type} - {self.status} - {self.key} - {self.result}"
+
+
 class Message(Base):
 
     __tablename__ = 'messages'

@@ -40,6 +40,7 @@ function remediation_selection(alert_uuids=null, targets=null) {
                 var remediation_key = data[key]['remediation_key'];
                 var remediation_key_b64 = btoa(remediation_key);
                 var remediation_history = data[key]['history'];
+                var company_id = data[key]['company_id'];
 
                 var in_progress = false;
                 var remediated = false;
@@ -72,6 +73,7 @@ function remediation_selection(alert_uuids=null, targets=null) {
                 html += 'id="cb_remediation_' + remediation_key_b64
                      + '" data-r-type="' + remediation_type
                      + '" data-r-key="' + remediation_key_b64
+                     + '" data-c-id="' + company_id
                      + '" data-o-type="' + observable_type
                      + '" data-o-value="' + observable_value_b64
                      + '"></td>'
@@ -90,7 +92,8 @@ function execute_remediation_selection(action) {
     var targets = [];
     $('input:checked[id^=cb_remediation_]').each(function(i, e) {
         targets.push({'remediation_type': e.dataset.rType,
-                      'remediation_key_b64': e.dataset.rKey, 
+                      'remediation_key_b64': e.dataset.rKey,
+                      'company_id': e.dataset.cId,
                       'observable_type': e.dataset.oType, 
                       'observable_value_b64': e.dataset.oValue});
     });
