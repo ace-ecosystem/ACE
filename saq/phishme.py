@@ -15,7 +15,7 @@ from email.headerregistry import Address
 import saq
 from saq.constants import *
 
-def submit_response(recipient, subject, disposition, comment):
+def submit_response(recipient, subject, disposition, comment, old_disposition=None):
     """Sends en email as a response to a PhishMe report based on the analysis of an analyst."""
 
     # Is phishme enabled?
@@ -40,6 +40,17 @@ def submit_response(recipient, subject, disposition, comment):
 
     # load the response from file
     response_path = saq.CONFIG['phishme'][saq.CONFIG['phishme'][disposition_key]]
+
+    # only proceed if we're updating the disposition to something that changes the respone message
+    if old_disposition is not None:
+        try:
+            _old_disposition_key = f'DISPOSITION_{old_disposition}'
+            old_response_path = saq.CONFIG['phishme'][saq.CONFIG['phishme'][_old_disposition_key]]
+            if old_response_path is not '' and old_response_path == response_path:
+                logging.info("Response message doesn't change with disposition change. Not sending phishme response to user.")
+                return True
+        except Exception as e:
+            logging.warning(f"Caught exception trying to compare phishme response changes: {e}")
 
     # interpolate the values
     if comment is None or comment is '':
