@@ -111,6 +111,7 @@ class ObservableAction(object):
         self.description = None
         self.jinja_action_path = None
         self.icon = None
+        self.display = True
 
 class ObservableActionSeparator(ObservableAction):
     """Use this to place separator bars in your list of action choices."""
@@ -160,6 +161,7 @@ class ObservableActionClearCloudphishAlert(ObservableAction):
         self.description = "Clear Cloudphish Alert"
         self.jinja_action_path = 'analysis/observable_actions/clear_cloudphish_alert.html'
         self.icon = 'thumbs-down'
+        self.display = saq.CONFIG.getboolean('gui', 'clear_cloudphish_alert', fallback=True)
 
 class ObservableActionRemediateEmail(ObservableAction):
     """Action to remediate a given email (referenced by message-id)."""

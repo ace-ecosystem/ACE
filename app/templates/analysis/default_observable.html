@@ -29,7 +29,8 @@
     <span class="caret"></span>
     </button>
     <ul class="dropdown-menu" aria-labelledby="action_{{unique_reference}}">
-        {% for action in _observable.jinja_available_actions %}
+        {% for action in _observable.jinja_available_actions if action.display %}
+        {# TODO go through existing observable actions and override action.display if configurable #}
             {% if action.name is none %}
                 <li role="separator" class="divider"></li>
             {% else %}
