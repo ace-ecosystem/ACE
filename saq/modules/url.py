@@ -57,8 +57,8 @@ class ParseURLAnalysis(Analysis):
                          'params': None,
                          'fragment': None }
 
-    #def generate_summary(self):
-    #    return f"Parsed: {self.details['netloc']}"
+    def generate_summary(self):
+        return f"Parsed: {self.details['netloc']}"
 
 class ParseURLAnalyzer(AnalysisModule):
     """Parse the URL and add the FQDN as an observable."""
@@ -806,6 +806,7 @@ class CrawlphishAnalyzer(AnalysisModule):
                 continue
             except Exception as e:
                 proxy_result.error_reason = str(e)
+                logging.error(f"caught exception requesting '{formatted_url}' : {e}")
                 #report_exception()
                 continue
 
