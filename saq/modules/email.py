@@ -1382,7 +1382,7 @@ class EmailAnalyzer(AnalysisModule):
             email_details[KEY_FROM] = decode_rfc2822(target_email['from'])
 
             address = normalize_email_address(email_details[KEY_FROM])
-            if address is not None:
+            if address:
                 mail_from = address
                 from_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if from_address:

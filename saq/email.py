@@ -19,12 +19,12 @@ from exchangelib.errors import DoesNotExist
 def normalize_email_address(email_address):
     """Returns a normalized version of email address.  Returns None if the address cannot be parsed."""
     name, address = parseaddr(email_address)
-    if address is '':
+    if not address:
         # attempt to fix known cases the stdlib has, like <<person@example.com>>
-        while email_address and '<<' and '>>'  in email_address:
+        while email_address and '<<' in email_address and '>>'  in email_address:
             email_address = email_address.replace('<<','<').replace('>>','>')
         name, address = parseaddr(email_address)
-        if address is '':
+        if not address:
             return None
 
     address = address.strip()
