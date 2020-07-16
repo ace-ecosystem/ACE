@@ -1,4 +1,4 @@
-# vim: sw=4:ts=4:et:cc=120
+# vim: sw=4:ts=4:et
 import datetime
 import email.header
 import email.parser
@@ -1380,9 +1380,9 @@ class EmailAnalyzer(AnalysisModule):
 
         if 'from' in target_email:
             email_details[KEY_FROM] = decode_rfc2822(target_email['from'])
-            
+
             address = normalize_email_address(email_details[KEY_FROM])
-            if address != '':
+            if address is not None:
                 mail_from = address
                 from_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if from_address:
