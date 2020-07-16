@@ -192,9 +192,9 @@ class IPIAnalyzer(AnalysisModule):
     def execute_analysis(self, observable):
         logging.debug("Inspecting {}".format(observable.value))
         try:
-            proxies = proxies() if self.use_proxy else None
+            _proxies = proxies() if self.use_proxy else None
             # Create Inspector with MaxMind API
-            mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=proxies),
+            mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=_proxies),
                             blacklists=self.blacklist_maps,
                             whitelists=self.whitelist_maps)
         except Exception as e:
