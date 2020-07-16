@@ -102,7 +102,7 @@ def failed_remediation(remediation: database.Remediation, remediator: BaseRemedi
 
 
 class EmailRemediationSystem(RemediationSystem):
-    def __init__(self, company_id=None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # Create a remediator for each account
@@ -124,13 +124,13 @@ class EmailRemediationSystem(RemediationSystem):
             logging.debug(f'loading section {section.name}')
 
             # is this remediation account restricted to a specific company?
-            if company_id is not None and 'company_id' in section:
-                if not isinstance(company_id, int):
-                    company_id = int(company_id)
-                if company_id != section.getint('company_id', None):
+            if self.company_id is not None and 'company_id' in section:
+                if not isinstance(self.company_id, int):
+                    self.company_id = int(self.company_id)
+                if self.company_id != section.getint('company_id', None):
                     logging.info(f"skipping remediator {section.name}: company_id does not match.")
                     continue
-                logging.info(f"found remediator {section.name} specified for company_id={company_id}")
+                logging.info(f"found remediator {section.name} specified for company_id={self.company_id}")
 
             try:
                 remediator = get_email_remediator(section)

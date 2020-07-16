@@ -120,11 +120,14 @@ class RemediationSystemManager(ACEService):
                 continue
 
 class RemediationSystem(object):
-    def __init__(self, config=None):
+    def __init__(self, config=None, company_id=None):
         assert isinstance(config, configparser.SectionProxy)
 
         # configuration settings for this remediation system
         self.config = config
+
+        # for restricting remediation accounts to a specific companies
+        self.company_id = company_id
 
         # the type of remediations this system performs
         self.remediation_type = config['type']
