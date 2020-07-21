@@ -413,6 +413,46 @@ clear_persistence_parser.add_argument('--dry-run', action='store_true', default=
 clear_persistence_parser.set_defaults(func=clear_persistence)
 
 # ============================================================================
+# microsoft api utilities
+#
+
+msapi_parser = subparsers.add_parser('msapi')
+msapi_sp = msapi_parser.add_subparsers(dest='msapi_cmd')
+
+graph_parser =  msapi_sp.add_parser('graph',
+    help="MS Graph API utilites")
+graph_sp = graph_parser.add_subparsers(dest='graph_cmd')
+
+def validate_graph_resources(args):
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+    grc.load_resources()
+    for r in grc.resources:
+        print(r)
+
+    sys.exit(0)
+
+validate_resource_parser = graph_sp.add_parser('validate-resources',
+    help="Validate graph resource configurations.")
+
+validate_resource_parser.set_defaults(func=validate_graph_resources)
+
+def print_collection_accounts(args):
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+    grc.load_collection_accounts()
+    for account, value in grc.collection_accounts.items():
+        print(f"\t{account}: {value}")
+
+    sys.exit(0)
+
+print_collection_account_parser = graph_sp.add_parser('print-collection-accounts',
+    help="print configured collection accounts")
+print_collection_account_parser.set_defaults(func=print_collection_accounts)
+
+# ============================================================================
 # configuration settings
 #
 
