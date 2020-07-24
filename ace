@@ -416,14 +416,15 @@ clear_persistence_parser.set_defaults(func=clear_persistence)
 # microsoft api utilities
 #
 
-msapi_parser = subparsers.add_parser('msapi')
+msapi_parser = subparsers.add_parser('msapi',
+    help="Interface with Microsoft API integrations.")
 msapi_sp = msapi_parser.add_subparsers(dest='msapi_cmd')
 
 graph_parser =  msapi_sp.add_parser('graph',
     help="MS Graph API utilites")
 graph_sp = graph_parser.add_subparsers(dest='graph_cmd')
 
-def validate_graph_resources(args):
+def list_graph_resources(args):
     from saq.collectors import graph_collections
 
     grc = graph_collections.GraphResourceCollector()
@@ -433,10 +434,10 @@ def validate_graph_resources(args):
 
     sys.exit(0)
 
-validate_resource_parser = graph_sp.add_parser('validate-resources',
+validate_resource_parser = graph_sp.add_parser('list-resources',
     help="Validate graph resource configurations.")
 
-validate_resource_parser.set_defaults(func=validate_graph_resources)
+validate_resource_parser.set_defaults(func=list_graph_resources)
 
 def print_collection_accounts(args):
     from saq.collectors import graph_collections
@@ -451,6 +452,52 @@ def print_collection_accounts(args):
 print_collection_account_parser = graph_sp.add_parser('print-collection-accounts',
     help="print configured collection accounts")
 print_collection_account_parser.set_defaults(func=print_collection_accounts)
+
+def get_resource(args):
+    from saq.graph_api import GraphAPI
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+
+    grc.load_resources()
+    if args.resource not in [r.name for r in grc.resources]:
+        logging.error(f"no configured resource by the name {args.resource}")
+        sys.exit(1)
+
+    resource = [r for r in grc.resources if r.name == args.resource][0]
+    logging.info(f"loaded the {resource.name} resource")
+
+    if not resource.ready:
+        print("Supply required arguments:")
+        for arg in resource.args['required']:
+            value = input(f"Set {arg}: ")
+            resource.set_argument(arg, value)
+        print("Change optional arugments, if you want:")
+        for arg in resource.args['optional']:
+            default = resource.args['optional'][arg]
+            value = input(f"Set {arg} [{default}]: ") or default
+            resource.set_argument(arg, value)
+
+    if not grc.build_graph_api_client_map():
+        logging.error("failed to get a graph api client.")
+        sys.exit(1)
+
+    graph_api_client = grc.graph_api_clients[resource.graph_account_name]
+    graph_api_client.initialize()
+
+    results = grc.execute_resource(graph_api_client, resource)
+    # NOTE, not handeling pagination here
+    if results:
+        print(json.dumps(results, indent=2, sort_keys=True))
+
+    sys.exit(0)
+
+graph_resource_parser = graph_sp.add_parser('get',
+    help="get a configured resource")
+graph_resource_parser.add_argument('resource', action='store',
+    help="the name of a configured resource")
+graph_resource_parser.set_defaults(func=get_resource)
+
 
 # ============================================================================
 # configuration settings
