@@ -518,6 +518,7 @@ ANALYSIS_TYPE_FALCON = 'falcon'
 ANALYSIS_TYPE_FIREEYE = 'fireeye'
 ANALYSIS_TYPE_QRADAR_OFFENSE = 'qradar_offense'
 ANALYSIS_TYPE_BRICATA = 'bricata'
+ANALYSIS_TYPE_GRAPH_RESOURCE = 'graph - resource'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'
