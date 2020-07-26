@@ -209,9 +209,6 @@ class GraphResourceCollector(Collector):
         # The GraphResources to collect events from
         self.resources = []
 
-        # For reporting on miss-configured resources
-        self.miss_configured_resources = {} # key = ini path, value = error message
-
         # Collection accounts for supporting role based access environments
         self.collection_accounts = {}
 
@@ -291,8 +288,6 @@ class GraphResourceCollector(Collector):
 
         for account, _config in self.collection_accounts.items():
             self.graph_api_clients[account] = graph_api.GraphAPI(_config, proxies=saq.proxy.proxies())
-
-        return self.graph_api_clients
 
     def filter_events_through_resource_tune_map(self, resource, events):
         """Only return events that do not match a resourced tune map."""
