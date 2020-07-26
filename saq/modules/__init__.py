@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 
 import saq
 
+from saq import graph_api
 from saq.analysis import Analysis, Observable, MODULE_PATH
 from saq.constants import *
 from saq.error import report_exception
@@ -990,6 +991,69 @@ class TagAnalysisModule(AnalysisModule):
 
     def is_excluded(self, observable):
         return False 
+
+
+class GraphAnalysisModule(AnalysisModule):
+    """An analysis module that uses MS Graph."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Collection accounts for supporting role based access environments
+        self.collection_accounts = {}
+
+        # Name of default graph collection account
+        self.default_collection_account_name = 'default'
+
+        # For storing the loaded graph api objects
+        self.graph_api_clients = {}
+
+    def load_collection_accounts(self):
+        for section_name in saq.CONFIG.keys():
+            if not section_name.startswith('graph_collection_account'):
+                continue
+
+            account_name = None
+            if section_name == 'graph_collection_account':
+                account_name = self.default_collection_account_name
+            else:
+                if not section_name.startswith('graph_collection_account_'):
+                    continue
+                account_name = section_name[len('graph_collection_account_'):]
+
+            self.collection_accounts[account_name] = saq.CONFIG[section_name]
+
+    def build_graph_api_client_map(self):
+        if not self.collection_accounts:
+            self.load_collection_accounts()
+        if not self.collection_accounts:
+            logging.error(f"no graph collection accounts detected")
+            return None
+
+        for account, _config in self.collection_accounts.items():
+            self.graph_api_clients[account] = graph_api.GraphAPI(_config, proxies=saq.proxy.proxies())
+
+    def get_api(self, account_name):
+        if not self.graph_api_clients:
+            self.build_graph_api_client_map()
+        if not self.graph_api_clients:
+            logging.error(f"unable to load any graph api clients")
+            return None
+        if account_name is None:
+            account_name = self.default_collection_account_name
+        if account_name not in self.graph_api_clients.keys():
+            logging.error(f"{account_name} not found in graph api client map")
+            return None
+
+        return self.graph_api_clients[account_name]
+
+    def execute_request(self, api: graph_api.GraphAPI, url: str, method='get', params={}, data={}, **kwargs):
+        response = api.request(url, method=method, proxies=saq.proxy.proxies(), params=params, data=json.dumps(data))
+        if response.status_code != 200:
+            error = response.json()['error']
+            logging.error(f"got {response.status_code} getting {url}: {error['code']} : {error['message']}")
+            return False
+
+        return response
 
 class LDAPAnalysisModule(AnalysisModule):
     """An analysis module that uses LDAP."""
