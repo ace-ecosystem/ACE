@@ -31,7 +31,7 @@ F_DISPOSITION = 'disposition'
 #
 # WARNING
 # XXX NOTE
-# when you add a new observable type you ALSO need to edit lib/saq/observables/__init__.py
+# when you add a new observable type you ALSO need to edit saq/observables/__init__.py
 # and add a matching entry to the _OBSERVABLE_TYPE_MAPPING dictionary
 
 F_ASSET = 'asset'
