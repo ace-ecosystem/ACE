@@ -12,7 +12,7 @@ You can use docker to develop in ACE.
 - Execute `bin/initialize_docker.py` which sets up random passwords for a development environment.
 - Execute `docker-compose -f docker-compose-dev.yml up -d` which launches the containers into the background.
 - Execute `docker exec -it -u root ace-dev /bin/bash -c 'docker/provision/ace/install -r'` to finish the installation.
-- Execute `bin/attach-docker-dev.sh` to attach to the running container.
+- Execute `bin/attach-dev-container.sh` to attach to the running container.
 
 ## Windows Setup Instructions (Powershell)
 
