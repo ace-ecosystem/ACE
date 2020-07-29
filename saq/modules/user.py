@@ -1,5 +1,6 @@
 # vim: sw=4:ts=4:et
 
+import base64
 import os
 import os.path
 import logging
@@ -10,7 +11,7 @@ import json
 import saq
 from saq.error import report_exception
 from saq.analysis import Analysis, Observable
-from saq.modules import AnalysisModule, LDAPAnalysisModule
+from saq.modules import AnalysisModule, LDAPAnalysisModule, GraphAnalysisModule
 from saq.constants import *
 import saq.ldap
 
@@ -190,3 +191,160 @@ class UserAnalyzer(LDAPAnalysisModule):
             analysis.add_observable(F_EMAIL_ADDRESS, analysis.details['ldap']['mail'])
 
         return True
+
+class UserPrincipleNameAnalysis(Analysis):
+    """Who is the user?"""
+
+    def initialize_details(self):
+        self.user_id = None
+        self.details = {'user': {},
+                        'groups': {},
+                        'teams': {},
+                        'manager': {},
+                        'directReports': {},
+                        'encoded_profile_photo': None}
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/upn.html"
+
+    def generate_summary(self):
+        if self.details:
+            user_details = self.details['user']
+            desc = ""
+            if 'displayName' in user_details:
+                desc += f" - {user_details['displayName']}"
+            if 'companyName' in user_details:
+                desc += f" - {user_details['companyName']}"
+            if 'department' in user_details:
+                desc += f" - {user_details['department']}"
+            if 'jobTitle' in user_details:
+                desc += f" - {user_details['jobTitle']}"
+            if 'officeLocation' in user_details:
+                desc += f" - {user_details['officeLocation']}"
+            if 'preferredLanguage' in user_details:
+                desc += f" - {user_details['preferredLanguage']}"
+            return f"UserPrincipleName Analysis{desc}"
+        return None
+
+class UserPrincipleNameAnalyzer(GraphAnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return UserPrincipleNameAnalysis
+
+    @property
+    def select_properties(self):
+        # https://docs.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0#properties
+        user_properties = [ 'id',
+                            'employeeId',
+                            'displayName',
+                            'surname',
+                            'givenName',
+                            'city',
+                            'state',
+                            'streetAddress',
+                            'country',
+                            'postalCode',
+                            'officeLocation',
+                            'companyName',
+                            'department',
+                            'jobTitle',
+                            'externalUserState',
+                            'hireDate',
+                            'lastPasswordChangeDateTime',
+                            'mail',
+                            'mobilePhone',
+                            'onPremisesDistinguishedName',
+                            'preferredLanguage',
+                            'preferredName',
+                            'usageLocation',
+                            'userType',
+                            'userPrincipalName']
+        return ",".join(user_properties)
+
+    @property
+    def upn_observable_type_pointer(self):
+        return self.config.get('upn_pointer', None)
+
+    @property
+    def api_version(self):
+        return self.config.get('resource_api_version', 'v1.0')
+
+    @property
+    def graph_account_name(self):
+        return self.config.get('graph_account_name', None)
+
+    @property
+    def get_profile_photo(self):
+        return self.config.getboolean('get_profile_photo', None)
+
+    @property
+    def profile_photo_size(self):
+        return self.config.get('profile_photo_size', "120x120")
+
+    @property
+    def valid_observable_types(self):
+        # ADD an F_UPN observable to ACE? Not sure it's necessary, yet.
+        o_types = (  )
+        if self.upn_observable_type_pointer and self.upn_observable_type_pointer in VALID_OBSERVABLE_TYPES:
+            if self.upn_observable_type_pointer not in o_types:
+                o_types += (self.upn_observable_type_pointer, )
+        return o_types
+
+    def execute_analysis(self, upn):
+        analysis = self.create_analysis(upn)
+
+        api = self.get_api(self.graph_account_name)
+        api.initialize()
+
+        # user
+        url = api.build_url(f"{self.api_version}/users/{upn.value}?$select={self.select_properties}")
+        results = self.execute_request(api, url)
+        if results:
+            analysis.details['user'] = results.json()
+            analysis.user_id = analysis.details['user']['id']
+
+        # The employee identifier assigned to the user by the organization.
+        employeeId = analysis.details['user'].get('employeeId', None)
+        if employeeId:
+            analysis.add_observable(F_USER, employeeId)
+
+        # groups
+        url = api.build_url(f"{self.api_version}/users/{upn.value}/memberOf")
+        results = self.execute_request(api, url)
+        if results:
+            #if '@odata.nextwhaever' - while url, get all content from pages
+            analysis.details['groups'] = results.json()
+
+        # teams
+        if analysis.user_id:
+            url = api.build_url(f"{self.api_version}/users/{analysis.user_id}/joinedTeams")
+            results = self.execute_request(api, url)
+            if results:
+                analysis.details['teams'] = results.json()
+
+        # manager
+        url = api.build_url(f"{self.api_version}/users/{upn.value}/manager")
+        results = self.execute_request(api, url)
+        if results:
+            analysis.details['manager'] = results.json()
+
+        # directReports
+        url = api.build_url(f"{self.api_version}/users/{upn.value}/directReports")
+        results = self.execute_request(api, url)
+        if results:
+            analysis.details['directReports'] = results.json()
+
+        # photo ?
+        if self.get_profile_photo:
+            url = api.build_url(f"{self.api_version}/users/{upn.value}/photos/{self.profile_photo_size}/$value")
+            try:
+                results = self.execute_request(api, url, stream=True)
+                if results:
+                    analysis.details['encoded_profile_photo'] = base64.b64encode(results.content)
+            except Exception as e:
+                logging.warning(f"couldn't download profile photo: {e}")
+
+        if analysis.details:
+            return True
+        return False
