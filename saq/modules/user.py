@@ -12,6 +12,7 @@ import saq
 from saq.error import report_exception
 from saq.analysis import Analysis, Observable
 from saq.modules import AnalysisModule, LDAPAnalysisModule, GraphAnalysisModule
+from saq.util import create_timedelta, local_time, is_ipv4
 from saq.constants import *
 import saq.ldap
 
@@ -348,3 +349,147 @@ class UserPrincipleNameAnalyzer(GraphAnalysisModule):
         if analysis.details:
             return True
         return False
+
+class UserSignInHistoryAnalysis(Analysis):
+    """What can the user's recent authentication history tell us?"""
+
+    def initialize_details(self):
+        self.details = {}
+
+    def generate_summary(self):
+        if self.details:
+            desc = f"UserSignInHistoryAnalysis ({self.details['day_interval']} days) -"
+            total_events = len(self.details['raw_events'])
+            desc += f" TotalAttempts={total_events}"
+            percent = self.details['auth_sucess_count']/total_events * 100
+            desc += f" Successful={percent:.2f}%"
+            percent = self.details['auth_fail_count']/total_events * 100
+            desc += f" Failed={percent:.2f}%"
+            percent = self.details['count_from_managed']/total_events * 100
+            desc += f" ManagedDevice={percent:.2f}%"
+            desc += f" - UniqueIP={len(self.details['unique_ipaddr'])}"
+            desc += f" - UniqueApp={len(self.details['apps'])}"
+
+            return desc
+        return None
+
+class UserSignInHistoryAnalyzer(GraphAnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return UserSignInHistoryAnalysis
+
+    @property
+    def upn_observable_type_pointer(self):
+        return self.config.get('upn_pointer', None)
+
+    @property
+    def day_interval(self):
+        # how far back to query the user's sign-in history, in days
+        return self.config.get('day_interval', 7)
+
+    @property
+    def api_version(self):
+        return self.config.get('resource_api_version', 'v1.0')
+
+    @property
+    def graph_account_name(self):
+        return self.config.get('graph_account_name', None)
+
+    @property
+    def valid_observable_types(self):
+        # ADD an F_UPN observable to ACE? Not sure it's necessary, yet.
+        o_types = (  )
+        if self.upn_observable_type_pointer and self.upn_observable_type_pointer in VALID_OBSERVABLE_TYPES:
+            if self.upn_observable_type_pointer not in o_types:
+                o_types += (self.upn_observable_type_pointer, )
+        return o_types
+
+    def execute_analysis(self, upn):
+        analysis = self.create_analysis(upn)
+
+        api = self.get_api(self.graph_account_name)
+        api.initialize()
+
+        time_interval = create_timedelta(f'{self.day_interval}:00:00:00')
+        start_time = (local_time() - time_interval).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        analysis.details['day_interval'] = self.day_interval
+        analysis.details['start_time'] = start_time
+
+        # sign ins
+        url = api.build_url(f"{self.api_version}/auditLogs/signIns")#?$filter=userPrincipalName eq '{upn.value}' and createdDateTime gt {start_time}")
+        params = {'$filter': f"userPrincipalName eq '{upn.value}' and createdDateTime gt {start_time}"}
+        results = self.execute_request(api, url, params=params)
+        if not results:
+            return False
+
+        results = results.json()
+        events = results['value'] if 'value' in results else None
+        if not events:
+            return False
+
+        # get any and all paged content
+        if '@odata.nextLink' in results:
+            url = results['@odata.nextLink']
+            while url is not None:
+                results = self.execute_request(api, url)
+                if 'value' in results and results['value']:
+                    events.extend(results['value'])
+                if '@odata.nextLink' in results:
+                    url = results['@odata.nextLink']
+                else:
+                    url = None
+
+        analysis.details['raw_events'] = events
+
+        # how does MS categorize the user's risk?
+        # this is not really sign in history analysis ...
+        # should it go in the UPN analyzer?
+        user_id = events[0]['userId']
+        url = api.build_url(f"{self.api_version}/identityProtection/riskyUsers/{user_id}")
+        results = self.execute_request(api, url)
+        if results:
+            results = results.json()
+            analysis.details['risk_result'] = results
+            risk_state = f"{results['riskLevel']} {results['riskState']}"
+            analysis.details['risk_state'] = risk_state
+            if results['riskLevel'] in ['high', 'medium']:
+                analysis.add_tag(risk_state)
+
+        # parse out some simple stats to display
+        # and add any observables
+
+        # ips
+        unique_ips = list(set([si['ipAddress'] for si in events if si.get('ipAddress')]))
+        analysis.details['unique_ipaddr'] = unique_ips
+        for ip in unique_ips:
+            if is_ipv4(ip):
+                analysis.add_observable(F_IPV4, ip)
+            # else we need to add an F_IPV6
+
+        # apps
+        apps = list(set([si['appDisplayName'] for si in events if si.get('appDisplayName')]))
+        analysis.details['apps'] = apps
+
+        # devices
+        devices = [si['deviceDetail'] for si in events if si.get('deviceDetail')]
+        unique_managed_devices = []
+        analysis.details['count_from_managed'] = 0
+        for device in devices:
+            if device.get('isManaged'):
+                analysis.details['count_from_managed'] += 1
+                if device.get('displayName') and device['displayName'] not in unique_managed_devices:
+                    unique_managed_devices.append(device['displayName'])
+        for dname in unique_managed_devices:
+            analysis.add_observable(F_HOSTNAME, dname)
+
+        # auth success / failure counts
+        auth_results = [si['status'] for si in events]
+        analysis.details['auth_sucess_count'] = 0
+        analysis.details['auth_fail_count'] = 0
+        for auth in auth_results:
+            if auth['errorCode'] == 0:
+                analysis.details['auth_sucess_count'] += 1
+            else:
+                analysis.details['auth_fail_count'] += 1
+
+        return True
