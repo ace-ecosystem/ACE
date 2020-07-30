@@ -1,5 +1,6 @@
 """Module is a grouping of Graph API authentication and helper classes."""
 
+import os
 import configparser
 from typing import Union
 import urllib.parse
@@ -13,6 +14,18 @@ from saq.error import report_exception
 from saq.extractors import RESULT_MESSAGE_NOT_FOUND, RESULT_MESSAGE_FOUND
 from saq import proxy
 import time
+
+# MSAL Token Cache
+TOKEN_CACHE = msal.SerializableTokenCache()
+MSAL_TOKEN_CACHE_PATH = os.path.join(saq.DATA_DIR, saq.CONFIG['msal'].get('token_cache_path'))
+if MSAL_TOKEN_CACHE_PATH and os.path.exists(MSAL_TOKEN_CACHE_PATH):
+    TOKEN_CACHE.deserialize(open(MSAL_TOKEN_CACHE_PATH, "r").read())
+
+def update_token_cache():
+    logging.debug(f"updating token cache: {MSAL_TOKEN_CACHE_PATH}")
+    if TOKEN_CACHE.has_state_changed:
+        with open(MSAL_TOKEN_CACHE_PATH, "w") as fp:
+            fp.write(TOKEN_CACHE.serialize())
 
 class GraphApiAuth(requests.auth.AuthBase):
     def __init__(self, client_id, tenant_id, thumbprint, private_key_path, auth_url="https://login.microsoftonline.com", scope="https://graph.microsoft.com/.default"):
@@ -103,7 +116,7 @@ class GraphAPI:
         kicking off the I/O of setting up a client app until you're ready
         to initialize it."""
         self.client_app = kwargs.get('client_app') or msal.ConfidentialClientApplication(
-            self.config.client_id, **self.config.auth_kwargs, verify=self.verify_auth, timeout=5, proxies=self.proxies,
+            self.config.client_id, **self.config.auth_kwargs, verify=self.verify_auth, timeout=5, proxies=self.proxies, token_cache=TOKEN_CACHE,
         )
 
     def build_url(self, path):
@@ -111,8 +124,17 @@ class GraphAPI:
 
     def get_token(self, **kwargs):
         """Get auth token for Graph API."""
-        logging.info("acquiring new auth token for graph api")
-        result = self.client_app.acquire_token_for_client(self.config.scopes)
+        logging.debug("checking msal cache for usable auth token")
+        result = self.client_app.acquire_token_silent(self.config.scopes, account=None)
+
+        if not result:
+            logging.debug("no token cached: acquiring new auth token for graph api")
+            result = self.client_app.acquire_token_for_client(self.config.scopes)
+            # update the cache with the new token
+            update_token_cache()
+
+        if 'access_token' not in result:
+            logging.error(f"{result.get('error')}")
 
         self.token = result
 
