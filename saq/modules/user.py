@@ -472,14 +472,14 @@ class UserSignInHistoryAnalyzer(GraphAnalysisModule):
 
         # devices
         devices = [si['deviceDetail'] for si in events if si.get('deviceDetail')]
-        unique_managed_devices = []
+        unique_devices = []
         analysis.details['count_from_managed'] = 0
         for device in devices:
             if device.get('isManaged'):
                 analysis.details['count_from_managed'] += 1
-                if device.get('displayName') and device['displayName'] not in unique_managed_devices:
-                    unique_managed_devices.append(device['displayName'])
-        for dname in unique_managed_devices:
+            if device.get('displayName') and device['displayName'] not in unique_devices:
+                unique_devices.append(device['displayName'])
+        for dname in unique_devices:
             analysis.add_observable(F_HOSTNAME, dname)
 
         # auth success / failure counts
