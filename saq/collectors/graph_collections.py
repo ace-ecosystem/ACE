@@ -25,7 +25,7 @@ ARGUMENTS = 'arguments'
 RESOURCE = 'resource'
 OBSERVABLE_MAP = 'observable_mapping'
 ARGUMENT_HELP = 'argument_help'
-TUNE = 'tune'
+
 ACCEPTED_ANALYSIS_MODES = ['analysis', 'correlation']
 REQUIRED_RESOURCE_SECTIONS = [OVERVIEW, ARGUMENTS, RESOURCE, OBSERVABLE_MAP]
 SECTION_ARGUMENTS = {'required': ['required'],
@@ -107,17 +107,6 @@ class GraphResource():
         self.observable_map = resource_config[OBSERVABLE_MAP] or {}
         self.temporal_fields = resource_config['temporal_fields'] if resource_config.has_section('temporal_fields') else {}
         self.persistent_time_field = resource_config[OVERVIEW]['persistent_time_field']
-        self.tune_map = {'strings': [],
-                         'field_matches': {}}
-        if resource_config.has_section(TUNE):
-            for key in resource_config[TUNE].keys():
-                if not resource_config[TUNE].get(key):
-                    logging.warning(f"resource '{self.name}' has tune key={key} with no value")
-                    continue
-                if key.startswith('string'):
-                    self.tune_map['strings'] = resource_config[TUNE].get(key)
-                else:
-                    self.tune_map['field_matches'][key] = resource_config[TUNE].get(key)
 
         # XXX move from parameter str to params like dict that requests lib takes? does it matter?
         self.parameter_str = resource_config[RESOURCE]['parameters'] if 'parameters' in resource_config[RESOURCE] else None
@@ -292,54 +281,6 @@ class GraphResourceCollector(Collector):
             self.graph_api_clients[account] = graph_api.GraphAPI(_config, proxies=saq.proxy.proxies())
         return True
 
-    def filter_events_through_resource_tune_map(self, resource, events):
-        """Only return events that do not match a resourced tune map."""
-        if isinstance(events, dict):
-            events = [events]
-
-        filtered_events = []
-        for event in events:
-            tune_match = False
-            if resource.tune_map['strings']:
-                event_txt = json.dumps(event)
-                for string_tune in resource.tune_map['strings']:
-                    if string_tune in event_txt:
-                        logging.debug(f"ignoring event {event['id']}: event content contained tune rule='{string_tune}'")
-                        tune_match = True
-                        break
-            for field_map, tune_value in resource.tune_map['field_matches'].items():
-                if field_map in event.keys():
-                    # simple key=value
-                    if tune_value in event[field_map]:
-                        logging.debug(f"ignoring event {event['id']}: event matched tune rule where {tune_value} in {field_map}")
-                        tune_match = True
-                        break
-                else:
-                    # we expect it to be a "dict_key.[list].field_key = value" mapping
-                    field_parts = []
-                    if '.' and '[]' in field_map:
-                        # key.[].target_field
-                        field_parts = field_map.split('.')
-                        if len(field_parts) != 3:
-                            logging.error(f"unexpected tune mapping length: {field_map}->{len(field_parts)}")
-                            continue
-                        key = field_parts[0]
-                        field = field_parts[2]
-                        try:
-                            field_values = [_[field] for _ in event[key] if field in _ and _[field]]
-                            for _value in field_values:
-                                if tune_value in _value:
-                                    logging.debug(f"ignoring event {event['id']}: tune match where {tune_value} found in {field_map}")
-                                    tune_match = True
-                                    break
-                        except KeyError:
-                            pass
-
-            if not tune_match:
-                filtered_events.append(event)
-
-        return filtered_events
-
     def execute_resource(self, api_client, resource, url=None):
         if url is None:
             url_path = f"{resource.api_version}/{resource.resource}"
@@ -494,13 +435,6 @@ class GraphResourceCollector(Collector):
                         url = results['@odata.next']
                     else:
                         url = None
-
-            # filter out events that match this resource tune map
-            try:
-                events = self.filter_events_through_resource_tune_map(resource, events)
-            except Exception as e:
-                logging.error(f"failed to filter events through resource='{resource.name}' tune map: {e}")
-                report_exception()
 
             def _context_organization(events):
                 # organize needed and potentially helpful context here
