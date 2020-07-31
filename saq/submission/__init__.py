@@ -15,6 +15,7 @@ import tempfile
 import uuid
 
 import saq
+from saq.constants import *
 from saq.error import report_exception
 from saq.util import abs_path, local_time, create_timedelta, workload_storage_dir, storage_dir_from_uuid
 
