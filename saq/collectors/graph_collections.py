@@ -212,6 +212,9 @@ class GraphResourceCollector(Collector):
         # Collection accounts for supporting role based access environments
         self.collection_accounts = {}
 
+        # For storing the available graph api clients
+        self.graph_api_clients = {}
+
     def _list_resource_ini(self):
         """Return the list of resource ini files in self.resource_dirs."""
         result = []
@@ -280,7 +283,6 @@ class GraphResourceCollector(Collector):
             self.collection_accounts[account_name] = saq.CONFIG[section_name]
 
     def build_graph_api_client_map(self):
-        self.graph_api_clients = {}
         self.load_collection_accounts()
         if not self.collection_accounts:
             logging.error(f"no graph collection accounts detected")
@@ -288,6 +290,7 @@ class GraphResourceCollector(Collector):
 
         for account, _config in self.collection_accounts.items():
             self.graph_api_clients[account] = graph_api.GraphAPI(_config, proxies=saq.proxy.proxies())
+        return True
 
     def filter_events_through_resource_tune_map(self, resource, events):
         """Only return events that do not match a resourced tune map."""
@@ -441,6 +444,7 @@ class GraphResourceCollector(Collector):
 
     def collect_resource_events(self):
         if not self.build_graph_api_client_map():
+            logging.info(f"no graph api clients to work with")
             return None
 
         self.load_resources()
