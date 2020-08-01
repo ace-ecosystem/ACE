@@ -356,6 +356,10 @@ class UserSignInHistoryAnalysis(Analysis):
     def initialize_details(self):
         self.details = {}
 
+    @property
+    def jinja_template_path(self):
+        return "analysis/user_auth_history.html"
+
     def generate_summary(self):
         if self.details:
             desc = f"UserSignInHistoryAnalysis ({self.details['day_interval']} days) -"
