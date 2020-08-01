@@ -316,7 +316,10 @@ class GraphResourceCollector(Collector):
         for event in events:
             # NOTE event time accuracy can vary widely from seconds to 7 digit micoseconds. dateutil.parser has been able to
             # handle these format variations gracefully compared to fighting the formats for datetime.datetime.strptime
-            event_time = dateutil.parser.parse(event["eventDateTime"])
+            if "eventDateTime" in event:
+                event_time = dateutil.parser.parse(event["eventDateTime"])
+            else:
+                event_time = dateutil.parser.parse(event[resource.persistent_time_field])
 
             try:
                 # for keeping track so duplicates don't get added.
@@ -444,13 +447,17 @@ class GraphResourceCollector(Collector):
                 _earliest_event_time = None
 
                 for _e in events:
-                    _references[_e['id']] = _e['sourceMaterials']
-                    _descriptions[_e['id']] = _e['description']
+                    _references[_e['id']] = _e['sourceMaterials'] if 'sourceMaterials' in _e else []
+                    _descriptions[_e['id']] = _e['description'] if 'description' in _e else "No description was provided for this event."
                     _event_uuids.append(_e['id'])
 
                     # NOTE event time accuracy can vary widely from seconds to 7 digit micoseconds. dateutil.parser has been able to
                     # handle these format variations gracefully compared to fighting the formats for datetime.datetime.strptime
-                    _event_time = dateutil.parser.parse(_e["eventDateTime"])
+                    if "eventDateTime" in _e:
+                        _event_time = dateutil.parser.parse(_e["eventDateTime"])
+                    else:
+                        # use the time field we know about
+                        _event_time = dateutil.parser.parse(_e[resource.persistent_time_field])
                     if _earliest_event_time is None:
                         _earliest_event_time = _event_time
                     elif _event_time < _earliest_event_time:
@@ -501,7 +508,11 @@ class GraphResourceCollector(Collector):
                     # submit every event
 
                     for event in submission_data:
-                        event_time = dateutil.parser.parse(event["eventDateTime"])
+                        if "eventDateTime" in event:
+                            event_time = dateutil.parser.parse(event["eventDateTime"])
+                        else:
+                            # use the time field we know about for this resource
+                            event_time = dateutil.parser.parse(event[resource.persistent_time_field])
                         submission = Submission(
                             description = f"MS Graph Resource: {resource.name} (1)",
                             analysis_mode = resource.analysis_mode,
@@ -512,8 +523,8 @@ class GraphResourceCollector(Collector):
                             event_time = event_time,
                             details = { 'events': event,
                                         'resource_description': resource.description,
-                                        'provider_references': event['sourceMaterials'],
-                                        'provider_descriptions': event['description'],
+                                        'provider_references': event['sourceMaterials'] if 'sourceMaterials' in event else [],
+                                        'provider_descriptions': event['description'] if 'description' in event else "No description was provided for this event.",
                                         'event_uuids': [event['id']]
                                         },
                             observables = self.parse_events_for_observables(resource, event),
