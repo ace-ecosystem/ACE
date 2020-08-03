@@ -150,14 +150,14 @@
 {% endif %}
 
 <p><b>Group & Directory Role Membership</b></p>
-{% if 'groups' in analysis.details and 'value' in analysis.details['groups'] %}
+{% if 'groups' in analysis.details and analysis.details['groups'] %}
 <table class="table table-bordered table-condensed">
     <tr>
         <th>Group/Role</th>
         <th>Description</th>
         <th>Domain</th>
     </tr>
-    {% for group in analysis.details['groups']['value'] %}
+    {% for group in analysis.details['groups'] %}
  
     <tr {% if "admin" in group['displayName'].lower() 
             or ( group['description'] and "admin" in group['description'].lower() ) 

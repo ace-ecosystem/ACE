@@ -9,6 +9,7 @@ import sys
 import json
 
 import saq
+from saq.email import is_local_email_domain
 from saq.error import report_exception
 from saq.analysis import Analysis, Observable
 from saq.modules import AnalysisModule, LDAPAnalysisModule, GraphAnalysisModule
@@ -212,6 +213,8 @@ class UserPrincipleNameAnalysis(Analysis):
     def generate_summary(self):
         if self.details:
             user_details = self.details['user']
+            if not user_details:
+                return None
             desc = ""
             if 'displayName' in user_details:
                 desc += f" - {user_details['displayName']}"
@@ -293,7 +296,10 @@ class UserPrincipleNameAnalyzer(GraphAnalysisModule):
         return o_types
 
     def execute_analysis(self, upn):
-        analysis = self.create_analysis(upn)
+        if upn.type == F_EMAIL_ADDRESS:
+            if not is_local_email_domain(upn.value):
+                logging.info(f"not analyzing non-local email observable: {upn}")
+                return False
 
         api = self.get_api(self.graph_account_name)
         api.initialize()
@@ -301,9 +307,13 @@ class UserPrincipleNameAnalyzer(GraphAnalysisModule):
         # user
         url = api.build_url(f"{self.api_version}/users/{upn.value}?$select={self.select_properties}")
         results = self.execute_request(api, url)
-        if results:
-            analysis.details['user'] = results.json()
-            analysis.user_id = analysis.details['user']['id']
+        if not results:
+            return False
+
+        analysis = self.create_analysis(upn)
+
+        analysis.details['user'] = results.json()
+        analysis.user_id = analysis.details['user']['id']
 
         # The employee identifier assigned to the user by the organization.
         employeeId = analysis.details['user'].get('employeeId', None)
@@ -312,10 +322,7 @@ class UserPrincipleNameAnalyzer(GraphAnalysisModule):
 
         # groups
         url = api.build_url(f"{self.api_version}/users/{upn.value}/memberOf")
-        results = self.execute_request(api, url)
-        if results:
-            #if '@odata.nextwhaever' - while url, get all content from pages
-            analysis.details['groups'] = results.json()
+        analysis.details['groups'] = self.execute_and_get_all(api, url)
 
         # teams
         if analysis.user_id:
@@ -409,41 +416,29 @@ class UserSignInHistoryAnalyzer(GraphAnalysisModule):
         return o_types
 
     def execute_analysis(self, upn):
-        analysis = self.create_analysis(upn)
+        if upn.type == F_EMAIL_ADDRESS:
+            if not is_local_email_domain(upn.value):
+                logging.info(f"not analyzing non-local email observable: {upn}")
+                return False
 
         api = self.get_api(self.graph_account_name)
         api.initialize()
 
         time_interval = create_timedelta(f'{self.day_interval}:00:00:00')
         start_time = (local_time() - time_interval).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        analysis.details['day_interval'] = self.day_interval
-        analysis.details['start_time'] = start_time
 
         # sign ins
-        url = api.build_url(f"{self.api_version}/auditLogs/signIns")#?$filter=userPrincipalName eq '{upn.value}' and createdDateTime gt {start_time}")
+        url = api.build_url(f"{self.api_version}/auditLogs/signIns")
         params = {'$filter': f"userPrincipalName eq '{upn.value}' and createdDateTime gt {start_time}"}
-        results = self.execute_request(api, url, params=params)
-        if not results:
-            return False
-
-        results = results.json()
-        events = results['value'] if 'value' in results else None
+        events = self.execute_and_get_all(api, url, params=params)
         if not events:
             return False
 
-        # get any and all paged content
-        if '@odata.nextLink' in results:
-            url = results['@odata.nextLink']
-            while url is not None:
-                results = self.execute_request(api, url)
-                if 'value' in results and results['value']:
-                    events.extend(results['value'])
-                if '@odata.nextLink' in results:
-                    url = results['@odata.nextLink']
-                else:
-                    url = None
+        analysis = self.create_analysis(upn)
 
         analysis.details['raw_events'] = events
+        analysis.details['day_interval'] = self.day_interval
+        analysis.details['start_time'] = start_time
 
         # how does MS categorize the user's risk?
         # this is not really sign in history analysis ...
