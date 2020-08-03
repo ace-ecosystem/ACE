@@ -15,18 +15,6 @@ from saq.extractors import RESULT_MESSAGE_NOT_FOUND, RESULT_MESSAGE_FOUND
 from saq import proxy
 import time
 
-# MSAL Token Cache
-TOKEN_CACHE = msal.SerializableTokenCache()
-MSAL_TOKEN_CACHE_PATH = os.path.join(saq.DATA_DIR, saq.CONFIG['msal'].get('token_cache_path'))
-if MSAL_TOKEN_CACHE_PATH and os.path.exists(MSAL_TOKEN_CACHE_PATH):
-    TOKEN_CACHE.deserialize(open(MSAL_TOKEN_CACHE_PATH, "r").read())
-
-def update_token_cache():
-    logging.debug(f"updating token cache: {MSAL_TOKEN_CACHE_PATH}")
-    if TOKEN_CACHE.has_state_changed:
-        with open(MSAL_TOKEN_CACHE_PATH, "w") as fp:
-            fp.write(TOKEN_CACHE.serialize())
-
 class GraphApiAuth(requests.auth.AuthBase):
     def __init__(self, client_id, tenant_id, thumbprint, private_key_path, auth_url="https://login.microsoftonline.com", scope="https://graph.microsoft.com/.default"):
         authority = f"{auth_url}/{tenant_id}"
@@ -107,6 +95,7 @@ class GraphAPI:
         self.proxies = proxies or {}
         self.client_app = None
         self.token = None
+        self.token_expiration_time = 0
         self.verify = verify_graph
         self.verify_auth = verify_auth
         self.base_url = self.config.endpoint
@@ -116,7 +105,7 @@ class GraphAPI:
         kicking off the I/O of setting up a client app until you're ready
         to initialize it."""
         self.client_app = kwargs.get('client_app') or msal.ConfidentialClientApplication(
-            self.config.client_id, **self.config.auth_kwargs, verify=self.verify_auth, timeout=5, proxies=self.proxies, token_cache=TOKEN_CACHE,
+            self.config.client_id, **self.config.auth_kwargs, verify=self.verify_auth, timeout=5, proxies=self.proxies,
         )
 
     def build_url(self, path):
@@ -124,17 +113,8 @@ class GraphAPI:
 
     def get_token(self, **kwargs):
         """Get auth token for Graph API."""
-        logging.debug("checking msal cache for usable auth token")
-        result = self.client_app.acquire_token_silent(self.config.scopes, account=None)
-
-        if not result:
-            logging.debug("no token cached: acquiring new auth token for graph api")
-            result = self.client_app.acquire_token_for_client(self.config.scopes)
-            # update the cache with the new token
-            update_token_cache()
-
-        if 'access_token' not in result:
-            logging.error(f"{result.get('error')}")
+        logging.info("acquiring new auth token for graph api")
+        result = self.client_app.acquire_token_for_client(self.config.scopes)
 
         self.token = result
 
@@ -145,9 +125,13 @@ class GraphAPI:
 
         _proxies = proxies or self.proxies
 
-        # TODO - Do we need a 'refresh' process in case the token expires after 1 hour?
-        if not self.token:
+        if self.token is None or self.token_expiration_time < time.time():
+            # add a 10 second grace period for long running analysis
+            start = time.time() - 10
             self.get_token()
+            self.token_expiration_time = start + self.token['expires_in']
+        else:
+            logging.debug("re-using existing token")
 
         # If the endpoint is not defined properly in the configuration, then it can cause the
         # urllib.parse.urljoin in self.build_url to join paths incorrectly.
