@@ -8,9 +8,15 @@ cd "$SAQ_HOME" || { echo "cannot cd to $SAQ_HOME"; exit 1; }
 
 if [ -e ssl/root/ca/openssl.cnf ]
 then
-    # TODO fix this
-    echo "already installed openssl certificates"
-    exit 0
+    echo "already installed openssl certificates; removing old openssl certs and recreating"
+(
+    cd ssl && \
+    rm ace.cert.pem ace.key.pem ca-chain.cert.pem && \
+    cd root/ca && \
+    rm -rf certs crl newcerts private index* serial* openssl.cnf && \
+    cd intermediate && \
+    rm -rf certs crl csr newcerts private ace.openssl.cnf crlnumber index* serial* openssl.cnf
+)
 fi
 
 mkdir -p ssl/root/ca/intermediate
@@ -86,7 +92,7 @@ chmod 400 ssl/root/ca/.intermediate_ca.pwd
     cd ssl/root/ca && \
     cp intermediate/openssl.cnf intermediate/ace.openssl.cnf && \
     echo 'DNS.1 = localhost' >> intermediate/ace.openssl.cnf && \
-    echo "DNS.2 = ace" >> intermediate/ace.openssl.cnf && \ 
+    echo "DNS.2 = ace" >> intermediate/ace.openssl.cnf && \
     echo "DNS.3 = ace-http" >> intermediate/ace.openssl.cnf && \
     echo "DNS.4 = ace-db" >> intermediate/ace.openssl.cnf && \
     echo "DNS.5 = ace-dev" >> intermediate/ace.openssl.cnf && \
