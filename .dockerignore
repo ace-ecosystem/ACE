@@ -11,3 +11,5 @@ venv/
 vt_cache/
 work/
 yss/
+ace.out/
+.git/
