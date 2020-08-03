@@ -1048,12 +1048,47 @@ class GraphAnalysisModule(AnalysisModule):
 
     def execute_request(self, api: graph_api.GraphAPI, url: str, method='get', params={}, data={}, **kwargs):
         response = api.request(url, method=method, proxies=saq.proxy.proxies(), params=params, data=json.dumps(data))
+        if response.status_code == 401:
+            error = response.json()['error']
+            logging.warning(f"authentication failed: {error['message']}")
+            # try again with a fresh token
+            api.get_token()
+            response = api.request(url, method=method, proxies=saq.proxy.proxies(), params=params, data=json.dumps(data))
         if response.status_code != 200:
             error = response.json()['error']
             logging.error(f"got {response.status_code} getting {url}: {error['code']} : {error['message']}")
             return False
 
         return response
+
+    def execute_and_get_all(self, api: graph_api.GraphAPI, url: str, params={}, data={}, **kwargs):
+        """Execute and method='get' all values accross all pages if there are values.
+           NOTE this will return an empty list even if the api call fails.
+        """
+        values = []
+        response = self.execute_request(api, url, params=params, data=data, **kwargs)
+        if not response:
+            return values
+        results = response.json()
+        if 'value' not in results:
+            return values
+        values = results['value']
+        # get any and all paged content
+        if '@odata.nextLink' in results:
+            url = results['@odata.nextLink']
+            while url is not None:
+                response = self.execute_request(api, url, **kwargs)
+                if not response:
+                    break
+                results = response.json()
+                if 'value' in results and results['value']:
+                    values.extend(results['value'])
+                if '@odata.nextLink' in results:
+                    url = results['@odata.nextLink']
+                else:
+                    url = None
+
+        return values
 
 class LDAPAnalysisModule(AnalysisModule):
     """An analysis module that uses LDAP."""
