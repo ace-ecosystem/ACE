@@ -13,6 +13,7 @@ import saq
 from saq import graph_api
 from saq.collectors import Collector, Submission
 from saq.constants import *
+from saq.email import normalize_email_address
 from saq.error import report_exception
 from saq.persistence import *
 from saq.util import *
@@ -334,6 +335,12 @@ class GraphResourceCollector(Collector):
                         # if it's a simple "key = value" observable mapping
                         o_value = event[field_map]
                         if f"{o_type}:{o_value}" in _o_accounted_for:
+                            continue
+                        if o_type == F_EMAIL_ADDRESS:
+                            _normalized_address = normalize_email_address(o_value)
+                            if not _normalized_address or '@' not in _normalized_address:
+                                # unconventional https://docs.microsoft.com/en-us/windows/win32/ad/naming-properties#userprincipalname
+                                logging.warning(f"'{o_value}' is not an email address")
                                 continue
                         if temporal:
                             observables.append({'type': o_type,
@@ -360,6 +367,12 @@ class GraphResourceCollector(Collector):
                             for o_value in o_values:
                                 if f"{o_type}:{o_value}" in _o_accounted_for:
                                     continue
+                                if o_type == F_EMAIL_ADDRESS:
+                                    _normalized_address = normalize_email_address(o_value)
+                                    if not _normalized_address or '@' not in _normalized_address:
+                                        # unconventional https://docs.microsoft.com/en-us/windows/win32/ad/naming-properties#userprincipalname
+                                        logging.warning(f"'{o_value}' is not an email address")
+                                        continue
                                 if temporal:
                                     observables.append({'type': o_type,
                                                         'value': o_value,
