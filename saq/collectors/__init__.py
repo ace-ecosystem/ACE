@@ -31,6 +31,7 @@ from saq.database import (
         ALERT
 )
 
+from saq.constants import *
 from saq.error import report_exception
 from saq.persistence import Persistable
 from saq.service import ACEService

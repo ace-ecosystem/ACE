@@ -15,8 +15,9 @@ import tempfile
 import uuid
 
 import saq
+from saq.constants import *
 from saq.error import report_exception
-from saq.util import abs_path, local_time, create_timedelta, workload_storage_dir
+from saq.util import abs_path, local_time, create_timedelta, workload_storage_dir, storage_dir_from_uuid
 
 import yara
 import plyara
@@ -122,7 +123,13 @@ class Submission(object):
                 queue=self.queue,
                 instructions=self.instructions)
 
-        root.storage_dir=workload_storage_dir(root.uuid)
+
+        # does the engine use a different drive for the workload?
+        if self.analysis_mode != ANALYSIS_MODE_CORRELATION:
+            root.storage_dir = workload_storage_dir(root.uuid)
+        else:
+            root.storage_dir = storage_dir_from_uuid(root.uuid)
+
         root.initialize_storage()
 
         for observable_json in self.observables:
@@ -326,6 +333,9 @@ class SubmissionFilter(object):
 
     def update_rules(self):
         # is it time to check to see if the rules needs to be checked for updates?
+        if self.tracking_scanner is None:
+            return 
+
         need_update = False
         if self.next_update is None:
             need_update = True
