@@ -123,6 +123,15 @@ class EmailRemediationSystem(RemediationSystem):
 
             logging.debug(f'loading section {section.name}')
 
+            # is this remediation account restricted to a specific company?
+            if self.company_id is not None and 'company_id' in section:
+                if not isinstance(self.company_id, int):
+                    self.company_id = int(self.company_id)
+                if self.company_id != section.getint('company_id', None):
+                    logging.info(f"skipping remediator {section.name}: company_id does not match.")
+                    continue
+                logging.info(f"found remediator {section.name} specified for company_id={self.company_id}")
+
             try:
                 remediator = get_email_remediator(section)
             except Exception as e:
@@ -130,7 +139,7 @@ class EmailRemediationSystem(RemediationSystem):
                 self.errors[section.name] = 'error while setting up remediator'
                 continue
             else:
-                logging.debug(f'loaded remediator account section {section.name}')
+                logging.info(f'loaded remediator account section {section.name}')
                 self.remediators.append(remediator)
 
         logging.debug(f'acquired {len(self.remediators)} remediator accounts')

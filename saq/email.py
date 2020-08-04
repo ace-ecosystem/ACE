@@ -9,6 +9,7 @@ import saq
 from email.utils import parseaddr
 from email.header import decode_header
 from saq.database import get_db_connection
+from saq.proxy import proxies
 from saq.util import *
 
 import exchangelib
@@ -18,8 +19,13 @@ from exchangelib.errors import DoesNotExist
 def normalize_email_address(email_address):
     """Returns a normalized version of email address.  Returns None if the address cannot be parsed."""
     name, address = parseaddr(email_address)
-    if address is None:
-        return None
+    if not address:
+        # attempt to fix known cases the stdlib has, like <<person@example.com>>
+        while email_address and '<<' in email_address and '>>'  in email_address:
+            email_address = email_address.replace('<<','<').replace('>>','>')
+        name, address = parseaddr(email_address)
+        if not address:
+            return None
 
     address = address.strip()
 
@@ -417,8 +423,9 @@ def get_ews_api_object(config_section, **kwargs) -> EWSApi:
     if certificate:
         adapter.add_cert(server, certificate)
 
-    if not use_proxy:
-        adapter.PROXIES = {}
+    # default is defined as None in PreInitCustomSSLAdapter
+    if use_proxy:
+        adapter.PROXIES = proxies()
 
     try:
         api_object = _api_class(

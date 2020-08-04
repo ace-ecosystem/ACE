@@ -192,9 +192,9 @@ class IPIAnalyzer(AnalysisModule):
     def execute_analysis(self, observable):
         logging.debug("Inspecting {}".format(observable.value))
         try:
-            proxies = proxies() if self.use_proxy else None
+            _proxies = proxies() if self.use_proxy else None
             # Create Inspector with MaxMind API
-            mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=proxies),
+            mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=_proxies),
                             blacklists=self.blacklist_maps,
                             whitelists=self.whitelist_maps)
         except Exception as e:
@@ -224,7 +224,10 @@ class IPIAnalyzer(AnalysisModule):
 
             if inspected_ip.is_blacklisted:
                 logging.info("IP '{}' on blacklist for '{}'".format(inspected_ip.ip, inspected_ip.blacklist_reason))
-                observable.add_detection_point("IP Address '{}' on blacklist".format(inspected_ip.blacklist_reason))
+                observable.add_detection_point("{} on {} blacklist: {}".format(observable.value,
+                                                                                     inspected_ip.blacklist_reason,
+                                                                                     inspected_ip.get(inspected_ip.blacklist_reason)))
+
                 analysis.details['blacklist'] = inspected_ip.get(inspected_ip.blacklist_reason)
                 observable.add_tag('blacklisted:{}'.format(inspected_ip.blacklist_reason))
             # It shouldn't happen but it's possible an IP could hit on a blacklist and whitelist
@@ -232,7 +235,6 @@ class IPIAnalyzer(AnalysisModule):
             if inspected_ip.is_whitelisted:
                 logging.info("IP '{}' on whitelist for '{}'".format(inspected_ip.ip, inspected_ip.whitelist_reason))
                 analysis.details['whitelist'] = inspected_ip.get(inspected_ip.whitelist_reason)
-                observable.add_tag('whitelisted:{}'.format(inspected_ip.whitelist_reason))
 
             analysis.details['pretty'] = str(inspected_ip)
             return True

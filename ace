@@ -1512,6 +1512,9 @@ def modify_user(args):
         if args.default_queue:
             c.execute("""UPDATE users SET queue = %s WHERE id = %s""", ( args.default_queue, user_id ))
 
+        if args.display_name:
+            c.execute("""UPDATE users SET display_name = %s WHERE id = %s""", ( args.display_name, user_id ))
+
         db.commit()
 
     logging.info("modified user {0}".format(u.username))
@@ -1523,6 +1526,7 @@ modify_user_parser.add_argument('-e', '--email', dest='email', default=None, hel
 modify_user_parser.add_argument('-p', '--password', action='store_true', dest='password', default=False, help="Prompt for a new password.")
 modify_user_parser.add_argument('-z', '--timezone', required=False, default=None, help="The timezone the user is in. Defaults to UTC.")
 modify_user_parser.add_argument('-q', '--default_queue', required=False, default=None, help="Change the default queue the user is assigned to.")
+modify_user_parser.add_argument('-n', '--display-name', required=False, default=None, help="Change the user's display name.")
 modify_user_parser.set_defaults(func=modify_user)
 
 # XXX DEPRECATED
@@ -1583,7 +1587,8 @@ test_sp = test_parser.add_subparsers(dest='test_cmd')
 def test_proxy(args):
     try:
         import requests
-        requests.get(args.url, proxies=saq.PROXIES, verify=saq.CONFIG['proxy']['verify'] if 'verify' in saq.CONFIG['proxy'] else False)
+        from saq import proxy
+        requests.get(args.url, proxies=proxy.proxies(), verify=saq.CONFIG['proxy']['verify'] if 'verify' in saq.CONFIG['proxy'] else False)
         sys.exit(0)
     except Exception as e:
         traceback.print_exc()
@@ -2707,11 +2712,11 @@ update_organization_parsers = subparsers.add_parser('update-organization',
 update_organization_parsers.set_defaults(func=update_organization)
 
 def update_maxmind_databases(args):
-    import saq
+    from saq import proxy
     from ip_inspector import maxmind
 
     config = saq.CONFIG['analysis_module_ip_inspector']
-    proxies = saq.PROXIES if 'use_proxy' in config and config.getboolean('use_proxy') else None
+    proxies = proxy.proxies() if 'use_proxy' in config and config.getboolean('use_proxy') else None
     license_key = config['license_key'] if 'license_key' in config else args.license_key
     if license_key:
         if not maxmind.update_databases(license_key=license_key, proxies=proxies):
@@ -3294,7 +3299,7 @@ def test_proxies(args):
     import requests
     import saq
     proxy_configs = saq.OTHER_PROXIES.copy()
-    proxy_configs['GLOBAL'] = saq.PROXIES
+    proxy_configs['GLOBAL'] = saq.CONFIG['proxy']
 
     for proxy_name, proxy_config in proxy_configs.items():
         print("testing proxy {} ({})".format(proxy_name, proxy_config))

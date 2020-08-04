@@ -9,6 +9,7 @@ import msal
 import requests
 
 import saq
+from saq.error import report_exception
 from saq.extractors import RESULT_MESSAGE_NOT_FOUND, RESULT_MESSAGE_FOUND
 from saq import proxy
 import time
@@ -51,13 +52,16 @@ class GraphConfig:
         self.client_id = section["client_id"]
         self.authority = urllib.parse.urljoin(section['authority_base_url'], section['tenant_id'])
         self.scopes = section["scopes"].split(',')
-        self.thumbprint = section["thumbprint"]
-        self.private_key = kwargs.get('private_key') or read_private_key(section["private_key_file"])
         self.endpoint = section["endpoint"]
-        self.client_credential = {
-            "thumbprint": self.thumbprint,
-            "private_key": self.private_key
-        }
+        self.thumbprint = section["thumbprint"]
+        self.private_key = None
+        self.client_credential = section.get("client_credential", None)
+        if self.client_credential is None:
+            self.private_key = kwargs.get('private_key') or read_private_key(section["private_key_file"])
+            self.client_credential = {
+                "thumbprint": self.thumbprint,
+                "private_key": self.private_key
+            }
 
     @property
     def auth_kwargs(self):
@@ -225,4 +229,5 @@ def get_graph_api_object(config_section: configparser.SectionProxy, **kwargs) ->
         )
     except Exception as e:
         logging.error(f"error creating Graph API object: {e.__class__} '{e}'")
+        report_exception()
         raise e

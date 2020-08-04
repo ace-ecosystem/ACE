@@ -76,7 +76,7 @@ class RemediationSystemManager(ACEService):
         for type, system in self.systems.items():
             system.wait(*args, **kwargs)
 
-    def load_remediation_systems(self):
+    def load_remediation_systems(self, company_id=None):
         for section_name in saq.CONFIG.keys():
             if not section_name.startswith('remediation_system_'):
                 continue
@@ -105,7 +105,7 @@ class RemediationSystemManager(ACEService):
 
             try:
                 logging.debug(f"loading remediation system {name}")
-                remediation_system = _class(config=saq.CONFIG[section_name])
+                remediation_system = _class(config=saq.CONFIG[section_name], company_id=company_id)
 
                 if remediation_system.remediation_type in self.systems:
                     logging.error(f"multiple remediations systems are defined for the type {remediation_system.remediation_type}")
@@ -120,11 +120,14 @@ class RemediationSystemManager(ACEService):
                 continue
 
 class RemediationSystem(object):
-    def __init__(self, config=None):
+    def __init__(self, config=None, company_id=None):
         assert isinstance(config, configparser.SectionProxy)
 
         # configuration settings for this remediation system
         self.config = config
+
+        # for restricting remediation accounts to a specific companies
+        self.company_id = company_id
 
         # the type of remediations this system performs
         self.remediation_type = config['type']
@@ -394,7 +397,7 @@ class RemediationSystem(object):
 
 def execute(action, type, key, user_id, company_id, comment=None):
     manager = RemediationSystemManager()
-    manager.load_remediation_systems()
+    manager.load_remediation_systems(company_id=company_id)
     if type not in manager.systems:
         logging.error(f"remediation type {type} is missing")
         return None

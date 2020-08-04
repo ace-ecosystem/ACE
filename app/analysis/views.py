@@ -1930,6 +1930,12 @@ def manage():
         alert_remediations[k[0]].extend([{'result': k[1] if k[1] in ['removed', 'restored'] else 'Remediation failed: not cleaned',
                                           'css_class': 'label-success' if k[1] in ['removed', 'restored'] else 'label-danger'}])
 
+
+    # alert display timezone
+    if current_user.timezone and pytz.timezone(current_user.timezone) != pytz.utc:
+        for alert in alerts:
+            alert.display_timezone = pytz.timezone(current_user.timezone)
+
     return render_template(
         'analysis/manage.html',
         # settings
@@ -4096,7 +4102,8 @@ def query_remediation_targets():
                                                               'remediation_type': observable.remediation_type,
                                                               'value': observable.value,
                                                               'remediation_key': observable.remediation_key,
-                                                              'history': []}
+                                                              'history': [],
+                                                              'company_id': root.company_id}
         except Exception as e:
             logging.error(f"unable to load remediation target {root}: {e}")
 
@@ -4126,13 +4133,14 @@ def remediate_targets():
         observable_type = target['observable_type']
         observable_value_b64 = target['observable_value_b64']
         observable_value = base64.b64decode(observable_value_b64).decode('utf8', errors='replace')
+        company_id = target['company_id']
 
-        logging.info(f"got request from {current_user.username} to remediate action {action} type {observable_type} value {observable_value} key {remediation_key}")
+        logging.info(f"got request from {current_user.username} to remediate action {action} type {observable_type} value {observable_value} key {remediation_key} for company_id={company_id}")
         
         if blocking:
-            remediation_result = saq.remediation.execute(action, remediation_type, remediation_key, current_user.id, saq.COMPANY_ID)
+            remediation_result = saq.remediation.execute(action, remediation_type, remediation_key, current_user.id, company_id)
         else:
-            remediation_result = saq.remediation.request(action, remediation_type, remediation_key, current_user.id, saq.COMPANY_ID)
+            remediation_result = saq.remediation.request(action, remediation_type, remediation_key, current_user.id, company_id)
 
         if remediation_result is not None:
             result.append(remediation_result.json)

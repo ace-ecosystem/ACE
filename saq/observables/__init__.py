@@ -239,7 +239,7 @@ class URLObservable(Observable):
 
     @property
     def jinja_available_actions(self):
-        result = [ ObservableActionUrlCrawl(), ObservableActionSeparator() ]
+        result = [ ObservableActionUrlCrawl(), ObservableActionSeparator() , ObservableActionClearCloudphishAlert()]
         result.extend(super().jinja_available_actions)
         return result
 
