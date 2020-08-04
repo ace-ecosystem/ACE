@@ -222,6 +222,10 @@ class IPIAnalyzer(AnalysisModule):
                     continue
                 observable.add_tag(inspected_ip.get(field))
 
+            if inspected_ip.is_tor:
+                logging.info(f"IP '{inspected_ip.ip}' is a tor exit node")
+                observable.add_tag('tor_exit_node')
+
             if inspected_ip.is_blacklisted:
                 logging.info("IP '{}' on blacklist for '{}'".format(inspected_ip.ip, inspected_ip.blacklist_reason))
                 observable.add_detection_point("{} on {} blacklist: {}".format(observable.value,
