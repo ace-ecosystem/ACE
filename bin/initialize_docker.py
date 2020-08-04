@@ -8,6 +8,8 @@
 import os
 import os.path
 import random
+import re
+import shutil
 import string
 
 def generate_password() -> str:
@@ -81,6 +83,36 @@ password = {user_password}
 password = {user_password}""")
 
     print(f"created {target_path}")
+
+    for src_sql, dest_sql in [
+        ('01-ace.sql', '21-ace-unittest.sql'),
+        ('02-email-archive.sql', '22-email-archive-unittest.sql'),
+        ('03-brocess.sql', '23-brocess-unittest.sql'),
+        ('04-vt-hash-cache.sql', '24-vt-hash-cache-unittest.sql'),
+        ('05-amc.sql', '25-amc-unittest.sql'), ]:
+        with open(os.path.join('sql', src_sql), 'r') as fp_in:
+            with open(os.path.join('sql', dest_sql), 'w') as fp_out:
+                for line in fp_in:
+                    if line.startswith('CREATE DATABASE IF NOT EXISTS `') \
+                    or line.startswith('ALTER DATABASE `') \
+                    or line.startswith('USE `'):
+                        line = re.sub(r'`([^`]+)`', r'`\1-unittest`', line)
+
+                    fp_out.write(line)
+
+    # this sucks -- a few of the integration tests require yet another ace database
+    # XXX fix me!
+    for src_sql, dest_sql in [
+        ('01-ace.sql', '211-ace-unittest-2.sql'), ]:
+        with open(os.path.join('sql', src_sql), 'r') as fp_in:
+            with open(os.path.join('sql', dest_sql), 'w') as fp_out:
+                for line in fp_in:
+                    if line.startswith('CREATE DATABASE IF NOT EXISTS `') \
+                    or line.startswith('ALTER DATABASE `') \
+                    or line.startswith('USE `'):
+                        line = re.sub(r'`([^`]+)`', r'`\1-unittest-2`', line)
+
+                    fp_out.write(line)
 
 if __name__ == '__main__':
     main()

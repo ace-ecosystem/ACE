@@ -4,6 +4,7 @@
 # Functionality to store data in long term storage external to the system.
 #
 
+from datetime import datetime
 import functools
 import logging
 import pickle
@@ -180,4 +181,14 @@ ON DUPLICATE KEY UPDATE last_update = CURRENT_TIMESTAMP""", (self.persistence_so
         """Deletes the given persistence key."""
         saq.db.execute(Persistence.__table__.delete().where(and_(Persistence.source_id == self.persistence_source.id,
                                                             Persistence.uuid == key_name)))
+        saq.db.commit()
+
+    def delete_expired_persistent_keys(self, expiration_timedelta, unmodified_expiration_timedelta):
+        """Deletes all expired persistence keys."""
+        expiration_date = datetime.now() - expiration_timedelta
+        unmodified_expiration_date = datetime.now() - unmodified_expiration_timedelta
+        saq.db.execute(Persistence.__table__.delete().where(and_(Persistence.source_id == self.persistence_source.id,
+                                                            Persistence.permanent == 0,
+                                                            or_(Persistence.created_at < expiration_date, Persistence.last_update < unmodified_expiration_date)
+                                                            )))
         saq.db.commit()

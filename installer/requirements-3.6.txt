@@ -32,7 +32,7 @@ oletools
 openpyxl
 pcodedmp
 pip
-ply
+plyara==2.0.3
 psutil 
 pyasn1 
 pylint
@@ -41,6 +41,9 @@ pysip
 pysocks
 pytest
 pytest-datadir
+pytest-print
+pytest-pythonpath
+python-dotenv
 python-magic
 python-memcached
 pytz 
@@ -60,3 +63,7 @@ msal==1.3.0
 ip-inspector
 croniter
 uwsgi
+fastapi
+selenium
+docker
+redis

@@ -909,6 +909,8 @@ class CrawlphishAnalyzer(AnalysisModule):
         download = analysis.add_observable(F_FILE, os.path.relpath(file_path, start=self.root.storage_dir))
         if download: 
             download.add_relationship(R_DOWNLOADED_FROM, final_url if final_url else url)
+            # HTML files pulled with crawlphish will automatically attempt to be Rendered, so calling this is redundant
+            download.add_directive(DIRECTIVE_NO_RENDER)
             # only extract if non-error http response
             if response.status_code >= 200 and response.status_code <= 299:
                 download.add_directive(DIRECTIVE_EXTRACT_URLS)

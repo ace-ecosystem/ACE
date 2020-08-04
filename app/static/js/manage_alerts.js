@@ -347,7 +347,7 @@ function add_filter(name, values) {
         traditional: true,
         data: { filter: JSON.stringify({"name":name, "values":values}) },
         success: function(data, textStatus, jqXHR) {
-            window.location.replace("/ace/manage")
+            window.location.replace("/ace/manage");
         },
         error: function(jqXHR, textStatus, errorThrown) {
             alert("DOH: " + textStatus);
@@ -357,22 +357,43 @@ function add_filter(name, values) {
 
 // adds selected filter from filter modal
 function apply_filter() {
-    name = document.getElementById("filter_name").value;
-    filter_inputs = $("[name='filter_value_" + name + "']");
-    if (filter_inputs.length == 1) {
-        val = filter_inputs.val();
-        if (Array.isArray(val)) {
-            add_filter(name, val);
-        } else {
-            add_filter(name, [val]);
+    filter_settings = {};
+    filters = document.getElementsByName("filter_name");
+    for (i = 0; i < filters.length; i++) {
+        filter_name = filters[i].value;
+        if (!(filter_name in filter_settings)) {
+            filter_settings[filter_name] = [];
         }
-    } else {
-        val = []
-        filter_inputs.each(function(index) {
-            val.push($(this).val())
-        });
-        add_filter(name, [val]);
+        filter_inputs = $("[name='" + filters[i].id + "_value_" + filter_name + "']");
+        if (filter_inputs.length == 1) {
+            val = filter_inputs.val();
+            if (Array.isArray(val)) {
+                filter_settings[filter_name].push(...val);
+            } else {
+                filter_settings[filter_name].push(val);
+            }
+        } else {
+            val = [];
+            filter_inputs.each(function(index) {
+                val.push($(this).val());
+            });
+            filter_settings[filter_name].push(val);
+        }
     }
+
+    $.ajax({
+        dataType: "html",
+        url: 'set_filters',
+        traditional: true,
+        data: { filters: JSON.stringify(filter_settings) },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage");
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+
     return false; // prevents form from submitting
 }
 
@@ -471,14 +492,23 @@ function set_page_size(current_size) {
 
 // hides/shows correct filter value input based on filter name selection
 function on_filter_changed(filter_name) {
-    filters = document.getElementsByName("filter_value_container");
+    filters = document.getElementsByName(filter_name.id + "_value_container");
     for (i = 0; i < filters.length; i++) {
-        if (filters[i].id == "filter_value_container_" + filter_name.value) {
+        if (filters[i].id == filter_name.id + "_value_container_" + filter_name.value) {
             filters[i].style.display = "block";
         } else {
             filters[i].style.display = "none";
         }
     }
+}
+
+function removeElement(id) {
+    var elem = document.getElementById(id);
+    return elem.parentNode.removeChild(elem);
+}
+
+function removeElements(id_starts_with) {
+    $('[id^="' + id_starts_with + '"]').remove();
 }
 
 // hides/shows correct input options
@@ -488,6 +518,34 @@ function toggle_options(input, options_id) {
     } else {
         input.setAttribute('list', null)
     }
+}
+
+function new_filter_option() {
+  $.ajax({
+    dataType: "html",
+    url: 'new_filter_option',
+    data: {},
+    success: function(data, textStatus, jqXHR) {
+      $('#filter_modal_body').append(data);
+      $('.daterange').daterangepicker({
+          timePicker: true,
+          format: 'MM-DD-YYYY HH:mm',
+          startDate:  moment().subtract(6, 'days').startOf('day'),
+          endDate: moment(),
+          ranges: {
+             'Today': [moment().startOf('day'), moment().endOf('day')],
+             'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+             'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
+             'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
+             'This Month': [moment().startOf('month').startOf('day'), moment()],
+             'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
+          }
+      });
+    },
+    error: function(jqXHR, textStatus, errorThrown) {
+      alert("DOH: " + textStatus);
+    }
+  });
 }
 
 // gets called when the user clicks on the right triangle button next to each alert

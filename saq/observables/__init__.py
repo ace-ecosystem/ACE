@@ -577,6 +577,7 @@ class FileObservable(Observable):
                 result.append(ObservableActionViewInVx())
             if integration_enabled('falcon_sandbox'):
                 result.append(ObservableActionViewInFalconSandbox())
+            result.append(ObservableActionFileRender())
 
             result.append(ObservableActionSeparator())
         result.extend(super().jinja_available_actions)
@@ -905,6 +906,18 @@ class ExabeamSessionObservable(Observable):
         result.extend(super().jinja_available_actions)
         return result
 
+class O365FileObservable(Observable): 
+    def __init__(self, *args, **kwargs): 
+        super().__init__(F_O365_FILE, *args, **kwargs)
+
+    @property
+    def jinja_available_actions(self):
+        result = []
+        result.append(ObservableActionDownloadO365File())
+        result.append(ObservableActionSeparator())
+        result.extend(super().jinja_available_actions)
+        return result
+
 class FireEyeUUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_FIREEYE_UUID, *args, **kwargs)
@@ -971,6 +984,7 @@ _OBSERVABLE_TYPE_MAPPING = {
     F_MAC_ADDRESS: MacAddressObservable,
     F_MD5: MD5Observable,
     F_MESSAGE_ID: MessageIDObservable,
+    F_O365_FILE: O365FileObservable,
     F_PCAP: FileObservable,
     F_PROCESS_GUID: ProcessGUIDObservable,
     F_SHA1: SHA1Observable,

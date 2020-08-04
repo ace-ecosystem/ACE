@@ -19,7 +19,7 @@ class GraphApiAuth(requests.auth.AuthBase):
         with open(private_key_path) as f:
             private_key = f.read()
         client_credential = { "thumbprint": thumbprint, "private_key": private_key }
-        self.client_app = msal.ConfidentialClientApplication(client_id, authority=authority, client_credential=client_credential, timeout=5)
+        self.client_app = msal.ConfidentialClientApplication(client_id, authority=authority, client_credential=client_credential, timeout=5, proxies=proxy.proxies())
         self.scope = scope
         self.token = None
         self.token_expiration_time = 0
