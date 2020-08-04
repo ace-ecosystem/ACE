@@ -138,5 +138,5 @@ if [ ! -e /home/ace/.vscode-server/extensions ]; then mkdir -p /home/ace/.vscode
 if [ ! -e /home/ace/.vscode-server/extensionsCache ]; then mkdir -p /home/ace/.vscode-server/extensionsCache; fi
 
 chown -R ace:ace /home/ace
-
 docker/provision/ace/install_ssl_certs.sh
+chown -R ace:ace /opt/ace/ssl
