@@ -31,6 +31,7 @@ class SplunkHunt(QueryHunt):
         self.splunk_config = self.manager.config.get('splunk_config', 'splunk')
         
         self.tool_instance = saq.CONFIG[self.splunk_config]['uri']
+        self.timezone = saq.CONFIG[self.splunk_config]['timezone']
 
         # splunk app/user context
         self.namespace_user = '-' # defaults to wildcards
@@ -105,8 +106,10 @@ class SplunkHunt(QueryHunt):
             self.namespace_user = section_rule['splunk_user_context']
 
     def execute_query(self, start_time, end_time, unit_test_query_results=None):
-        earliest = start_time.strftime('%m/%d/%Y:%H:%M:%S')
-        latest = end_time.strftime('%m/%d/%Y:%H:%M:%S')
+        tz = pytz.timezone(self.timezone)
+
+        earliest = start_time.astimezone(tz).strftime('%m/%d/%Y:%H:%M:%S')
+        latest = end_time.astimezone(tz).strftime('%m/%d/%Y:%H:%M:%S')
 
         if self.use_index_time:
             self.time_spec = f'_index_earliest = {earliest} _index_latest = {latest}'

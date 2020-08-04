@@ -22,6 +22,7 @@ from saq.analysis import RootAnalysis
 from saq.error import report_exception
 from saq.performance import track_execution_time
 from saq.util import abs_path, validate_uuid, create_timedelta
+from sqlalchemy.orm import aliased
 
 import pytz
 import businesstime
@@ -525,6 +526,10 @@ class User(UserMixin, Base):
 
     def verify_password(self, value):
         return check_password_hash(self.password_hash, value)
+
+Owner = aliased(User)
+DispositionBy = aliased(User)
+RemediatedBy = aliased(User)
 
 class Campaign(Base):
     __tablename__ = 'campaign'
@@ -1878,6 +1883,12 @@ class Persistence(Base):
         nullable=True)
 
     last_update = Column(
+        TIMESTAMP, 
+        nullable=False, 
+        index=True,
+        server_default=text('CURRENT_TIMESTAMP'))
+
+    created_at = Column(
         TIMESTAMP, 
         nullable=False, 
         index=True,

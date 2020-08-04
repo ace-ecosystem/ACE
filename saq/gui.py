@@ -276,6 +276,14 @@ class ObservableActionViewInExabeamSession(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/view_in_exabeam_session.html'
         self.icon = 'chevron-right'
 
+class ObservableActionDownloadO365File(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_O365_FILE_DOWNLOAD
+        self.description = "Download"
+        self.jinja_action_path = 'analysis/observable_actions/o365_file_download.html'
+        self.icon = 'chevron-right'
+
 class ObservableActionViewInVx(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -328,6 +336,14 @@ class ObservableActionUrlCrawl(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = ACTION_URL_CRAWL
-        self.description = "Grab HTML content of URL"
+        self.description = "Download HTML & Render screenshot of URL"
         self.jinja_action_path = 'analysis/observable_actions/url_crawl.html'
         self.icon = 'download-alt'
+
+class ObservableActionFileRender(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_FILE_RENDER
+        self.description = "Attempt to render screenshot of HTML"
+        self.jinja_action_path = 'analysis/observable_actions/file_render.html'
+        self.icon = 'camera'

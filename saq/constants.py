@@ -58,6 +58,7 @@ F_IPV4_FULL_CONVERSATION = 'ipv4_full_conversation'
 F_MAC_ADDRESS = 'mac_address'
 F_MD5 = 'md5'
 F_MESSAGE_ID = 'message_id'
+F_O365_FILE = 'o365_file'
 F_PCAP = 'pcap'
 F_PROCESS_GUID = 'process_guid'
 F_SHA1 = 'sha1'
@@ -95,6 +96,7 @@ OBSERVABLE_DESCRIPTIONS = {
     F_MAC_ADDRESS: 'network card mac address',
     F_MD5: 'MD5 hash',
     F_MESSAGE_ID: 'email Message-ID',
+    F_O365_FILE: 'graph api path to a file in o365',
     F_PCAP: 'path to a pcap formatted file *** DEPRECATED (use F_FILE instead)',
     F_PROCESS_GUID: 'CarbonBlack global process identifier',
     F_SHA1: 'SHA1 hash',
@@ -133,6 +135,7 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_MAC_ADDRESS,
     F_MD5,
     F_MESSAGE_ID,
+    F_O365_FILE,
     F_PCAP,
     F_PROCESS_GUID,
     F_SHA1,
@@ -225,7 +228,7 @@ DISPOSITION_INSIDER_DATA_EXFIL = 'INSIDER_DATA_EXFIL'
 # disposition to label mapping
 # each disposition has a specific CSS class assigned to it
 DISPOSITION_CSS_MAPPING = {
-    None: 'default', # when no disposition has been set yet
+    None: 'special', # when no disposition has been set yet
     DISPOSITION_FALSE_POSITIVE: 'success',
     DISPOSITION_IGNORE: 'default',
     DISPOSITION_UNKNOWN: 'info',
@@ -320,11 +323,13 @@ DIRECTIVE_EXTRACT_URLS = 'extract_urls'
 DIRECTIVE_FORCE_DOWNLOAD = 'force_download'
 DIRECTIVE_IGNORE_AUTOMATION_LIMITS = 'ignore_automation_limits'
 DIRECTIVE_NO_SCAN = 'no_scan'
+DIRECTIVE_NO_RENDER = 'no_render'
 DIRECTIVE_ORIGINAL_EMAIL = 'original_email'
 DIRECTIVE_ORIGINAL_SMTP = 'original_smtp'
 DIRECTIVE_PREVIEW = 'preview'
 DIRECTIVE_REMEDIATE = 'remediate'
 DIRECTIVE_RENAME_ANALYSIS = 'rename_analysis'
+DIRECTIVE_RENDER = 'render'
 DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
 DIRECTIVE_SANDBOX = 'sandbox'
 DIRECTIVE_TRACKED = 'tracked'
@@ -342,11 +347,13 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_FORCE_DOWNLOAD: 'download the content of the URL no matter what',
     DIRECTIVE_IGNORE_AUTOMATION_LIMITS: 'ignores any automation limits when analyzing this observable',
     DIRECTIVE_NO_SCAN: 'do not scan this file with yara',
+    DIRECTIVE_NO_RENDER: 'do not attempt to render this observable',
     DIRECTIVE_ORIGINAL_EMAIL: 'treat this file as the original email file',
     DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
     DIRECTIVE_PREVIEW: 'show this content inline if possible',
     DIRECTIVE_REMEDIATE: 'remediate the target',
     DIRECTIVE_RENAME_ANALYSIS: 'indicates that the description of the root analysis object should be updated with analysis results',
+    DIRECTIVE_RENDER: 'render URL or HTML and download screenshot',
     DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
     DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
     DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
@@ -365,15 +372,18 @@ VALID_DIRECTIVES = [
     DIRECTIVE_FORCE_DOWNLOAD,
     DIRECTIVE_IGNORE_AUTOMATION_LIMITS,
     DIRECTIVE_NO_SCAN,
+    DIRECTIVE_NO_RENDER,
     DIRECTIVE_ORIGINAL_EMAIL,
     DIRECTIVE_ORIGINAL_SMTP,
     DIRECTIVE_PREVIEW,
     DIRECTIVE_REMEDIATE,
     DIRECTIVE_RENAME_ANALYSIS,
+    DIRECTIVE_RENDER,
     DIRECTIVE_SANDBOX,
     DIRECTIVE_TRACKED,
     DIRECTIVE_WHITELISTED,
 ]
+
 
 def is_valid_directive(directive):
     return directive in VALID_DIRECTIVES
@@ -431,6 +441,7 @@ ACTION_CLEAR_CLOUDPHISH_ALERT = 'clear_cloudphish_alert'
 ACTION_COLLECT_FILE = 'collect_file'
 ACTION_DLP_INCIDENT_VIEW_DLP = 'dlp_incident_view_dlp'
 ACTION_EXABEAM_SESSION_VIEW_EXABEAM = 'exabeam_session_view_exabeam'
+ACTION_O365_FILE_DOWNLOAD = 'o365_file_download'
 ACTION_USER_VIEW_EXABEAM = 'user_view_exabeam'
 ACTION_FILE_DOWNLOAD = 'file_download'
 ACTION_FILE_DOWNLOAD_AS_ZIP = 'file_download_as_zip'
@@ -454,6 +465,7 @@ ACTION_UN_WHITELIST = 'un_whitelist'
 ACTION_UPLOAD_TO_CRITS = 'upload_crits'
 ACTION_WHITELIST = 'whitelist'
 ACTION_URL_CRAWL = 'crawl'
+ACTION_FILE_RENDER = 'file'
 
 # recorded metrics
 METRIC_THREAD_COUNT = 'thread_count'

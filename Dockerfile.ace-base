@@ -1,4 +1,4 @@
-FROM python:3.8-buster
+FROM python:3.8.3-buster
 ENV SAQ_HOME /opt/ace
 ENV SAQ_USER ace
 ENV SAQ_GROUP ace
@@ -47,7 +47,9 @@ RUN groupadd ace \
     && chown ace:ace /venv 
 RUN mkdir /usr/local/share/ca-certificates/extra
 COPY ssl/extra /usr/local/share/ca-certificates/extra
-RUN update-ca-certificates \
+COPY docker/provision/ace/install_site_CAs.sh /install_site_CAs.sh
+RUN /install_site_CAs.sh \
+    && update-ca-certificates \
     && python3 -m pip config set global.cert /etc/ssl/certs/ca-certificates.crt \
     && python2.7 -m pip config set global.cert /etc/ssl/certs/ca-certificates.crt \ 
     && python3 -m pip install pip virtualenv --upgrade \

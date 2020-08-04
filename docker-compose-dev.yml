@@ -21,16 +21,26 @@ services:
         image: ace-dev:latest
         depends_on:
             - ace-db
-        command: /bin/sh -c "while sleep 1000; do :; done"
+        command: /bin/bash -c "/opt/ace/docker/startup/dev.sh > /opt/ace/docker_startup.log 2>&1"
+        #/bin/sh -c "while sleep 1000; do :; done"
+        expose:
+            - '8443'
         volumes:
             - .:/opt/ace
             - ace-data-volume:/opt/ace/data
+            - ace-home-volume:/home/ace
         hostname: ace
         container_name: ace-dev
+        ports:
+            - 5000:5000
+            - 8443:8443
 volumes:
     ace-data-volume:
         name: ace-data-dev
 
     ace-db-volume:
         name: ace-db-dev
+
+    ace-home-volume:
+        name: ace-home-dev
         

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-@pytest.fixture(autouse=True, scope='session')
+@pytest.fixture(autouse=True, scope='module')
 def initialize_environment():
 
     # where is ACE?
@@ -45,4 +45,4 @@ def initialize_environment():
 
     yield
 
-    shutil.rmtree(saq.DATA_DIR)
+    #shutil.rmtree(saq.DATA_DIR)

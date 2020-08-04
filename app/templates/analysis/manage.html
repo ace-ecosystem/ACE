@@ -21,7 +21,7 @@
     <div class="row">
         <div class="col-md-12">
             Filters | 
-            <span class="label label-special" style="cursor:pointer" data-toggle="modal" data-target="#filter_modal">Add</span>
+            <span class="label label-special" style="cursor:pointer" data-toggle="modal" data-target="#filter_modal">Edit</span>
             <span class="label label-special" style="cursor:pointer" onmousedown='reset_filters()'>Reset</span> | 
             {% for name, values in session['filters'].items() %}
                 {% if values|length > 0 %}
@@ -132,62 +132,17 @@
         <div class="modal-content">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
-                <h4 class="modal-title" id="filter_modal_label">Add Filter</h4>
+                <h4 class="modal-title" id="filter_modal_label">Edit Filters</h4>
             </div>
-            <div class="modal-body">
-                <div class="row">
-                    <div class="col-xs-12">
-                        <div class="row">
-                            <div class="col-xs-4">
-                                <select class="form-control" id="filter_name" onChange="on_filter_changed(this)">
-                                {% for name in filters %}
-                                    <option value="{{name}}">{{name}}</option>
-                                {% endfor %}
-                                </select>
-                            </div>
-                            {% for name in filters %}
-                            <div class="col-xs-8" style="display:{% if loop.index == 1 %}block{% else %}none{% endif %}" name="filter_value_container" id="filter_value_container_{{name}}">
-                                {% if filters[name].__class__.__name__ == 'TextFilter' %}
-                                    <input type="text" class="form-control" name="filter_value_{{name}}" value=""/>
-                                {% elif filters[name].__class__.__name__ == 'Filter' %}
-                                    <input type="text" class="form-control" name="filter_value_{{name}}" value=""/>
-                                {% elif filters[name].__class__.__name__ == 'SelectFilter' or filters[name].__class__.__name__ == 'MultiSelectFilter' %}
-                                    <select class="form-control" name="filter_value_{{name}}" {% if filters[name].__class__.__name__ == 'MultiSelectFilter' %}size="20" multiple{% endif %}>
-                                    {% for option in filters[name].options %}
-                                        <option value="{{option}}" {% if loop.index == 1 %}SELECTED{% endif %}>{{option}}</option>
-                                    {% endfor %}
-                                    </select>
-                                {% elif filters[name].__class__.__name__ == 'DateRangeFilter' %}
-                                    <input type="text" class="form-control daterange" name="filter_value_{{name}}" value=""/>
-                                {% elif filters[name].__class__.__name__ == 'TypeValueFilter' %}
-                                    <div class="row">
-                                        <div class="col-xs-6">
-                                            <select class="form-control" name="filter_value_{{name}}">
-                                            {% for option in filters[name].options %}
-                                                <option value="{{option}}" {% if loop.index == 1 %}SELECTED{% endif %}>{{option}}</option>
-                                            {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="col-xs-6">
-                                            <input type="text" class="form-control" name="filter_value_{{name}}" value=""/>
-                                        </div>
-                                    </div>
-                                {% elif filters[name].__class__.__name__ == 'AutoTextFilter' %}
-                                    <input type="text" class="form-control" name="filter_value_{{name}}" oninput="toggle_options(this, 'filter_options_{{name}}')" autocomplete="off" value=""/>
-                                    <datalist id="filter_options_{{name}}">
-                                        {% for option in filters[name].options %}
-                                            <option value="{{option}}">
-                                        {% endfor %}
-                                    </datalist>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+            <div class="modal-body" id="filter_modal_body">
+                {% with filters=filters, session_filters=session['filters'] %}
+                    {% include "analysis/alert_filter_input.html" %}
+                {% endwith %}
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">Nevermind</button>
+                <button type="button" class="btn btn-default" onmousedown='new_filter_option()'><span class="glyphicon glyphicon-plus-sign"></span> Add</button>
+                <button type="button" class="btn btn-default" onmousedown='removeElements("filter_row_")'><span class="glyphicon glyphicon-remove"></span> Clear</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
                 <button type="submit" class="btn btn-primary" onmousedown='apply_filter()'>Apply</button>
             </div>
         </div>

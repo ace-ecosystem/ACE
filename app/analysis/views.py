@@ -51,6 +51,7 @@ import saq.remediation
 import virustotal
 
 from saq import SAQ_HOME
+from saq.graph_api import GraphApiAuth
 from saq.constants import *
 from saq.crits import update_status
 from saq.analysis import Tag
@@ -61,7 +62,7 @@ from saq.database import User, UserAlertMetrics, Comment, get_db_connection, Eve
                          acquire_lock, release_lock, \
                          get_available_nodes, use_db, set_dispositions, add_workload, \
                          add_observable_tag_mapping, remove_observable_tag_mapping, \
-                         Remediation
+                         Remediation, Owner, DispositionBy, RemediatedBy
 from saq.email import search_archive, get_email_archive_sections
 from saq.error import report_exception
 from saq.gui import GUIAlert
@@ -78,7 +79,7 @@ from app import db
 from app.analysis import *
 from app.analysis.filters import *
 from flask import jsonify, render_template, redirect, request, url_for, flash, session, \
-                  make_response, g, send_from_directory, send_file
+                  make_response, g, send_from_directory, send_file, stream_with_context, Response
 from flask_login import login_user, logout_user, login_required, current_user
 
 from sqlalchemy import and_, or_, func, distinct
@@ -1651,8 +1652,8 @@ def make_sort_instruction(sort_field, sort_direction):
 
 def _reset_filters():
     session['filters'] = {
-        'Disposition': [ None ],
-        'Owner': [ None, current_user.display_name ],
+        'Disposition': [ 'None' ],
+        'Owner': [ 'None', current_user.display_name ],
         'Queue': [ current_user.queue ],
     }
 
@@ -1731,11 +1732,7 @@ def add_filter():
         session['filters'][name] = []
     values = new_filter['values']
     for v in values:
-        if isinstance(v, str):
-            value = None if v == 'None' else v
-            if value not in session['filters'][name]:
-                session['filters'][name].append(value)
-        elif not v in session['filters'][name]:
+        if v not in session['filters'][name]:
             session['filters'][name].append(v)
 
     # return empy page
@@ -1774,6 +1771,11 @@ def remove_filter_category():
     # return empy page
     return ('', 204)
 
+@analysis.route('/new_filter_option', methods=['POST', 'GET'])
+@login_required
+def new_filter_option():
+    return render_template('analysis/alert_filter_input.html', filters=getFilters(), session_filters={'Description': [ "" ]})
+
 @analysis.route('/set_page_offset', methods=['GET', 'POST'])
 @login_required
 def set_page_offset():
@@ -1811,6 +1813,22 @@ def set_owner():
 def hasFilter(name):
     return 'filters' in session and name in session['filters'] and len(session['filters'][name]) > 0
 
+def getFilters():
+    return {
+        'Alert Date': DateRangeFilter(GUIAlert.insert_date),
+        'Description': TextFilter(GUIAlert.description),
+        'Disposition': MultiSelectFilter(GUIAlert.disposition, nullable=True, options=VALID_ALERT_DISPOSITIONS),
+        'Disposition By': SelectFilter(DispositionBy.display_name, nullable=True),
+        'Disposition Date': DateRangeFilter(GUIAlert.disposition_time),
+        'Event Date': DateRangeFilter(GUIAlert.event_time),
+        'Observable': TypeValueFilter(Observable.type, Observable.value, options=VALID_OBSERVABLE_TYPES),
+        'Owner': SelectFilter(Owner.display_name, nullable=True),
+        'Queue': SelectFilter(GUIAlert.queue),
+        'Remediated By': SelectFilter(RemediatedBy.display_name, nullable=True),
+        'Remediated Date': DateRangeFilter(GUIAlert.removal_time),
+        'Tag': AutoTextFilter(Tag.name),
+    }
+
 @analysis.route('/manage', methods=['GET', 'POST'])
 @login_required
 def manage():
@@ -1826,12 +1844,9 @@ def manage():
 
     # create alert view by joining required tables
     query = db.session.query(GUIAlert).with_labels()
-    Owner = aliased(User)
     query = query.outerjoin(Owner, GUIAlert.owner_id == Owner.id)
-    DispositionBy = aliased(User)
     if hasFilter('Disposition By'):
         query = query.outerjoin(DispositionBy, GUIAlert.disposition_user_id == DispositionBy.id)
-    RemediatedBy = aliased(User)
     if hasFilter('Remediated By'):
         query = query.outerjoin(RemediatedBy, GUIAlert.removal_user_id == RemediatedBy.id)
     if hasFilter('Tag'):
@@ -1840,20 +1855,7 @@ def manage():
         query = query.join(ObservableMapping, GUIAlert.id == ObservableMapping.alert_id).join(Observable, ObservableMapping.observable_id == Observable.id)
 
     # apply filters
-    filters = {
-        'Alert Date': DateRangeFilter(GUIAlert.insert_date),
-        'Description': TextFilter(GUIAlert.description),
-        'Disposition': MultiSelectFilter(GUIAlert.disposition, nullable=True, options=VALID_ALERT_DISPOSITIONS),
-        'Disposition By': SelectFilter(DispositionBy.display_name, nullable=True),
-        'Disposition Date': DateRangeFilter(GUIAlert.disposition_time),
-        'Event Date': DateRangeFilter(GUIAlert.event_time),
-        'Observable': TypeValueFilter(Observable.type, Observable.value, options=VALID_OBSERVABLE_TYPES),
-        'Owner': SelectFilter(Owner.display_name, nullable=True),
-        'Queue': SelectFilter(GUIAlert.queue),
-        'Remediated By': SelectFilter(RemediatedBy.display_name, nullable=True),
-        'Remediated Date': DateRangeFilter(GUIAlert.removal_time),
-        'Tag': AutoTextFilter(Tag.name),
-    }
+    filters = getFilters()
     for name in session['filters']:
         if session['filters'][name] and len(session['filters'][name]) > 0:
             query = filters[name].apply(query, session['filters'][name])
@@ -3149,19 +3151,16 @@ def index():
             return self.history[key]
 
         def __setitem__(self, key, value):
-            # we skip the None key which corresponds to alerts that have not been dispositioned yet
-            if key is not None:
-                if key not in VALID_ALERT_DISPOSITIONS:
-                    raise ValueError(f"invalid disposition {key}")
-
-                self.history[key] = value
+            if key == DISPOSITION_UNKNOWN:
+                return
+            self.history[key] = value
 
         def __delitem__(self, key):
             pass
 
         def __iter__(self):
             total = sum([self.history[disp] for disp in self.history.keys()])
-            dispositions = [disposition for disposition in VALID_ALERT_DISPOSITIONS if disposition in self.history]
+            dispositions = [disposition for disposition in self.history]
             dispositions = sorted(dispositions, key=lambda disposition: (self.history[disposition] / total) * 100.0, reverse=True)
             for disposition in dispositions:
                 yield disposition, self.history[disposition], (self.history[disposition] / total) * 100.0
@@ -3748,28 +3747,37 @@ def observable_action():
             else:
                 return "File uploaded", 200
 
-        elif action_id == ACTION_URL_CRAWL:
+        elif action_id in [ACTION_URL_CRAWL, ACTION_FILE_RENDER]:
             # make sure alert is locked before starting new analysis
             if alert.is_locked():
                 try:
-                    observable.add_directive(DIRECTIVE_CRAWL)
-                    logging.info("user {} added directive {} to {}".format(current_user, DIRECTIVE_CRAWL, observable))
+                    # only crawl (download HTML) if crawl action was selected
+                    if action_id == ACTION_URL_CRAWL:
+                        observable.add_directive(DIRECTIVE_CRAWL)
+                        logging.info(f"user {current_user} added directive {DIRECTIVE_CRAWL} to {observable}")
+
+                    if action_id == ACTION_FILE_RENDER:
+                        observable.remove_directive(DIRECTIVE_NO_RENDER)
+                        logging.info(f"user {current_user} removed directive {DIRECTIVE_NO_RENDER} to {observable}")
+
+                    observable.add_directive(DIRECTIVE_RENDER)
+                    logging.info(f"user {current_user} added directive {DIRECTIVE_RENDER} to {observable}")
 
                     alert.analysis_mode = ANALYSIS_MODE_CORRELATION
                     alert.sync()
 
                     add_workload(alert)
 
-                except:
-                    logging.error("unable to mark observable {} for crawl".format(observable))
+                except Exception as e:
+                    logging.error(f"unable to mark observable {observable} for crawl/render")
                     report_exception()
-                    return "Error: Crawl Request failed - Check logs", 500
+                    return "Error: Crawl/Render Request failed - Check logs", 500
 
                 else:
-                    return "URL crawl successfully requested.", 200
+                    return "URL crawl/render successfully requested.", 200
 
             else:
-                return "Alert wasn't locked for crawling, try again later", 500
+                return "Alert wasn't locked for crawl/render, try again later", 500
 
         return "invalid action_id", 500
 
@@ -3778,8 +3786,6 @@ def observable_action():
         return "Unable to load alert: {}".format(str(e)), 500
     finally:
         release_lock(alert.uuid, lock_uuid)
-
-    return "Action completed. ", 200
 
 @analysis.route('/mark_suspect', methods=['POST'])
 @login_required
@@ -4161,3 +4167,20 @@ def html_details():
     response = make_response(alert.details[request.args['field']])
     response.mimtype = 'text/html'
     return response
+
+@analysis.route('/o365_file_download', methods=['GET'])
+@login_required
+def o365_file_download():
+    path = request.args['path'] if request.method == 'GET' else request.form['path']
+    c = saq.CONFIG['analysis_module_o365_file_analyzer']
+    s = requests.Session()
+    s.proxies = proxies()
+    s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'])
+    r = s.get(f"{c['base_uri']}{path}:/content", stream=True)
+    if r.status_code != requests.codes.ok:
+        return r.text, r.status_code
+    fname = path.split('/')[-1]
+    headers = {
+        "Content-Disposition": f'attachment; filename="{fname}"'
+    }
+    return Response(stream_with_context(r.iter_content(10*1024*1024)), headers=headers, content_type=r.headers['content-type'])
