@@ -7,13 +7,17 @@ from sqlalchemy.orm import aliased
 
 # exact match, provides text input
 class Filter:
-    def __init__(self, column):
+    def __init__(self, column, nullable=False):
         self.column = column
+        self.nullable = nullable
 
     def apply(self, query, values):
         conditions = []
         for value in values:
-            conditions.append(self.column == value)
+            if value == 'None' and self.nullable:
+                conditions.append(self.column == None)
+            else:
+                conditions.append(self.column == value)
         return query.filter(or_(*conditions))
 
 # case insensitive contains match, provides text input
@@ -41,10 +45,10 @@ class DateRangeFilter(Filter):
 # exact match, provides drop down menu for value selection
 class SelectFilter(Filter):
     def __init__(self, column, nullable=False, options=None):
-        super().__init__(column)
+        super().__init__(column, nullable=nullable)
         self.options = options if options else [r[0] for r in db.session.query(self.column).order_by(self.column.asc()).distinct()]
-        if nullable and None not in self.options:
-            self.options.insert(0, None)
+        if nullable and 'None' not in self.options:
+            self.options.insert(0, 'None')
 
 # exact match, provides text input with choices in dropdown while typing
 class AutoTextFilter(SelectFilter):
@@ -59,9 +63,14 @@ class TypeValueFilter(SelectFilter):
     def __init__(self, column, value_column, options=None):
         super().__init__(column, options=options)
         self.value_column = value_column
+        if 'Any' not in self.options:
+            self.options.insert(0, 'Any')
 
     def apply(self, query, values):
         conditions = []
         for value in values:
-            conditions.append(and_(self.column == value[0], self.value_column.like(f"%{value[1]}%".encode('utf8', errors='ignore'))))
+            if value[0] == 'Any':
+                conditions.append(self.value_column.like(f"%{value[1]}%".encode('utf8', errors='ignore')))
+            else:
+                conditions.append(and_(self.column == value[0], self.value_column.like(f"%{value[1]}%".encode('utf8', errors='ignore'))))
         return query.filter(or_(*conditions))

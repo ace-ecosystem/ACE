@@ -562,6 +562,7 @@ CREATE TABLE `persistence` (
   `permanent` int(11) NOT NULL DEFAULT '0' COMMENT 'Set to 1 if this value should never be deleted, 0 otherwise.',
   `uuid` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'A unique identifier (key) for this piece of persistence data specific to this source.',
   `value` blob COMMENT 'The value of this piece of persistence data. This is pickled python data.',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'The time this information was created.',
   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'The last time this information was updated.',
   PRIMARY KEY (`id`,`source_id`),
   UNIQUE KEY `idx_p_lookup` (`source_id`,`uuid`),

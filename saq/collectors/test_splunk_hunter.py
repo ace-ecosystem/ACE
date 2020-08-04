@@ -159,9 +159,11 @@ class TestCaseSplunkConfig(HunterBaseTestCase):
 
         saq.CONFIG.add_section('splunk')
         saq.CONFIG['splunk']['uri'] = SPLUNK_URI
+        saq.CONFIG['splunk']['timezone'] = 'GMT'
 
         saq.CONFIG.add_section('splunk_alt')
         saq.CONFIG['splunk_alt']['uri'] = SPLUNK_ALT_URI
+        saq.CONFIG['splunk_alt']['timezone'] = 'GMT'
 
         saq.CONFIG.add_section('hunt_type_splunk_alt')
         s = saq.CONFIG['hunt_type_splunk_alt']

@@ -1,2 +1,19 @@
-docker exec -it -u ace ace-dev /bin/bash -il
+param (
+[string]$u = ""
+)
+
+$USER = switch ($u)
+{
+    root
+    {
+        "root"
+    }
+
+    default
+    {
+        "ace"
+    }
+}
+
+docker exec -it -u $USER ace-dev /bin/bash -il
 

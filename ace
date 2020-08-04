@@ -156,15 +156,12 @@ def execute_hunt(args):
 
     if isinstance(hunt, QueryHunt):
         start_time = datetime.datetime.strptime(args.start_time, '%m/%d/%Y:%H:%M:%S')
-        if args.timezone is not None:
-            start_time = pytz.timezone(args.timezone).localize(start_time)
-        else:
-            start_time = pytz.utc.localize(start_time)
-
         end_time = datetime.datetime.strptime(args.end_time, '%m/%d/%Y:%H:%M:%S')
         if args.timezone is not None:
+            start_time = pytz.timezone(args.timezone).localize(start_time)
             end_time = pytz.timezone(args.timezone).localize(end_time)
         else:
+            start_time = pytz.utc.localize(start_time)
             end_time = pytz.utc.localize(end_time)
 
         exec_kwargs['start_time'] = start_time
@@ -1352,7 +1349,7 @@ start_gui_parser.set_defaults(func=start_gui)
 
 def start_api(args):
     import saq
-    from api import create_app
+    from aceapi import create_app
 
     app = create_app(testing=True)
     from werkzeug.serving import run_simple

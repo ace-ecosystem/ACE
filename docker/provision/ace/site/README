@@ -1,0 +1,4 @@
+This directory can contain any number of scripts to execute when bin/reset-dev-container.sh is executed. 
+The scripts are executed in alphabetical order. 
+If a script ends with _container.sh then it is executed inside the development container. 
+Otherwise it is executed locally on the host.
