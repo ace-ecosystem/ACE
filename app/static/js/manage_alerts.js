@@ -12,6 +12,31 @@ function get_all_checked_alerts() {
     return result;
 }
 
+function setup_daterange_pickers() {
+    $('.daterange').each(function(index) {
+        if ($(this).val() == '') {
+            $(this).val(
+                moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
+                moment().format("MM-DD-YYYY HH:mm"));
+        }
+    });
+
+    $('.daterange').daterangepicker({
+        timePicker: true,
+        format: 'MM-DD-YYYY HH:mm',
+        startDate:  moment().subtract(6, 'days').startOf('day'),
+        endDate: moment(),
+        ranges: {
+           'Today': [moment().startOf('day'), moment().endOf('day')],
+           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
+           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
+           'This Month': [moment().startOf('month').startOf('day'), moment()],
+           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
+        }
+    });
+}
+
 $(document).ready(function() {
 
     document.getElementById("event_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
@@ -53,16 +78,6 @@ $(document).ready(function() {
 
     $("#btn-BusinessHours").click(function(e) {
         $("#frm-sla_hours").append('<input type="hidden" name="SLA_business-hours" value="1">').submit();
-    });
-
-    $("#btn-reset-filters").click(function(e) {
-        $("#frm-filter").append('<input type="hidden" name="reset-filters" value="1">').submit();
-    });
-
-    // when the user clicks on the search button we just submit the filter dialog as-is
-    // the filter dialog will be filled out with the current filter settings
-    $("#btn-search").click(function(e) {
-        $("#frm-filter").submit();
     });
 
     $("#btn-submit-comment").click(function(e) {
@@ -134,99 +149,7 @@ $(document).ready(function() {
         timeFormat: 'HH:mm:ss'
     });
 
-    $('.daterange').val(
-        moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
-        moment().format("MM-DD-YYYY HH:mm"));
-
-    $('.daterange').daterangepicker({
-        timePicker: true,
-        format: 'MM-DD-YYYY HH:mm',
-        startDate:  moment().subtract(6, 'days').startOf('day'),
-        endDate: moment(),
-        ranges: {
-           'Today': [moment().startOf('day'), moment().endOf('day')],
-           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-           'This Month': [moment().startOf('month').startOf('day'), moment()],
-           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-        }
-    });
-
-    if ($('input[name="daterange"]').val() == '') {
-        $('input[name="daterange"]').val(
-            moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
-            moment().format("MM-DD-YYYY HH:mm"));
-    }
-
-    $('input[name="remediate_daterange"]').daterangepicker({
-        timePicker: true,
-        format: 'MM-DD-YYYY HH:mm',
-        startDate:  moment().subtract(6, 'days').startOf('day'),
-        endDate: moment(),
-        ranges: {
-           'Today': [moment().startOf('day'), moment().endOf('day')],
-           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-           'This Month': [moment().startOf('month').startOf('day'), moment()],
-           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-        }
-    });
-
-    $('input[name="daterange"]').daterangepicker({
-        timePicker: true,
-        format: 'MM-DD-YYYY HH:mm',
-        startDate:  moment().subtract(6, 'days').startOf('day'),
-        endDate: moment(),
-        ranges: {
-           'Today': [moment().startOf('day'), moment().endOf('day')],
-           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-           'This Month': [moment().startOf('month').startOf('day'), moment()],
-           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-        }
-    });
-
-    if ($('input[name="disposition_daterange"]').val() == '') {
-        $('input[name="disposition_daterange"]').val(
-            moment().subtract(6, "days").format("MM-DD-YYYY HH:mm") + ' - ' + 
-            moment().format("MM-DD-YYYY HH:mm"));
-    }
-
-    $('input[name="disposition_daterange"]').daterangepicker({
-        timePicker: true,
-        format: 'MM-DD-YYYY HH:mm',
-        startDate:  moment().subtract(6, "days").startOf('day'),
-        endDate: moment(),
-        ranges: {
-           'Today': [moment().startOf('day'), moment().endOf('day')],
-           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-           'This Month': [moment().startOf('month').startOf('day'), moment()],
-           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-        }
-    });
-
-    // add event handlers to the column headers to trigger column sorting
-    $("span[id^='sort_by_']").each(function(index) {
-        var $this = $(this);
-        $this.click(function(e) {
-            //alert(this.id);
-            sort_field = this.id.replace(/^sort_by_/, "");
-            $("#frm-filter").append('<input type="hidden" name="sort_field" value="' + sort_field + '">');
-
-            // was the user pressing shift? this indicates we want to add this column to the sort
-            if (e.shiftKey) {
-                $("#frm-filter").append('<input type="hidden" name="sort_field_add" value="1">');
-            }
-
-            // submit the form
-            $("#frm-filter").submit();
-        });
-    });
+    setup_daterange_pickers();
 
     $("#btn-take-ownership").click(function(e) {
         all_alert_uuids = get_all_checked_alerts();
@@ -527,20 +450,7 @@ function new_filter_option() {
     data: {},
     success: function(data, textStatus, jqXHR) {
       $('#filter_modal_body').append(data);
-      $('.daterange').daterangepicker({
-          timePicker: true,
-          format: 'MM-DD-YYYY HH:mm',
-          startDate:  moment().subtract(6, 'days').startOf('day'),
-          endDate: moment(),
-          ranges: {
-             'Today': [moment().startOf('day'), moment().endOf('day')],
-             'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-             'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-             'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-             'This Month': [moment().startOf('month').startOf('day'), moment()],
-             'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-          }
-      });
+      setup_daterange_pickers()
     },
     error: function(jqXHR, textStatus, errorThrown) {
       alert("DOH: " + textStatus);
@@ -570,34 +480,6 @@ function load_alert_observables(alert_uuid) {
         }
     });
     
-}
-
-function change_limit(current_limit) {
-    limit = prompt("How many alerts should be shown in the screen at once?", String(current_limit));
-    if (limit == null) return;
-    err = function() {
-        alert("error: enter an integer value between 1 and 1000");
-    };
-
-    try {
-        limit = parseInt(limit);
-    } catch (e) {
-        alert(e);
-        return;
-    }
-
-    if (limit < 1 || limit > 1000) {
-        err();
-        return;
-    }
-
-    $("#frm-filter").append('<input type="hidden" name="modify_limit" value="' + limit.toString() + '"/>');
-    $("#frm-filter").submit();
-}
-
-function navigate(direction) {
-    $("#frm-filter").append('<input type="hidden" name="navigate" value="' + direction + '"/>');
-    $("#frm-filter").submit();
 }
 
 function toggle_chevron(alert_row_id) {
