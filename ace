@@ -1318,10 +1318,17 @@ message_system_parser.set_defaults(func=message_system)
 def start_gui(args):
     import saq
     from app import create_app, db
-    from app.models import User
-    from flask_script import Manager, Shell
+    from werkzeug.serving import run_simple
+    from werkzeug.wsgi import DispatcherMiddleware
+    from flask import Flask
 
     app = create_app()
+    app.config['DEBUG'] = True
+    app.config['APPLICATION_ROOT'] = '/ace'
+    app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+        app.config['APPLICATION_ROOT']: app,
+    })
+
     # add the "do" template command
     app.jinja_env.add_extension('jinja2.ext.do')
 
@@ -1330,9 +1337,9 @@ def start_gui(args):
             print(rule)
         sys.exit(0)
 
-    app.run(saq.CONFIG.get('gui', 'listen_address'), debug=True, port=saq.CONFIG.getint('gui', 'listen_port'), 
-        ssl_context=(saq.CONFIG.get('gui', 'ssl_cert'), saq.CONFIG.get('gui', 'ssl_key')),
-        use_reloader=True)
+    run_simple(saq.CONFIG.get('gui', 'listen_address'), saq.CONFIG.getint('gui', 'listen_port'), app,
+               ssl_context=(saq.CONFIG.get('gui', 'ssl_cert'), saq.CONFIG.get('gui', 'ssl_key')),
+               use_reloader=True)
 
 # start-gui
 start_gui_parser = subparsers.add_parser('start-gui',
@@ -1357,7 +1364,7 @@ def start_api(args):
     from flask import Flask, url_for
     app.config['DEBUG'] = True
     app.config['APPLICATION_ROOT'] = '/api'
-    application = DispatcherMiddleware(Flask('dummy_app'), {
+    app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
         app.config['APPLICATION_ROOT']: app,
     })
 
@@ -1366,7 +1373,7 @@ def start_api(args):
             print(rule)
         sys.exit(0)
 
-    run_simple(saq.CONFIG.get('api', 'listen_address'), saq.CONFIG.getint('api', 'listen_port'), application,
+    run_simple(saq.CONFIG.get('api', 'listen_address'), saq.CONFIG.getint('api', 'listen_port'), app,
                ssl_context=(saq.CONFIG.get('api', 'ssl_cert'), saq.CONFIG.get('api', 'ssl_key')),
                use_reloader=False)
 
