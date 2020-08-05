@@ -2,11 +2,15 @@
 #
 
 RESET=""
-while getopts "r" opt
+INSTANCE_TYPE="DEVELOPMENT"
+while getopts "rt:" opt
 do
     case ${opt} in
         r)
             RESET="Y"
+            ;;
+        t)
+            INSTANCE_TYPE="$OPTARG"
             ;;
         *)
             echo "invalid command line option ${opt}"
@@ -96,8 +100,13 @@ if [ ! -e etc/saq.ini -o -n "$RESET" ]
 then
     cat > etc/saq.ini <<EOF
 [config]
-docker_default = etc/saq.docker-dev.ini
+docker_default = etc/saq.docker.ini
 EOF
+
+    if [ "$INSTANCE_TYPE" == "DEVELOPMENT" ]
+    then
+        sed -i -e '/^docker_default =/a docker_dev = etc/saq.docker-dev.ini' etc/saq.ini
+    fi
 fi
     #if [ "$(hostname)" == "ace-dev" ]
     #then
