@@ -44,8 +44,8 @@ cat "$CLIENT_CERT" >> "$CLIENT_CERTS"
 
 cat "$CLIENT_CERTS" | base64 > "$CLIENT_CERTS_B64"
 
-echo "$MSG cleaning up files"
-rm "$KEY" "$CERT" "$CA_KEY" "$CA_CERT" "$CLIENT_KEY" "$CLIENT_CSR" "$CLIENT_CERT" "$CLIENT_CERTS" "test_ca.srl"
+#echo "$MSG cleaning up files"
+#rm "$KEY" "$CERT" "$CA_KEY" "$CA_CERT" "$CLIENT_KEY" "$CLIENT_CSR" "$CLIENT_CERT" "$CLIENT_CERTS" "test_ca.srl"
 
 echo "$MSG your certs in b64 to be used for testing via environment variables:"
 echo "$MSG     - NGINX_X509_PRIVATE_KEY_B64:      contents of '${KEY_B64}'"
