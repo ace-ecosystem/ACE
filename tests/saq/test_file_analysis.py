@@ -113,8 +113,17 @@ class TestUrlExtraction:
         elapsed = t2 - t1
         print(f' Execute analysis took {elapsed} seconds.')
 
+        expected_analysis_observables = list()
         with open(datadir / f'{test_file}.out') as f:
-            expected_analysis_observables = f.read()
+            for line in f:
+                line = line.strip()
+                expected_analysis_observables.append(line)
+
+        expected_analysis_observables = set(expected_analysis_observables)
 
         assert url_extraction_completed
-        assert str(url_extraction_analysis.observables) == expected_analysis_observables
+        for type, value in url_extraction_analysis.observables:
+            assert type == 'url'
+
+        assert set([value for type, value in url_extraction_analysis.observables]) == expected_analysis_observables
+        #assert str(url_extraction_analysis.observables) == expected_analysis_observables

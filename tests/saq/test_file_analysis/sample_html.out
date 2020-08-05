@@ -1,1 +1,6 @@
-[('url', 'http://schemas.xmlsoap.org/soap/envelope'), ('url', 'http://www.passport.com/NameSpace.xsd'), ('url', 'http://microsoft.com/officenet/conferencing'), ('url', 'http://microsoft.com/sharepoint/webpartpages'), ('url', 'http://microsoft.com/webservices/SharePointPortalServer/PublishedLinksService'), ('url', 'http://microsoft.com/webservices/SharePointPortalServer/UserProfileService')]
+http://schemas.xmlsoap.org/soap/envelope
+http://www.passport.com/NameSpace.xsd
+http://microsoft.com/officenet/conferencing
+http://microsoft.com/sharepoint/webpartpages
+http://microsoft.com/webservices/SharePointPortalServer/PublishedLinksService
+http://microsoft.com/webservices/SharePointPortalServer/UserProfileService
