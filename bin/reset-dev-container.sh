@@ -2,14 +2,21 @@
 #
 
 FULL_RESET=""
-while getopts "f" opt
+RESET_SSL=""
+while getopts "fs" opt
 do
     case ${opt} in
         f)
             FULL_RESET="-r"
             ;;
+        s)
+            RESET_SSL="-r"
+            ;;
         *)
             echo "invalid command line option ${opt}"
+            echo "usage: $0 [-f] [-s]"
+            echo "use -f for a full reset"
+            echo "use -s to reset the ssl certificates"
             exit 1
             ;;
     esac
@@ -28,7 +35,7 @@ docker volume rm ace-db-dev > /dev/null 2>&1
 #docker volume rm ace-home-dev > /dev/null 2>&1
 bin/build_docker_dev_images.sh
 docker-compose -f docker-compose-dev.yml up -d
-docker exec -it -u root ace-dev /bin/bash -c "docker/provision/ace/install $FULL_RESET -t DEVELOPMENT"
+docker exec -it -u root ace-dev /bin/bash -c "docker/provision/ace/install $FULL_RESET $RESET_SSL -t DEVELOPMENT"
 
 # wait for the database to come up...
 echo -n "waiting for database..."

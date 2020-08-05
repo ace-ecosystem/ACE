@@ -2,12 +2,16 @@
 #
 
 RESET=""
+RESET_SSL=""
 INSTANCE_TYPE="DEVELOPMENT"
-while getopts "rt:" opt
+while getopts "rst:" opt
 do
     case ${opt} in
         r)
             RESET="Y"
+            ;;
+        s)
+            RESET_SSL="Y"
             ;;
         t)
             INSTANCE_TYPE="$OPTARG"
@@ -147,5 +151,5 @@ if [ ! -e /home/ace/.vscode-server/extensions ]; then mkdir -p /home/ace/.vscode
 if [ ! -e /home/ace/.vscode-server/extensionsCache ]; then mkdir -p /home/ace/.vscode-server/extensionsCache; fi
 
 chown -R ace:ace /home/ace
-docker/provision/ace/install_ssl_certs.sh
+docker/provision/ace/install_ssl_certs.sh $RESET_SSL
 chown -R ace:ace /opt/ace/ssl
