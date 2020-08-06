@@ -40,7 +40,7 @@
     
     
       
-        <title>Email Logging - Analysis Correlation Engine</title>
+        <title>HTML/URL Render Service - Analysis Correlation Engine</title>
       
     
     
@@ -87,7 +87,7 @@
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
     <label class="md-overlay" data-md-component="overlay" for="__drawer"></label>
     
-      <a href="#email-logging" tabindex="0" class="md-skip">
+      <a href="#htmlurl-render-service" tabindex="0" class="md-skip">
         Skip to content
       </a>
     
@@ -113,7 +113,7 @@
             </span>
             <span class="md-header-nav__topic">
               
-                Email Logging
+                HTML/URL Render Service
               
             </span>
           
@@ -891,20 +891,11 @@
           
           
 
-  
 
-
-  <li class="md-nav__item md-nav__item--active">
-    
-    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-    
-      
-    
-    
-    <a href="./" title="Email Logging" class="md-nav__link md-nav__link--active">
+  <li class="md-nav__item">
+    <a href="../email_logging/" title="Email Logging" class="md-nav__link">
       Email Logging
     </a>
-    
   </li>
 
         
@@ -1104,11 +1095,63 @@
           
           
 
+  
 
-  <li class="md-nav__item">
-    <a href="../render_service/" title="HTML/URL Render Service" class="md-nav__link">
+
+  <li class="md-nav__item md-nav__item--active">
+    
+    <input class="md-toggle md-nav__toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+    
+      
+    
+    
+      <label class="md-nav__link md-nav__link--active" for="__toc">
+        HTML/URL Render Service
+      </label>
+    
+    <a href="./" title="HTML/URL Render Service" class="md-nav__link md-nav__link--active">
       HTML/URL Render Service
     </a>
+    
+      
+<nav class="md-nav md-nav--secondary">
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#docker" class="md-nav__link">
+    Docker
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-the-containers-interact" class="md-nav__link">
+    How the Containers Interact
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#renderer-lifecycle" class="md-nav__link">
+    Renderer Lifecycle
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
+</nav>
+    
   </li>
 
         
@@ -1542,6 +1585,36 @@
     
   
   
+    <label class="md-nav__title" for="__toc">Table of contents</label>
+    <ul class="md-nav__list" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#docker" class="md-nav__link">
+    Docker
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-the-containers-interact" class="md-nav__link">
+    How the Containers Interact
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#renderer-lifecycle" class="md-nav__link">
+    Renderer Lifecycle
+  </a>
+  
+</li>
+      
+      
+      
+      
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1553,8 +1626,27 @@
               
                 
                 
-                <h1 id="email-logging">Email Logging<a class="headerlink" href="#email-logging" title="Permanent link">&para;</a></h1>
-<p>ACE can log the meta data of <a href="../../modules/email_analyzer/">analyzed emails</a> to files that can be consumed by log aggregation tools such as ElasticSearch and Splunk.</p>
+                <h1 id="htmlurl-render-service">HTML/URL Render Service<a class="headerlink" href="#htmlurl-render-service" title="Permanent link">&para;</a></h1>
+<p>The HTML/URL Render service is a suite of containers that function to securely render HTML and URL observables into images. The design of the system is such that, depending on deployment, even malicious content can be rendered. Once rendered, the images can be served through ACE's GUI to analysts, to allow for quick triaging.</p>
+<h2 id="docker">Docker<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h2>
+<p>Several containers are used in orchestration:</p>
+<ul>
+<li><strong>NGinx Proxy</strong> (<code>nginx:alpine</code>): This container is a reverse proxy that achieves two goals:<ul>
+<li>Certificate based client authentication between ACE and the service</li>
+<li>Reverse proxying HTTP requests to (potentially) multiple <strong>Controllers</strong></li>
+</ul>
+</li>
+<li><strong>Controller</strong> (<code>tiangolo/uvicorn-gunicorn-fastapi</code>): This container is a RESTful HTTP API, written in <a href="">FastAPI</a> that essentially transforms HTTP requests from the primary ACE instance (running the <a href="">Render Analyzer module</a> into rendering jobs. Multiple of these containers <em>can</em> be deployed.</li>
+<li><strong>Redis</strong> (<code>redis:latest</code>): This container functions both as a queue (through a Redis List) for jobs, and as a data store, between the <strong>Controller</strong> and <strong>Renderer</strong>.</li>
+<li><strong>Renderer</strong> (<code>selenium/standalone-chrome</code>): This container does the work of taking a rendering job off the queue and generating the image. The renderer can also use an outbound proxy. The renderer dies after completing or failing to render, and relies of replication for subsequent jobs to be renderered (a major design constraint).</li>
+</ul>
+<h2 id="how-the-containers-interact">How the Containers Interact<a class="headerlink" href="#how-the-containers-interact" title="Permanent link">&para;</a></h2>
+<p><img alt="Renderer Service Orchestration" src="../../assets/images/renderer_high_level_diagram.png" /></p>
+<p>// TODO: update this image to lose AWS specific descriptions
+The above image describes how the containers interact.</p>
+<h2 id="renderer-lifecycle">Renderer Lifecycle<a class="headerlink" href="#renderer-lifecycle" title="Permanent link">&para;</a></h2>
+<p><img alt="Renderer Container Workflow" src="../../assets/images/renderer_cycle.png" /></p>
+<p>The <strong>Renderer</strong> container uses selenium's remote webdriver and headless Chrome to generate an image.</p>
                 
                   
                 
@@ -1576,7 +1668,7 @@
     <div class="md-footer-nav">
       <nav class="md-footer-nav__inner md-grid">
         
-          <a href="../email_collector/" title="Email Collector" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
+          <a href="../remediation/" title="Remediation" class="md-flex md-footer-nav__link md-footer-nav__link--prev" rel="prev">
             <div class="md-flex__cell md-flex__cell--shrink">
               <i class="md-icon md-icon--arrow-back md-footer-nav__button"></i>
             </div>
@@ -1585,19 +1677,19 @@
                 <span class="md-footer-nav__direction">
                   Previous
                 </span>
-                Email Collector
+                Remediation
               </span>
             </div>
           </a>
         
         
-          <a href="../email_remediation/" title="Email Remediation" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
+          <a href="../root_analysis/" title="Root Analysis" class="md-flex md-footer-nav__link md-footer-nav__link--next" rel="next">
             <div class="md-flex__cell md-flex__cell--stretch md-footer-nav__title">
               <span class="md-flex__ellipsis">
                 <span class="md-footer-nav__direction">
                   Next
                 </span>
-                Email Remediation
+                Root Analysis
               </span>
             </div>
             <div class="md-flex__cell md-flex__cell--shrink">

@@ -1095,6 +1095,18 @@
 
 
   <li class="md-nav__item">
+    <a href="../../design/render_service/" title="HTML/URL Render Service" class="md-nav__link">
+      HTML/URL Render Service
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
     <a href="../../design/root_analysis/" title="Root Analysis" class="md-nav__link">
       Root Analysis
     </a>
@@ -1368,6 +1380,18 @@
   </li>
 
         
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../render_service/" title="HTML/URL Render Service" class="md-nav__link">
+      HTML/URL Render Service
+    </a>
+  </li>
+
+        
       </ul>
     </nav>
   </li>
@@ -1472,6 +1496,18 @@
   <li class="md-nav__item">
     <a href="../../modules/email_logging_analyzer/" title="Email Logging Analyzer" class="md-nav__link">
       Email Logging Analyzer
+    </a>
+  </li>
+
+        
+          
+          
+          
+
+
+  <li class="md-nav__item">
+    <a href="../../modules/render_analyzer/" title="HTML/URL Renderer" class="md-nav__link">
+      HTML/URL Renderer
     </a>
   </li>
 
@@ -1637,25 +1673,21 @@
 <h2 id="installation-instructions">Installation Instructions<a class="headerlink" href="#installation-instructions" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Install Docker.</li>
+<li>On Windows or MacOS, adjust the maximum memory ACE can use to something reasonable. By default just 2GB is allocated. Suggest setting this value to 8GB or higher.</li>
 </ul>
 <h2 id="macos-and-linux-setup-instructions">MacOS and Linux Setup Instructions<a class="headerlink" href="#macos-and-linux-setup-instructions" title="Permanent link">&para;</a></h2>
 <ul>
-<li>Execute <code>bin/build-docker-images.sh</code> to build the Docker images.</li>
 <li>Execute <code>bin/initialize_docker.py</code> which sets up random passwords for a development environment.</li>
-<li>Execute <code>docker-compose -f docker-compose-dev.yml up -d</code> which launches the containers into the background.</li>
-<li>Execute <code>docker exec -it -u root ace-dev /bin/bash -c 'docker/provision/ace/install -r'</code> to finish the installation.</li>
-<li>Execute <code>bin/attach-docker-dev.sh</code> to attach to the running container.</li>
+<li>Execute <code>bin/reset-dev-container.sh</code> which builds the images, starts and configures the container.</li>
+<li>OPTIONAL: Execute <code>bin/attach-docker-dev.sh</code> to attach to the running container.</li>
 </ul>
 <h2 id="windows-setup-instructions-powershell">Windows Setup Instructions (Powershell)<a class="headerlink" href="#windows-setup-instructions-powershell" title="Permanent link">&para;</a></h2>
 <p>Windows is a little tricky because bind mounts are mounted as root:root with 755 permissions.</p>
 <ul>
-<li>Execute <code>&amp; .\bin\build-docker-images.ps1</code> to build the Docker images.</li>
 <li>Make sure you have python on your PATH.</li>
 <li>Execute <code>python .\bin\initialize_docker.py</code></li>
-<li>Execute <code>docker-compose -f docker-compose-dev.yml up -d</code> which launches the containers into the background.</li>
-<li>Execute <code>docker exec -it -u root ace-dev /bin/bash -c 'chown -R ace:ace /opt/ace/data'</code></li>
-<li>Execute <code>docker exec -it -u root ace-dev /bin/bash -c 'docker/provision/ace/install -r'</code> to finish the installation.</li>
-<li>Execute <code>&amp; .\bin\attach-dev-container.ps1</code> to attach to the running container.</li>
+<li>Execute <code>&amp; .\bin\reset-dev-container.ps1</code> which builds the images, starts and configures the container.</li>
+<li>OPTIONAL: Execute <code>&amp; .\bin\attach-dev-container.ps1</code> to attach to the running container.</li>
 </ul>
 <h2 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h2>
 <ul>
