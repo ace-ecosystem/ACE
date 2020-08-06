@@ -4,12 +4,36 @@
 # installs and configures SSL certificates for ACE
 #
 
+RESET=""
+INSTANCE_TYPE="DEVELOPMENT"
+while getopts "rt:" opt
+do
+    case ${opt} in
+        r)
+            RESET="Y"
+            ;;
+        t)
+            INSTANCE_TYPE="$OPTARG"
+            ;;
+        *)
+            echo "invalid command line option ${opt}"
+            exit 1
+            ;;
+    esac
+done
+
 cd "$SAQ_HOME" || { echo "cannot cd to $SAQ_HOME"; exit 1; }
 
-if [ -e ssl/root/ca/openssl.cnf ]
+# have we already created the certificates?
+if [ -z "$RESET" -a -e ssl/ca-chain.cert.pem -a -e ssl/ace.cert.pem -a -e ssl/ace.key.pem ]
 then
-    echo "already installed openssl certificates; removing old openssl certs and recreating"
+    echo "already installed ssl certificates"
+    echo "run with -r to reset the ssl certificates"
+    exit 0
+fi
+
 (
+    # this wipes out any existing certificate data
     cd ssl && \
     rm ace.cert.pem ace.key.pem ca-chain.cert.pem && \
     cd root/ca && \
@@ -17,7 +41,6 @@ then
     cd intermediate && \
     rm -rf certs crl csr newcerts private ace.openssl.cnf crlnumber index* serial* openssl.cnf
 )
-fi
 
 mkdir -p ssl/root/ca/intermediate
 sed -e "s;SAQ_HOME;$SAQ_HOME;g" ssl/root/ca/openssl.template.cnf > ssl/root/ca/openssl.cnf
