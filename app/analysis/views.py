@@ -3366,9 +3366,13 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
             _prune(display_tree)
             # root node is visible
             display_tree.visible = True
-            # and all observables in the root node
-            #for child in display_tree.children:
-                #child.visible = True
+
+            # if the show_root_observables config option is True then
+            # also all observables in the root node
+            if saq.CONFIG['gui'].getboolean('show_root_observables'):
+                for child in display_tree.children:
+                    child.visible = True
+
             _resolve_references(display_tree)
 
     try:
