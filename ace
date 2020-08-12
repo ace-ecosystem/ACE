@@ -2529,7 +2529,12 @@ def remediate_emails(args):
     from saq.remediation.mail import get_remediation_targets, create_email_remediation_key
 
     # get a user-id to execute remediation
-    user_id = saq.db.query(User).filter(User.username == args.user_name).one().id
+    user = saq.db.query(User).filter(User.username == args.user_name).first()
+    if user is None:
+        sys.stderr.write(f"invalid user {args.user_name}\n")
+        sys.exit(1)
+
+    user_id = user.id
 
     # clean input
     if args.from_stdin:
@@ -2569,8 +2574,8 @@ remediate_email_parser.add_argument('-m', '--message-id-only', required=False, d
     help="Assume all parameters are message-ids. Use email archive database to determine recipients automatically.")
 remediate_email_parser.add_argument('-c', '--comment', required=False, default=None,
     help="An optional comment to add to the remediation.")
-remediate_email_parser.add_argument('-u', '--user-name', required=False,
-    help="The username to execute the remediation as. Defaults to the current user name.")
+remediate_email_parser.add_argument('-u', '--user-name', required=False, default='ace',
+    help="The username to execute the remediation as. Defaults to the automation (ace) user.")
 remediate_email_parser.add_argument('targets', nargs='*',
     help="One or more message-ids to remediate. You can also specify --from-stdin.")
 remediate_email_parser.set_defaults(func=remediate_emails)
