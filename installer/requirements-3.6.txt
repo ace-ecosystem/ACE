@@ -53,7 +53,7 @@ setuptools_git
 six
 tld
 tzlocal
-urlfinderlib==0.11.11
+urlfinderlib
 vxstreamlib
 yara_scanner==1.0.15
 python-whois
