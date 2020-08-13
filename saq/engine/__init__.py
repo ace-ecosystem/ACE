@@ -87,6 +87,20 @@ class WaitForAnalysisException(Exception):
         self.analysis = analysis
         self.instance = instance
 
+
+TRACKER_MESSAGE_TYPE_WORK_TARGET = 'work_target'
+TRACKER_MESSAGE_TYPE_MODULE = 'module'
+TRACKER_MESSAGE_TYPE_CLEAR = 'clear'
+
+class TrackingMessage(object):
+    """Utility class used to track what is currently being processed in the child process."""
+    def __init__(self, type, details=None):
+        self.type = type
+        self.details = details
+
+    def __str__(self):
+        return f"TrackingMessage({self.type},{self.details})"
+
 class Worker(object):
     def __init__(self, mode=None):
         self.mode = mode # the primary analysis mode for the worker
@@ -103,11 +117,28 @@ class Worker(object):
         self.auto_refresh_frequency = saq.CONFIG['service_engine'].getint('auto_refresh_frequency', 0)
         self.next_auto_refresh_time = None # datetime.datetime
 
+        #
+        # we keep track of what is currently being worked on by reporting it to the Worker class
+        # from the Engine class that is executing from worker_loop
+        #
+
+        # the last WorkTarget that was being worked on
+        # this is going to be either a DelayedAnalysisRequest or a str that is a storage_dir to a RootAnalysis
+        self.last_work_target = None
+        # the last AnalysisModule that was being executed on the last_work_target
+        self.last_analysis_module = None
+        # set to True if we log a warning that the tracking seems to have stopped
+        self.logged_tracking_warning = False
+        # the multiprocessing.Queue used to communicate between parent and child process
+        self.tracker_message_queue = None # (created when the Worker starts)
+
     def start(self):
         self.worker_shutdown_event = Event()
         self.worker_startup_event = Event()
+        self.initialize_tracking()
         self.process = Process(target=self.worker_loop, name='Worker [{}]'.format(self.mode if self.mode else 'any'))
         self.process.start()
+        self.start_tracker_thread()
   
     def single_threaded_start(self):
         self.worker_shutdown_event = Event()
@@ -121,6 +152,7 @@ class Worker(object):
     def stop(self):
         self.worker_shutdown_event.set()
         self.wait()
+        self.stop_tracker_thread()
 
     def wait(self):
         while True:
@@ -185,7 +217,7 @@ class Worker(object):
     def worker_loop(self):
         logging.info("started worker loop on process {} with priority {}".format(os.getpid(), self.mode))
 
-        CURRENT_ENGINE.setup(self.mode)
+        CURRENT_ENGINE.setup(self.mode, self)
 
         # let the main process know we started
         if self.worker_startup_event is not None:
@@ -255,6 +287,76 @@ class Worker(object):
 
         logging.debug("worker {} exiting".format(os.getpid()))
 
+    def initialize_tracking(self):
+        self.logged_tracking_warning = False
+        self.tracker_message_queue = Queue(maxsize=1)
+        self.tracker_thread_control_event = Event()
+
+    def start_tracker_thread(self):
+        # NOTE we use multiprocessing queues and events since the worker runs on a child process
+        # maxsize is 1 and we use non-blocking put() calls so that if this tracker thread dies
+        # the worker doesn't block trying to send updates (it just starts to fail tracking and is logged)
+        self.tracker_thread = threading.Thread(target=self.tracker_loop, daemon=True)
+        self.tracker_thread.start()
+
+    def stop_tracker_thread(self):
+        self.tracker_thread_control_event.set()
+        logging.debug("waiting for tracker thread to stop...")
+        self.tracker_thread.join()
+
+    def tracker_loop(self):
+        logging.debug(f"started tracking {self.process.pid}")
+        while not self.tracker_thread_control_event.is_set():
+            try:
+                self.tracker_execute()
+            except Exception as e:
+                logging.error(f"engine process tracking failed for {self.process.pid}: {e}")
+                break
+
+        logging.debug(f"stopped tracking {self.process.pid}")
+
+    def tracker_execute(self):
+        try:
+            message = self.tracker_message_queue.get(block=True, timeout=1)
+        except queue.Empty:
+            return
+
+        logging.debug(f"got tracking message {message.type} {message.details}")
+        self.tracker_execute_message(message)
+
+    def tracker_execute_message(self, message):
+        if message.type == TRACKER_MESSAGE_TYPE_WORK_TARGET:
+            self.last_work_target = message.details
+        elif message.type == TRACKER_MESSAGE_TYPE_MODULE:
+            self.last_analysis_module = message.details
+        elif message.type == TRACKER_MESSAGE_TYPE_CLEAR:
+            self.last_work_target = None
+            self.last_analysis_module = None
+        else:
+            raise Exception(f"invalid tracker message type {message.type}")
+
+    def track_current_work_target(self, target):
+        if not isinstance(target, DelayedAnalysisRequest):
+            target = target.storage_dir
+
+        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_WORK_TARGET, target))
+
+    def track_current_analysis_module(self, module):
+        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_MODULE, module.name))
+
+    def clear_tracking(self):
+        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_CLEAR))
+
+    def _track(self, message):
+        try:
+            if self.tracker_message_queue:
+                self.tracker_message_queue.put(message, block=False)
+                self.logged_tracking_warning = False
+        except Full:
+            if not self.logged_tracking_warning:
+                logging.warning("unable to track work (tracking died?)")
+                self.logged_tracking_warning = True
+                                                    
     def __str__(self):
         return '{}{}'.format(str(self.process), ' (PID {})'.format(self.process.pid) if self.process else '')
 
@@ -363,6 +465,7 @@ class WorkerManager(object):
 
         # make sure all the processes exit with you
         for worker in self.workers:
+            #worker.stop()
             worker.wait()
 
         logging.info("worker manager on pid {} exiting".format(os.getpid()))
@@ -659,8 +762,39 @@ class Engine(ACEService):
         if self.target_nodes:
             logging.debug(f"target nodes for {saq.SAQ_NODE} is limited to {self.target_nodes}")
 
+        # an instance of Worker is what ends up calling Engine.execute
+        # this worker represents the parent process that monitors the child analysis process
+        self.worker = None
+
     def __str__(self):
         return "Engine ({} - {})".format(saq.SAQ_NODE, self.name)
+
+    def track_current_work_target(self, work_item):
+        """Tells the parent process what is currently being analyzed."""
+        if self.worker:
+            try:
+                self.worker.track_current_work_target(work_item)
+            except Exception as e:
+                logging.error(f"tracking request failed: {e}")
+                report_exception()
+
+    def track_current_analysis_module(self, analysis_module):
+        """Tells the parent process what analyis module is currently being executed."""
+        if self.worker:
+            try:
+                self.worker.track_current_analysis_module(analysis_module)
+            except Exception as e:
+                logging.error(f"tracking request failed: {e}")
+                report_exception()
+
+    def clear_tracking(self):
+        """Tells the parent process that processing completed successfully."""
+        if self.worker:
+            try:
+                self.worker.clear_tracking()
+            except Exception as e:
+                logging.error(f"tracking request failed: {e}")
+                report_exception()
 
     def set_local(self):
         """Sets the Engine into "local" mode."""
@@ -1742,18 +1876,22 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
 
             execute_with_retry(db, c, "DELETE FROM locks where uuid = %s", (target.uuid,))
             db.commit()
+            self.clear_tracking()
             logging.debug(f"cleared work target {target}")
 
         except Exception as e:
             logging.error(f"unable to clear work target {target}: {e}")
             report_exception()
 
-    def setup(self, mode):
+    def setup(self, mode, worker=None):
         """Called to setup the engine for execution. Typically this is called on the worker
            process just before the execution loop begins."""
 
         # this determines what kind of work we look for first
         self.analysis_mode_priority = mode
+
+        # keep a reference to the Worker instance that is managing the analysis process
+        self.worker = worker
 
         # set up our lock
         self.lock_uuid = str(uuid.uuid4())
@@ -1776,6 +1914,7 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
             return False
 
         logging.debug("got work item {}".format(work_item))
+        self.track_current_work_target(work_item)
 
         # at this point the thing to work on is locked (using the locks database table)
         # start a secondary thread that just keeps the lock open
@@ -2235,7 +2374,8 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                 self.dependency = dependency            # the dependency we're trying to resolve
 
             def __str__(self):
-                return "WorkTarget(obs:{},analyis:{},module:{},dep:{})".format(self.observable, self.analysis, self.analysis_module, self.dependency)
+                return "WorkTarget(obs:{},analyis:{},module:{},dep:{})".format(
+                        self.observable, self.analysis, self.analysis_module, self.dependency)
 
             def __repr__(self):
                 return self.__str__()
@@ -2650,6 +2790,7 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                         # by returning False here
                         try:
                             module_start_time = datetime.datetime.now()
+                            self.track_current_analysis_module(analysis_module)
                             analysis_result = analysis_module.analyze(work_item.observable, final_analysis_mode)
                         finally:
                             # make sure we stop the monitor thread
