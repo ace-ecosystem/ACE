@@ -787,6 +787,12 @@ class AnalysisModule(object):
 
         if isinstance(obj, Observable):
             if self.analysis_covered(obj):
+                logging.debug(f"{obj} is already covered by another {self} analysis")
+                return False
+
+            # did analysis fail for this observable?
+            if obj.get_analysis_failed(self, self.instance):
+                logging.debug(f"analysis by {self} has already failed for {obj}")
                 return False
 
         # try to load analysis from cache first

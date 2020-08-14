@@ -13,3 +13,4 @@ work/
 yss/
 ace.out/
 .git/
+*.log

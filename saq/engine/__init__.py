@@ -30,12 +30,12 @@ import saq
 import saq.analysis
 import saq.database
 
-from saq.analysis import Observable, Analysis, RootAnalysis
+from saq.analysis import Observable, Analysis, RootAnalysis, MODULE_PATH
 from saq.constants import *
 from saq.database import Alert, use_db, \
                          get_db_connection, add_workload, acquire_lock, release_lock, execute_with_retry, \
                          add_delayed_analysis_request, clear_expired_locks, clear_expired_local_nodes, \
-                         initialize_node, ALERT
+                         initialize_node, ALERT, force_release_lock
 from saq.error import report_exception
 from saq.modules import AnalysisModule
 from saq.performance import record_metric
@@ -126,7 +126,10 @@ class Worker(object):
         # this is going to be either a DelayedAnalysisRequest or a str that is a storage_dir to a RootAnalysis
         self.last_work_target = None
         # the last AnalysisModule that was being executed on the last_work_target
+        # NOTE this is the value of the config_section_name property
         self.last_analysis_module = None
+        # the last Observable id that was being analyzed by last_analysis_module
+        self.last_observable_id = None
         # set to True if we log a warning that the tracking seems to have stopped
         self.logged_tracking_warning = False
         # the multiprocessing.Queue used to communicate between parent and child process
@@ -147,7 +150,7 @@ class Worker(object):
 
     def wait_for_start(self):
         while not self.worker_startup_event.wait(5):
-            logging.warning("worker for {} not starting".format(self.mode))
+            logging.warning(f"worker for {self.mode} not starting ({self.process.pid})")
 
     def stop(self):
         self.worker_shutdown_event.set()
@@ -210,6 +213,44 @@ class Worker(object):
         # if not then start it back up
         if self.process:
             logging.info("detected death of process {} pid {}".format(self.process, self.process.pid))
+
+        # was the process executing an analysis module?
+        while self.last_work_target and self.last_analysis_module and self.last_observable_id:
+            logging.warning(f"detected failed analysis module {self.last_analysis_module} "
+                            f"for observable {self.last_observable_id} for {self.last_work_target}")
+
+            # load the failed analysis
+            # XXX refactor into AnalysisRequest
+            if isinstance(self.last_work_target, DelayedAnalysisRequest):
+                storage_dir = self.last_work_target.storage_dir
+            else:
+                storage_dir = self.last_work_target
+
+            try:
+                root = RootAnalysis(storage_dir=storage_dir)
+                root.load()
+
+                # get the observable that was last being worked on
+                observable = root.get_observable(self.last_observable_id)
+                if observable is None:
+                    logging.error(f"unable to find observable with id {self.last_observable_id} in {root.storage_dir}")
+                    break
+
+                # mark the analysis as failed
+                observable.set_analysis_failed(self.last_analysis_module)
+                root.save()
+
+                # and then clear the lock on this so it can get picked up right away
+                force_release_lock(root.uuid)
+
+            except Exception as e:
+                logging.error(f"unable to mark analysis as failed: {e}")
+                report_exception()
+
+            finally:
+                self.last_work_target = None
+                self.last_analysis_module = None
+                self.last_observable_id = None
 
         self.start()
         self.wait_for_start()
@@ -305,7 +346,6 @@ class Worker(object):
         self.tracker_thread.join()
 
     def tracker_loop(self):
-        logging.debug(f"started tracking {self.process.pid}")
         while not self.tracker_thread_control_event.is_set():
             try:
                 self.tracker_execute()
@@ -328,10 +368,13 @@ class Worker(object):
         if message.type == TRACKER_MESSAGE_TYPE_WORK_TARGET:
             self.last_work_target = message.details
         elif message.type == TRACKER_MESSAGE_TYPE_MODULE:
-            self.last_analysis_module = message.details
+            self.last_analysis_module, self.last_observable_id = message.details
         elif message.type == TRACKER_MESSAGE_TYPE_CLEAR:
-            self.last_work_target = None
-            self.last_analysis_module = None
+            if message.details == TRACKER_MESSAGE_TYPE_WORK_TARGET or message.details is None:
+                self.last_work_target = None
+            if message.details == TRACKER_MESSAGE_TYPE_MODULE or message.details is None:
+                self.last_analysis_module = None
+                self.last_observable_id = None
         else:
             raise Exception(f"invalid tracker message type {message.type}")
 
@@ -341,11 +384,11 @@ class Worker(object):
 
         self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_WORK_TARGET, target))
 
-    def track_current_analysis_module(self, module):
-        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_MODULE, module.name))
+    def track_current_analysis_module(self, module, observable):
+        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_MODULE, (MODULE_PATH(module), observable.id)))
 
-    def clear_tracking(self):
-        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_CLEAR))
+    def clear_tracking(self, type=None):
+        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_CLEAR, type))
 
     def _track(self, message):
         try:
@@ -778,20 +821,20 @@ class Engine(ACEService):
                 logging.error(f"tracking request failed: {e}")
                 report_exception()
 
-    def track_current_analysis_module(self, analysis_module):
+    def track_current_analysis_module(self, analysis_module, observable):
         """Tells the parent process what analyis module is currently being executed."""
         if self.worker:
             try:
-                self.worker.track_current_analysis_module(analysis_module)
+                self.worker.track_current_analysis_module(analysis_module, observable)
             except Exception as e:
                 logging.error(f"tracking request failed: {e}")
                 report_exception()
 
-    def clear_tracking(self):
+    def clear_tracking(self, type=None):
         """Tells the parent process that processing completed successfully."""
         if self.worker:
             try:
-                self.worker.clear_tracking()
+                self.worker.clear_tracking(type)
             except Exception as e:
                 logging.error(f"tracking request failed: {e}")
                 report_exception()
@@ -2790,8 +2833,12 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                         # by returning False here
                         try:
                             module_start_time = datetime.datetime.now()
-                            self.track_current_analysis_module(analysis_module)
+                            # let the tracker know that we're starting analysis for this observable and analysis module
+                            # so that if this fails then the tracker can mark it as such
+                            self.track_current_analysis_module(analysis_module, work_item.observable)
                             analysis_result = analysis_module.analyze(work_item.observable, final_analysis_mode)
+                            # let the tracker know that we completed analysis work for this module
+                            self.clear_tracking(TRACKER_MESSAGE_TYPE_MODULE)
                         finally:
                             # make sure we stop the monitor thread
                             if not self.single_threaded_mode:
