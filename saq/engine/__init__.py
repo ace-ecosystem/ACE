@@ -151,6 +151,17 @@ class Worker(object):
     def wait_for_start(self):
         while not self.worker_startup_event.wait(5):
             logging.warning(f"worker for {self.mode} not starting ({self.process.pid})")
+            self.stop_tracker_thread()
+
+            try:
+                kill_process_tree(self.process.pid, signal.SIGKILL)
+            except Exception as e:
+                logging.error(f"unable to kill process {self.process}: {e}")
+
+            if self.worker_shutdown_event.is_set():
+                break
+
+            self.start()
 
     def stop(self):
         self.worker_shutdown_event.set()
