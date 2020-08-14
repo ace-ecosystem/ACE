@@ -2427,6 +2427,43 @@ class TestCase(ACEEngineTestCase):
         engine.stop()
         engine.wait()
 
+    def test_failed_analysis_module(self):
+        
+        # make sure that when an analysis module causes the entire analysis process to crash
+        # ACE deals with the situation and recovers
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.storage_dir = storage_dir_from_uuid(root.uuid)
+        root.initialize_storage()
+        observable = root.add_observable(F_TEST, 'test_worker_death')
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine(pool_size_limit=1)
+        # basic test should run before low_priority does
+        engine.enable_module('analysis_module_basic_test')
+        engine.enable_module('analysis_module_low_priority')
+        engine.start()
+        # we should see it die
+        wait_for_log_count('detected death of', 1, 5)
+        # and then we should have seen two workers start
+        wait_for_log_count('started worker loop', 2, 5)
+        engine.controlled_stop()
+        engine.wait()
+
+        root = RootAnalysis(storage_dir=root.storage_dir)
+        root.load()
+        observable = root.get_observable(observable.id)
+        self.assertIsNotNone(observable)
+
+        # we should have recorded a failed analysis
+        from saq.modules.test import BasicTestAnalysis
+        self.assertTrue(observable.get_analysis_failed(BasicTestAnalysis))
+
+        # the low priority analysis module should have still executed
+        from saq.modules.test import LowPriorityAnalysis
+        analysis = observable.get_analysis(LowPriorityAnalysis)
+        self.assertIsNotNone(analysis)
+
     @use_db
     def test_engine_exclusive_uuid(self, db, c):
 

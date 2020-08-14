@@ -237,7 +237,7 @@ class Worker(object):
                     break
 
                 # mark the analysis as failed
-                observable.set_analysis_failed(self.last_analysis_module)
+                observable.set_analysis_failed(self.last_analysis_module, error_message="process died unexpectedly")
                 root.save()
 
                 # and then clear the lock on this so it can get picked up right away
