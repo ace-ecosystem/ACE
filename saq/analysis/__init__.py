@@ -1587,6 +1587,20 @@ class Observable(TaggableObject, DetectableObject):
         analysis module that failed to analyze this observable."""
         return self._failed_analysis
 
+    @property
+    def failed_analysis_display(self):
+        """Returns a list of formatted failed analysis messages suitable for display."""
+        result = []
+        for analysis_module_path, error_message in self.failed_analysis.items():
+            module, _class, instance = SPLIT_MODULE_PATH(analysis_module_path)
+            message = f"{_class} failed"
+            if error_message:
+                message += f": {error_message}"
+
+            result.append(message)
+
+        return result
+
     @failed_analysis.setter
     def failed_analysis(self, value):
         assert isinstance(value, dict)
