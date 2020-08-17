@@ -30,7 +30,7 @@ import saq
 import saq.analysis
 import saq.database
 
-from saq.analysis import Observable, Analysis, RootAnalysis, MODULE_PATH
+from saq.analysis import Observable, Analysis, RootAnalysis, MODULE_PATH, SPLIT_MODULE_PATH
 from saq.constants import *
 from saq.database import Alert, use_db, \
                          get_db_connection, add_workload, acquire_lock, release_lock, execute_with_retry, \
@@ -130,6 +130,12 @@ class Worker(object):
         self.last_analysis_module = None
         # the last Observable id that was being analyzed by last_analysis_module
         self.last_observable_id = None
+        # the start time of the last analysis module execution
+        self.last_analysis_start_time = None
+        # the amount of time (in seconds) the current analysis module has to execute 
+        self.last_maximum_analysis_time = None
+        # the time at which the current analysis is considered to be timed out
+        self.last_analysis_module_timeout = None
         # set to True if we log a warning that the tracking seems to have stopped
         self.logged_tracking_warning = False
         # the multiprocessing.Queue used to communicate between parent and child process
@@ -219,6 +225,13 @@ class Worker(object):
                 logging.error(f"unable to check memory of process {self.process}: {e}")
                 break
 
+            # is it taking too long to analyze something?
+            if self.last_analysis_start_time is not None:
+                if datetime.datetime.now() >= self.last_analysis_module_timeout:
+                    logging.error(f"analysis module {self.last_analysis_module} timed out analyzing {self.last_work_target} observable {self.last_observable_id}")
+                    kill_process_tree(self.process.pid, signal.SIGKILL)
+                    break
+
             return
 
         # if not then start it back up
@@ -247,6 +260,10 @@ class Worker(object):
                     logging.error(f"unable to find observable with id {self.last_observable_id} in {root.storage_dir}")
                     break
 
+                # log which observable it was
+                logging.warning(f"detected failed analysis module {self.last_analysis_module} "
+                    f"for observable {observable} for {self.last_work_target}")
+
                 # mark the analysis as failed
                 observable.set_analysis_failed(self.last_analysis_module, error_message="process died unexpectedly")
                 root.save()
@@ -259,9 +276,7 @@ class Worker(object):
                 report_exception()
 
             finally:
-                self.last_work_target = None
-                self.last_analysis_module = None
-                self.last_observable_id = None
+                self._clear_work_tracking()
 
         self.start()
         self.wait_for_start()
@@ -379,15 +394,29 @@ class Worker(object):
         if message.type == TRACKER_MESSAGE_TYPE_WORK_TARGET:
             self.last_work_target = message.details
         elif message.type == TRACKER_MESSAGE_TYPE_MODULE:
-            self.last_analysis_module, self.last_observable_id = message.details
+            self.last_analysis_module, self.last_observable_id, self.last_maximum_analysis_time = message.details
+            self.last_analysis_start_time = datetime.datetime.now()
+            self.last_analysis_module_timeout = \
+                    self.last_analysis_start_time + datetime.timedelta(seconds=self.last_maximum_analysis_time)
         elif message.type == TRACKER_MESSAGE_TYPE_CLEAR:
             if message.details == TRACKER_MESSAGE_TYPE_WORK_TARGET or message.details is None:
-                self.last_work_target = None
+                self._clear_work_tracking()
             if message.details == TRACKER_MESSAGE_TYPE_MODULE or message.details is None:
-                self.last_analysis_module = None
-                self.last_observable_id = None
+                self._clear_module_tracking()
         else:
             raise Exception(f"invalid tracker message type {message.type}")
+
+    def _clear_work_tracking(self):
+        self.last_work_target = None
+        self._clear_module_tracking()
+
+    def _clear_module_tracking(self):
+        self.last_work_target = None
+        self.last_analysis_module = None
+        self.last_observable_id = None
+        self.last_maximum_analysis_time = None
+        self.last_analysis_start_time = None
+        self.last_analysis_module_timeout = None
 
     def track_current_work_target(self, target):
         if not isinstance(target, DelayedAnalysisRequest):
@@ -396,7 +425,7 @@ class Worker(object):
         self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_WORK_TARGET, target))
 
     def track_current_analysis_module(self, module, observable):
-        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_MODULE, (MODULE_PATH(module), observable.id)))
+        self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_MODULE, (MODULE_PATH(module), observable.id, module.maximum_analysis_time)))
 
     def clear_tracking(self, type=None):
         self._track(TrackingMessage(TRACKER_MESSAGE_TYPE_CLEAR, type))
