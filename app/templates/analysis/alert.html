@@ -188,6 +188,23 @@
                             </ul>
                         {% endif %}
                     {% endfor %}
+
+                    {# this is where we display the analysis failures I AM HERE #}
+                    {% if observable_node.obj.failed_analysis %}
+                    <ul>
+                        {% for failed_analysis_message in observable_node.obj.failed_analysis_display %}
+                        <li>
+                            <div class="alert alert-warning" role="alert">
+                                <button type="button" class="btn btn-danger btn-xs">
+                                    <span class="glyphicon glyphicon-warning-sign" aria-hidden="true"></span>
+                                </button>
+                                {{failed_analysis_message}}
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+
                 {% endif %}
             {% endif %}
         {% endfor %}

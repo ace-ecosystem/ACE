@@ -22,6 +22,11 @@ do
     sleep 1
 done
 
+if [ ! -d etc/yara ]
+then
+    mkdir etc/yara
+fi
+
 bin/start-ace
 
 if [ ! -e etc/gui_logging.ini ]

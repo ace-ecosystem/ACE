@@ -36,7 +36,12 @@ def MODULE_PATH(m, instance=None):
 
     assert isinstance(m, Analysis) or \
            isinstance(m, AnalysisModule) or \
-           (inspect.isclass(m) and issubclass(m, Analysis))
+           (inspect.isclass(m) and issubclass(m, Analysis)) or \
+           isinstance(m, str)
+
+    # is this already a module path?
+    if isinstance(m, str) and _MODULE_PATH_REGEX.match(m):
+        return m
 
     # did we pass an instance of an Analysis
     if isinstance(m, Analysis):
@@ -1222,6 +1227,7 @@ class Observable(TaggableObject, DetectableObject):
     KEY_LINKS = 'links'
     KEY_LIMITED_ANALYSIS = 'limited_analysis'
     KEY_EXCLUDED_ANALYSIS = 'excluded_analysis'
+    KEY_FAILED_ANALYSIS = 'failed_analysis'
     KEY_RELATIONSHIPS = 'relationships'
     KEY_GROUPING_TARGET = 'grouping_target'
 
@@ -1233,6 +1239,7 @@ class Observable(TaggableObject, DetectableObject):
         self._links = []
         self._limited_analysis = []
         self._excluded_analysis = []
+        self._failed_analysis = []
         self._relationships = []
         self._grouping_target = False
 
@@ -1249,6 +1256,7 @@ class Observable(TaggableObject, DetectableObject):
             self._links = [] # [ str ]
             self._limited_analysis = [] # [ str ]
             self._excluded_analysis = [] # [ str ]
+            self._failed_analysis = {} # key = MODULE_PATH, value = error_message (str)
             self._relationships = [] # [ Relationship ]
             self._grouping_target = False
 
@@ -1331,6 +1339,7 @@ class Observable(TaggableObject, DetectableObject):
             Observable.KEY_LINKS: self._links,
             Observable.KEY_LIMITED_ANALYSIS: self._limited_analysis,
             Observable.KEY_EXCLUDED_ANALYSIS: self._excluded_analysis,
+            Observable.KEY_FAILED_ANALYSIS: self._failed_analysis,
             Observable.KEY_RELATIONSHIPS: self._relationships,
             Observable.KEY_GROUPING_TARGET: self._grouping_target,
         })
@@ -1362,6 +1371,8 @@ class Observable(TaggableObject, DetectableObject):
             self._limited_analysis = value[Observable.KEY_LIMITED_ANALYSIS]
         if Observable.KEY_EXCLUDED_ANALYSIS in value:
             self._excluded_analysis = value[Observable.KEY_EXCLUDED_ANALYSIS]
+        if Observable.KEY_FAILED_ANALYSIS in value:
+            self._failed_analysis = value[Observable.KEY_FAILED_ANALYSIS]
         if Observable.KEY_RELATIONSHIPS in value:
             self._relationships = value[Observable.KEY_RELATIONSHIPS]
         if Observable.KEY_GROUPING_TARGET in value:
@@ -1569,6 +1580,44 @@ class Observable(TaggableObject, DetectableObject):
             name += f'{analysis_module.instance}'
 
         return name in self.excluded_analysis
+
+    @property
+    def failed_analysis(self):
+        """Returns a dict(MODULE_PATH, str) that contains a key pair for each
+        analysis module that failed to analyze this observable."""
+        return self._failed_analysis
+
+    @property
+    def failed_analysis_display(self):
+        """Returns a list of formatted failed analysis messages suitable for display."""
+        result = []
+        for analysis_module_path, error_message in self.failed_analysis.items():
+            module, _class, instance = SPLIT_MODULE_PATH(analysis_module_path)
+            message = f"{_class} failed"
+            if error_message:
+                message += f": {error_message}"
+
+            result.append(message)
+
+        return result
+
+    @failed_analysis.setter
+    def failed_analysis(self, value):
+        assert isinstance(value, dict)
+        self._failed_analysis = value
+
+    def set_analysis_failed(self, analysis_module, instance=None, error_message=None):
+        """Marks the analysis as failed for this observable."""
+        self.failed_analysis[MODULE_PATH(analysis_module, instance)] = error_message
+
+    def get_analysis_failed(self, analysis_module, instance=None):
+        """Returns True if the given analysis module failed analysis for this observable."""
+        return MODULE_PATH(analysis_module, instance) in self.failed_analysis
+
+    def get_analysis_failed_message(self, analysis_module, instance=None):
+        """Returns the error message given for the failure for the given
+        analysis module, or None if the analysis did not fail."""
+        return MODULE_PATH(analysis_module, instance) in self.failed_analysis
 
     @property
     def relationships(self):

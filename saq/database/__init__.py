@@ -2317,6 +2317,24 @@ def release_lock(uuid, lock_uuid, db, c):
     return False
 
 @use_db
+def force_release_lock(uuid, db, c):
+    """Releases a lock acquired by acquire_lock without providing the lock_uuid."""
+    try:
+        execute_with_retry(db, c, "DELETE FROM locks WHERE uuid = %s", (uuid,))
+        db.commit()
+        if c.rowcount == 1:
+            logging.debug("released lock on {}".format(uuid))
+        else:
+            logging.info("failed to force release lock on {}".format(uuid))
+
+        return c.rowcount == 1
+    except Exception as e:
+        logging.error("unable to force release lock {}: {}".format(uuid, e))
+        report_exception()
+
+    return False
+
+@use_db
 def clear_expired_locks(db, c):
     """Clear any locks that have exceeded saq.LOCK_TIMEOUT_SECONDS."""
     execute_with_retry(db, c, "DELETE FROM locks WHERE TIMESTAMPDIFF(SECOND, lock_time, NOW()) >= %s",

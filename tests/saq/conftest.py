@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-@pytest.fixture(autouse=True, scope='module')
+@pytest.fixture(autouse=True, scope='session')
 def initialize_environment():
 
     # where is ACE?
@@ -20,7 +20,6 @@ def initialize_environment():
     import saq.util
 
     saq.UNIT_TESTING = True # XXX get rid of this
-    saq.util.create_directory(os.path.join(saq_home, 'data_unittest', 'logs')) # XXX hack
     saq.initialize(
             saq_home=saq_home, 
             config_paths=[], 
@@ -44,5 +43,3 @@ def initialize_environment():
     os.makedirs(test_dir)
 
     yield
-
-    #shutil.rmtree(saq.DATA_DIR)

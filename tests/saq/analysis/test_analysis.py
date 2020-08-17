@@ -33,6 +33,38 @@ def test_encoding():
     json_output = json.dumps(test_data, sort_keys=True, cls=_JSONEncoder)
     assert json_output == r'{"binary_string": "\u00e4\u00bd\u00a0\u00e5\u00a5\u00bd\u00ef\u00bc\u008c\u00e4\u00b8\u0096\u00e7\u0095\u008c", "bool": true, "custom_object": "hello world", "datetime": "2017-11-11T07:36:01.000001", "dict": {}, "float": 1.0, "int": 1, "list": [], "null": null, "str": "test"}'
 
+@pytest.mark.unit
+def test_MODULE_PATH():
+    from saq.analysis import MODULE_PATH, SPLIT_MODULE_PATH
+    module_class_spec = 'some_module:some_class' # simple dummy module + class spec
+    module_class_instance_spec = 'some_module:some_class:some_instance' # simple dummy module + class spec + instance
+    assert MODULE_PATH(module_class_spec) == module_class_spec
+    assert SPLIT_MODULE_PATH(MODULE_PATH(module_class_spec)) == ( 'some_module', 'some_class', None )
+    assert MODULE_PATH(module_class_instance_spec) == module_class_instance_spec
+    assert SPLIT_MODULE_PATH(MODULE_PATH(module_class_instance_spec)) == ( 'some_module', 'some_class', 'some_instance' )
+
+    # pass by Analysis instance
+    from saq.modules.test import BasicTestAnalysis
+    assert MODULE_PATH(BasicTestAnalysis()) == 'saq.modules.test:BasicTestAnalysis'
+    assert SPLIT_MODULE_PATH(MODULE_PATH(BasicTestAnalysis())) == ( 'saq.modules.test', 'BasicTestAnalysis', None )
+
+    # pass by Analysis class
+    from saq.modules.test import BasicTestAnalysis
+    assert MODULE_PATH(BasicTestAnalysis) == 'saq.modules.test:BasicTestAnalysis'
+    assert SPLIT_MODULE_PATH(MODULE_PATH(BasicTestAnalysis)) == ( 'saq.modules.test', 'BasicTestAnalysis', None )
+
+    # pass by AnalysisModule instance
+    from saq.modules.test import BasicTestAnalyzer
+    assert MODULE_PATH(BasicTestAnalyzer('analysis_module_basic_test')) == 'saq.modules.test:BasicTestAnalysis'
+    assert SPLIT_MODULE_PATH(MODULE_PATH(BasicTestAnalyzer('analysis_module_basic_test'))) == ( 'saq.modules.test', 'BasicTestAnalysis', None )
+
+    # same thing but with an instance value for the module
+    from saq.modules.test import TestInstanceAnalysis
+    analysis = TestInstanceAnalysis()
+    analysis.instance = 'instance1'
+    assert MODULE_PATH(analysis) == 'saq.modules.test:TestInstanceAnalysis:instance1'
+    assert SPLIT_MODULE_PATH(MODULE_PATH(analysis)) == ( 'saq.modules.test', 'TestInstanceAnalysis', 'instance1' )
+
 class TestRootAnalysis(object):
     @pytest.mark.unit
     def test_submission(self, tmp_path):
