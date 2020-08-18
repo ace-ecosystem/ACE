@@ -356,7 +356,7 @@ class Worker(object):
 
     def initialize_tracking(self):
         self.logged_tracking_warning = False
-        self.tracker_message_queue = Queue(maxsize=1)
+        self.tracker_message_queue = Queue(maxsize=100)
         self.tracker_thread_control_event = Event()
 
     def start_tracker_thread(self):
