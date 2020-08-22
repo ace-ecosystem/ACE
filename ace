@@ -1312,6 +1312,77 @@ message_system_parser.set_defaults(func=message_system)
 
 
 # ============================================================================
+# Section for Metrics / Analytics / Statistics
+#
+
+from metrics.cli import build_metric_parser, stdout_like
+from metrics.alerts import ( ALERTS_BY_MONTH_DB_QUERY,
+                             VALID_ALERT_STATS, 
+                             FRIENDLY_STAT_NAME_MAP,
+                             statistics_by_month_by_dispo,
+                             generate_hours_of_operation_summary_table,
+                             generate_overall_summary_table
+                            )
+
+metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
+build_metric_parser(metrics_parser)
+
+def metrics(args):
+    import pandas as pd
+    from saq.database import get_db_connection
+
+    # companies
+    company_ids = []
+    if args.company:
+        with get_db_connection() as db:
+            c = db.cursor()
+            c.execute("select * from company")
+            company_map = {}
+            for comp in c.fetchall():
+                company_map[comp['name']] = comp['id']
+            for cname in args.company:
+                company_ids.append(company_map[cname] if cname in company_map else None)
+
+    if args.metric_target == 'alerts':
+        query = ALERTS_BY_MONTH_DB_QUERY.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company_id=%s' for x in company_ids]) +')' if company_ids else '')
+
+        params = [args.start_datetime,
+                  args.end_datetime]
+        params.extend(company_ids)
+        with get_db_connection() as db:
+            alert_df = pd.read_sql_query(query, db, params=params)
+
+        # go ahead and drop the dispositions we don't care about
+        # XXX make a list of dispositions to ignore configurable
+        alert_df = alert_df[alert_df.disposition != 'IGNORE']
+
+        alert_df.set_index('month', inplace=True)
+
+        # generate statistic tables
+        alert_stat_map = statistics_by_month_by_dispo(alert_df, business_hours=args.business_hours)
+        if args.all_stats:
+            for stat in VALID_ALERT_STATS:
+                alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
+                stdout_like(alert_stat_map[stat], format=args.stdout_format)
+        else:
+            # check the general statistics
+            arg_stats = [sarg[len('alert_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('alert_stat_') and value is True]
+            for stat in arg_stats:
+                alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
+                stdout_like(alert_stat_map[stat], format=args.stdout_format)
+
+        if args.hours_of_operation:
+            hop_df = generate_hours_of_operation_summary_table(alert_df.copy())
+            stdout_like(hop_df, format=args.stdout_format)
+
+        if args.average_alert_cycletime_summary:
+            sla_df = generate_overall_summary_table(alert_df.copy())
+            stdout_like(sla_df, format=args.stdout_format)
+
+metrics_parser.set_defaults(func=metrics)
+
+
+# ============================================================================
 # start GUI (non-apache version)
 #
 
