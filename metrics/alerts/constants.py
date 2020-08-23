@@ -1,3 +1,4 @@
+"""Constants for alert metrics."""
 
 # ALERT RELATED CONSTANTS #
 # The valid stats commonly calculated for ACE Alerts

@@ -26,15 +26,22 @@ def stdout_like(df: pd.DataFrame, format='print'):
         logging.warning(f"{format} is not a supported output format for the cli")
         return False
 
+    table_name = ""
+    try:
+        table_name = f"{df.name}:"
+    except AttributeError:
+        # table has no name
+        pass
+
     if format == 'ascii_table':
         print()
-        print(f"{df.name}:")
+        print(table_name)
         print(tabulate(df, headers='keys', tablefmt='simple'))
         print()
         return
     
     print()
-    print(f"{df.name}:")
+    print(table_name)
     print(df)
     print()
     return
@@ -60,6 +67,23 @@ def build_metric_alert_parser(alert_parser: argparse.ArgumentParser) -> None:
         alert_parser.add_argument(f'--{stat}', action='store_true', dest=f"alert_stat_{stat}", help=FRIENDLY_STAT_NAME_MAP[stat])
     alert_parser.add_argument('--all-stats', action='store_true', help="Return all of the available statistics.")
 
+def build_metric_event_parser(event_parser: argparse.ArgumentParser) -> None:
+    """Given an argparse subparser, build a metric event parser.
+
+    Build an event parser that defines how to interface with the
+    ACE metrics library for ACE event data.
+    
+    Args:
+        event_parser: An argparse.ArgumentParser.
+
+    Returns: None
+    """ 
+
+    event_parser.add_argument('-i', '--incidents', action='store_true',
+                              help='Return only events that are incidents')
+    event_parser.add_argument('-ce', '--count-emails', action='store_true',
+                              help='Count emails, in each event, per company.')            
+
 def build_metric_parser(parser: argparse.ArgumentParser) -> None:
     """Build the ACE metric parser.
     
@@ -79,9 +103,14 @@ def build_metric_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('-s', '--start_datetime', action='store', required=True, help="The start datetime specifying the ACE data in scope")
     parser.add_argument('-e', '--end_datetime', action='store', required=True, help="The end datetime specifying the ACE data in scope")
 
-    alert_metrics_subparsers = parser.add_subparsers(dest='metric_target')
-    alert_parser = alert_metrics_subparsers.add_parser("alerts", help="alert based metrics")
+    metrics_subparsers = parser.add_subparsers(dest='metric_target')
+ 
+    alert_parser = metrics_subparsers.add_parser("alerts", help="alert based metrics")
     build_metric_alert_parser(alert_parser)
+
+    event_parser = metrics_subparsers.add_parser("events", help="event based metrics. With no arguments will return all events")
+    build_metric_event_parser(event_parser)
+
 
 '''
 def execute_expressed_(args):

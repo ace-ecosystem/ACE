@@ -10,6 +10,7 @@ import os
 import datetime
 import logging
 
+import pymysql
 import businesstime
 import pandas as pd
 
@@ -17,7 +18,55 @@ from typing import Tuple, Mapping
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 
-from .constants import VALID_ALERT_STATS, FRIENDLY_STAT_NAME_MAP, ACE_KILLCHAIN_DISPOSITIONS
+from .constants import VALID_ALERT_STATS, FRIENDLY_STAT_NAME_MAP, ACE_KILLCHAIN_DISPOSITIONS, ALERTS_BY_MONTH_DB_QUERY
+
+def get_alerts_between_dates(start_date: datetime,
+                             end_date: datetime,
+                             con: pymysql.connections.Connection,
+                             alert_query: str =ALERTS_BY_MONTH_DB_QUERY,
+                             selected_companies: list =[],
+                            ) -> pd.DataFrame:
+    """Query the database for all ACE alerts between two dates.
+
+    Query the ACE database for all ACE alerts betweem two dates.
+    If there are selected_companies, only return alerts associated to those companies,
+    else all alerts are selected.
+
+    Args:
+        start_date: Get alerts created on or after this datetime.
+        end_date: Get alert created on or before this datetime.
+        con: a pymysql database connectable
+        alert_query: The str SQL database query to get alerts with.
+        selected_companies: A list of companies to select alerts for, by name.
+          If the list is empty, all alerts are selected.
+
+    Returns:
+        A pd.DataFrame of the alerts.
+    """
+
+    # apply company selection by name
+    company_ids = []
+    if selected_companies:
+        cursor = con.cursor()
+        cursor.execute("select * from company")
+        for c_id,c_name in cursor.fetchall():
+            if c_name in selected_companies:
+                company_ids.append(c_id)
+
+    alert_query = alert_query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company.name=%s' for company in selected_companies]) +') ' if company_ids else '')
+
+    params = [start_date.strftime('%Y-%m-%d %H:%M:%S'),
+              end_date.strftime('%Y-%m-%d %H:%M:%S')]
+    params.extend(company_ids)
+
+    alerts = pd.read_sql_query(alert_query, con, params=params)
+
+    # go ahead and drop the dispositions we don't care about
+    # XXX make a list of dispositions to ignore configurable
+    alerts = alerts[alerts.disposition != 'IGNORE']
+    alerts.set_index('month', inplace=True)
+
+    return alerts
 
 def get_business_hour_cycle_time(alert_df: pd.DataFrame, start_hour=6, end_hour=18) -> pd.Series(timedelta):
     """Convert alert times to a business hours timedelta pd.Series.

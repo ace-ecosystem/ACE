@@ -1316,12 +1316,17 @@ message_system_parser.set_defaults(func=message_system)
 #
 
 from metrics.cli import build_metric_parser, stdout_like
-from metrics.alerts import ( ALERTS_BY_MONTH_DB_QUERY,
+from metrics.alerts import ( get_alerts_between_dates,
                              VALID_ALERT_STATS, 
                              FRIENDLY_STAT_NAME_MAP,
                              statistics_by_month_by_dispo,
                              generate_hours_of_operation_summary_table,
                              generate_overall_summary_table
+                            )
+
+from metrics.events import ( get_events_between_dates,
+                             get_incidents_from_events,
+                             add_email_alert_counts_per_event
                             )
 
 metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
@@ -1337,29 +1342,33 @@ def metrics(args):
         with get_db_connection() as db:
             c = db.cursor()
             c.execute("select * from company")
-            company_map = {}
-            for comp in c.fetchall():
-                company_map[comp['name']] = comp['id']
-            for cname in args.company:
-                company_ids.append(company_map[cname] if cname in company_map else None)
+            for c_id,c_name in c.fetchall():
+                if c_name in args.company:
+                    company_ids.append(c_id)
+
+    if args.metric_target == 'events':
+        with get_db_connection() as db:
+            start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
+            end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
+            events = get_events_between_dates(start_date, end_date, db)
+            if args.count_emails:
+                add_email_alert_counts_per_event(events, db)
+
+        if args.incidents:
+            incidents = get_incidents_from_events(events)
+            stdout_like(incidents, format=args.stdout_format)
+        else:
+            events.drop(columns=['id'], inplace=True)
+            stdout_like(events, format=args.stdout_format)
 
     if args.metric_target == 'alerts':
-        query = ALERTS_BY_MONTH_DB_QUERY.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company_id=%s' for x in company_ids]) +')' if company_ids else '')
-
-        params = [args.start_datetime,
-                  args.end_datetime]
-        params.extend(company_ids)
         with get_db_connection() as db:
-            alert_df = pd.read_sql_query(query, db, params=params)
-
-        # go ahead and drop the dispositions we don't care about
-        # XXX make a list of dispositions to ignore configurable
-        alert_df = alert_df[alert_df.disposition != 'IGNORE']
-
-        alert_df.set_index('month', inplace=True)
+            start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
+            end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
+            alerts = get_alerts_between_dates(start_date, end_date, db)
 
         # generate statistic tables
-        alert_stat_map = statistics_by_month_by_dispo(alert_df, business_hours=args.business_hours)
+        alert_stat_map = statistics_by_month_by_dispo(alerts, business_hours=args.business_hours)
         if args.all_stats:
             for stat in VALID_ALERT_STATS:
                 alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
