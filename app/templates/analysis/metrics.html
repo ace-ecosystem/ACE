@@ -1,112 +1,316 @@
 {% extends "base.html" %}
 
+{% block head %}
+{{ super() }}
+<!--link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/dashboard.css') }}" /-->
+
+{% endblock %}
+
 {% block page_content %}
 
 <style>
 table.dataframe thead {background-color: #eceff1;}
 table.dataframe {border: none;}
 label.form-check-label { margin-right: 10px; font-weight: 100;}
+
+.btn-link.custum-submit-btn-link{
+  outline: 5px auto -webkit-focus-ring-color;
+  outline-offset: -2px;
+  outline-color: #337ab7;
+  outline-width: 2px;
+}
+.btn-link.custum-submit-btn-link:hover,
+.btn-link.custum-submit-btn-link:focus {
+  color: #23527c;
+  text-decoration: underline;
+  background-color: transparent;
+}
+.custum-submit-btn {
+  padding-top: 3px;
+  padding-bottom: 3px;
+  padding-right: 6px;
+  padding-left: 6px;
+}
+.custom-submit-form-group {
+    margin-bottom: 0px;
+}
 </style>
 
-<div class="container-fluid">
+<div class="container-fluid" role="navigation">
+  <form id="metric-filter" method="POST" action="{{url_for('analysis.metrics')}}">
+    <div class="row custom-nav-filter">
+      <div class="col-md-6 col-md-push-3">
+        <div class="row">
+          <ul class="nav nav-tabs">
+            <!--div class="col-md-1"-->
+              <li role="presentation">
+                <p style="padding-top: 1.2mm;">Select: </p>
+              </li>
+            <!--/div>
+            <div class="col-md-1"-->
+              <li role="presentation">
+                <button role="button" class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapseDateRange" aria-expanded="false" aria-controls="collapseDateRange">
+                  <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-calendar-range" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" d="M1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1zm1-3a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2H2z"/>
+                    <path fill-rule="evenodd" d="M3.5 0a.5.5 0 0 1 .5.5V1a.5.5 0 0 1-1 0V.5a.5.5 0 0 1 .5-.5zm9 0a.5.5 0 0 1 .5.5V1a.5.5 0 0 1-1 0V.5a.5.5 0 0 1 .5-.5z"/>
+                    <path d="M9 7a1 1 0 0 1 1-1h5v2h-5a1 1 0 0 1-1-1zM1 9h4a1 1 0 0 1 0 2H1V9z"/>
+                  </svg>
+                  Date Range
+                </button>
+              </li>
+            <!--/div>
+            <div class="col-md-1 col-md-push-1"-->
+              <li role="presentation">
+                <button role="button" class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapseAlerts" aria-expanded="false" aria-controls="collapseAlerts">
+                  <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-exclamation-triangle" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" d="M7.938 2.016a.146.146 0 0 0-.054.057L1.027 13.74a.176.176 0 0 0-.002.183c.016.03.037.05.054.06.015.01.034.017.066.017h13.713a.12.12 0 0 0 .066-.017.163.163 0 0 0 .055-.06.176.176 0 0 0-.003-.183L8.12 2.073a.146.146 0 0 0-.054-.057A.13.13 0 0 0 8.002 2a.13.13 0 0 0-.064.016zm1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566z"/>
+                    <path d="M7.002 12a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 5.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995z"/>
+                  </svg>
+                  Alerts
+                </button>
+              </li>
+            <!--/div>
+            <div class="col-md-1 col-md-push-2"-->
+              <li role="presentation">
+                <label for="exampleFormControlSelect2" class="col-form-label">
+                  <button role="button" class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapseEvents" aria-expanded="false" aria-controls="collapseEvents">
+                    <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-lightning" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                      <path fill-rule="evenodd" d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.09zM4.157 8.5H7a.5.5 0 0 1 .478.647L6.11 13.59l5.732-6.09H9a.5.5 0 0 1-.478-.647L9.89 2.41 4.157 8.5z"/>
+                    </svg>
+                    Events
+                  </button>
+                </label>
+              </li>
+              {% if target_companies.keys()|length > 1 %}
+                {# only show this section if more than a single company is available #}
+                <li role="presentation">
+                  <label for="exampleFormControlSelect2" class="col-sm-2 col-form-label">
+                    <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapseCompanies" aria-expanded="false" aria-controls="collapseExample">
+                      <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-building" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                        <path fill-rule="evenodd" d="M14.763.075A.5.5 0 0 1 15 .5v15a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5V14h-1v1.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V10a.5.5 0 0 1 .342-.474L6 7.64V4.5a.5.5 0 0 1 .276-.447l8-4a.5.5 0 0 1 .487.022zM6 8.694L1 10.36V15h5V8.694zM7 15h2v-1.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5V15h2V1.309l-7 3.5V15z"/>
+                        <path d="M2 11h1v1H2v-1zm2 0h1v1H4v-1zm-2 2h1v1H2v-1zm2 0h1v1H4v-1zm4-4h1v1H8V9zm2 0h1v1h-1V9zm-2 2h1v1H8v-1zm2 0h1v1h-1v-1zm2-2h1v1h-1V9zm0 2h1v1h-1v-1zM8 7h1v1H8V7zm2 0h1v1h-1V7zm2 0h1v1h-1V7zM8 5h1v1H8V5zm2 0h1v1h-1V5zm2 0h1v1h-1V5zm0-2h1v1h-1V3z"/>
+                      </svg>
+                      Companies
+                    </button>
+                  </label>
+                </li>
+              {% endif %}
+              <li role="presentation">
+                <label for="exampleFormControlSelect2" class="col-form-label">
+                  <button role="button" class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapseExports" aria-expanded="false" aria-controls="collapseExports">
+                    <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-download" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                      <path fill-rule="evenodd" d="M.5 8a.5.5 0 0 1 .5.5V12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8.5a.5.5 0 0 1 1 0V12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V8.5A.5.5 0 0 1 .5 8z"/>
+                      <path fill-rule="evenodd" d="M5 7.5a.5.5 0 0 1 .707 0L8 9.793 10.293 7.5a.5.5 0 1 1 .707.707l-2.646 2.647a.5.5 0 0 1-.708 0L5 8.207A.5.5 0 0 1 5 7.5z"/>
+                      <path fill-rule="evenodd" d="M8 1a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-1 0v-8A.5.5 0 0 1 8 1z"/>
+                    </svg>
+                    Export
+                  </button>
+                </label>
+              </li>
+            <!--/div-->
+            <div class="pull-right">
+              <li role="presentation">
+                <div class="form-group custom-submit-form-group">
+                  <!-- info custum-submit-btn-->
+                  <button type="submit" class="btn btn-link custum-submit-btn-link">Get</button>
+                </div>
+              </li>
+            </div>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <br>
     <div class="row">
-        <div class="col-md-8 col-md-push-2">
-        <div class="well">
-            <form id="metric-filter" method="POST" action="{{url_for('analysis.metrics')}}">
-              <div class="form-group row">
-                <label for="exampleFormControlSelect2" class="col-sm-2 col-form-label">Companies</label>
-                <div class="col-sm-10">
-                    <select multiple class="form-control" name="companies" id="exampleFormControlSelect2">
-                        {% for company_id, company_name in target_companies %}
-                          <option value="{{company_id}}">{{company_name}}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-              </div>
-              <div class="form-group row">
-                <label for="daterange" class="col-sm-2 col-form-label">Date Range</label>
-                <div class="col-sm-10">
-                  <input type="text" class="form-control" id="daterange"  name="daterange" value="{{filter_state['daterange']}}"/>
-                </div>
-              </div>
-              <div class="form-group row">
-                <label for="table_choices" class="col-sm-2 col-form-label">Metrics</label>
-                <div class="col-sm-10" id="table_choices">
-                  <div class="form-check form-check-inline">
+      <div class="col-md-6 col-md-push-3">
+          <div class="col-md-10 col-md-push-1 collapse" id="collapseDateRange">
+            <div class="form-group">
+              <label for="daterange" class="col-form-label">Select Date Range:</label>
+                <input type="text" class="form-control" id="daterange"  name="daterange" value="{{filter_state['daterange']}}"/>
+            </div>
+          </div>
+          <div class="col-md-10 col-md-push-1 collapse" id="collapseAlerts">
+            <div class="form-group">
+              <label for="metric_alert_stats" class="col-form-label">Select Statistics:</label>
+              <select multiple class="form-control" name="metric_alert_stats" id="metric_alert_stats">
+                  {% for valid_stat in valid_alert_stats %}
+                    <option value="{{valid_stat}}" selected>{{friendly_stat_name_map[valid_stat]}}</option>
+                  {% endfor %}
+              </select>
+              <br>
+              <label for="table_choices" class="col-form-label">For:</label>
+              <div class="row">
+                <div id="table_choices" class="col-md-10 col-md-push-1">
+                  <div class="form-check">
                     <label class="form-check-label">
-                      <input class="form-check-input" type="checkbox" id="alertStatCheckbox" name="metric_actions" value="alert_quan" checked> Alert Quantities
-                    </label>
-                    <label class="form-check-label">
-                      <input class="form-check-input" type="checkbox" id="HOP_Checkbox" name="metric_actions" value="HoP" checked> Hours of Operation
-                    </label>
-                    <label class="form-check-label">
-                      <input class="form-check-input" type="checkbox" id="cycleTimeCheckbox" name="metric_actions" value="cycle_time" checked> Alert Cycle Times
-                    </label>
-                    <label class="form-check-label">
-                      <input class="form-check-input" type="checkbox" id="incidentsCheckbox" name="metric_actions" value="incidents" checked> Incidents
-                    </label>
-                    <label class="form-check-label">
-                      <input class="form-check-input" type="checkbox" id="eventsCheckbox" name="metric_actions" value="events" checked> Events
-                    </label>
-                    <label class="form-check-label">
-                      <input class="form-check-input" type="checkbox" id="indicatorCheckbox" name="metric_actions" value="indicator_intel"> Indicator Stats
+                      <input class="form-check-input" type="checkbox" id="target_alerts" name="alert_metric_targets" value="alerts">
+                        <b>All Alerts</b>
                     </label>
                   </div>
-                </div>
-              </div>
-              <div class="form-group row">
-                <label for="download_xlsx" class="col-sm-2 col-form-label">Download to xlsx</label>
-                <div class="col-sm-10" id="download_xlsx">
-                  <div class="form-check form-check-inline">
-                      <input class="form-check-input" type="checkbox" id="xlsxCheckbox" name="download_results" value="true">
+                  <div class="form-check">
+                    <label class="form-check-label" data-toggle="collapse" data-target="#collapseAlertTypeOptions">
+                      <input class="form-check-input" type="checkbox" id="target_alert_types" name="alert_metric_targets" value="alert_types">
+                        <b>Alerts by Alert Type</b>
+                    </label>
                   </div>
-                </div>
-              </div>
-              <div class="form-group row">
-                <div class="col-sm-10">
-                  <button type="submit" class="btn btn-primary">Submit</button>
-                </div>
-              </div>
-            </form>
-        </div> <!-- end well -->
-        </div> <!-- end column -->
-    </div> <!-- end row -->
-    {% if not tables and post_bool %}
-        <center><h4>No results</h4></center>
-    {% endif %}
-    <!-- elif post_bool
-         <div class="row">
-            <div class="col-md-8 col-md-push-2">
-                <form id="metric-table-download" method="POST" action="{{url_for('analysis.metrics')}}">
-                  <input type="hidden" id="download_tables"  name="download_results" value="true">
-                  <div class="form-group row">
-                    <div class="col-md-1 col-md-push-10">
-                      <button type="submit" class="btn btn-link">Download Tables</button>
+                  <div class="row">
+                    <div class="col-md-10 col-md-push-1 collapse" id="collapseAlertTypeOptions">
+                      <label for="selected_alert_types" class="col-form-label">Select Alert Types:</label>
+                      <select multiple class="form-control" name="selected_alert_types" id="metric_selected_alert_types">
+                          {% for alert_type in valid_alert_types %}
+                            <option value="{{alert_type}}" selected>{{alert_type}}</option>
+                          {% endfor %}
+                      </select>
                     </div>
                   </div>
-                </form>
-            </div> 
-        </div-->
-    <center>
-    <h4>{{ query }}</h4>
-    {% for table in tables %}
-        <div class="row">
-            <div class="col-md-10 col-md-push-1">
-                {% if selected_companies %}
-                    {% for company_name in selected_companies %}
-                        <img src="{{url_for('static', filename='images/company_icons/{}.png'.format(company_name))}}">
-                    {% endfor %}
-                {% else %}
-                    {% for commpany_id, company_name in target_companies %}
-                        <img src="{{url_for('static', filename='images/company_icons/{}.png'.format(company_name))}}">
-                    {% endfor %}
-                {% endif %}
-                <h4>{{table.name}}</h4>
-                {{table.to_html(classes='table table-hover')|safe}}
+                  <div class="form-check">
+                    <label class="form-check-label" data-toggle="collapse" data-target="#collapseAnalystOptions">
+                      <input class="form-check-input" type="checkbox" id="target_alert_analysts" name="alert_metric_targets" value="users">
+                        <b>Alerts by Analyst</b>
+                    </label>
+                  </div>
+                  <div class="row">
+                    <div class="col-md-10 col-md-push-1 collapse" id="collapseAnalystOptions">
+                      <label for="analyst_selections" class="col-form-label">Select Analysts:</label>
+                      <select multiple class="form-control" name="selected_analysts" id="metric_analyst_selections">
+                          {% for user_id, user in users.items() %}
+                            <option value="{{user_id}}" selected>{{user_id}} - {{user['username']}} - {{user['display_name']}}</option>
+                          {% endfor %}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <label for="table_choices" class="col-form-label">With:</label>
+              <div class="row">
+                <div id="table_choices" class="col-md-10 col-md-push-1">
+                  <div class="form-check">
+                    <label class="form-check-label">
+                      <input class="form-check-input" type="checkbox" id="alert_business_hour_selection" name="business_hours" value="true">
+                        <b>Business Hours Applied</b>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <hr>
+              <label for="table_choices" class="col-form-label">Independant Alert Tables:</label>
+              <div class="row">
+                <div id="table_choices" class="col-md-10 col-md-push-1">
+                  <div class="form-check">
+                    <label class="form-check-label">
+                      <input class="form-check-input" type="checkbox" id="alert_hop_selection" name="alert_hours_of_operation" value="true">
+                        <b>Operating Hours Summary</b>
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <label class="form-check-label">
+                      <input class="form-check-input" type="checkbox" id="alert_overall_cycle_time_selection" name="alert_overall_cycle_time_summary" value="true">
+                        <b>Overall Alert Cycle-Time Summary</b>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <hr>
+              <label for="table_choices" class="col-form-label">Independant Alert Type Tables:</label>
+              <div class="row">
+                <div id="table_choices" class="col-md-10 col-md-push-1">
+                  <div class="form-check">
+                    <label class="form-check-label">
+                      <input class="form-check-input" type="checkbox" id="alert_type_count_breakdown" name="alert_type_count_breakdown" value="true">
+                        <b>Total Alert Type Quantities</b>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
-        </div>
-    {% endfor %}
-    </center>
+            <hr>
+          </div>
+          <div class="col-md-10 col-md-push-1 collapse" id="collapseEvents">
+            <div class="form-group">
+              <label for="event_table_choices" class="col-form-label">Independant Event Tables:</label>
+              <div class="row">
+                <div id="event_table_choices" class="col-md-10 col-md-push-1">
+                  <div class="form-check">
+                    <label class="form-check-label">
+                      <input class="form-check-input" type="checkbox" id="events_all_selection" name="events_metric_targets" value="events">
+                        <b>Event Summary</b>
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <label class="form-check-label">
+                      <input class="form-check-input" type="checkbox" id="events_incidents_selection" name="events_metric_targets" value="incidents">
+                        <b>Incident Summary</b>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <hr>
+          </div>
+          <div class="col-md-10 col-md-push-1 collapse" id="collapseCompanies">
+            <label for="company_selection" class="col-form-label">Select Companies:</label>
+            <div class="row">
+              <div id="company_selection" class="col-md-10 col-md-push-1">
+                <select multiple class="form-control" name="companies" id="company_selection_form">
+                  {% for company_id, company_name in target_companies.items() %}
+                    <option value="{{company_id}}">{{company_id}} - {{company_name}}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+            <hr>
+          </div>
+          <div class="col-md-10 col-md-push-1 collapse" id="collapseExports">
+            <label for="table_choices" class="col-form-label">Export Options:</label>
+            <div class="row">
+              <div id="table_choices" class="col-md-10 col-md-push-1">
+                <div class="form-check">
+                  <label class="form-check-label">
+                    <input class="form-check-input" type="checkbox" id="metrics_export" name="export_results" value="xlsx">
+                      <b>Excel (xlsx) - table names will be sanitized</b>
+                  </label>
+                </div>
+                <div class="form-check">
+                  <label class="form-check-label">
+                    <input class="form-check-input" type="checkbox" id="metrics_export" name="export_results" value="json">
+                      <b>JSON</b>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        <!--/form-->
+      </div>
+    </div>
+  </form>
+
+  {% if not tables and post_bool %}
+  <div class="row">
+    <center><h4>No results</h4></center>
+  </div>
+  {% endif %}
+  <center>
+  <h4>{{ query }}</h4>
+  {% for table in tables %}
+      <div class="row">
+          <div class="col-md-10 col-md-push-1">
+              {% if selected_companies_map %}
+                  {% for company_id, company_name in selected_companies_map.items() %}
+                      <img src="{{url_for('static', filename='images/company_icons/{}.png'.format(company_name))}}">
+                  {% endfor %}
+              {% else %}
+                  {% for commpany_id, company_name in target_companies.items() %}
+                      <img src="{{url_for('static', filename='images/company_icons/{}.png'.format(company_name))}}">
+                  {% endfor %}
+              {% endif %}
+              <h4>{{table.name}}</h4>
+              {{table.to_html(classes='table table-hover')|safe}}
+          </div>
+      </div>
+  {% endfor %}
+  </center>
 </div> <!-- end container -->
 {% endblock %}
 

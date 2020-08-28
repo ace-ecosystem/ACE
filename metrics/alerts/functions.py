@@ -7,7 +7,6 @@ purpose of generating metrics.
 """
 
 import os
-import datetime
 import logging
 
 import pymysql
@@ -15,7 +14,7 @@ import businesstime
 import pandas as pd
 
 from typing import Tuple, Mapping
-from datetime import timedelta
+from datetime import timedelta, datetime, time
 from dateutil.relativedelta import relativedelta
 
 from .constants import VALID_ALERT_STATS, FRIENDLY_STAT_NAME_MAP, ACE_KILLCHAIN_DISPOSITIONS, ALERTS_BY_MONTH_DB_QUERY
@@ -53,7 +52,7 @@ def get_alerts_between_dates(start_date: datetime,
             if c_name in selected_companies:
                 company_ids.append(c_id)
 
-    alert_query = alert_query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company.name=%s' for company in selected_companies]) +') ' if company_ids else '')
+    alert_query = alert_query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company_id=%s' for company in selected_companies]) +') ' if company_ids else '')
 
     params = [start_date.strftime('%Y-%m-%d %H:%M:%S'),
               end_date.strftime('%Y-%m-%d %H:%M:%S')]
@@ -68,7 +67,7 @@ def get_alerts_between_dates(start_date: datetime,
 
     return alerts
 
-def get_business_hour_cycle_time(alert_df: pd.DataFrame, start_hour=6, end_hour=18) -> pd.Series(timedelta):
+def get_business_hour_cycle_time(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> pd.Series(timedelta):
     """Convert alert times to a business hours timedelta pd.Series.
 
     From a DataFrame of alerts with insert_date and disposition_time, generate
@@ -84,15 +83,15 @@ def get_business_hour_cycle_time(alert_df: pd.DataFrame, start_hour=6, end_hour=
     Returns: pd.Series(timedelta) of alert cycle times in business hours
     """
 
-    business_hours = (datetime.time(start_hour), datetime.time(end_hour))
+    business_hours = (time(start_hour), time(end_hour))
     _bt = businesstime.BusinessTime(business_hours=business_hours)
 
     bh_cycle_time = []
-    for alert in alert_df.itertuples():
+    for alert in alerts.itertuples():
         open_hours = _bt.open_hours.seconds / 3600
         btd = _bt.businesstimedelta(alert.insert_date, alert.disposition_time)
         btd_hours = btd.seconds / 3600
-        bh_cycle_time.append(datetime.timedelta(hours=(btd.days * open_hours + btd_hours)))
+        bh_cycle_time.append(timedelta(hours=(btd.days * open_hours + btd_hours)))
 
     return pd.Series(data=bh_cycle_time)
 
@@ -147,12 +146,12 @@ def alert_statistics_by_disposition(alerts: pd.DataFrame, business_hours=False) 
                 'cycle_time_mean' : alert_cycle_times,
                 'cycle_time_min' : alert_cycle_times,
                 'cycle_time_max' : alert_cycle_times,
-                'cycle_time_std' : pd.Timedelta(datetime.timedelta()),
+                'cycle_time_std' : pd.Timedelta(timedelta()),
                 #'detection_time_sum': event_to_alert_time,
                 #'detection_time_mean': event_to_alert_time,
                 #'detection_time_min': event_to_alert_time,
                 #'detection_time_max': event_to_alert_time,
-                #'detection_time_std': pd.Timedelta(datetime.timedelta()),
+                #'detection_time_std': pd.Timedelta(timedelta()),
                 'alert_count' : 1
             }
 
@@ -222,7 +221,7 @@ def statistics_by_month_by_dispo(alerts: pd.DataFrame,
                     # dispo didn't happen during the given month
                     value = None
                     
-                if isinstance(value, datetime.timedelta):
+                if isinstance(value, timedelta):
                     # convert to hours - XXX Make configurable?
                     value = value.total_seconds() / 60 / 60   
 
@@ -237,10 +236,10 @@ def statistics_by_month_by_dispo(alerts: pd.DataFrame,
         
     return stat_data_map
 
-def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_hour=18) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def organize_alerts_by_time_category(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Organize alerts by 'week nights', 'weekends', and 'business hours'.
 
-    Evaluate what time category each alert in alert_df falls into. An alert
+    Evaluate what time category each alert in alerts falls into. An alert
     was either created on week nights, weekends, or during business hours.
     Create a DataFrame for each time category and fill each DataFrame with the
     alerts that belong in it. This is accomplished by iterating over every alert
@@ -249,7 +248,7 @@ def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_h
     the new DataFrames.
 
     Args:
-        alert_df: A pd.DataFrame of alerts
+        alerts: A pd.DataFrame of alerts
         start_hour: The business time start hour represented as in integer.
         end_hour: The business time end hour represented as an integer.
 
@@ -259,7 +258,7 @@ def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_h
     """
 
     # unsetting to better intertuple
-    alert_df.reset_index(0, inplace=True) 
+    alerts.reset_index(0, inplace=True)
 
     # for recording the indexes
     weekend_indexes = []
@@ -269,13 +268,13 @@ def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_h
     # for tracking indexes
     i=0
 
-    for row in alert_df.itertuples():
+    for row in alerts.itertuples():
         if row.insert_date.weekday() == 0: 
             # Monday
-            if row.insert_date.time() < datetime.time(hour=start_hour, minute=0, second=0):
+            if row.insert_date.time() < time(hour=start_hour, minute=0, second=0):
                 # Before business hours -> the weekend
                 weekend_indexes.append(i)
-            elif row.insert_date.time() >= datetime.time(hour=end_hour, minute=0, second=0):
+            elif row.insert_date.time() >= time(hour=end_hour, minute=0, second=0):
                 # After business hours -> weeknight
                 night_indexes.append(i)
             else: 
@@ -284,8 +283,8 @@ def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_h
 
         elif row.insert_date.weekday() == 1:
             # Tuesday: either side of business hours -> week night
-            if ( row.insert_date.time() < datetime.time(hour=start_hour, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=end_hour, minute=0, second=0) ):
+            if ( row.insert_date.time() < time(hour=start_hour, minute=0, second=0)
+                 or row.insert_date.time() >= time(hour=end_hour, minute=0, second=0) ):
                 night_indexes.append(i)
             else:
                 # Buisness hours
@@ -293,8 +292,8 @@ def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_h
 
         elif row.insert_date.weekday() == 2:
             # Wednesday: either side of business hours -> week night
-            if ( row.insert_date.time() < datetime.time(hour=start_hour, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=end_hour, minute=0, second=0) ):
+            if ( row.insert_date.time() < time(hour=start_hour, minute=0, second=0)
+                 or row.insert_date.time() >= time(hour=end_hour, minute=0, second=0) ):
                 night_indexes.append(i)
             else:
                 # Buisness hours
@@ -302,8 +301,8 @@ def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_h
 
         elif row.insert_date.weekday() == 3:
             # Thursday: either side of business hours -> week night
-            if ( row.insert_date.time() < datetime.time(hour=start_hour, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=end_hour, minute=0, second=0) ):
+            if ( row.insert_date.time() < time(hour=start_hour, minute=0, second=0)
+                 or row.insert_date.time() >= time(hour=end_hour, minute=0, second=0) ):
                 night_indexes.append(i)
             else:
                 # Buisness hours
@@ -311,10 +310,10 @@ def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_h
 
         elif row.insert_date.weekday() == 4:
             # Friday
-            if row.insert_date.time() < datetime.time(hour=start_hour, minute=0, second=0):
+            if row.insert_date.time() < time(hour=start_hour, minute=0, second=0):
                 # Before business hours -> weeknight
                 night_indexes.append(i)
-            elif row.insert_date.time() >= datetime.time(hour=end_hour, minute=0, second=0):
+            elif row.insert_date.time() >= time(hour=end_hour, minute=0, second=0):
                 # After business hours -> weekend
                 weekend_indexes.append(i)
             else:
@@ -335,16 +334,16 @@ def organize_alerts_by_time_category(alert_df: pd.DataFrame, start_hour=6, end_h
         # next index
         i+=1
 
-    weekend_df = alert_df[alert_df.index.isin(weekend_indexes)]
-    bday_df = alert_df[alert_df.index.isin(bday_indexes)]
-    nights_df = alert_df[alert_df.index.isin(night_indexes)]
+    weekend_df = alerts[alerts.index.isin(weekend_indexes)]
+    bday_df = alerts[alerts.index.isin(bday_indexes)]
+    nights_df = alerts[alerts.index.isin(night_indexes)]
 
-    if((len(weekend_df) + len(nights_df) + len(bday_df)) != len(alert_df) ):
+    if((len(weekend_df) + len(nights_df) + len(bday_df)) != len(alerts) ):
         logging.critical("incorrect alert count.")
 
     return weekend_df, nights_df, bday_df
 
-def generate_hours_of_operation_summary_table(alert_df: pd.DataFrame, start_hour=6, end_hour=18) -> pd.DataFrame:
+def generate_hours_of_operation_summary_table(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> pd.DataFrame:
     """Cycle-time averages and alert quantities by operating hours and month.
 
     Summarize the overall cycle-time averages and alert quantities observed
@@ -353,7 +352,7 @@ def generate_hours_of_operation_summary_table(alert_df: pd.DataFrame, start_hour
       business hours, weekends, week nights
 
     Args:
-        alert_df: A pd.DataFrame of alerts
+        alerts: A pd.DataFrame of alerts
         start_hour: The business time start hour represented as in integer.
         end_hour: The business time end hour represented as an integer.
 
@@ -361,19 +360,25 @@ def generate_hours_of_operation_summary_table(alert_df: pd.DataFrame, start_hour
         A pd.DataFrame.	    
     """
 
-    months = alert_df.index.get_level_values('month').unique()
+    # operate on a copy
+    alerts = alerts.copy()
 
-    weekend, nights, bday = organize_alerts_by_time_category(alert_df, start_hour=start_hour, end_hour=end_hour)
+    months = alerts.index.get_level_values('month').unique()
+
+    weekend, nights, bday = organize_alerts_by_time_category(alerts, start_hour=start_hour, end_hour=end_hour)
     weekend.set_index('month', inplace=True)
     nights.set_index('month', inplace=True)
     bday.set_index('month', inplace=True)
 
-    bday_averages = []
-    weekend_averages = []
-    nights_averages = []
-    bday_quantities = []
+    business_day_cycle_time_averages = []
+    weekend_cycle_time_averages = []
+    nights_cycle_time_averages = []
+    business_day_cycle_time_stdev = []
+    weekend_cycle_time_stdev = []
+    nights_cycle_time_stdev = []
+    business_day_quantities = []
     weekend_quantities = []
-    nights_quantities = []
+    weeknight_quantities = []
     for month in months:
         try:
             bday_ct = bday.loc[month, 'disposition_time'] - bday.loc[month, 'insert_date']
@@ -398,24 +403,32 @@ def generate_hours_of_operation_summary_table(alert_df: pd.DataFrame, start_hour
         if isinstance(weekend_ct, pd.Timedelta):
             weekend_ct = pd.Series(data=weekend_ct)
 
-        bday_averages.append((bday_ct.mean().total_seconds() / 60) / 60)
-        nights_averages.append((nights_ct.mean().total_seconds() / 60) / 60)
-        weekend_averages.append((weekend_ct.mean().total_seconds() / 60) / 60)
+        business_day_cycle_time_averages.append((bday_ct.mean().total_seconds() / 60) / 60)
+        nights_cycle_time_averages.append((nights_ct.mean().total_seconds() / 60) / 60)
+        weekend_cycle_time_averages.append((weekend_ct.mean().total_seconds() / 60) / 60)
 
-        bday_quantities.append(len(bday_ct))
-        nights_quantities.append(len(nights_ct))
+        business_day_cycle_time_stdev.append((bday_ct.std().total_seconds() / 60) / 60)
+        weekend_cycle_time_stdev.append((nights_ct.std().total_seconds() / 60) / 60)
+        nights_cycle_time_stdev.append((weekend_ct.std().total_seconds() / 60) / 60)
+
+        business_day_quantities.append(len(bday_ct))
+        weeknight_quantities.append(len(nights_ct))
         weekend_quantities.append(len(weekend_ct))
 
     data = {
-             ('Cycle-Time Averages', 'Bus Hrs'): bday_averages,
-             ('Cycle-Time Averages', 'Nights'): nights_averages,
-             ('Cycle-Time Averages', 'Weekend'): weekend_averages,
-             ('Quantities', 'Bus Hrs'): bday_quantities,
-             ('Quantities', 'Nights'): nights_quantities,
+             ('Cycle-Time Averages', 'Business'): business_day_cycle_time_averages,
+             ('Cycle-Time Averages', 'Nights'): nights_cycle_time_averages,
+             ('Cycle-Time Averages', 'Weekend'): weekend_cycle_time_averages,
+             ('Cycle-Time Std. Dev.', 'Business'): business_day_cycle_time_stdev,
+             ('Cycle-Time Std. Dev.', 'Nights'): nights_cycle_time_stdev,
+             ('Cycle-Time Std. Dev.', 'Weekend'): weekend_cycle_time_stdev,
+             ('Quantities', 'Bus Hrs'): business_day_quantities,
+             ('Quantities', 'Nights'): weeknight_quantities,
              ('Quantities', 'Weekend'): weekend_quantities
             }
 
     hop_df = pd.DataFrame(data, index=months)
+    hop_df.fillna(0, inplace=True)
     hop_df.name = "Hours of Operation"
     return hop_df
 
@@ -426,7 +439,7 @@ def generate_overall_summary_table(alerts: pd.DataFrame, start_hour=6, end_hour=
      and the alert quantities observed over the alerts passed when organized by month.
 
     Args:
-        alert_df: A pd.DataFrame of alerts
+        alerts: A pd.DataFrame of alerts
         start_hour: The business time start hour represented as in integer.
         end_hour: The business time end hour represented as an integer.
 

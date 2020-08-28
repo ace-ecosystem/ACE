@@ -1323,11 +1323,19 @@ from metrics.alerts import ( get_alerts_between_dates,
                              generate_hours_of_operation_summary_table,
                              generate_overall_summary_table
                             )
+from metrics.alerts.users import get_all_users, generate_user_alert_stats
+from metrics.alerts.alert_types import ( unique_alert_types_between_dates,
+                                         overall_alert_count_quantites,
+                                         get_alerts_between_dates_by_type,
+                                         generate_alert_type_stats
+                                        )
 
 from metrics.events import ( get_events_between_dates,
                              get_incidents_from_events,
                              add_email_alert_counts_per_event
                             )
+
+from metrics.helpers import get_companies
 
 metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
 build_metric_parser(metrics_parser)
@@ -1336,21 +1344,23 @@ def metrics(args):
     import pandas as pd
     from saq.database import get_db_connection
 
-    # companies
-    company_ids = []
-    if args.company:
+    if args.companies:
+        valid_companies = []
         with get_db_connection() as db:
-            c = db.cursor()
-            c.execute("select * from company")
-            for c_id,c_name in c.fetchall():
-                if c_name in args.company:
-                    company_ids.append(c_id)
+            valid_companies = list(get_companies(db).values())
+ 
+         for company in args.companies:
+            if company not in valid_companies:
+                logging.warning(f"{company} is not a valid company: {valid_companies}")
+                args.companies.remove(company)
+        if not args.companies:
+            sys.exit(0)
 
     if args.metric_target == 'events':
         with get_db_connection() as db:
             start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
             end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
-            events = get_events_between_dates(start_date, end_date, db)
+            events = get_events_between_dates(start_date, end_date, db, selected_companies=args.companies)
             if args.count_emails:
                 add_email_alert_counts_per_event(events, db)
 
@@ -1362,10 +1372,83 @@ def metrics(args):
             stdout_like(events, format=args.stdout_format)
 
     if args.metric_target == 'alerts':
+        users = {}
+        user_ids = []
+        if args.alert_metric_target == 'users':
+            with get_db_connection() as db:
+                users = get_all_users(db)
+
+            if args.list_users:
+                users = pd.DataFrame.from_dict(users, orient='index')
+                users.name = "Analysts"
+                stdout_like(users, format=args.stdout_format)
+                sys.exit(0)
+
+            if args.users:
+                for username in args.users:
+                    user_ids.extend([user_id for user_id, user in users.items() if username == user['username']])
+            else:
+                user_ids = [user_id for user_id in users.keys()]
+
+        if args.alert_metric_target == 'types':
+            if args.overall_count_breakdown:
+                with get_db_connection() as db:
+                    start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
+                    end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
+                    at_counts = overall_alert_count_quantites(start_date, end_date, db)
+                stdout_like(at_counts, format=args.stdout_format)
+                sys.exit(0)
+
+            with get_db_connection() as db:
+                start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
+                end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
+                alert_types = unique_alert_types_between_dates(start_date, end_date, db)
+                if args.list_alert_types:
+                    print("Alert Types:")
+                    [print(f"\t{at}") for at in alert_types]
+                    print()
+                    sys.exit(0)
+
+            with get_db_connection() as db:
+                start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
+                end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
+                alert_type_map = get_alerts_between_dates_by_type(start_date, end_date, db, selected_companies=args.companies)
+
+            alert_type_stat_map = generate_alert_type_stats(alert_type_map, business_hours=args.business_hours)
+
+            for alert_type in alert_types:
+                if args.all_stats:
+                    for stat in VALID_ALERT_STATS:
+                        stdout_like(alert_type_stat_map[alert_type][stat], format=args.stdout_format)
+                else:
+                    # check the general statistics
+                    arg_stats = [sarg[len('alert_type_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('alert_type_stat_') and value is True]
+                    for stat in arg_stats:
+                        stdout_like(alert_type_stat_map[alert_type][stat], format=args.stdout_format)
+
+            sys.exit(0)
+
         with get_db_connection() as db:
             start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
             end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
-            alerts = get_alerts_between_dates(start_date, end_date, db)
+            alerts = get_alerts_between_dates(start_date, end_date, db, selected_companies=args.companies)
+
+        if args.alert_metric_target == 'users':
+            # generate statistic tables for users
+            all_user_stat_map = generate_user_alert_stats(alerts, users, business_hours=args.business_hours)
+
+            for user_id in user_ids:
+                if args.all_stats:
+                    for stat in VALID_ALERT_STATS:
+                        stdout_like(all_user_stat_map[user_id][stat], format=args.stdout_format)
+                else:
+                    # check the general statistics
+                    arg_stats = [sarg[len('user_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('user_stat_') and value is True]
+                    for stat in arg_stats:
+                        stdout_like(all_user_stat_map[user_id][stat], format=args.stdout_format)
+
+            sys.exit(0)
+
 
         # generate statistic tables
         alert_stat_map = statistics_by_month_by_dispo(alerts, business_hours=args.business_hours)
@@ -1381,11 +1464,11 @@ def metrics(args):
                 stdout_like(alert_stat_map[stat], format=args.stdout_format)
 
         if args.hours_of_operation:
-            hop_df = generate_hours_of_operation_summary_table(alert_df.copy())
+            hop_df = generate_hours_of_operation_summary_table(alerts.copy())
             stdout_like(hop_df, format=args.stdout_format)
 
         if args.average_alert_cycletime_summary:
-            sla_df = generate_overall_summary_table(alert_df.copy())
+            sla_df = generate_overall_summary_table(alerts.copy())
             stdout_like(sla_df, format=args.stdout_format)
 
 metrics_parser.set_defaults(func=metrics)

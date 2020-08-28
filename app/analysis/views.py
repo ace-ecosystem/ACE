@@ -73,6 +73,27 @@ from saq.remediation.constants import REMEDIATION_TYPE_EMAIL
 from saq.remediation import request_remediation, request_restoration, execute_remediation, execute_restoration
 from saq.file_upload import *
 
+from metrics.alerts import ( get_alerts_between_dates,
+                             VALID_ALERT_STATS,
+                             FRIENDLY_STAT_NAME_MAP,
+                             statistics_by_month_by_dispo,
+                             generate_hours_of_operation_summary_table,
+                             generate_overall_summary_table
+                            )
+from metrics.alerts.users import get_all_users, generate_user_alert_stats
+from metrics.alerts.alert_types import ( all_alert_types,
+                                         unique_alert_types_between_dates,
+                                         overall_alert_count_quantites,
+                                         get_alerts_between_dates_by_type,
+                                         generate_alert_type_stats
+                                        )
+
+from metrics.events import ( get_events_between_dates,
+                             get_incidents_from_events,
+                             add_email_alert_counts_per_event
+                            )
+from metrics.helpers import get_companies, export_dataframes_to_xlsx
+
 import ace_api
 
 from app import db
@@ -1971,516 +1992,13 @@ def get_valid_alert_queues():
                 valid_alert_queues.append(row[0])
     return valid_alert_queues
 
-
-# begin helper functions for metrics
-def businessHourCycleTimes(df):
-    # return pd.Series(timedelta) of alert cycle times in business hours
-    business_hours = (datetime.time(6), datetime.time(18))
-    _bt = businesstime.BusinessTime(business_hours=business_hours)
-    
-    bh_cycle_time = []
-    for alert in df.itertuples():
-        open_hours = _bt.open_hours.seconds / 3600
-        btd = _bt.businesstimedelta(alert.insert_date, alert.disposition_time)
-        btd_hours = btd.seconds / 3600
-        bh_cycle_time.append(datetime.timedelta(hours=(btd.days * open_hours + btd_hours)))
-        
-    return pd.Series(data=bh_cycle_time)
-
-
-def alert_stats_for_month(df, business_hours=False):
-    # df = dataframe of all alerts during one month
-    # output: dataframe of alert cycle_time & quantity stats by disposition
-
-    df.set_index('disposition', inplace=True)
-    dispositions = df.index.get_level_values('disposition').unique()
-
-    dispo_data = {}
-    for dispo in dispositions:
-        if business_hours: # could just pass df or a copy of df - here a copy with just data needed
-            alert_cycle_times = businessHourCycleTimes(df.loc[[dispo],['disposition_time', 'insert_date']])
-        else:
-            alert_cycle_times = df.loc[dispo, 'disposition_time'] - df.loc[dispo, 'insert_date'] 
-
-        try:
-            dispo_data[dispo] = {
-                'Total' : alert_cycle_times.sum(),
-                'Cycle-Time' : alert_cycle_times.mean(),
-                'Min' : alert_cycle_times.min(),
-                'Max' : alert_cycle_times.max(),
-                'Stdev' : alert_cycle_times.std(),
-                'Quantity' : len(df.loc[dispo])
-            }
-        except AttributeError: # this occures when there was only ONE alert of this dispo type
-            dispo_data[dispo] = {
-                'Total' : alert_cycle_times,
-                'Cycle-Time' : alert_cycle_times,
-                'Min' : alert_cycle_times,
-                'Max' : alert_cycle_times,
-                'Stdev' : pd.Timedelta(datetime.timedelta()),
-                'Quantity' : 1
-            }
-
-    dispo_df = pd.DataFrame(data=dispo_data, columns=dispositions)
-        
-    return dispo_df
-
-
-def statistic_by_dispo(df, stat, business_hours=False):
-    # Input: 
-    #    df - dataframe of alerts with these columns: 
-    #        ['month', 'insert_date', 'disposition', 'disposition_time', 'owner_id', 'owner_time']
-    #    stat - a specific statistic we're interested in (Cycle-Time    Max Min Quantity    Stdev   Total)
-    #   business_hours - bool to tell us if we're calculating in Business hours or real time
-    # Output: List of dataframes, indexed by disposition, where each dataframe contains the
-    #         alert 'stat' statisics for each month
-    
-    months = df.index.get_level_values('month').unique()
-    #dispositions = list(df['disposition'].unique())
-    dispositions = [ 'FALSE_POSITIVE','GRAYWARE','POLICY_VIOLATION','RECONNAISSANCE','WEAPONIZATION','DELIVERY','EXPLOITATION','INSTALLATION','COMMAND_AND_CONTROL','EXFIL','DAMAGE' ]
-
-    stat_data = {}
-    for dispo in dispositions:
-        
-        #have to handle months where a specific disposition never happend
-        #converting timedelta objects to minutes for astetic and graphing purposes
-        fp = deliv = exp = c2 = damage = exfil = recon = wepon = gray = pv = instal = 0
-        month_data = {}
-
-        for month in months:
-            month_df = df.loc[month] # <- select the month
-            # 1 dispo type during month means DataFrame selection gives a Series
-            # alert_stats_for_month expects a DataFrame
-            if isinstance(month_df, pd.Series):
-                month_df = pd.DataFrame([month_df])
-
-            month_df = alert_stats_for_month(month_df, business_hours)
-
-            try:
-                value = month_df.at[stat, dispo]
-            except KeyError: # dispo didn't happen during the given month
-                value = None
-            if isinstance(value, datetime.timedelta): # convert to hours
-                value = value.total_seconds() / 60 / 60
-            month_data[month] = value
-            
-        stat_data[dispo] = month_data
-
-    stat_data_df = pd.DataFrame(data=stat_data)
-    if stat == 'Quantity':
-        stat_data_df.fillna(0, inplace=True)
-        stat_data_df = stat_data_df.astype(int)
-        stat_data_df.name = "Alert Quantities" 
-    else:
-        stat_data_df.fillna(0, inplace=True)
-        if business_hours:
-            stat_data_df.name = "Business Hour Alert " + stat
-        else:
-            stat_data_df.name = "Real Hour Alert " + stat
-
-    return stat_data_df
-
-
-def SliceAlertsByTimeCategory(df):
-    # this function evaluates the alerts in the given dataframe and then 
-    # places those alerts in new dataframes based on when the alert was created
-    # i.e., weekend, business hours, and week nights
-    
-    df.reset_index(0, inplace=True) # unsetting to better intertuple
-    # Cycle-Time Max Min Quantity Stdev Total
-     
-    weekend_indexes = []
-    bday_indexes = []
-    night_indexes = []
-    i=0
-    # month->insert_date    disposition disposition_time    owner_id    owner_time
-    for row in df.itertuples():
-
-        if row.insert_date.weekday() == 5: # Sat
-            # put into weekend bucket
-            weekend_indexes.append(i) 
-            
-        elif row.insert_date.weekday() == 6: # Sunday
-            # put into weekend bucket
-            weekend_indexes.append(i)
-            
-        elif row.insert_date.weekday() == 0: # Monday
-            #either weekend or weeknight bucket
-            if row.insert_date.time() < datetime.time(hour=6, minute=0, second=0):
-                night_indexes.append(i)
-            elif row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0):
-                night_indexes.append(i)
-            else: #put into Buisness hours bucket
-                bday_indexes.append(i)
-                
-        elif row.insert_date.weekday() == 1: #'Tue':
-            if ( row.insert_date.time() < datetime.time(hour=6, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0) ):
-                night_indexes.append(i)
-            else: # put into buisness hour bucket
-                bday_indexes.append(i)
-                
-        elif row.insert_date.weekday() == 2: #'Wed':
-            if ( row.insert_date.time() < datetime.time(hour=6, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0) ):
-                # put into weeknight bucket
-                night_indexes.append(i)
-            else: # put into buisness hour bucket
-                bday_indexes.append(i)
-                
-        elif row.insert_date.weekday() == 3: # Thurs
-            if ( row.insert_date.time() < datetime.time(hour=6, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0) ):
-                # put into weeknight bucket
-                night_indexes.append(i)
-            else: # put into buisness hour bucket
-                bday_indexes.append(i)
-                
-        elif row.insert_date.weekday() == 4: #'Fri':
-            if row.insert_date.time() < datetime.time(hour=6, minute=0, second=0):
-                # put into weeknight bucket
-                night_indexes.append(i)
-            elif row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0):
-                # put into weeknight or weekend bucket?
-                weekend_indexes.append(i)
-            else: # buisness hours - get first day remainder 
-                # buisness hour bucket
-                bday_indexes.append(i)
-        i+=1
-    weekend_df = df[df.index.isin(weekend_indexes)]
-    bday_df = df[df.index.isin(bday_indexes)]
-    nights_df = df[df.index.isin(night_indexes)]
-    if((len(weekend_df) + len(nights_df) + len(bday_df)) != len(df) ):
-        logging.error("Incorrect Alert count/Missing Alerts")
-    return weekend_df, nights_df, bday_df
-
-
-def Hours_of_Operation(df):
-    # df = dataframe of alerts -> SliceAlertsByTimeCategory
-    # output = df of alert-cycle-time averages and quantities,
-    #          for each month (across all dispositions), and respective to the hours
-    #          of operation by which alerts where created in
-    
-    months = df.index.get_level_values('month').unique()
-    
-    weekend, nights, bday = SliceAlertsByTimeCategory(df)
-    weekend.set_index('month', inplace=True)
-    nights.set_index('month', inplace=True)
-    bday.set_index('month', inplace=True)
-
-    bday_averages = []
-    weekend_averages = []
-    nights_averages = []
-    bday_quantities = []
-    weekend_quantities = []
-    nights_quantities = []
-    for month in months:
-        try:
-            bday_ct = bday.loc[month, 'disposition_time'] - bday.loc[month, 'insert_date']
-        except KeyError: # month not in index, or only one alert
-            bday_ct = pd.Series(data=pd.Timedelta(0))
-        try:
-            nights_ct = nights.loc[month, 'disposition_time'] - nights.loc[month, 'insert_date']
-        except KeyError: # month not in index 
-            nights_ct = pd.Series(data=pd.Timedelta(0))
-        try: 
-            weekend_ct = weekend.loc[month, 'disposition_time'] - weekend.loc[month, 'insert_date']
-        except KeyError:
-            weekend_ct = pd.Series(data=pd.Timedelta(0))
-
-        # handle case of single alert in a bucket for the month
-        if isinstance(bday_ct, pd.Timedelta):
-            bday_ct = pd.Series(data=bday_ct)
-        if isinstance(nights_ct, pd.Timedelta):
-            nights_ct = pd.Series(data=nights_ct)
-        if isinstance(weekend_ct, pd.Timedelta):
-            weekend_ct = pd.Series(data=weekend_ct)
-
-        bday_averages.append((bday_ct.mean().total_seconds() / 60) / 60)
-        nights_averages.append((nights_ct.mean().total_seconds() / 60) / 60)
-        weekend_averages.append((weekend_ct.mean().total_seconds() / 60) / 60)
-        
-        bday_quantities.append(len(bday_ct))
-        nights_quantities.append(len(nights_ct))
-        weekend_quantities.append(len(weekend_ct))
-        
-    data = {
-             ('Cycle-Time Averages', 'Bus Hrs'): bday_averages,
-             ('Cycle-Time Averages', 'Nights'): nights_averages,
-             ('Cycle-Time Averages', 'Weekend'): weekend_averages,
-             ('Quantities', 'Bus Hrs'): bday_quantities,
-             ('Quantities', 'Nights'): nights_quantities,
-             ('Quantities', 'Weekend'): weekend_quantities
-            }
-        
-    
-    new_df = pd.DataFrame(data, index=months)
-    new_df.name = "Hours of Operation"
-    return new_df
-
-
-def monthly_alert_SLAs(alerts):
-    # input - dataframe of alerts
-    
-    months = alerts.index.get_level_values('month').unique()
-    
-    quantities = []
-    bh_cycletime = []
-    total_cycletime = []
-    for month in months:
-        bh_alert_ct = businessHourCycleTimes(alerts.loc[[month],['disposition_time', 'insert_date']]) #alerts_BH.loc[month, 'disposition_time'] - alerts_BH.loc[month, 'insert_date']
-        alert_ct = alerts.loc[month, 'disposition_time'] - alerts.loc[month, 'insert_date'] 
-        quantities.append(len(alerts.loc[month]))
-        
-        if isinstance(bh_alert_ct, pd.Timedelta):
-            bh_alert_ct = pd.Series(data=bh_alert_ct)
-        if isinstance(alert_ct, pd.Timedelta):
-            alert_ct = pd.Series(data=alert_ct)
-        bh_cycletime.append(((bh_alert_ct.mean()).total_seconds() /60 ) /60)
-        total_cycletime.append(((alert_ct.mean()).total_seconds() /60 ) /60)
-    
-    data = {
-             'Business Hour cycle time': bh_cycletime,
-             'Total Cycle time': total_cycletime,
-             'Quantity': quantities
-           }
-
-    result = pd.DataFrame(data, index=months)
-    result.name = "Average Alert Cycle Times"
-    return result
-
-
-def add_email_alert_counts_per_event(events):
-
-    # given event id and company name ~ get alert count per company
-    alrt_cnt_company = """SELECT 
-        COUNT(DISTINCT event_mapping.alert_id) as 'alert_count' 
-        FROM event_mapping 
-        JOIN alerts 
-            ON alerts.id=event_mapping.alert_id 
-        LEFT JOIN company 
-            ON company.id=alerts.company_id 
-        WHERE 
-        event_mapping.event_id={} AND company.name='{}'"""
-
-    # given event id and company name ~ get count of emails based on 
-    # alerts with message_id observables and smart counting
-    msg_id_query = """SELECT
-                a.id, a.alert_type, o.value 
-            FROM
-                observables o
-                JOIN observable_mapping om ON om.observable_id = o.id
-                JOIN alerts a ON a.id = om.alert_id
-                JOIN event_mapping em ON em.alert_id=a.id
-                JOIN company c ON c.id = a.company_id
-            WHERE
-                o.type = 'message_id'
-                AND em.event_id={}
-                AND a.alert_type!='o365'
-                AND c.name = '{}'"""
-
-
-    email_counts = []
-    for event in events.itertuples():
-        if ',' in event.Company:
-            companies = event.Company.split(', ')
-            new_AlertCnt = emailCount = ""
-            for company in companies:
-                with get_db_connection() as db:
-                    companyAlerts = pd.read_sql_query(alrt_cnt_company.format(event.id, company),db)
-                    emailAlerts = pd.read_sql_query(msg_id_query.format(event.id, company),db)
-                new_AlertCnt += str(int(companyAlerts.alert_count.values))+","
-
-                # all mailbox alerts will be unique phish
-                mailbox_phish = emailAlerts.loc[emailAlerts.alert_type=='mailbox']
-                mailbox_phish_count = len(mailbox_phish)
-                unique_phish = list(set(mailbox_phish.value.values))
-                # remove mailbox alerts and leave any other alerts with a message_id observable
-                emailAlerts = emailAlerts[emailAlerts.alert_type!='mailbox']
-                for alert in emailAlerts.itertuples():
-                    if alert.value not in unique_phish:
-                        unique_phish.append(alert.value)
-                        mailbox_phish_count += 1
-                emailCount += str(mailbox_phish_count)+","
-
-            events.loc[events.id == event.id, '# Alerts'] = new_AlertCnt[:-1]
-            email_counts.append(emailCount[:-1])
-        else:
-            with get_db_connection() as db:
-                emailAlerts = pd.read_sql_query(msg_id_query.format(event.id, event.Company),db)
-                companyAlerts = pd.read_sql_query(alrt_cnt_company.format(event.id, event.Company),db)
-
-            alertCnt = int(companyAlerts.alert_count.values)
-            total_alerts = int(events.loc[events.id == event.id, '# Alerts'].values)
-            if alertCnt != total_alerts: # multi-company event, but user filtered by company
-                # update alert column to only alerts associated to the company
-                events.loc[events.id == event.id, '# Alerts'] = alertCnt
-
-            # all mailbox alerts will be unique phish
-            mailbox_phish = emailAlerts.loc[emailAlerts.alert_type=='mailbox']
-            mailbox_phish_count = len(mailbox_phish)
-            unique_phish = list(set(mailbox_phish.value.values))
-            # remove mailbox alerts and leave any other alerts with a message_id observable
-            emailAlerts = emailAlerts[emailAlerts.alert_type!='mailbox'] 
-            for alert in emailAlerts.itertuples():
-                if alert.value not in unique_phish:
-                    unique_phish.append(alert.value)
-                    mailbox_phish_count += 1
-            email_counts.append(mailbox_phish_count)
-            
-    events['# Emails'] = email_counts
-
-
-def generate_intel_tables(sip=True, crits=False):
-    if sip and crits:
-        logging.error("Can only use one intel source at a time.")
-        return False, False
-    if crits:
-        mongo_uri = saq.CONFIG.get("crits", "mongodb_uri")
-        mongo_host = mongo_uri[mongo_uri.rfind('://')+3:mongo_uri.rfind(':')]
-        mongo_port = int(mongo_uri[mongo_uri.rfind(':')+1:])
-        client = MongoClient(mongo_host, mongo_port)
-        crits = client.crits
-    elif sip:
-        sip_host = saq.CONFIG.get("sip", "remote_address")
-        api_key = saq.CONFIG.get("sip", "api_key")
-        sip = pysip.Client(sip_host, api_key, verify=False) 
-    else:
-        logging.warn("No intel source specified.")
-        return None, None
-
-    #+ amount of indicators per source
-    intel_sources = crits.source_access.distinct("name") if crits else None
-    if sip:
-        intel_sources = sip.get('/api/intel/source')
-        intel_sources = [s['value'] for s in intel_sources]
-    source_counts = {}
-    for source in intel_sources:
-        source_counts[source] = crits.indicators.find( { 'source.name': source }).count() if crits else None
-        source_counts[source] = sip.get('/indicators?sources={}&count'.format(source))['count'] if sip else source_counts[source]
-    source_cnt_df = pd.DataFrame.from_dict(source_counts, orient='index')
-    source_cnt_df.columns = ['count']
-    source_cnt_df.name = "Count of Indicators by Intel Sources"
-    source_cnt_df.sort_index(inplace=True)
-
-    # amount of indicators per status
-    indicator_statuses = crits.indicators.distinct("status") if crits else None
-    if sip:
-        indicator_statuses = sip.get('/api/indicators/status')
-        indicator_statuses = [s['value'] for s in indicator_statuses if s['value'] != 'FA']
-    status_counts = []
-    for status in indicator_statuses:
-        count = crits.indicators.find( { 'status': status }).count() if crits else None
-        count = sip.get('/indicators?status={}&count'.format(status))['count'] if sip else count
-        status_counts.append(count)
-    # put results in dataframe row
-    status_cnt_df = pd.DataFrame(data=[status_counts], columns=indicator_statuses)
-    status_cnt_df.name = "Count of Indicators by Status"
-    status_cnt_df.rename(index={0: "Count"}, inplace=True)
-
-    if crits:
-        client.close()
-    return source_cnt_df, status_cnt_df 
-
-
-def get_month_day_range(date):
-    """
-    For a date 'date' returns the start and end dateitime for the month of 'date'.
-
-    Month with 31 days:
-    >>> date = datetime(2011, 7, 31, 5, 27, 18)
-    >>> get_month_day_range(date)
-    (datetime.datetime(2011, 7, 1, 0, 0), datetime.datetime(2011, 7, 31, 23, 59, 59))
-
-    Month with 28 days:
-    >>> datetime(2011, 2, 15, 17, 8, 45)
-    >>> get_month_day_range(date)
-    (datetime.datetime(2011, 2, 1, 0, 0), datetime.datetime(2011, 2, 28, 23, 59, 59))
-    """
-    start_time = date.replace(day=1, hour=0, minute=0, second=0)
-    last_day = calendar.monthrange(date.year, date.month)[1]
-    end_time = date.replace(day=last_day, hour=23, minute=59, second=59)
-    return start_time, end_time
-
-
-def get_month_ranges(daterange_start, daterange_end):
-    """
-    Take whatever start and end datetime and return a dictionary where the keys are %Y%m
-    formatted and the values are tuples with start and end datetimes respective to the month (key).
-    """
-    month_ranges = {}
-    month = datetime.datetime.strftime(daterange_start, '%Y%m')
-    start_time, end_time = get_month_day_range(daterange_start)
-    if end_time >= daterange_end:
-        # range contained in month
-        month_ranges[month] = (daterange_start, daterange_end)
-        return month_ranges
-
-    if daterange_start != end_time: # edge case
-        month_ranges[month] = (daterange_start, end_time)
-    
-    while True:
-        # move to first second of next month
-        start_time = start_time + relativedelta(months=1)
-        start_time, end_time = get_month_day_range(start_time)
-        month = datetime.datetime.strftime(start_time, '%Y%m')
-
-        if end_time >= daterange_end:
-            # range contained in current month
-            if start_time != daterange_end: # edge case
-                month_ranges[month] = (start_time, daterange_end)
-            return month_ranges
-        else:
-            month_ranges[month] = (start_time, end_time)
-
-
-def get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=False, modified=False):
-    """
-    Use SIP to return a DataFrame table representing the status of all indicators created OR modified during
-    daterange and by the month (%Y%m) they were created in.i
-
-    :param datetime daterange_start: The datetime representing the start time of the daterange
-    :param datetime daterange_end: The datetime representing the end time of the daterange
-    :param bool created: If True, return table of created indicators
-    :param bool modified: If True, return table of modified indicators
-    :return: Pandas DataFrame table
-    """
-    sip_host = saq.CONFIG.get("sip", "remote_address")
-    api_key = saq.CONFIG.get("sip", "api_key")
-    sc = pysip.Client(sip_host, api_key, verify=False) 
-   
-    if created is modified: # they should never be the same
-        logging.warning("Created and Modfied flags both set to '{}'".format(created))
-        return False
-    table_type = "created" if created else "modified" 
-
-    statuses = sc.get('/api/indicators/status')
-    statuses = [s['value'] for s in statuses if s['value'] != 'FA']
-
-    status_by_date = {}
-    month_ranges = get_month_ranges(daterange_start, daterange_end)
-    for month, daterange in month_ranges.items():
-        status_counts = {}
-        for status in statuses:
-            status_counts[status] = sc.get('/indicators?status={0}&{1}_after={2}&{3}_before={4}&count'
-                                           .format(status, table_type, daterange[0], table_type, daterange[1]))['count']
-        status_by_date[month] = status_counts
-
-    status_by_month = pd.DataFrame.from_dict(status_by_date, orient='index')
-    status_by_month.name = "Count of Indicator Status by {} Month".format(table_type.capitalize())
-    return status_by_month
-
-
 @analysis.route('/metrics', methods=['GET', 'POST'])
 @login_required
 def metrics():
-
     if not saq.CONFIG['gui'].getboolean('display_metrics'):
         # redirect to index
         return redirect(url_for('analysis.index'))
 
-    # object representations of the filters to define types and value verification routines
-    # this later gets augmented with the dynamic filters
     filters = {
         FILTER_TXT_DATERANGE: SearchFilter('daterange', FILTER_TYPE_TEXT, '')
     }
@@ -2488,29 +2006,56 @@ def metrics():
     # initialize filter state (passed to the view to set up the form controls)
     filter_state = {filters[f].name: filters[f].state for f in filters}
 
-    target_companies = [] # of tuple(id, name)
-    with get_db_connection() as dbcon:
-        c = dbcon.cursor()
-        c.execute("SELECT `id`, `name` FROM company WHERE `name` != 'legacy' ORDER BY name")
-        for row in c:
-            target_companies.append(row)
+    # define dynamic defaults
+    users = {}
+    valid_alert_types = []
+    target_companies = {}
+    with get_db_connection() as db:
+        users = get_all_users(db)
+        valid_alert_types = all_alert_types(db)
+        target_companies = get_companies(db)
 
-    alert_df = dispo_stats_df = HOP_df = sla_df = incidents = events = pd.DataFrame()
-    months = query = company_name = company_id = daterange = post_bool = download_results = None
-    selected_companies = [] 
-    metric_actions = tables = []
+    # define static defaults
+    # NOTE: calculate the defaults over 7 days and return by default?
+    post_bool = False
+    daterange = False
+    business_hours = False
+    alert_overall_cycle_time_summary = False
+    hours_of_operation = False
+    alert_type_count_breakdown = False
+    selected_companies_map = {}
+    tables = []
+    human_readable_selection_summary = ""
+
     if request.method == "POST" and request.form['daterange']:
         post_bool = True
         daterange = request.form['daterange']
-        metric_actions = request.form.getlist('metric_actions')
 
-        company_ids = request.form.getlist('companies')
-        company_ids = [ int(x) for x in company_ids ]
-        company_dict = dict(target_companies)
-        selected_companies = [company_dict[int(cid)] for cid in company_ids ]
+        metric_alert_stats = request.form.getlist('metric_alert_stats')
+        alert_metric_targets = request.form.getlist('alert_metric_targets')
+        events_metric_targets = request.form.getlist('events_metric_targets')
+        export_results_to = request.form.getlist('export_results')
 
-        if 'download_results' in request.form:
-           download_results = True
+        selected_analysts = [int(uid) for uid in request.form.getlist('selected_analysts')]
+        selected_alert_types = request.form.getlist('selected_alert_types')
+        selected_companies = [ int(cid) for cid in request.form.getlist('companies') ]
+        for cid in selected_companies:
+            cid = int(cid)
+            selected_companies_map[cid] = target_companies[cid]
+
+        # independent alert tables
+        if 'alert_hours_of_operation' in request.form:
+            hours_of_operation = True
+        if 'alert_overall_cycle_time_summary' in request.form:
+            alert_overall_cycle_time_summary = True
+
+        # independent alert type tables
+        if 'alert_type_count_breakdown' in request.form:
+            alert_type_count_breakdown = True
+
+        # apply business hours before performing time calculations
+        if 'business_hours' in request.form:
+            business_hours = True
 
         try:
             daterange_start, daterange_end = daterange.split(' - ')
@@ -2520,182 +2065,122 @@ def metrics():
             flash("error parsing date range, using default 7 days: {0}".format(str(error)))
             daterange_end = datetime.datetime.now()
             daterange_start = daterange_end - datetime.timedelta(days=7)
+
+        # store alerts for reuse
+        alerts = None
+        for alert_target in alert_metric_targets:
+            if alert_target == 'alerts':
+                with get_db_connection() as db:
+                    alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
+
+                if hours_of_operation:
+                    hop_df = generate_hours_of_operation_summary_table(alerts.copy())
+                    tables.append(hop_df)
+
+                if alert_overall_cycle_time_summary:
+                    sla_df = generate_overall_summary_table(alerts.copy())
+                    tables.append(sla_df)
             
-        query = """SELECT DATE_FORMAT(insert_date, '%%Y%%m') AS month, insert_date, disposition,
-            disposition_time, owner_id, owner_time FROM alerts
-            WHERE insert_date BETWEEN %s AND %s AND alert_type!='faqueue'
-            AND alert_type!='dlp - internal threat' AND alert_type!='dlp-exit-alert' 
-            AND disposition IS NOT NULL {}{}"""
+                alert_stat_map = statistics_by_month_by_dispo(alerts, business_hours=business_hours)
+                for stat in metric_alert_stats:
+                    alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
+                    tables.append(alert_stat_map[stat])
 
-        query = query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company_id=%s' for x in company_ids]) +')' if company_ids else '')
+            if alert_target == 'alert_types':
+                with get_db_connection() as db:
+                    # only use alert types that occur duing the date range
+                    alert_types = unique_alert_types_between_dates(daterange_start,daterange_end, db)
+                    # XXX modify this function to accept a list of alert_types to generate stats for
+                    alert_type_map = get_alerts_between_dates_by_type(daterange_start,daterange_end, db, selected_companies=selected_companies)
 
-        with get_db_connection() as db:
-            params = [daterange_start.strftime('%Y-%m-%d %H:%M:%S'),
-                      daterange_end.strftime('%Y-%m-%d %H:%M:%S')]
-            params.extend(company_ids)
-            alert_df = pd.read_sql_query(query, db, params=params)
+                alert_type_stat_map = generate_alert_type_stats(alert_type_map, business_hours=business_hours)
 
-        # go ahead and drop the dispositions we don't care about
-        alert_df = alert_df[alert_df.disposition != 'UNKNOWN']
-        alert_df = alert_df[alert_df.disposition != 'IGNORE']
-        alert_df = alert_df[alert_df.disposition != 'REVIEWED']
+                if selected_alert_types:
+                    # narrow to any alert_type selections
+                    alert_types = [a_type for a_type in alert_types if a_type in selected_alert_types]
 
-        # First, alert quantities by disposition per month
-        alert_df.set_index('month', inplace=True)
-        months = alert_df.index.get_level_values('month').unique()
+                for alert_type in alert_types:
+                    for stat in metric_alert_stats:
+                        tables.append(alert_type_stat_map[alert_type][stat])
 
-        # Legacy -- remove?
-        # if March 2015 alerts in our results then manually insert alert
-        # for https://wiki.local/display/integral/20150309+ctbCryptoLocker
-        # No alert was ever put into ACE for this event
-        if '201503' in months:
-            insert_date = datetime.datetime(year=2015, month=3, day=9, hour=10, minute=12, second=8)
-            #Alert Dwell Time was 4hr, 15mins according to wiki
-            disposition_time = insert_date + datetime.timedelta(hours=4, minutes=15)
-            ctbCryptoLocker = pd.DataFrame({ 'insert_date' : insert_date,
-                                             'disposition' : 'DAMAGE',
-                                             'disposition_time' : disposition_time,
-                                             'owner_id' : 4.0,
-                                             'owner_time' : insert_date},
-                                             index=['201503'])
-            alert_df = pd.concat([alert_df, ctbCryptoLocker])
+            if alert_target == 'users':
+                if alerts is None:
+                    with get_db_connection() as db:
+                        alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
 
-        # generate and store our tables
-        if 'alert_quan' in metric_actions:
-            dispo_stats_df = statistic_by_dispo(alert_df, 'Quantity', False)
-            if not dispo_stats_df.empty:
-                tables.append(dispo_stats_df)
-            # leaving this table here, for now
-            CT_stats_df = statistic_by_dispo(alert_df, 'Cycle-Time', True)
-            if not CT_stats_df.empty:
-                tables.append(CT_stats_df)
+                selected_users = users
+                user_ids = users.keys()
+                if selected_analysts:
+                    # narrow users to selected users
+                    user_ids = [user_id for user_id in user_ids if user_id in selected_analysts]
+                    # only generate what's needed
+                    selected_users = {}
+                    for user_id, user in users.items():
+                        if user_id in user_ids:
+                            selected_users[user_id] = user
 
-        if 'HoP' in metric_actions:
-            HOP_df = Hours_of_Operation(alert_df.copy())
-            if not HOP_df.empty:
-                tables.append(HOP_df)
+                all_user_stat_map = generate_user_alert_stats(alerts, selected_users, business_hours=business_hours)
+                for user_id in user_ids:
+                    for stat in metric_alert_stats:
+                        tables.append(all_user_stat_map[user_id][stat])
 
-        if 'cycle_time' in metric_actions:
-            sla_df = monthly_alert_SLAs(alert_df.copy())
-            if not sla_df.empty:
-                tables.append(sla_df)
+        for event_target in events_metric_targets:
+            # we will get the events no matter what
+            with get_db_connection() as db:
+                events = get_events_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
 
-        # Make incident and email event tables
-        event_query = """SELECT 
-                events.id, 
-                events.creation_date as 'Date', events.name as 'Event', 
-                GROUP_CONCAT(DISTINCT malware.name SEPARATOR ', ') as 'Malware', 
-                GROUP_CONCAT(DISTINCT IFNULL(malware_threat_mapping.type, 'UNKNOWN') SEPARATOR ', ') 
-                    as 'Threat', GROUP_CONCAT(DISTINCT alerts.disposition SEPARATOR ', ') as 'Disposition', 
-                events.vector as 'Delivery Vector', 
-                events.prevention_tool as 'Prevention', 
-                GROUP_CONCAT(DISTINCT company.name SEPARATOR ', ') as 'Company', 
-                count(DISTINCT event_mapping.alert_id) as '# Alerts' 
-            FROM events 
-                JOIN event_mapping 
-                    ON events.id=event_mapping.event_id 
-                JOIN malware_mapping 
-                    ON events.id=malware_mapping.event_id 
-                JOIN malware 
-                    ON malware.id=malware_mapping.malware_id 
-                JOIN company_mapping 
-                    ON events.id=company_mapping.event_id 
-                JOIN company 
-                    ON company.id=company_mapping.company_id 
-                LEFT JOIN malware_threat_mapping 
-                    ON malware.id=malware_threat_mapping.malware_id 
-                JOIN alerts 
-                    ON alerts.id=event_mapping.alert_id 
-            WHERE 
-                events.status='CLOSED' AND events.creation_date 
-                BETWEEN %s AND %s {}{}
-            GROUP BY events.name, events.creation_date, event_mapping.event_id 
-            ORDER BY events.creation_date"""
+            # by default, for gui, count emails
+            add_email_alert_counts_per_event(events, db)
 
-        event_query = event_query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company.name=%s' for company in selected_companies]) +') ' if company_ids else '')
+            if event_target == 'events':
+                tables.append(events.drop(columns=['id']))
 
-        with get_db_connection() as db:
-            params = [daterange_start.strftime('%Y-%m-%d %H:%M:%S'),
-                      daterange_end.strftime('%Y-%m-%d %H:%M:%S')]
-            params.extend(selected_companies)
-            events = pd.read_sql_query(event_query, db, params=params)
-
-        events.set_index('Date', inplace=True)
-
-        # make incident table from events
-        if 'incidents' in metric_actions:
-            incidents = events[
-                (events.Disposition == 'INSTALLATION') | ( events.Disposition == 'EXPLOITATION') |
-                (events.Disposition == 'COMMAND_AND_CONTROL') | (events.Disposition == 'EXFIL') |
-                (events.Disposition == 'DAMAGE')]
-            incidents.drop(columns=['id'], inplace=True)
-            incidents.name = "Incidents"
-            if not incidents.empty:
+            if event_target == 'incidents':
+                incidents = get_incidents_from_events(events)
                 tables.append(incidents)
- 
-        # make email event table
-        if 'events' in metric_actions:
-            add_email_alert_counts_per_event(events) # events df  altered inplace
-            events.drop(columns=['id'], inplace=True)
-            # email_events = events[(events['Delivery Vector'] == 'corporate email')] 
-            # email_events.name = "Email Events"
-            events.name = "Events"
-            if not events.empty:
-                tables.append(events)
 
-        # generate SIP ;-) indicator intel tables
-        # XXX add support for using CRITS/SIP based on what ACE is configured to use
-        if 'indicator_intel' in metric_actions:
-            if not (saq.CONFIG.get("crits", "mongodb_uri") or
-                    (saq.CONFIG.get("sip", "remote_address") or saq.CONFIG.get("sip", "api_key"))):
-                flash("intel source not configured; skipping indicator stats table generation")
-            else:
-                try:
-                    indicator_source_table, indicator_status_table = generate_intel_tables()
-                    tables.append(indicator_source_table)
-                    tables.append(indicator_status_table)
-                except Exception as e:
-                    flash("Problem generating overall source and status indicator tables : {0}".format(str(e)))
-                # Count all created indicators during daterange by their status
-                try:
-                    created_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=True)
-                    if created_indicators is not False:
-                        tables.append(created_indicators)
-                except Exception as e:
-                    flash("Problem generating created indicator table: {0}".format(str(e)))
-                try:
-                    modified_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, modified=True)
-                    if modified_indicators is not False:
-                        tables.append(modified_indicators)
-                except Exception as e:
-                    flash("Problem generating modified indicator table: {0}".format(str(e)))
+        # Independent tables
+        if hours_of_operation:
+            if alerts is None:
+                with get_db_connection() as db:
+                    alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
+            hop_df = generate_hours_of_operation_summary_table(alerts)
+            tables.append(hop_df)
 
-    if download_results:
-        if tables:
-            outBytes = io.BytesIO()
-            writer = pd.ExcelWriter(outBytes)
-            for table in tables:
-                table.to_excel(writer, table.name)
-            writer.close()
-            outBytes.seek(0)
-            filename = company_name+"_metrics.xlsx" if company_name else "ACE_metrics.xlsx"
-            output = make_response(outBytes.read())
-            output.headers["Content-Disposition"] = "attachment; filename="+filename
-            output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            return output
-        else:
-            flash("No results; .xlsx could not be generated")
+        if alert_overall_cycle_time_summary:
+            if alerts is None:
+                with get_db_connection() as db:
+                    alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
+            overall_ct_summary = generate_overall_summary_table(alerts)
+            tables.append(overall_ct_summary)
+
+        if alert_type_count_breakdown:
+            with get_db_connection() as db:
+                # TODO: implement company selection here
+                at_counts = overall_alert_count_quantites(daterange_start,daterange_end, db)
+            tables.append(at_counts)
+
+        if tables and export_results_to:
+            for export_type in export_results_to:
+                if export_type == 'xlsx':
+                    filename, filebytes = export_dataframes_to_xlsx(tables)
+                    output = make_response(filebytes)
+                    output.headers["Content-Disposition"] = "attachment; filename="+filename
+                    output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    return output
 
     return render_template(
         'analysis/metrics.html',
         filter_state=filter_state,
+        valid_alert_stats=reversed(VALID_ALERT_STATS),
+        friendly_stat_name_map=FRIENDLY_STAT_NAME_MAP,
+        users=users,
+        valid_alert_types=valid_alert_types,
         target_companies=target_companies,
-        selected_companies=selected_companies,
+        selected_companies_map=selected_companies_map,
         tables=tables,
         post_bool=post_bool,
-        metric_actions=metric_actions,
         daterange=daterange)
-
 
 @analysis.route('/events', methods=['GET', 'POST'])
 @login_required

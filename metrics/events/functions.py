@@ -8,14 +8,12 @@ of generating metrics.
 """
 
 import os
-import datetime
 import logging
 
 import pymysql
 import pandas as pd
 
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
 
 from .constants import INCIDENT_DISPOSITIONS, EVENT_DB_QUERY
 
@@ -139,7 +137,7 @@ def get_events_between_dates(start_date: datetime,
         end_date: Get events created on or before this datetime.
         con: a pymysql database connectable
         event_query: The str SQL database query to get all events.
-        selected_companies: A list of companies to select events for, by name.
+        selected_companies: A list of companies to select events for, by id.
           If the list is empty, all events are selected.
 
     Returns:
@@ -155,7 +153,7 @@ def get_events_between_dates(start_date: datetime,
             if c_name in selected_companies:
                 company_ids.append(c_id)
 
-    event_query = event_query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company.name=%s' for company in selected_companies]) +') ' if company_ids else '')
+    event_query = event_query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company.id=%s' for company in selected_companies]) +') ' if company_ids else '')
 
     params = [start_date.strftime('%Y-%m-%d %H:%M:%S'),
               end_date.strftime('%Y-%m-%d %H:%M:%S')]

@@ -46,3 +46,12 @@ ALERTS_BY_MONTH_DB_QUERY = """SELECT DATE_FORMAT(insert_date, '%%Y%%m') AS month
                               WHERE insert_date BETWEEN %s AND %s AND alert_type!='faqueue'
                               AND alert_type!='dlp - internal threat' AND alert_type!='dlp-exit-alert' 
                               AND disposition IS NOT NULL {}{}"""
+
+# Database query for getting alerts between two dates
+# by alert type.
+# Allows for reduction by list of company id
+ALERTS_BY_ALERT_TYPE_QUERY = """select DATE_FORMAT(insert_date, '%%Y%%m') AS month, insert_date, disposition, disposition_time,
+                                disposition_user_id, event_time
+                                FROM alerts WHERE alert_type=%s
+                                AND insert_date BETWEEN %s AND %s AND disposition is not NULL {}{}
+                             """
