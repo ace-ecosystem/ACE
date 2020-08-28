@@ -2,7 +2,34 @@
 
 from saq.analysis import Analysis
 
-class AnalysisModuleTrackingInterface():
+class InboundRequestInterface():
+    def process_analysis_request():
+        pass
+
+    def process_analysis_response():
+        pass
+
+def get_inbound_request_interface():
+    pass
+
+class OutboundRequestInterface():
+    def get_next_analysis_request():
+        pass
+
+def get_outbound_request_interface():
+    pass
+
+class WorkQueue():
+    def assign_analysis_request():
+        pass
+
+    def get_next_analysis_request():
+        pass
+
+def get_work_queue():
+    pass
+
+class AnalysisModuleRegistrationInterface():
     def register_analysis_module():
         pass
 
@@ -12,27 +39,30 @@ class AnalysisModuleTrackingInterface():
     def get_analysis_modules():
         pass
 
-analysis_module_manager = None
+def get_analysis_module_registration_interface():
+    pass
 
 class TrackingInterface():
     def get_tracked_analysis_request():
         pass
 
-tracking_system = None
+def get_tracking_interface():
+    pass
 
 class CacheInterface():
     def get_cached_result():
         pass
 
-caching_system = None
+def get_cache_interface():
+    pass
 
 class FileStorageInterface():
     pass
 
-file_storage_system = None
-
-class DeadlockException(Exception):
+def get_file_storage_interface():
     pass
+
+# redesign to avoid locking requirements at all except for RootAnalysis
 
 class NotLockedException(Exception):
     pass
@@ -44,7 +74,8 @@ class LockingInterface():
     def unlock(lock_id, lock_uuid):
         pass
 
-locking_system = None
+def get_lock_request_interface():
+    pass
 
 class Locking():
 
@@ -60,15 +91,13 @@ class Locking():
     def unlock(self):
         return locking_system.unlock(self.get_lock_id(), self.lock_uuid)
 
-class Engine():
-    def execute(self):
+# not sure about this one anymore
+class TrackingEngine():
+    def resubmit_failed_jobs(self):
         pass
 
-    def process_analysis_result(self, analysis_result: AnalysisResult):
-        pass
-
-    def process_analysis(self, analysis: Analysis):
-        pass
+def get_tracking_engine():
+    pass
 
 class AnalysisRequest():
     def __init__(self, observable: dict, analysis_module: str, root: str):
