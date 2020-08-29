@@ -4,6 +4,7 @@ import io
 import os
 import logging
 import pymysql
+import tarfile
 
 import datetime
 
@@ -27,7 +28,6 @@ def get_companies(con: pymysql.connections.Connection) -> CompanyMap:
           {company_id: 'company_name'}, ..
     """
 
-    # apply company selection by name
     companies = {}
     cursor = con.cursor()
     cursor.execute("select * from company")
@@ -51,22 +51,86 @@ def apply_company_selection_to_query(query: str, company_ids: list, selected_com
     """
     return query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company.name=%s' for company in selected_companies]) +') ' if company_ids else '')
 
-def export_dataframes_to_xlsx(tables: List[pd.DataFrame]) -> Tuple[str, bytes]:
-    """Export tables to xlsx bytes.
+def sanitize_table_name(table_name=None, keep_friendly=False) -> str:
+    """Sanitize a table name.
 
-    Write the bytes to a file to send the bytes wherever.
+    Try to make a table name safe to be a file name.
+
+    Args:
+        table_name: The table name to sanitize.
+        keep_friendly: Do not map detailed friendly statistic names back
+          to their less descriptive key names.
+
+    Returns:
+       A santized name string.
+    """
+
+    if table_name is None:
+        return f"No name - {datetime.datetime.now().timestamp()}"
+
+    safe_name = table_name.strip()
+
+    if not keep_friendly:
+        # map the friendly names back to key name
+        for stat_key,stat_name in FRIENDLY_STAT_NAME_MAP.items():
+            if stat_name in safe_name:
+                safe_name = safe_name.replace(stat_name, stat_key)
+
+    _invalid_chars = ["\\", "*", "?", ":", "/", "[", "]"]
+    for invalid_char in _invalid_chars:
+        safe_name = safe_name.replace(invalid_char, '-')
+
+    return safe_name
+
+def dataframes_to_archive_bytes_of_json_files(tables: List[pd.DataFrame]) -> bytes:
+    """Create byte archive of tables as json files.
+
+    Convert each table to its json file bytestring. Put each bytestring
+    into a tar archive and return the tar.gz bytes of that archive.
+    Write to a file or send wherever.
 
     Args:
         tables: A list of pd.DataFrames
 
     Returns:
-        A tuple with recommended filename and the file bytes
+        The bytestring of a tar.gz archive containing the
+        tables as json files.
     """
 
-    time_stamp = str(datetime.datetime.now().timestamp())
-    time_stamp = time_stamp[:time_stamp.rfind('.')]
-    
-    filename = f"ACE_metrics_{time_stamp}.xlsx"
+    buf = io.BytesIO()
+    tar = tarfile.open(mode="w:gz", fileobj=buf)
+    for table in tables:
+        if not table.name:
+            safe_table_name = sanitize_table_name()
+        else:
+            safe_table_name = sanitize_table_name(table.name, keep_friendly=True)
+
+        table_buf = io.BytesIO()
+        table_bytes = table.to_json().encode('utf-8')
+        table_info = tarfile.TarInfo(name=f"{safe_table_name}.json")
+        table_info.size = len(table_bytes)
+        table_buf.write(table_bytes)
+        table_buf.seek(0)
+        tar.addfile(table_info, table_buf)
+        table_buf.close()
+
+    tar.close()
+    buf.seek(0)
+    filebytes = buf.read()
+    buf.close()
+    return filebytes
+
+def dataframes_to_xlsx_bytes(tables: List[pd.DataFrame]) -> bytes:
+    """Export dataframes to xlsx bytes.
+
+    Write the bytes to a file or send them wherever.
+
+    Args:
+        tables: A list of pd.DataFrames
+
+    Returns:
+        The bytestring representation of the xlsx file.
+    """
 
     tab_names = []
     tab_name_map = {}
@@ -74,22 +138,13 @@ def export_dataframes_to_xlsx(tables: List[pd.DataFrame]) -> Tuple[str, bytes]:
     # sanitize and make tab name map
     for table in tables:
         if table.name:
-            table_name = table.name.strip()
+            table_name = sanitize_table_name(table.name)
         else:
             logging.warning("metric table has no name.")
-            table_name = f"No name - {time_stamp}"
+            table_name = sanitize_table_name()
         clean_table_name = table_name
 
-        # map the friendly names back to their key name
-        for stat_key,stat_name in FRIENDLY_STAT_NAME_MAP.items():
-            if stat_name in clean_table_name:
-                clean_table_name = clean_table_name.replace(stat_name, stat_key)
-
-        # remove any openpyxl.workbook.child.INVALID_TITLE_REGEX
-        _invalid_title_chars = ["\\", "*", "?", ":", "/", "[", "]"]
-        for invalid_char in _invalid_title_chars:
-            clean_table_name = clean_table_name.replace(invalid_char, '-')
-
+        # do additional table name cleanup for excel
         # try to clean up alert_type names
         name_parts = clean_table_name.split(' - ')
         if name_parts:
@@ -122,6 +177,8 @@ def export_dataframes_to_xlsx(tables: List[pd.DataFrame]) -> Tuple[str, bytes]:
                                             columns=['ACE Data Table Name'])
     tab_name_map_df.index.names = ['Tab Name']
     tab_name_map_df.to_excel(writer, "Tab Name Map")
+
+    # write the tables to excel tabs
     for name, table in table_tab_map.items():
         try:
             table.to_excel(writer, name)
@@ -133,4 +190,4 @@ def export_dataframes_to_xlsx(tables: List[pd.DataFrame]) -> Tuple[str, bytes]:
     filebytes = xlsx_bytes.read()
     xlsx_bytes.close()
 
-    return filename, filebytes
+    return filebytes
