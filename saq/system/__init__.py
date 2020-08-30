@@ -5,24 +5,21 @@
 class ACESystemInterface:
     pass
 
-from saq.system.inbound import InboundRequestInterface
 from saq.system.outbound import OutboundRequestInterface
-from saq.system.work_queue import WorkQueueManagerInterface
-from saq.system.analysis_module import AnalysisModuleRegistrationInterface
+from saq.system.work_queue import WorkQueueInterface
 from saq.system.tracking import TrackingInterface
-from saq.system.cache import CacheInterface
+from saq.system.caching import CachingInterface
 from saq.system.storage import StorageInterface
-from saq.system.lock import LockingInterface
+from saq.system.locking import LockingInterface
 
 class ACESystem:
     inbound = None
     outbound = None
     work_queue = None
-    analysis_module_registration = None
     tracking = None
-    cache = None
+    caching = None
     storage = None
-    locks = None
+    locking = None
 
 # the global system object that contains references to all the interfaces
 ace = ACESystem()
@@ -35,17 +32,15 @@ def register(obj: ACESystemInterface):
         system.inbound = obj
     elif isinstance(obj, OutboundRequestInterface):
         system.outbound = obj
-    elif isinstance(obj, WorkQueueManager):
+    elif isinstance(obj, WorkQueueInterface):
         system.work_queue = obj
-    elif isinstance(obj, AnalysisModuleRegistrationInterface):
-        system.analysis_module_registration = obj
     elif isisntance(obj, TrackingInterface):
         system.tracking = obj
     elif isinstance(obj, CacheInterface):
-        system.cache = obj
+        system.caching = obj
     elif isinstance(obj, StorageInterface):
         system.storage = obj
     elif isinstance(obj, LockingInterface):
-        system.locks = obj
+        system.locking = obj
     else:
         raise ValueError(f"invalid or unknown ACESystemInterface type {type(obj)})

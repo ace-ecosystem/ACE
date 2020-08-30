@@ -1,25 +1,27 @@
 # vim: ts=4:sw=4:et:cc=120
 
+import json
 from uuid import uuid4
 
-STATUS_NEW = 'new'
-STATUS_QUEUE = 'queue'
-STATUS_ANALYZING = 'analyzing'
-STATUS_PROCESSING = 'processing'
-STATUS_FINISHED = 'finished'
-STATUS_EXPIRED = 'expired'
 
-class AnalysisRequest(Locking):
+from saq.system import get_system
+from saq.system.analysis_module import AnalysisModuleType
+from saq.system.caching import generate_cache_key
+from saq.system.tracking import Trackable, get_tracked_object
+from saq.system.locking import Lockable
+
+class AnalysisRequest(Trackable, Lockable):
     """Represents a request to analyze a single observable, or all the observables in a RootAnalysis."""
-    def __init__(self, observable: Observable, analysis_module: AnalysisModule, root: RootAnalysis):
-        # generic unique ID for the request for tracking purposes
-        self.id = str(uuid.uuid4())
+    def __init__(self, observable: Observable, analysis_module_type: AnalysisModuleType, root: Union[str, RootAnalysis]):
         # the observable to be analyzed
         self.observable = observable
-        # the analysis module to execute on this observable
-        self.analysis_module = analysis_module
-        # the list of RootAnalysis objects that want the result of this
-        self.roots = [ root ]
+        # the type of analysis module to execute on this observable
+        self.analysis_module_type = analysis_module_type
+        # the RootAnalysis object this request belongs to or is entirely about
+        # this can also be the UUID of the RootAnalysis
+        self.root = root 
+        # additional RootAnalysis objects (or UUIDs) that are waiting for this analysis
+        self.additional_roots = []
         # dict of analysis dependencies requested
         # key = analysis_module, value = Analysis
         self.dependency_analysis = {}
@@ -27,25 +29,119 @@ class AnalysisRequest(Locking):
         self.status = TRACKING_STATUS_NEW
         # the result of the analysis
         self.result = None
+        # the UUID of the analysis module that is currently processing this request
+        self.owner = None
 
-    def get_lock_id(self):
-        return self.id
-
-    def append_root(self, root: RootAnalysis):
-        """Adds the given RootAnalysis to the list to be updated when this completes."""
-        self.roots.append(root) # TODO avoid duplicates
-
-    @property
-    def json(self):
-        pass
-
-    @staticmethod
-    def from_json(json_data):
-        pass
+    #
+    # Trackable interface
+    #
 
     @property
-    def cache_id(self):
-        if self.analysis_module is None:
+    def tracking_key(self) -> str:
+        if self.is_root_analysis_request:
             return self.root.uuid
 
-        return self.analysis_module.get_cache_id(self.observable)
+        return self.cache_key
+
+    def to_json(self) -> str:
+        return json.dumps({
+            'observable': self.observable.to_json(),
+            'analysis_module_type': self.analysis_module_type.to_json(),
+            'root': self.root,
+            'additional_roots': self.additional_roots,
+            'dependency_analysis': self.dependency_analysis,
+            'status': self.status,
+            'result': self.result,
+            'owner': self.owner,
+        })
+
+    @staticmethod
+    def from_json(json_data: str) -> AnalysisRequest:
+        ar = AnalysisRequest()
+        result = json.loads(json_data)
+
+        ar.observable = Observable.from_json(result['observable'])
+        ar.analysis_module_type = AnalysisModuleType.from_json(result['analysis_module_type'])
+        ar.root = result['root']
+        ar.additional_roots = result['additional_roots']
+        ar.dependency_analysis = result['dependency_analysis']
+        ar.status = result['status']
+        ar.result = result['result']
+        ar.owner = result['owner']
+
+        return ar
+
+    #
+    # Lockable interface
+    #
+
+    def get_lock_key(self):
+        return self.tracking_key
+
+    #
+    # AnalysisRequest
+    #
+
+    @property
+    def cache_key(self):
+        if self.is_root_analysis_request:
+            return None
+
+        if self._cache_key is None:
+            self._cache_key = generate_cache_key(self.observable, self.analysis_module_type)
+
+        return self._cache_key
+
+    @property
+    def is_cachable(self):
+        """Returns True if the result of the analysis should be cached."""
+        return self.cache_key is not None
+
+    #
+    # utility functions
+    #
+
+    @property
+    def is_observable_analysis_request(self) -> bool:
+        """Was this a request to analyze an Observable?"""
+        return self.observable is not None
+
+    @property
+    def is_observable_analysis_result(self) -> bool:
+        """Does this include the result of the analysis?"""
+        return self.result is not None
+
+    @property
+    def is_root_analysis_request(self) -> bool:
+        """Was this a request to analyze a RootAnalysis?"""
+        return self.observable is None
+
+    @property
+    def observables(self) -> List[Observable]:
+        """Returns the list of all observables to analyze."""
+        if self.is_observable_analysis_request:
+            if self.is_observable_analysis_result:
+                # process both the new observables and the one we already processed
+                # doing so resolves dependencies
+                result = self.result.observables # get all the observables from the Analysis object
+                result.append(self.observable) # and also reprocess our original observable
+            else:
+                # otherwise we just want to look at the observable
+                return [ self.observable ]
+        else:
+            # otherwise we analyze all the observables in the entire RootAnalysis 
+            return self.root.all_observables
+
+
+def get_analysis_request(tracking_key: str) -> Union[AnalysisRequest, None]:
+    return get_tracked_object(TRACKING_SYSTEM_ANALYSIS_REQUESTS, tracking_key, AnalysisRequest)
+
+def find_analysis_request(observable: Observable, analysis_module_type: AnalysisModuleType) -> Union[AnalysisRequest, None]:
+    return get_analysis_request(generate_cache_key(observable, analysis_module_type))
+
+def delete_analysis_request(analysis_request: AnalysisRequest):
+    delete_tracked_object(TRACKING_SYSTEM_ANALYSIS_REQUESTS, analysis_request)
+
+def submit_analysis_request(analysis_request: AnalysisRequest):
+    """Submits the given AnalysisRequest to the appropriate queue for analysis."""
+    get_system().work_queue.get_work_queue(analysis_request.analysis_module_type).put(analysis_request)
