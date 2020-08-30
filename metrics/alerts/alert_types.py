@@ -11,6 +11,8 @@ import pandas as pd
 from typing import Dict, Mapping
 from datetime import datetime
 
+#from ..helpers import get_companies, apply_company_selection_to_query
+
 from . import ALERTS_BY_ALERT_TYPE_QUERY, statistics_by_month_by_dispo, VALID_ALERT_STATS, FRIENDLY_STAT_NAME_MAP
 
 Stat = str
@@ -59,8 +61,8 @@ def unique_alert_types_between_dates(start_date: datetime,
     alert_types = [_r[0] for _r in cursor.fetchall()]
     return alert_types
 
-# TODO: Needs to have company selection capability
-def overall_alert_count_quantites(start_date: datetime,
+# TODO: implement company selection here
+def count_quantites_by_alert_type(start_date: datetime,
                                   end_date: datetime,
                                   con: pymysql.connections.Connection
                                   ) -> pd.DataFrame:
@@ -69,7 +71,7 @@ def overall_alert_count_quantites(start_date: datetime,
     Args:
         start_date: Get events created on or after this datetime.
         end_date: Get events created on or before this datetime.
-        con: a pymysql database connectable
+        con: a pymysql database connectable.
 
     Returns:
         A pd.DataFrame breakdown of the alert_type counts.

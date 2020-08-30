@@ -83,7 +83,7 @@ from metrics.alerts import ( get_alerts_between_dates,
 from metrics.alerts.users import get_all_users, generate_user_alert_stats
 from metrics.alerts.alert_types import ( all_alert_types,
                                          unique_alert_types_between_dates,
-                                         overall_alert_count_quantites,
+                                         count_quantites_by_alert_type,
                                          get_alerts_between_dates_by_type,
                                          generate_alert_type_stats
                                         )
@@ -92,7 +92,7 @@ from metrics.events import ( get_events_between_dates,
                              get_incidents_from_events,
                              add_email_alert_counts_per_event
                             )
-from metrics.helpers import get_companies, export_dataframes_to_xlsx
+from metrics.helpers import get_companies, dataframes_to_xlsx_bytes, dataframes_to_archive_bytes_of_json_files
 
 import ace_api
 
@@ -1999,6 +1999,10 @@ def metrics():
         # redirect to index
         return redirect(url_for('analysis.index'))
 
+    # get the list of users that have full access to all metrics
+    full_access_users = saq.CONFIG['gui'].get('full_metric_access', "")
+    full_access_users = [int(u_id) for u_id in full_access_users.split(',')]
+
     filters = {
         FILTER_TXT_DATERANGE: SearchFilter('daterange', FILTER_TYPE_TEXT, '')
     }
@@ -2025,7 +2029,6 @@ def metrics():
     alert_type_count_breakdown = False
     selected_companies_map = {}
     tables = []
-    human_readable_selection_summary = ""
 
     if request.method == "POST" and request.form['daterange']:
         post_bool = True
@@ -2157,16 +2160,28 @@ def metrics():
         if alert_type_count_breakdown:
             with get_db_connection() as db:
                 # TODO: implement company selection here
-                at_counts = overall_alert_count_quantites(daterange_start,daterange_end, db)
+                at_counts = count_quantites_by_alert_type(daterange_start,daterange_end, db)
             tables.append(at_counts)
 
         if tables and export_results_to:
+            time_stamp = str(datetime.datetime.now().timestamp())
+            time_stamp = time_stamp[:time_stamp.rfind('.')]
+            filename = f"ACE_metrics_{time_stamp}"
+
             for export_type in export_results_to:
                 if export_type == 'xlsx':
-                    filename, filebytes = export_dataframes_to_xlsx(tables)
+                    filename += ".xlsx"
+                    filebytes = dataframes_to_xlsx_bytes(tables)
                     output = make_response(filebytes)
                     output.headers["Content-Disposition"] = "attachment; filename="+filename
                     output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    return output
+                if export_type == 'json':
+                    filename += ".tar.gz"
+                    filebytes = dataframes_to_archive_bytes_of_json_files(tables)
+                    output = make_response(filebytes)
+                    output.headers["Content-Disposition"] = "attachment; filename="+filename
+                    output.headers['Content-Type'] == 'application/x-gzip'
                     return output
 
     return render_template(
@@ -2180,6 +2195,8 @@ def metrics():
         selected_companies_map=selected_companies_map,
         tables=tables,
         post_bool=post_bool,
+        current_user=current_user,
+        full_access_users=full_access_users,
         daterange=daterange)
 
 @analysis.route('/events', methods=['GET', 'POST'])

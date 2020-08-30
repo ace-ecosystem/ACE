@@ -1325,7 +1325,7 @@ from metrics.alerts import ( get_alerts_between_dates,
                             )
 from metrics.alerts.users import get_all_users, generate_user_alert_stats
 from metrics.alerts.alert_types import ( unique_alert_types_between_dates,
-                                         overall_alert_count_quantites,
+                                         count_quantites_by_alert_type,
                                          get_alerts_between_dates_by_type,
                                          generate_alert_type_stats
                                         )
@@ -1335,7 +1335,10 @@ from metrics.events import ( get_events_between_dates,
                              add_email_alert_counts_per_event
                             )
 
-from metrics.helpers import get_companies
+from metrics.helpers import ( get_companies,
+                              #dataframes_to_archive_bytes_of_json_files,
+                              #dataframes_to_xlsx_bytes
+                            )
 
 metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
 build_metric_parser(metrics_parser)
@@ -1349,7 +1352,7 @@ def metrics(args):
         with get_db_connection() as db:
             valid_companies = list(get_companies(db).values())
  
-         for company in args.companies:
+        for company in args.companies:
             if company not in valid_companies:
                 logging.warning(f"{company} is not a valid company: {valid_companies}")
                 args.companies.remove(company)
@@ -1395,7 +1398,7 @@ def metrics(args):
                 with get_db_connection() as db:
                     start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
                     end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
-                    at_counts = overall_alert_count_quantites(start_date, end_date, db)
+                    at_counts = count_quantites_by_alert_type(start_date, end_date, db)
                 stdout_like(at_counts, format=args.stdout_format)
                 sys.exit(0)
 
