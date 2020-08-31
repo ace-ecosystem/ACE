@@ -34,6 +34,14 @@ def stdout_like(df: pd.DataFrame, format='print'):
         # table has no name
         pass
 
+    if format == 'json':
+        print(df.to_json())
+        return
+
+    if format == 'csv':
+        print(df.to_csv())
+        return
+
     if format == 'ascii_table':
         print()
         print(table_name)
@@ -60,10 +68,6 @@ def build_metric_user_parser(user_parser: argparse.ArgumentParser) -> None:
                               help='List all users')
     user_parser.add_argument('-u', '--user', action='append', dest='users', default=[],
                              help='A list of users to generate statistics for. Default: All users.')
-    user_parser.add_argument('-s', '--start_datetime', action='store',
-                              help="The start datetime specifying the ACE data in scope. Format: YYYY-MM-DD HH:MM:SS")
-    user_parser.add_argument('-e', '--end_datetime', action='store',
-                              help="The end datetime specifying the ACE data in scope. Format: YYYY-MM-DD HH:MM:SS")
 
     for stat in VALID_ALERT_STATS:
         user_parser.add_argument(f'--{stat}', action='store_true', dest=f"user_stat_{stat}", help=FRIENDLY_STAT_NAME_MAP[stat])
