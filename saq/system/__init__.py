@@ -5,7 +5,6 @@
 class ACESystemInterface:
     pass
 
-from saq.system.outbound import OutboundRequestInterface
 from saq.system.work_queue import WorkQueueInterface
 from saq.system.tracking import TrackingInterface
 from saq.system.caching import CachingInterface
@@ -13,8 +12,6 @@ from saq.system.storage import StorageInterface
 from saq.system.locking import LockingInterface
 
 class ACESystem:
-    inbound = None
-    outbound = None
     work_queue = None
     tracking = None
     caching = None
@@ -28,11 +25,7 @@ def get_system():
     return ace
 
 def register(obj: ACESystemInterface):
-    if isinstance(obj, InboundRequestInterface):
-        system.inbound = obj
-    elif isinstance(obj, OutboundRequestInterface):
-        system.outbound = obj
-    elif isinstance(obj, WorkQueueInterface):
+    if isinstance(obj, WorkQueueInterface):
         system.work_queue = obj
     elif isisntance(obj, TrackingInterface):
         system.tracking = obj

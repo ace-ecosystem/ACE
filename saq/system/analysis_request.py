@@ -3,7 +3,6 @@
 import json
 from uuid import uuid4
 
-
 from saq.system import get_system
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.caching import generate_cache_key
@@ -13,6 +12,10 @@ from saq.system.locking import Lockable
 class AnalysisRequest(Trackable, Lockable):
     """Represents a request to analyze a single observable, or all the observables in a RootAnalysis."""
     def __init__(self, observable: Observable, analysis_module_type: AnalysisModuleType, root: Union[str, RootAnalysis]):
+        #
+        # static data
+        #
+
         # the observable to be analyzed
         self.observable = observable
         # the type of analysis module to execute on this observable
@@ -20,17 +23,22 @@ class AnalysisRequest(Trackable, Lockable):
         # the RootAnalysis object this request belongs to or is entirely about
         # this can also be the UUID of the RootAnalysis
         self.root = root 
-        # additional RootAnalysis objects (or UUIDs) that are waiting for this analysis
-        self.additional_roots = []
         # dict of analysis dependencies requested
         # key = analysis_module, value = Analysis
         self.dependency_analysis = {}
+
+        # 
+        # dynamic data
+        #
+
         # the current status of this analysis request
         self.status = TRACKING_STATUS_NEW
-        # the result of the analysis
-        self.result = None
+        # additional RootAnalysis objects (or UUIDs) that are waiting for this analysis
+        self.additional_roots = []
         # the UUID of the analysis module that is currently processing this request
         self.owner = None
+        # the result of the analysis
+        self.result = None
 
     #
     # Trackable interface
@@ -132,6 +140,21 @@ class AnalysisRequest(Trackable, Lockable):
             # otherwise we analyze all the observables in the entire RootAnalysis 
             return self.root.all_observables
 
+    def append_root(self, root: RootAnalysis):
+        self.additional_roots.append(root)
+
+    def duplicate(self) -> AnalysisRequest:
+        result = AnalysisRequest(
+                self.observable,
+                self.analysis_module_type,
+                self.root)
+
+        result.dependency_analysis = self.dependency_analysis
+        result.status = self.status
+        result.additional_roots = self.additional_roots
+        result.owner = self.owner
+        result.result = self.result
+        return result
 
 def get_analysis_request(tracking_key: str) -> Union[AnalysisRequest, None]:
     return get_tracked_object(TRACKING_SYSTEM_ANALYSIS_REQUESTS, tracking_key, AnalysisRequest)

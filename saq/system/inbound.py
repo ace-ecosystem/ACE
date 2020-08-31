@@ -10,12 +10,11 @@ from saq.system.analysis_request import (
 from saq.system.analysis_module import get_all_analysis_module_types
 from saq.system.caching import cache_analysis, get_cached_analysis
 
-# XXX there is an issue with needing to also reload the RootAnalysis object
-# XXX at this point it assumes analysis_request.root is a RootAnalysis object
 def process_analysis_request(analysis_request: AnalysisRequest):
     with analysis_request.lock():
         # did we complete a request?
         if analysis_request.is_observable_analysis_result:
+
             # should we cache these results?
             if analysis_request.is_cachable:
                 cache_analysis(analysis_request.observable, 
@@ -45,17 +44,17 @@ def process_analysis_request(analysis_request: AnalysisRequest):
 
                 # is this observable being analyzed for another root analysis?
                 # this could be in another root analysis as well
-                tracked_ar = find_analysis_request(observable, analysis_module)
+                tracked_ar = find_analysis_request(observable, analysis_module_type)
                 if tracked_ar:
                     try:
                         with tracked_ar.lock():
                             if get_analysis_request(tracked_ar.tracking_key):
                                 # if we can get the AR and lock it it means it's still in a queue waiting
                                 # so we can tell that AR to update the details of this analysis as well when it's done
-                                # TODO I AM HERE!
-                                update_additional_root()??
-                                #tracked_ar.append_root(analysis.root) # NOTE-A
-                                get_system().tracking.set_analysis_tracking(analysis, tracked_ar)
+                                tracked_ar.additional_roots.append(analysis_request.root)
+                                tracked_ar.update()
+                                # now this observable is tracked to the other observable
+                                analysis_request.root.track_analysis(observable, analysis_module_type, tracked_ar)
                                 continue
 
                         # the AR was completed before we could lock it
@@ -88,6 +87,7 @@ def process_analysis_request(analysis_request: AnalysisRequest):
                     new_ar[dep] = analysis_request.root.get_analysis(observable, dep)
 
                 # send it out
+                analysis_request.root.track_analysis(observable, analysis_module_type, new_ar)
                 submit_analysis_request(new_ar)
                 continue
 
@@ -96,6 +96,7 @@ def process_analysis_request(analysis_request: AnalysisRequest):
 
     # if there were any other RootAnalysis objects waiting for this one, go ahead and process those now
     for root in analysis_request.additional_roots:
-        new_ar = analysis_request.copy()
+        new_ar = analysis_request.duplicate()
         new_ar.root = root
+        new_ar.additional_roots = []
         process_analysis_request(new_ar)
