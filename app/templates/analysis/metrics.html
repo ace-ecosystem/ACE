@@ -238,13 +238,13 @@
             <div id="table_choices" class="col-md-10 col-md-push-1">
               <div class="form-check">
                 <label class="form-check-label">
-                  <input class="form-check-input" type="radio" id="metric_export_xlsx" name="export_results" value="xlsx">
+                  <input class="form-check-input export_check" type="checkbox" id="metric_export_xlsx" name="export_results" value="xlsx">
                     <b>Excel (xlsx) - table names will be sanitized</b>
                 </label>
               </div>
               <div class="form-check">
                 <label class="form-check-label">
-                  <input class="form-check-input" type="radio" id="metric_export_json" name="export_results" value="json">
+                  <input class="form-check-input export_check" type="checkbox" id="metric_export_json" name="export_results" value="json">
                     <b>JSON</b>
                 </label>
               </div>
@@ -286,5 +286,20 @@
 
 {% block scripts %}
 {{ super() }}
+<!--Only one export option can be selected, at a time.-->
+<script>
+  $(document).ready(function() {
+  $('.export_check').each(function() {
+    $(this).addClass('unselected');
+  });
+  $('.export_check').on('click', function() {
+    $(this).toggleClass('unselected');
+    $(this).toggleClass('selected');
+    $('.export_check').not(this).prop('checked', false);
+    $('.export_check').not(this).removeClass('selected');
+    $('.export_check').not(this).addClass('unselected');
+  });
+});
+</script>
 <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
 {% endblock %}
