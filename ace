@@ -1327,7 +1327,8 @@ from metrics.alerts.users import get_all_users, generate_user_alert_stats
 from metrics.alerts.alert_types import ( unique_alert_types_between_dates,
                                          count_quantites_by_alert_type,
                                          get_alerts_between_dates_by_type,
-                                         generate_alert_type_stats
+                                         generate_alert_type_stats,
+                                         all_alert_types
                                         )
 
 from metrics.events import ( get_events_between_dates,
@@ -1407,9 +1408,11 @@ def metrics(args):
                 end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
                 alert_types = unique_alert_types_between_dates(start_date, end_date, db)
                 if args.list_alert_types:
-                    print("Alert Types:")
+                    print(f"Alert Types between '{args.start_datetime}' and '{args.end_datetime}':")
                     [print(f"\t{at}") for at in alert_types]
                     print()
+                    print("All Alert Types:")
+                    [print(f"\t{at}") for at in all_alert_types(db)]
                     sys.exit(0)
 
             with get_db_connection() as db:

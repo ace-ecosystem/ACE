@@ -2019,8 +2019,13 @@ def metrics():
     target_companies = {}
     with get_db_connection() as db:
         users = get_all_users(db)
-        valid_alert_types = all_alert_types(db)
         target_companies = get_companies(db)
+        # NOTE: Some systems can have a very large number of historical alert_types.
+        # Limit the alert_type options to alert_types that exist, in the last 90 days.
+        # Use the CLI if you need to go back further.
+        daterange_end = datetime.datetime.now()
+        daterange_start = daterange_end - datetime.timedelta(days=90)
+        valid_alert_types = unique_alert_types_between_dates(daterange_start, daterange_end, db)
 
     # define static defaults
     # NOTE: calculate the defaults over 7 days and return by default?
