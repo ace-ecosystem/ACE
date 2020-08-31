@@ -264,8 +264,8 @@
   <center>
   <h4>{{ query }}</h4>
   {% for table in tables %}
-      <div class="row">
-          <div class="col-md-10 col-md-push-1">
+      <!--div class="row">
+          <div class="col-md-10 col-md-push-1"-->
               {% if selected_companies_map %}
                   {% for company_id, company_name in selected_companies_map.items() %}
                       <img src="{{url_for('static', filename='images/company_icons/{}.png'.format(company_name))}}">
@@ -277,8 +277,8 @@
               {% endif %}
               <h4>{{table.name}}</h4>
               {{table.to_html(classes='table table-hover')|safe}}
-          </div>
-      </div>
+          <!--/div>
+      </div-->
   {% endfor %}
   </center>
 </div> <!-- end container -->
