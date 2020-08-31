@@ -67,3 +67,4 @@ fastapi
 selenium
 docker
 redis
+tabulate
