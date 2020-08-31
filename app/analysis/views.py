@@ -2000,8 +2000,11 @@ def metrics():
         return redirect(url_for('analysis.index'))
 
     # get the list of users that have full access to all metrics
-    full_access_users = saq.CONFIG['gui'].get('full_metric_access', "")
-    full_access_users = [int(u_id) for u_id in full_access_users.split(',')]
+    full_access_users = saq.CONFIG['gui'].get('full_metric_access')
+    if full_access_users:
+        full_access_users = [int(u_id) for u_id in full_access_users.split(',')]
+    else:
+        full_access_users = []
 
     filters = {
         FILTER_TXT_DATERANGE: SearchFilter('daterange', FILTER_TYPE_TEXT, '')
