@@ -93,34 +93,22 @@ class AnalysisModuleType(Trackable):
 
         return True
 
-def get_analysis_module_type(self, name: str) -> Union[AnalysisModuleType, None]:
-    """Returns the AnalysisModuleType object for the given type, or None if it does not exist."""
-    return get_system().tracking.get_tracked_object(name, TRACKING_SYSTEM_ANALYSIS_MODULE_TYPES, AnalysisModuleType)
-
-def get_all_analysis_module_types():
-    """Returns a list of all known AnalysisModuleType objects."""
-    return [_[1] for _ in get_system().tracking.get_all_tracked_objects(TRACKING_SYSTEM_ANALYSIS_MODULE_TYPES, AnalysisModuleType)]
-
-def track_analysis_module_type(self, analysis_module_type: AnalysisModuleType) -> str:
-    """Tracks the given AnalysisModuleType in the TRACKING_SYSTEM_ANALYSIS_MODULE_TYPES system."""
-    return get_system().tracking.track_object(TRACKING_SYSTEM_ANALYSIS_MODULE_TYPES, analysis_module_type)
-
-def register_analysis_module_type(self, analysis_module_type: AnalysisModuleType) -> AnalysisModuleType:
+def register_analysis_module_type(self, amt: AnalysisModuleType) -> AnalysisModuleType:
     """Registers the given AnalysisModuleType with the system."""
-    current_type = get_analysis_module_type(analysis_module_type.name)
+    current_type = get_analysis_module_type(amt.name)
     if current_type is None:
-        get_system().work_queue.add_work_queue(analysis_module_type.name)
-        track_analysis_module_type(analysis_module_type)
-        return analysis_module_type
+        get_system().work_queue.add_work_queue(amt.name)
 
-    # if it already exists check to see if the version changed
-    if current_type.version == analysis_module_type.version:
-        # update the current version of the analysis modules
-        # requests for new work will fail if the requested version does not match
-        track_analysis_module_type(analysis_module_type)
-    else:
-        raise VersionError(f"current version {current_type.version} "
-                           f"is greater than requested version {analysis_module_type.version} "
-                           f"for analysis module type {analysis_module_type.name}")
+    # regardless we take this to be the new registration for this analysis module
+    # any updates to version or cache keys would be saved here
+    track_analysis_module_type(amt)
+    return amt
 
-    return current_type
+def track_analysis_module_type(*args, **kwargs):
+    return get_system().module_tracking.track_analysis_module_type(*args, **kwargs)
+
+def get_analysis_module_type(self, *args, **kwargs):
+    return get_system().module_tracking.get_analysis_module_type(*args, **kwargs)
+
+def get_all_analysis_module_types(self):
+    return get_system().module_tracking.get_all_analysis_module_types():

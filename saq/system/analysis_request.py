@@ -1,7 +1,7 @@
 # vim: ts=4:sw=4:et:cc=120
 
 import json
-from uuid import uuid4
+import uuid
 
 from saq.system import get_system
 from saq.system.analysis_module import AnalysisModuleType
@@ -16,6 +16,8 @@ class AnalysisRequest(Trackable, Lockable):
         # static data
         #
 
+        # generic unique ID of the request
+        self.id = str(uuid.uuid4())
         # the observable to be analyzed
         self.observable = observable
         # the type of analysis module to execute on this observable
@@ -156,15 +158,26 @@ class AnalysisRequest(Trackable, Lockable):
         result.result = self.result
         return result
 
-def get_analysis_request(tracking_key: str) -> Union[AnalysisRequest, None]:
-    return get_tracked_object(TRACKING_SYSTEM_ANALYSIS_REQUESTS, tracking_key, AnalysisRequest)
+    def submit(self):
+        submit_analysis_request(self)
 
-def find_analysis_request(observable: Observable, analysis_module_type: AnalysisModuleType) -> Union[AnalysisRequest, None]:
-    return get_analysis_request(generate_cache_key(observable, analysis_module_type))
+    def update(self):
+        update_analysis_request(self)
 
-def delete_analysis_request(analysis_request: AnalysisRequest):
-    delete_tracked_object(TRACKING_SYSTEM_ANALYSIS_REQUESTS, analysis_request)
+def get_analysis_request(*args, **kwargs):
+    return get_system().request_tracking.get_analysis_request(*args, **kwargs)
 
-def submit_analysis_request(analysis_request: AnalysisRequest):
+def find_analysis_request(*args, **kwargs):
+    return get_system().request_tracking.find_analysis_request(*args, **kwargs)
+
+def delete_analysis_request(*args, **kwargs):
+    return get_system().request_tracking.delete_analysis_request(*args, **kwargs)
+
+def update_analysis_request(*args, **kwargs):
+    return get_system().request_tracking.update_analysis_request(*args, **kwargs)
+
+def submit_analysis_request(ar: AnalysisRequest):
     """Submits the given AnalysisRequest to the appropriate queue for analysis."""
-    get_system().work_queue.get_work_queue(analysis_request.analysis_module_type).put(analysis_request)
+    get_system().work_queue.get_work_queue(ar.analysis_module_type).put(ar)
+    ar.status = TRACKING_STATUS_QUEUED
+    ar.update()

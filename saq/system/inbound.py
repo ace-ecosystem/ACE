@@ -10,40 +10,43 @@ from saq.system.analysis_request import (
 from saq.system.analysis_module import get_all_analysis_module_types
 from saq.system.caching import cache_analysis, get_cached_analysis
 
-def process_analysis_request(analysis_request: AnalysisRequest):
-    with analysis_request.lock():
+def process_analysis_request(ar: AnalysisRequest):
+    with ar.lock():
         # did we complete a request?
-        if analysis_request.is_observable_analysis_result:
+        if ar.is_observable_analysis_result:
 
             # should we cache these results?
-            if analysis_request.is_cachable:
-                cache_analysis(analysis_request.observable, 
-                    analysis_request.analysis_module_type, 
-                    analysis_request.result)
+            if ar.is_cachable:
+                cache_analysis(ar.observable, 
+                    ar.analysis_module_type, 
+                    ar.result)
 
             # save the analysis results!
             self.root.set_analysis(
-                    analysis_request.observable, 
-                    analysis_request.analysis_module_type, 
-                    analysis_request.result)
+                    ar.observable, 
+                    ar.analysis_module_type, 
+                    ar.result)
 
         # for each observable that needs to be analyzed
-        for observable in analysis_request.observables:
+        for observable in ar.observables:
             for analysis_module_type in get_all_analysis_module_types():
                 # does this analysis module accept this observable?
                 if not analysis_module_type.accepts(observable):
                     continue
 
                 # is this analysis request already completed?
-                if analysis_request.root.analysis_completed(observable, analysis_module_type):
+                if ar.root.analysis_completed(observable, analysis_module_type):
                     continue
 
                 # is this request for this RootAnalysis already being tracked?
-                if analysis_request.root.analysis_tracked(observable, analysis_module_type):
+                if ar.root.analysis_tracked(observable, analysis_module_type):
                     continue
 
+                # XXX complexity
                 # is this observable being analyzed for another root analysis?
                 # this could be in another root analysis as well
+                # NOTE if the analysis module does not support caching
+                # then find_analysis_request always returns None
                 tracked_ar = find_analysis_request(observable, analysis_module_type)
                 if tracked_ar:
                     try:
@@ -51,10 +54,10 @@ def process_analysis_request(analysis_request: AnalysisRequest):
                             if get_analysis_request(tracked_ar.tracking_key):
                                 # if we can get the AR and lock it it means it's still in a queue waiting
                                 # so we can tell that AR to update the details of this analysis as well when it's done
-                                tracked_ar.additional_roots.append(analysis_request.root)
+                                tracked_ar.additional_roots.append(ar.root)
                                 tracked_ar.update()
                                 # now this observable is tracked to the other observable
-                                analysis_request.root.track_analysis(observable, analysis_module_type, tracked_ar)
+                                ar.root.track_analysis(observable, analysis_module_type, tracked_ar)
                                 continue
 
                         # the AR was completed before we could lock it
@@ -71,32 +74,32 @@ def process_analysis_request(analysis_request: AnalysisRequest):
                 cached_result = get_cached_analysis(observable, analysis_module_type)
                 if cached_result:
                     self.root.set_analysis(
-                            analysis_request.observable, 
-                            analysis_request.analysis_module_type, 
-                            analysis_request.result)
+                            ar.observable, 
+                            ar.analysis_module_type, 
+                            ar.result)
                     continue
 
                 # otherwise we need to request it
                 new_ar = AnalysisRequest(
                     observable,
                     analysis_module_type,
-                    analysis_request.root)
+                    ar.root)
 
                 # fill out any requested dependency data
                 for dep in analysis_module_type.dependencies:
-                    new_ar[dep] = analysis_request.root.get_analysis(observable, dep)
+                    new_ar[dep] = ar.root.get_analysis(observable, dep)
 
                 # send it out
-                analysis_request.root.track_analysis(observable, analysis_module_type, new_ar)
+                ar.root.track_analysis(observable, analysis_module_type, new_ar)
                 submit_analysis_request(new_ar)
                 continue
 
         # at this point this AnalysisRequest is no longer needed
-        delete_analysis_request(analysis_request)
+        delete_analysis_request(ar)
 
     # if there were any other RootAnalysis objects waiting for this one, go ahead and process those now
-    for root in analysis_request.additional_roots:
-        new_ar = analysis_request.duplicate()
+    for root in ar.additional_roots:
+        new_ar = ar.duplicate()
         new_ar.root = root
         new_ar.additional_roots = []
         process_analysis_request(new_ar)
