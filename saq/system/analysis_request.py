@@ -4,6 +4,7 @@ import json
 import uuid
 
 from saq.system import get_system
+from saq.system.analysis import get_root_analysis
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.caching import generate_cache_key
 from saq.system.tracking import Trackable, get_tracked_object
@@ -11,7 +12,10 @@ from saq.system.locking import Lockable
 
 class AnalysisRequest(Trackable, Lockable):
     """Represents a request to analyze a single observable, or all the observables in a RootAnalysis."""
-    def __init__(self, observable: Observable, analysis_module_type: AnalysisModuleType, root: Union[str, RootAnalysis]):
+    def __init__(self, 
+            observable: Observable, 
+            analysis_module_type: AnalysisModuleType, 
+            root: Union[str, RootAnalysis]):
         #
         # static data
         #
@@ -24,7 +28,10 @@ class AnalysisRequest(Trackable, Lockable):
         self.analysis_module_type = analysis_module_type
         # the RootAnalysis object this request belongs to or is entirely about
         # this can also be the UUID of the RootAnalysis
-        self.root = root 
+        if isinstance(root, str):
+            self.root = get_root_analysis(root)
+        else:
+            self.root = root 
         # dict of analysis dependencies requested
         # key = analysis_module, value = Analysis
         self.dependency_analysis = {}
@@ -175,6 +182,9 @@ def delete_analysis_request(*args, **kwargs):
 
 def update_analysis_request(*args, **kwargs):
     return get_system().request_tracking.update_analysis_request(*args, **kwargs)
+
+def get_expired_analysis_request(*args, **kwargs):
+    return get_system().request_tracking.get_expired_analysis_request(*args, **kwargs)
 
 def submit_analysis_request(ar: AnalysisRequest):
     """Submits the given AnalysisRequest to the appropriate queue for analysis."""

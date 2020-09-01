@@ -1,16 +1,27 @@
 # vim: ts=4:sw=4:et:cc=120
 #
 
-from saq.analysis import RootAnalysis, Analysis, Observable
-from saq.modules import AnalysisModule
-from saq.system import ACESystemInterface, get_system
-from saq.system.analysis_request import *
+from saq.system.analysis_module import AnalysisModuleType
+from saq.system.analysis_request import AnalysisRequest
+from saq.system.work_queue import get_work_queue
 
-class OutboundRequestInterface(ACESystemInterface):
-    def get_next_analysis_request(self, analysis_module: AnalysisModule) -> Union[AnalysisRequest, None]:
-        next_ar = get_system().work_queue.get_work_queue(analysis_module).get()
-        if next_ar:
-            next_ar.status = TRACKING_STATUS_NEW
-            get_system().tracking.track_analysis_job(next_ar)
+def get_next_analysis_request(self, owner_uuid: str, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
+    # are there any expired analysis requests we need to process first?
+    for expired_ar in get_expired_analysis_requests(amt):
+        with expired_ar.lock():
+            expired_ar = get_analysis_request(expired_ar.id)
+            if expired_ar:
+                expired_ar.owner = owner_uuid
+                expired_ar.status = TRACKING_STATUS_PROCESSING
+                expired_ar.update()
 
-        return next_ar
+        return expired_ar
+
+    # TODO timeouts and stuff
+    next_ar = get_work_queue(analysis_module).get()
+    with next_ar.lock():
+        next_ar.owner = owner_uuid
+        next_ar.status = TRACKING_STATUS_PROCESSING
+        next_ar.update()
+        
+    return next_ar

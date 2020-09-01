@@ -1,7 +1,7 @@
 # vim: ts=4:sw=4:et:cc=120
 
 from saq.system import ACESystemInterface, get_system
-from saq.system.analysis_module import AnalysisModuleType
+from saq.system.analysis_module import AnalysisModuleType, track_analysis_module_type, get_analysis_module_type
 from saq.system.analysis_request import AnalysisRequest
 
 class WorkQueueInvalidated(Exception):
@@ -12,26 +12,6 @@ class ExpiredVersion(Exception):
     pass
 
 class WorkQueueManagerInterface(ACESystemInterface):
-    def register_work_queue(self, analysis_module_type: AnalysisModuleType) -> WorkQueue:
-        queue = self.get_work_queue(analysis_module_type.name)
-
-        # are we going to need to create a new queue?
-        if queue is None:
-            queue = self.add_work_queue(analysis_module_type.name)
-            get_system().tracking.track_analysis_module_type(analysis_module_type)
-            return queue
-
-        # get the current tracking data for the analysis module type
-        current_type = get_system().tracking.get_analysis_module_type(analysis_module_type.name)
-
-        # has the version changed?
-        if analysis_module_type.version < current_type.version:
-            # the new version invalidates the old version
-            raise ExpiredVersion()
-
-        elif analysis_module_type.version > current_type.version:
-            get_system().tracking.track(analysis_module_type)
-        
     def invalidate_work_queue(self, analysis_module_name: str) -> bool:
         raise NotImplementedError()
 
@@ -47,3 +27,22 @@ class WorkQueue():
 
     def get(self, *args, **kwargs) -> Union[AnalysisRequest, None]:
         raise NotImplementedError()
+
+def get_work_queue(*args, **kwargs):
+    get_system().work_queue.get_work_queue(*args, **kwargs)
+
+def invalidate_work_queue(*args, **kwargs):
+    get_system().work_queue.invalidate_work_queue(*args, **kwargs)
+
+def add_work_queue(*args, **kwargs):
+    get_system().work_queue.add_work_queue(*args, **kwargs)
+
+def register_work_queue(amt: AnalysisModuleType) -> WorkQueue:
+    queue = get_work_queue(amt.name)
+
+    # are we going to need to create a new queue?
+    if queue is None:
+        queue = add_work_queue(amt.name)
+
+    track_analysis_module_type(amt)
+    return queue

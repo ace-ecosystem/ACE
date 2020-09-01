@@ -1,6 +1,7 @@
 # vim: ts=4:sw=4:et:cc=120
 #
 
+from saq.analysis import RootAnalysis
 from saq.system import ACESystemInterface
 from saq.system.constants import *
 from saq.system.modules import AnalysisModuleType
@@ -16,7 +17,7 @@ class AnalysisRequestTrackingInterface(ACESystemInterface):
     def update_analysis_request(self, request: AnalysisRequest) -> bool:
         raise NotImplementedError()
 
-    def get_expired_analysis_requests(self, amt: AnalysisModuleType) -> List[AnalysisRequest]:
+    def get_expired_analysis_request(self, amt: AnalysisModuleType) -> List[AnalysisRequest]:
         raise NotImplementedError()
 
     def get_analysis_request(self, key: str) -> Union[AnalysisRequest, None]:
@@ -36,7 +37,8 @@ class AnalysisModuleTrackingInterface(ACESystemInterface):
         raise NotImplementedError()
 
 class AnalysisTrackingInterface(ACESystemInterface):
-    pass
+    def get_root_analysis(self, uuid: str) -> RootAnalysis:
+        raise NotImplementedError()
 
 class Trackable():
     tracking_key: str

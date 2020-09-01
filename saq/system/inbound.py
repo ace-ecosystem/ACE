@@ -10,10 +10,25 @@ from saq.system.analysis_request import (
 from saq.system.analysis_module import get_all_analysis_module_types
 from saq.system.caching import cache_analysis, get_cached_analysis
 
+class UnknownAnalysisRequest(Exception):
+    pass
+
+class ExpiredAnalysisRequest(Exception):
+    pass
+
 def process_analysis_request(ar: AnalysisRequest):
     with ar.lock():
         # did we complete a request?
         if ar.is_observable_analysis_result:
+            existing_ar = get_analysis_request(ar.id)
+            
+            # is it just straight up gone?
+            if not existing_ar:
+                raise UnknownAnalysisRequest(ar)
+
+            # did the ownership change?
+            if existing_ar.owner != ar.owner:
+                raise ExpiredAnalysisRequest(ar)
 
             # should we cache these results?
             if ar.is_cachable:
