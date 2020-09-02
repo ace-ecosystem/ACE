@@ -4,20 +4,82 @@ Every function in this file should expliclty work with
 data from the ACE `ace.alerts` database table for the
 purpose of generating metrics.
 
+NOTE: An argument could be made that some of these
+  functions, like the business time helpers, could
+  move to `metrics.helpers` but so far they're only
+  needed here.
 """
 
 import os
 import logging
 
 import pymysql
+import pytz
 import businesstime
+
 import pandas as pd
 
-from typing import Tuple, Mapping
+from typing import Tuple, Mapping, Optional
 from datetime import timedelta, datetime, time
 from dateutil.relativedelta import relativedelta
+from businesstime.holidays import Holidays
 
 from .constants import VALID_ALERT_STATS, FRIENDLY_STAT_NAME_MAP, ACE_KILLCHAIN_DISPOSITIONS, ALERTS_BY_MONTH_DB_QUERY
+
+
+class SiteHolidays(Holidays):
+    rules = [
+        dict(name="New Year's Day", month=1, day=1),
+        #dict(name="Birthday of Martin Luther King, Jr.", month=1, weekday=0, week=3),
+        #dict(name="Washington's Birthday", month=2, weekday=0, week=3),
+        dict(name="Memorial Day", month=5, weekday=0, week=-1),
+        dict(name="Independence Day", month=7, day=4),
+        dict(name="Labor Day", month=9, weekday=0, week=1),
+        #dict(name="Columbus Day", month=10, weekday=0, week=2),
+        #dict(name="Veterans Day", month=11, day=11),
+        dict(name="Thanksgiving Day", month=11, weekday=3, week=4),
+        dict(name="Day After Thanksgiving Day", month=11, weekday=4, week=4),
+        dict(name="Chistmas Eve", month=12, day=24),
+        dict(name="Chistmas Day", month=12, day=25),
+    ]
+
+    def _day_rule_matches(self, rule, dt):
+        """
+        Day-of-month-specific US federal holidays that fall on Sat or Sun are
+        observed on Fri or Mon respectively. Note that this method considers
+        both the actual holiday and the day of observance to be holidays.
+        """
+        if dt.weekday() == 4:
+            sat = dt + timedelta(days=1)
+            if super(SiteHolidays, self)._day_rule_matches(rule, sat):
+                return True
+        elif dt.weekday() == 0:
+            sun = dt - timedelta(days=1)
+            if super(SiteHolidays, self)._day_rule_matches(rule, sun):
+                return True
+        return super(SiteHolidays, self)._day_rule_matches(rule, dt)
+
+def define_business_time(start_hour=6,
+                         end_hour=18,
+                         time_zone='US/Eastern',
+                         holidays=SiteHolidays()
+                         ) -> businesstime.BusinessTime:
+    """Create a businesstime.BusinessTime object as defined by the passed arguments.
+
+    Args:
+        start_hour: The business time start hour represented as in integer.
+        end_hour: The business time end hour represented as an integer.
+        time_zone: The time zone that should be converted to before business
+          hours are applied.
+        holidays: A businesstime.holidays.Holidays based object representing
+          the relevant holidays to exclude from business time.
+    """
+    business_hours = (time(start_hour), time(end_hour))
+    business_hours = businesstime.BusinessTime(business_hours=business_hours,
+                                               holidays=holidays)
+    # HACK: Assign the time_zone as a dynamic property
+    business_hours.time_zone = time_zone
+    return business_hours
 
 def get_alerts_between_dates(start_date: datetime,
                              end_date: datetime,
@@ -67,7 +129,38 @@ def get_alerts_between_dates(start_date: datetime,
 
     return alerts
 
-def get_business_hour_cycle_time(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> pd.Series(timedelta):
+def _datetime_to_time_zone(dt=None, time_zone='US/Eastern'):
+    """Convert a datetime.datetime object to the equivalent business hour time zone.
+
+    Args:
+        dt: A datatime.datetime object to convert. If dt is None, convert the current
+          UTC time to the business hour time zone.
+        bh_tz: A pytz timezone that the business hours are in.
+
+    Returns:
+        The df datetime.datetime in the business hour time zone.
+    """
+    if dt is not None:
+        assert isinstance(dt, datetime)
+    else:
+        dt = datetime.utcnow()
+
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+
+    bh_tz = pytz.timezone(time_zone)
+    # convert to the business hour time zone
+    dt = dt.astimezone(bh_tz)
+    # XXX TODO: Revisit and see if this is still neccessary:
+    # because the businesshour library's math in -> def _build_spanning_datetimes(self, d1, d2) throws
+    # an error if datetime.datetime objects are time zone aware, we make the datetime naive again, 
+    # however, the replace method trys to be smart and convert the time back to UTC.. so we explicitly
+    # make `replace` keep the hour set to the business time zone hour.
+    return dt.replace(hour=dt.hour, tzinfo=None)
+
+def get_business_hour_cycle_time(alerts: pd.DataFrame,
+                                 business_hours: businesstime.BusinessTime
+                                ) -> pd.Series(timedelta):
     """Convert alert times to a business hours timedelta pd.Series.
 
     From a DataFrame of alerts with insert_date and disposition_time, generate
@@ -79,23 +172,26 @@ def get_business_hour_cycle_time(alerts: pd.DataFrame, start_hour=6, end_hour=18
           and a disposition_time column.
         start_hour: The business time start hour represented as in integer.
         end_hour: The business time end hour represented as an integer.
+        time_zone: The time zone that should be converted to before business
+          hours are applied.
 
     Returns: pd.Series(timedelta) of alert cycle times in business hours
     """
 
-    business_hours = (time(start_hour), time(end_hour))
-    _bt = businesstime.BusinessTime(business_hours=business_hours)
-
     bh_cycle_time = []
     for alert in alerts.itertuples():
-        open_hours = _bt.open_hours.seconds / 3600
-        btd = _bt.businesstimedelta(alert.insert_date, alert.disposition_time)
+        open_hours = business_hours.open_hours.seconds / 3600
+        bh_insert_date = _datetime_to_time_zone(alert.insert_date, time_zone=business_hours.time_zone)
+        bh_disposition_time = _datetime_to_time_zone(alert.disposition_time, time_zone=business_hours.time_zone)
+        btd = business_hours.businesstimedelta(bh_insert_date, bh_disposition_time)
         btd_hours = btd.seconds / 3600
         bh_cycle_time.append(timedelta(hours=(btd.days * open_hours + btd_hours)))
 
     return pd.Series(data=bh_cycle_time)
 
-def alert_statistics_by_disposition(alerts: pd.DataFrame, business_hours=False) -> pd.DataFrame:
+def alert_statistics_by_disposition(alerts: pd.DataFrame,
+                                    business_hours: Optional[businesstime.BusinessTime] = None
+                                    ) -> pd.DataFrame:
     """Calculate statistics for a dataframe of alerts orgainzed by disposition.
 
     Given a dataframe of ACE alerts, calcuate common statistics for the subsets of 
@@ -119,7 +215,7 @@ def alert_statistics_by_disposition(alerts: pd.DataFrame, business_hours=False) 
     dispo_data = {}
     for dispo in dispositions:
         if business_hours: # could just pass df or a copy of df - here a copy with just data needed
-            alert_cycle_times = get_business_hour_cycle_time(alerts.loc[[dispo],['disposition_time', 'insert_date']])
+            alert_cycle_times = get_business_hour_cycle_time(alerts.loc[[dispo],['disposition_time', 'insert_date']], business_hours)
         else:
             alert_cycle_times = alerts.loc[dispo, 'disposition_time'] - alerts.loc[dispo, 'insert_date']
 
@@ -161,7 +257,8 @@ def alert_statistics_by_disposition(alerts: pd.DataFrame, business_hours=False) 
 # XXX later create a statistics by day by dispo
 def statistics_by_month_by_dispo(alerts: pd.DataFrame,
                                  stats=VALID_ALERT_STATS,
-                                 business_hours=False) -> Mapping[str, pd.DataFrame]:
+                                 business_hours: Optional[businesstime.BusinessTime] = None
+                                ) -> Mapping[str, pd.DataFrame]:
     """Calculate statistics for ACE alerts organized by month and disposition.
 
     Given a pandas.DataFrame of ACE alerts, first organize the alerts by month.
@@ -192,12 +289,12 @@ def statistics_by_month_by_dispo(alerts: pd.DataFrame,
     dispositions.extend(sorted([d for d in list(alerts['disposition'].unique()) if d not in ACE_KILLCHAIN_DISPOSITIONS]))
  
     stat_data_map = {'cycle_time_sum': {},
-                 'cycle_time_mean': {},
-                 'cycle_time_min': {},
-                 'cycle_time_max': {},
-                 'cycle_time_std': {},
-                 'alert_count': {}
-                }
+                     'cycle_time_mean': {},
+                     'cycle_time_min': {},
+                     'cycle_time_max': {},
+                     'cycle_time_std': {},
+                     'alert_count': {}
+                    }
 
     for dispo in dispositions:   
         for stat in stats:
@@ -346,10 +443,10 @@ def organize_alerts_by_time_category(alerts: pd.DataFrame, start_hour=6, end_hou
 def generate_hours_of_operation_summary_table(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> pd.DataFrame:
     """Cycle-time averages and alert quantities by operating hours and month.
 
-    Summarize the overall cycle-time averages and alert quantities observed
-    over the alerts passed, when organized by month and placed in the 
-    respective operating hour category. Categories are:
-      business hours, weekends, week nights
+    Summarize the overall cycle-time averages, the standard deviation in cycle times,
+    and the alert quantities observed over the alerts passed when organized by month 
+    and placed in the respective operating hour category. Categories are:
+      business hours, weekends, weeknights
 
     Args:
         alerts: A pd.DataFrame of alerts
@@ -435,8 +532,9 @@ def generate_hours_of_operation_summary_table(alerts: pd.DataFrame, start_hour=6
 def generate_overall_summary_table(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> pd.DataFrame:
     """Generate an overall statistical summary for alerts by month.
 
-    Summarize the business hour cycle-time averages, the overall cycle-time averages,
-     and the alert quantities observed over the alerts passed when organized by month.
+    Organize alerts by month and then summarize the business hour and real hour
+    cycle-time averages, the standard deviation in the business hour and real 
+    hour cycle-times, and the alert quantities observed over the alerts passed.
 
     Args:
         alerts: A pd.DataFrame of alerts

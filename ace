@@ -1321,7 +1321,8 @@ from metrics.alerts import ( get_alerts_between_dates,
                              FRIENDLY_STAT_NAME_MAP,
                              statistics_by_month_by_dispo,
                              generate_hours_of_operation_summary_table,
-                             generate_overall_summary_table
+                             generate_overall_summary_table,
+                             define_business_time
                             )
 from metrics.alerts.users import get_all_users, generate_user_alert_stats
 from metrics.alerts.alert_types import ( unique_alert_types_between_dates,
@@ -1359,6 +1360,10 @@ def metrics(args):
                 args.companies.remove(company)
         if not args.companies:
             sys.exit(0)
+
+    if args.business_hours:
+        # NOTE: usind defaults for business time but this should be configurable
+        args.business_hours = define_business_time()
 
     if args.metric_target == 'events':
         with get_db_connection() as db:

@@ -78,7 +78,8 @@ from metrics.alerts import ( get_alerts_between_dates,
                              FRIENDLY_STAT_NAME_MAP,
                              statistics_by_month_by_dispo,
                              generate_hours_of_operation_summary_table,
-                             generate_overall_summary_table
+                             generate_overall_summary_table,
+                             define_business_time
                             )
 from metrics.alerts.users import get_all_users, generate_user_alert_stats
 from metrics.alerts.alert_types import ( all_alert_types,
@@ -2066,7 +2067,8 @@ def metrics():
 
         # apply business hours before performing time calculations
         if 'business_hours' in request.form:
-            business_hours = True
+            # NOTE: using built in defaults but this should be configurable
+            business_hours = define_business_time()
 
         try:
             daterange_start, daterange_end = daterange.split(' - ')
