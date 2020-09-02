@@ -22,10 +22,10 @@ class WorkQueueManagerInterface(ACESystemInterface):
         raise NotImplementedError()
 
 class WorkQueue():
-    def put(self, analysis_request: AnalysisRequest, *args, **kwargs):
+    def put(self, analysis_request: AnalysisRequest):
         raise NotImplementedError()
 
-    def get(self, *args, **kwargs) -> Union[AnalysisRequest, None]:
+    def get(self, timeout: int) -> Union[AnalysisRequest, None]:
         raise NotImplementedError()
 
 def get_work_queue(*args, **kwargs):

@@ -12,7 +12,7 @@ from saq.system.tracking import (
         AnalysisTrackingInterface)
 from saq.system.caching import CachingInterface
 from saq.system.storage import StorageInterface
-from saq.system.locking import LockingInterface
+from saq.system.locking import LockingInterface, LockTrackingInterface
 
 class ACESystem:
     work_queue = None
@@ -22,6 +22,7 @@ class ACESystem:
     caching = None
     storage = None
     locking = None
+    lock_tracking = None
 
 # the global system object that contains references to all the interfaces
 ace = ACESystem()
@@ -46,5 +47,7 @@ def register(obj: ACESystemInterface):
         system.storage = obj
     elif isinstance(obj, LockingInterface):
         system.locking = obj
+    elif isinstance(obj, LockingTrackingInterface):
+        system.lock_tracking = obj
     else:
         raise ValueError(f"invalid or unknown ACESystemInterface type {type(obj)})
