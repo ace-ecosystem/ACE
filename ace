@@ -1346,6 +1346,7 @@ metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
 build_metric_parser(metrics_parser)
 
 def metrics(args):
+    """Interface with the metric library."""
     import pandas as pd
     from saq.database import get_db_connection
 
@@ -1383,13 +1384,14 @@ def metrics(args):
             if args.count_emails:
                 add_email_alert_counts_per_event(events, db)
 
-        if args.incidents:
+        if args.incidents or args.incidents_only:
             incidents = get_incidents_from_events(events)
             if args.fileout_format:
                 tables.append(incidents)
             else:
                 stdout_like(incidents, format=args.stdout_format)
-        else:
+
+        if not args.incidents_only:
             events.drop(columns=['id'], inplace=True)
             if args.fileout_format:
                 tables.append(events)

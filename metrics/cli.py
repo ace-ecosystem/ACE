@@ -135,7 +135,9 @@ def build_metric_event_parser(event_parser: argparse.ArgumentParser) -> None:
     """ 
 
     event_parser.add_argument('-i', '--incidents', action='store_true',
-                              help='Return only events that are incidents')
+                              help='Create incident table from event table')
+    event_parser.add_argument('-io', '--incidents-only', action='store_true',
+                              help='Only return incidents table (skip event table)')
     event_parser.add_argument('-ce', '--count-emails', action='store_true',
                               help='Count emails, in each event, per company.')
 
