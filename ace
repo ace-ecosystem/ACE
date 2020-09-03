@@ -1338,8 +1338,8 @@ from metrics.events import ( get_events_between_dates,
                             )
 
 from metrics.helpers import ( get_companies,
-                              #dataframes_to_archive_bytes_of_json_files,
-                              #dataframes_to_xlsx_bytes
+                              dataframes_to_archive_bytes_of_json_files,
+                              dataframes_to_xlsx_bytes
                             )
 
 metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
@@ -1348,6 +1348,9 @@ build_metric_parser(metrics_parser)
 def metrics(args):
     import pandas as pd
     from saq.database import get_db_connection
+
+    # store tables for printing or writing
+    tables = []
 
     if args.companies:
         valid_companies = []
@@ -1362,8 +1365,15 @@ def metrics(args):
             sys.exit(0)
 
     if args.business_hours:
-        # NOTE: usind defaults for business time but this should be configurable
-        args.business_hours = define_business_time()
+        bh_settings = args.business_hours.split(',')
+        if not bh_settings:
+            logging.error(f"invalid business hour format: {args.business_hours}")
+            sys.exit(1)
+        start_hour = int(bh_settings[0])
+        end_hour = int(bh_settings[1])
+        time_zone = bh_settings[2]
+        # NOTE: holidays remain default
+        args.business_hours = define_business_time(start_hour, end_hour, time_zone)
 
     if args.metric_target == 'events':
         with get_db_connection() as db:
@@ -1375,10 +1385,16 @@ def metrics(args):
 
         if args.incidents:
             incidents = get_incidents_from_events(events)
-            stdout_like(incidents, format=args.stdout_format)
+            if args.fileout_format:
+                tables.append(incidents)
+            else:
+                stdout_like(incidents, format=args.stdout_format)
         else:
             events.drop(columns=['id'], inplace=True)
-            stdout_like(events, format=args.stdout_format)
+            if args.fileout_format:
+                tables.append(events)
+            else:
+                stdout_like(events, format=args.stdout_format)
 
     if args.metric_target == 'alerts':
         users = {}
@@ -1390,8 +1406,11 @@ def metrics(args):
             if args.list_users:
                 users = pd.DataFrame.from_dict(users, orient='index')
                 users.name = "Analysts"
-                stdout_like(users, format=args.stdout_format)
-                sys.exit(0)
+                if args.fileout_format:
+                    tables.append(users)
+                else:
+                    stdout_like(users, format=args.stdout_format)
+                    sys.exit(0)
 
             if args.users:
                 for username in args.users:
@@ -1405,8 +1424,11 @@ def metrics(args):
                     start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
                     end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
                     at_counts = count_quantites_by_alert_type(start_date, end_date, db)
-                stdout_like(at_counts, format=args.stdout_format)
-                sys.exit(0)
+                if args.fileout_format:
+                    tables.append(at_counts)
+                else:
+                    stdout_like(at_counts, format=args.stdout_format)
+                    sys.exit(0)
 
             with get_db_connection() as db:
                 start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
@@ -1430,14 +1452,21 @@ def metrics(args):
             for alert_type in alert_types:
                 if args.all_stats:
                     for stat in VALID_ALERT_STATS:
-                        stdout_like(alert_type_stat_map[alert_type][stat], format=args.stdout_format)
+                        if args.fileout_format:
+                            tables.append(alert_type_stat_map[alert_type][stat])
+                        else:
+                            stdout_like(alert_type_stat_map[alert_type][stat], format=args.stdout_format)
                 else:
                     # check the general statistics
                     arg_stats = [sarg[len('alert_type_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('alert_type_stat_') and value is True]
                     for stat in arg_stats:
-                        stdout_like(alert_type_stat_map[alert_type][stat], format=args.stdout_format)
+                        if args.fileout_format:
+                            tables.append(alert_type_stat_map[alert_type][stat])
+                        else:
+                            stdout_like(alert_type_stat_map[alert_type][stat], format=args.stdout_format)
 
-            sys.exit(0)
+            if not args.fileout_format:
+                sys.exit(0)
 
         with get_db_connection() as db:
             start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
@@ -1451,36 +1480,79 @@ def metrics(args):
             for user_id in user_ids:
                 if args.all_stats:
                     for stat in VALID_ALERT_STATS:
-                        stdout_like(all_user_stat_map[user_id][stat], format=args.stdout_format)
+                        if args.fileout_format:
+                            tables.append(all_user_stat_map[user_id][stat])
+                        else:
+                            stdout_like(all_user_stat_map[user_id][stat], format=args.stdout_format)
                 else:
                     # check the general statistics
                     arg_stats = [sarg[len('user_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('user_stat_') and value is True]
                     for stat in arg_stats:
-                        stdout_like(all_user_stat_map[user_id][stat], format=args.stdout_format)
+                        if args.fileout_format:
+                            tables.append(all_user_stat_map[user_id][stat])
+                        else:
+                            stdout_like(all_user_stat_map[user_id][stat], format=args.stdout_format)
 
-            sys.exit(0)
-
+            if not args.fileout_format:
+                sys.exit(0)
 
         # generate statistic tables
         alert_stat_map = statistics_by_month_by_dispo(alerts, business_hours=args.business_hours)
         if args.all_stats:
             for stat in VALID_ALERT_STATS:
                 alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
-                stdout_like(alert_stat_map[stat], format=args.stdout_format)
+                if args.fileout_format:
+                    tables.append(alert_stat_map[stat])
+                else:
+                    stdout_like(alert_stat_map[stat], format=args.stdout_format)
         else:
             # check the general statistics
             arg_stats = [sarg[len('alert_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('alert_stat_') and value is True]
             for stat in arg_stats:
                 alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
-                stdout_like(alert_stat_map[stat], format=args.stdout_format)
+                if args.fileout_format:
+                    tables.append(alert_stat_map[stat])
+                else:
+                    stdout_like(alert_stat_map[stat], format=args.stdout_format)
 
         if args.hours_of_operation:
-            hop_df = generate_hours_of_operation_summary_table(alerts.copy())
-            stdout_like(hop_df, format=args.stdout_format)
+            hop_df = generate_hours_of_operation_summary_table(alerts.copy(), args.business_hours)
+            if args.fileout_format:
+                tables.append(hop_df)
+            else:
+                stdout_like(hop_df, format=args.stdout_format)
+
 
         if args.average_alert_cycletime_summary:
-            sla_df = generate_overall_summary_table(alerts.copy())
-            stdout_like(sla_df, format=args.stdout_format)
+            sla_df = generate_overall_summary_table(alerts.copy(), args.business_hours)
+            if args.fileout_format:
+                tables.append(sla_df)
+            else:
+                stdout_like(sla_df, format=args.stdout_format)
+
+    if args.fileout_format and tables:
+        time_stamp = str(datetime.datetime.now().timestamp())
+        time_stamp = time_stamp[:time_stamp.rfind('.')]
+        filename = f"ACE_metrics_{time_stamp}"
+
+        if args.fileout_format == 'xls':
+            if args.filename:
+                filename = args.filename
+            else:
+                filename += ".xlsx"
+            with open(filename, 'wb') as fp:
+                fp.write(dataframes_to_xlsx_bytes(tables))
+            if os.path.exists(filename):
+                print(f" + wrote {filename}")
+        if args.fileout_format == 'json':
+            if args.filename:
+                filename = args.filename
+            else:
+                filename += ".tar.gz"
+            with open(filename, 'wb') as fp:
+                fp.write(dataframes_to_archive_bytes_of_json_files(tables))
+            if os.path.exists(filename):
+                print(f" + wrote {filename}")
 
 metrics_parser.set_defaults(func=metrics)
 

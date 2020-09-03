@@ -138,11 +138,11 @@ def dataframes_to_xlsx_bytes(tables: List[pd.DataFrame]) -> bytes:
     # sanitize and make tab name map
     for table in tables:
         if table.name:
-            table_name = sanitize_table_name(table.name)
+            table_name = table.name
         else:
             logging.warning("metric table has no name.")
             table_name = sanitize_table_name()
-        clean_table_name = table_name
+        clean_table_name = sanitize_table_name(table.name)
 
         # do additional table name cleanup for excel
         # try to clean up alert_type names

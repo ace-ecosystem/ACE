@@ -20,7 +20,7 @@ from .alerts import ( VALID_ALERT_STATS,
 
 STDOUT_FORMATS = ['json', 'csv', 'ascii_table', 'print']
 
-FILEOUT_FORMATS = ['json', 'csv', 'xls', 'sqlite']
+FILEOUT_FORMATS = ['json', 'xlsx']#, 'csv', 'sqlite']
 
 def stdout_like(df: pd.DataFrame, format='print'):
     if format not in STDOUT_FORMATS:
@@ -154,12 +154,13 @@ def build_metric_parser(parser: argparse.ArgumentParser) -> None:
 
     parser.add_argument('-so', '--stdout-format', default='print', action='store', choices=STDOUT_FORMATS,
                         help="desired standard output format. ~~~ NOTE: 'print' (the default) will also summarize large tables. Use 'ascii_table' to avoide that.")
-    parser.add_argument('-fo', '--fileout-format', default='xls', action='store', choices=FILEOUT_FORMATS,
+    parser.add_argument('-fo', '--fileout-format', default=None, action='store', choices=FILEOUT_FORMATS,
                         help="desired file output format. Default is xls.")
     parser.add_argument('-f', '--filename', action='store', default=None, help="The name of a file to write results to.")
     parser.add_argument('-c', '--company', action='append', dest='companies', default=[],
                         help="A list of company names to gather metrics for. Default is all defined companies.")
-    parser.add_argument('-bh', '--business-hours', action='store_true', default=False, help="Use business hours for all time based stats.")
+    parser.add_argument('-bh', '--business-hours', action='store', default=False,
+                        help="Use business hours for all time based stats. Set like start_hour,end_hour,time_zone. Example: 6,18,US/Eastern")
     parser.add_argument('-s', '--start_datetime', action='store', default=default_start_datetime,
                         help="The start datetime data is in scope. Format: YYYY-MM-DD HH:MM:SS. Default: 7 days ago.")
     parser.add_argument('-e', '--end_datetime', action='store', default=default_end_datetime,

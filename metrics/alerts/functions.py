@@ -77,8 +77,10 @@ def define_business_time(start_hour=6,
     business_hours = (time(start_hour), time(end_hour))
     business_hours = businesstime.BusinessTime(business_hours=business_hours,
                                                holidays=holidays)
-    # HACK: Assign the time_zone as a dynamic property
+    # HACK: Assign dynamic properties
     business_hours.time_zone = time_zone
+    business_hours._start_hour = start_hour
+    business_hours._end_hour = end_hour
     return business_hours
 
 def get_alerts_between_dates(start_date: datetime,
@@ -159,7 +161,7 @@ def _datetime_to_time_zone(dt=None, time_zone='US/Eastern'):
     return dt.replace(hour=dt.hour, tzinfo=None)
 
 def get_business_hour_cycle_time(alerts: pd.DataFrame,
-                                 business_hours: businesstime.BusinessTime
+                                 business_hours: Optional[businesstime.BusinessTime] = None
                                 ) -> pd.Series(timedelta):
     """Convert alert times to a business hours timedelta pd.Series.
 
@@ -178,11 +180,17 @@ def get_business_hour_cycle_time(alerts: pd.DataFrame,
     Returns: pd.Series(timedelta) of alert cycle times in business hours
     """
 
+    if business_hours is None:
+        # use defaults
+        business_hours = define_business_time()
+
     bh_cycle_time = []
+    logging.debug(f"calculating business hours for {len(alerts)} alerts...")
     for alert in alerts.itertuples():
         open_hours = business_hours.open_hours.seconds / 3600
         bh_insert_date = _datetime_to_time_zone(alert.insert_date, time_zone=business_hours.time_zone)
         bh_disposition_time = _datetime_to_time_zone(alert.disposition_time, time_zone=business_hours.time_zone)
+        #print(type(bh_insert_date))
         btd = business_hours.businesstimedelta(bh_insert_date, bh_disposition_time)
         btd_hours = btd.seconds / 3600
         bh_cycle_time.append(timedelta(hours=(btd.days * open_hours + btd_hours)))
@@ -214,6 +222,7 @@ def alert_statistics_by_disposition(alerts: pd.DataFrame,
 
     dispo_data = {}
     for dispo in dispositions:
+        logging.debug(f"calculating alert statistic dispositions stats for {dispo} @ length {len(alerts)}")
         if business_hours: # could just pass df or a copy of df - here a copy with just data needed
             alert_cycle_times = get_business_hour_cycle_time(alerts.loc[[dispo],['disposition_time', 'insert_date']], business_hours)
         else:
@@ -296,6 +305,7 @@ def statistics_by_month_by_dispo(alerts: pd.DataFrame,
                      'alert_count': {}
                     }
 
+    logging.debug(f"Calculate statistics for {len(alerts)} alerts ")
     for dispo in dispositions:   
         for stat in stats:
             # define the space
@@ -333,7 +343,9 @@ def statistics_by_month_by_dispo(alerts: pd.DataFrame,
         
     return stat_data_map
 
-def organize_alerts_by_time_category(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def organize_alerts_by_time_category(alerts: pd.DataFrame,
+                                     business_hours: Optional[businesstime.BusinessTime] = None
+                                    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Organize alerts by 'week nights', 'weekends', and 'business hours'.
 
     Evaluate what time category each alert in alerts falls into. An alert
@@ -357,14 +369,20 @@ def organize_alerts_by_time_category(alerts: pd.DataFrame, start_hour=6, end_hou
     # unsetting to better intertuple
     alerts.reset_index(0, inplace=True)
 
-    # for recording the indexes
     weekend_indexes = []
     bday_indexes = []
     night_indexes = []
     
-    # for tracking indexes
-    i=0
+    if business_hours is None:
+        logging.info(f"using default business time for business time dependent calculation.")
+        # use defaults
+        business_hours = define_business_time()
 
+    start_hour = business_hours._start_hour
+    end_hour = business_hours._end_hour
+
+    # track alert indexes
+    i=0
     for row in alerts.itertuples():
         if row.insert_date.weekday() == 0: 
             # Monday
@@ -440,7 +458,9 @@ def organize_alerts_by_time_category(alerts: pd.DataFrame, start_hour=6, end_hou
 
     return weekend_df, nights_df, bday_df
 
-def generate_hours_of_operation_summary_table(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> pd.DataFrame:
+def generate_hours_of_operation_summary_table(alerts: pd.DataFrame,
+                                              business_hours: Optional[businesstime.BusinessTime] = None
+                                             ) -> pd.DataFrame:
     """Cycle-time averages and alert quantities by operating hours and month.
 
     Summarize the overall cycle-time averages, the standard deviation in cycle times,
@@ -462,10 +482,18 @@ def generate_hours_of_operation_summary_table(alerts: pd.DataFrame, start_hour=6
 
     months = alerts.index.get_level_values('month').unique()
 
-    weekend, nights, bday = organize_alerts_by_time_category(alerts, start_hour=start_hour, end_hour=end_hour)
+    weekend, nights, bday = organize_alerts_by_time_category(alerts, business_hours)
     weekend.set_index('month', inplace=True)
     nights.set_index('month', inplace=True)
     bday.set_index('month', inplace=True)
+
+    if business_hours is None:
+        logging.info(f"using default business time for business time dependent calculation.")
+        # use defaults
+        business_hours = define_business_time()
+
+    start_hour = business_hours._start_hour
+    end_hour = business_hours._end_hour
 
     business_day_cycle_time_averages = []
     weekend_cycle_time_averages = []
@@ -529,7 +557,9 @@ def generate_hours_of_operation_summary_table(alerts: pd.DataFrame, start_hour=6
     hop_df.name = "Hours of Operation"
     return hop_df
 
-def generate_overall_summary_table(alerts: pd.DataFrame, start_hour=6, end_hour=18) -> pd.DataFrame:
+def generate_overall_summary_table(alerts: pd.DataFrame,
+                                   business_hours: Optional[businesstime.BusinessTime] = None
+                                  ) -> pd.DataFrame:
     """Generate an overall statistical summary for alerts by month.
 
     Organize alerts by month and then summarize the business hour and real hour
@@ -554,8 +584,7 @@ def generate_overall_summary_table(alerts: pd.DataFrame, start_hour=6, end_hour=
     real_std = []
     for month in months:
         bh_alert_ct = get_business_hour_cycle_time(alerts.loc[[month],['disposition_time', 'insert_date']],
-                                                   start_hour=start_hour,
-                                                   end_hour=end_hour)
+                                                   business_hours)
         alert_ct = alerts.loc[month, 'disposition_time'] - alerts.loc[month, 'insert_date']
         quantities.append(len(alerts.loc[month]))
 
