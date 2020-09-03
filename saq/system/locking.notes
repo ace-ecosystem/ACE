@@ -1,0 +1,87 @@
+# 
+# deadlock detection
+# (0) P1: LOCK(A)
+# (1) P2: LOCK(B)
+# (2) P2: LOCK(A) <-- BLOCKING ON P1 HOLDING A
+# (3) P1: LOCK(B) <-- DEADLOCK: P1 waiting on B which is locked by P2 which is waiting on A which is locked by P1
+#
+
+# (0) P1: A.ownership = [P1] <-- P1 owns A
+# (1) P2: B.ownership = [P2] <-- P2 owns B
+# (2) P2: A.ownership = [P1,P2] <-- P2 asking for A, A is owned by P1 so P2 is waiting on P1 to release A
+# (3) P1: B.ownership = [P2,P1] <-- P1 asking for B, B is owned by P2 and P2 is waiting on a lock from P1
+
+# 
+# deadlock detection
+# (0) P1: LOCK(A)
+# (1) P2: LOCK(B)
+# (2) P2: LOCK(A) <-- frozen just before setting wait target (intends to LOCK(A))
+# (3) P1: LOCK(B) <-- BLOCKING ON P2 HOLDING B
+# now (2) finishes
+# (4) P2: LOCK(A) <-- DEADLOCK: P2 waiting on A which is locked by P1 which is waiting on B which is locked by P2
+
+# so every Lock has an OWNER and a list of WAITERS
+# if the owner of the lock is waiting for you then you can't ask for the lock
+def lock(target, owner_id):
+    if owner_id == target.owner.waiting_on:
+        raise DeadlockException()
+
+# 0) P1: LOCK(A)
+# 1) P2: LOCK(B)
+# 2) P3: LOCK(C)
+# 3) P3: LOCK(A) <-- BLOCKING
+# 4) P1: LOCK(B) <-- BLOCKING
+# 5) P2: LOCK(C) <-- DEADLOCK
+
+# 0) P1: A = [P1] <-- P1 owns A
+# 1) P2: B = [P2] <-- P2 owns B
+# 2) P3: C = [P3] <-- P3 owns C
+# 3) P3: A = [P1,P3] <-- P1 owns A, P3 --> P1
+# 4) P1: B = [P2,P1] <-- P2 owns B, P1 --> P2
+# 5) P2: C = [P3] <-- basicall work your way down the chain and if you find yourself then DEADLOCK
+
+def is_deadlock(requestor, next_lock):
+    requestor = "P2"
+    next_lock = "C"
+
+    # C is locked by P3
+    lock_owner = next_lock.owner
+    lock_owner = "P3"
+    requestor != lock_owner
+
+    # what is P3 waiting on?
+    next_lock = get_owner_wait_target("P3")
+    next_lock = "A"
+
+    # A is locked by P1
+    lock_owner = next_lock.locker
+    lock_owner = "P1"
+    requestor != lock_owner
+
+    # what is P1 waiting on?
+    next_lock = get_owner_wait_target("P1")
+    next_lock = B
+
+    # B is locked by P2
+    lock_owner = next_lock.owner
+    lock_owner = "P2"
+    requestor == P2
+
+    # oh noes!
+
+
+# ok then we need this
+
+# what is actually being tracked then
+#
+# lock ( id, start_time, expire_time )
+# lock_wait ( owner_id, lock_id )
+# lock_ownership ( lock_id, owner_id )
+# that's it
+
+NOTES = """
+requirements of the LockingInterface
+1) acquire with optional block based on timeout
+2) ability to have multiple requests block
+3) ability to have a lock expire
+"""

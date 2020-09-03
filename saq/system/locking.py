@@ -1,200 +1,166 @@
 # vim: ts=4:sw=4:et:cc=120
 
+from contextlib import contextmanager
+
 from saq.system import ACESystemInterface, get_system
 
+#
+# ACE Distributed Locking System
+#
+# This supports any number of locks that can be locked by any number of concurrent processes.
+# Two processes can request the same lock at the same time, one will get it and proceed while the other blocks.
+# If a request to acquire a lock would cause a dead lock condition then an exception in thrown instead.
+# The call to acquire a lock can include an optional timeout which controls how long to wait for the lock.
+# The call can also include an optional lock_timeout which controls how long the lock should be held until
+# it expires automatically. Locks that expire are automatically released.
+#
+# A lock is identified by any unique string. A lock is created the first time it is requested. Locks that are
+# no longer referenced are removed.
+#
+# When a lock is acquired it is assigned an "owner" which is any unique string. This is used to keep track of
+# what owns what lock and what is waiting on what lock for the purpose of deadlock prevention.
+#
+
 class DeadlockException(Exception):
+    """Raised when an attempt to lock something would enter into a deadlock condition."""
     def __init__(self, lock_chain):
         self.lock_chain = lock_chain
         self.message = f'deadlock detected {"->".join(self.lock_chain)}'
         super().__init__(self.message)
 
+class InvalidLockOwnership(Exception):
+    """Raised when a call is made to release a lock the caller does not own."""
+    pass
 
+class LockAcquireFailed(Exception):
+    """Raised when a call to acquire a lock fails from a with statement."""
+    pass
 
 class Lockable():
+    """Represents something that can be locked with the lock() function.
 
-    lock_uuid = None
+    lock_id is a unique ID that represents this object.
+    lock_owner_id is a unique ID that represents what is requesting the lock."""
 
-    def get_lock_key(self):
-        raise NotImplementedError()
+    lock_id = None
+    lock_owner_id = None
 
-    @contentmanager
-    def lock(self, *args, **kwargs):
+    @contextmanager
+    def lock(self, timeout=None, lock_timeout=None):
         try:
-            self.lock_uuid = get_system().locks.lock(self.get_lock_key(), *args, **kwargs)
-            yield self.lock_uuid
-        except:
-            # XXX ???
-            self.lock_uuid = None
-            yield self.lock_uuid
+            self.lock_owner_id = default_owner_id()
+            lock_result = acquire(self.lock_id, self.lock_owner_id, timeout=timeout, lock_timeout=lock_timeout)
+
+            if not lock_result:
+                raise LockAcquireFailed()
+            else:
+                yield lock_result
         finally:
-            get_system().locks.unlock(self.get_lock_key(), self.lock_uuid)
+            if lock_result:
+                release(self.lock_id, self.lock_owner_id)
 
-    def unlock(self):
-        return get_system().locks.unlock(self.get_lock_key(), self.lock_uuid)
-
-# 
-# deadlock detection
-# 0) P1: LOCK(A)
-# 1) P2: LOCK(B)
-# 2) P2: LOCK(A) <-- BLOCKING
-# 3) P1: LOCK(B) <-- DEADLOCK
-#
-
-# 0) P1: A.ownership = [P1] <-- P1 owns A
-# 1) P2: B.ownership = [P2] <-- P2 owns B
-# 2) P2: A.ownership = [P1,P2] <-- P2 asking for A, A is owned by P1 so P2 is waiting on P1 to release A
-# 3) P1: B.ownership = [P2,P1] <-- P1 asking for B, B is owned by P2 and P2 is waiting on a lock from P1
-
-# so every Lock has an OWNER and a list of WAITERS
-# if the owner of the lock is waiting for you then you can't ask for the lock
-def lock(target, owner_id):
-    if owner_id == target.owner.waiting_on:
-        raise DeadlockException()
-
-# 0) P1: LOCK(A)
-# 1) P2: LOCK(B)
-# 2) P3: LOCK(C)
-# 3) P3: LOCK(A) <-- BLOCKING
-# 4) P1: LOCK(B) <-- BLOCKING
-# 5) P2: LOCK(C) <-- DEADLOCK
-
-# 0) P1: A = [P1] <-- P1 owns A
-# 1) P2: B = [P2] <-- P2 owns B
-# 2) P3: C = [P3] <-- P3 owns C
-# 3) P3: A = [P1,P3] <-- P1 owns A, P3 --> P1
-# 4) P1: B = [P2,P1] <-- P2 owns B, P1 --> P2
-# 5) P2: C = [P3] <-- basicall work your way down the chain and if you find yourself then DEADLOCK
-
-def is_deadlock(requestor, next_lock):
-    requestor = "P2"
-    next_lock = "C"
-
-    # C is locked by P3
-    lock_owner = next_lock.owner
-    lock_owner = "P3"
-    requestor != lock_owner
-
-    # what is P3 waiting on?
-    next_lock = get_owner_wait_target("P3")
-    next_lock = "A"
-
-    # A is locked by P1
-    lock_owner = next_lock.locker
-    lock_owner = "P1"
-    requestor != lock_owner
-
-    # what is P1 waiting on?
-    next_lock = get_owner_wait_target("P1")
-    next_lock = B
-
-    # B is locked by P2
-    lock_owner = next_lock.owner
-    lock_owner = "P2"
-    requestor == P2
-
-    # oh noes!
-
-
-# ok then we need this
-
-class Lock():
-    # what is the id of the lock (what is actually be locked)
-    lock_id: str
-    # who currently owns this lock?
-    owner: LockOwner
-    # how long is this lock valid for?
-    timeout: int
-
-    def acquire(self, requestor: LockOwner, timeout:Optional[int]=None, lock_timeout:Optional[int]=None):
-        get_system().locking.acquire(requestor, self, timeout, lock_timeout)
-        track_lock(self)
-
-    def release(self, requestor: LockOwner):
-        get_system().locking.release(requestor, self)
-
-class LockOwner():
-    # unique ID of the owner
-    owner_id: str
-    # the list of locks held by this owner
-    held_locks: List[Lock]
-    # the lock this owner is currently waiting for
-    wait_target: Lock
-
-    @property
-    def wait_target(self) -> Union[Lock, None]:
-        return self._wait_target
-
-    @wait_target.setter
-    def wait_target(self, value: Lock):
-        self._wait_target = value
-        track_lock_owner(self)
-
-    def __eq__(self, other):
-        return self.owner_id == other.owner_id
-
-def check_deadlock(requestor: LockOwner, lock: Lock, chain=[]):
-    # if get owner wait target returns None then we're at the end of the chain and we're done
-    if not lock:
+def check_deadlock(requestor_id: str, lock_id: str, chain=[]):
+    # if get_owner_wait_target returns None then we're at the end of the chain and we're done checking
+    if not lock_id:
         return
 
-    if not lock.owner:
+    # if this lock we're looking at now isn't actually owned yet then we're done checking
+    lock_owner_id = get_lock_owner(lock_id)
+    if not lock_owner_id:
         return
 
     # if we found ourself in the ownership chain then we're deadlocked
     # NOTE that if we find ourselves right away (len(chain) == 0) it just means we've already locked this lock
-    if requestor == lock.owner and chain:
-        raise Deadlock(chain)
+    if requestor_id == lock_owner_id and chain:
+        raise DeadlockException(chain)
 
     chain = chain[:] 
-    chain.append(lock) # just for debug info
+    chain.append(lock_id) # just for debug info
 
-    check_deadlock(requestor, lock.owner.wait_target, chain)
+    check_deadlock(requestor_id, get_owner_wait_target(lock_owner_id), chain)
 
 class LockTrackingInterface(ACESystemInterface):
-    def get_lock(lock_id: str) -> Lock:
+    def get_lock_owner(self, lock_id: str) -> Union[str, None]:
         raise NotImplementedError()
 
-    def get_lock_owner(owner_id: str) -> LockOwner:
+    def get_owner_wait_target(self, owner_id: str) -> Union[str, None]:
         raise NotImplementedError()
 
-    def track_lock(lock: Lock):
+    def track_wait_target(self, owner_id: str, lock_id: str):
         raise NotImplementedError()
 
-    def track_lock_owner(owner: LockOwner):
+    def track_lock_acquire(self, owner_id: str, lock_id: str, lock_timeout: Optional[int]=None):
         raise NotImplementedError()
 
-def get_lock(*args, **kwargs):
-    return get_system().lock_tracking.get_lock(*args, **kwargs)
+    def track_lock_release(self, owner_id: str, lock_id: str):
+        raise NotImplementedError()
 
-def get_lock_owner(*args, **kwargs):
-    return get_system().lock_tracking.get_lock_owner(*args, **kwargs)
+def get_lock_owner(lock_id: str) -> Union[str, None]:
+    return get_system().lock_tracking.get_lock_owner(lock_id)
 
-def track_lock(*args, **kwargs):
-    return track_system().lock_tracking.track_lock(*args, **kwargs)
+def get_owner_wait_target(owner_id) -> Union[str, None]:
+    return get_system().lock_tracking.get_owner_wait_target(owner_id)
 
-def track_lock_owner(*args, **kwargs):
-    return track_system().lock_tracking.track_lock_owner(*args, **kwargs)
+def track_wait_target(owner_id: str, lock_id: str):
+    track_system().lock_tracking.track_wait_target(owner_id, lock_id)
+
+def clear_wait_target(owner_id: str):
+    track_wait_target(owner_id, None)
+
+def track_lock_acquire(owner_id: str, lock_id: str, lock_timeout: Optional[int]=None):
+    get_system().lock_tracking.track_lock_acquire(owner_id, lock_id, lock_timeout)
+
+def track_lock_release(owner_id: str, lock_id: str):
+    get_system().lock_tracking.track_lock_release(owner_id, lock_id)
+
+def default_owner_id():
+    import socket, os, threading
+    return f'{socket.gethostname()}-{os.getpid()}-{threading.get_ident()}'
 
 class LockingInterface(ACESystemInterface):
-    def acquire(self, requestor: LockOwner, lock:Lock, timeout:Optional[int]=None, lock_timeout:Optional[int]=None) -> Union[str, None]:
+    def acquire(self, lock_id: str, owner_id: str, timeout: Optional[int]=None, lock_timeout: Optional[int]=None) -> bool:
         raise NotImplementedError()
 
-    def release(self, owner:LockOwner, lock:Lock):
+    def release(self, lock_id: str, owner_id: str):
         raise NotImplementedError()
 
-def acquire(owner_id: str, lock_uuid: str):
-    # pull the owner and lock out of tracking
-    # if they don't exist then they are created
-    owner = get_lock_owner(owner_id)
-    lock = get_lock(lock_uuid)
+# timeout > 0 --> wait for timeout seconds
+# timeout = 0  --> try and return immediately regardless of success
+# timeout = None --> wait forever
 
-    # make sure this isn't goint to be a deadlock condition
-    check_deadlock(owner, lock)
+def acquire(lock_id: str, owner_id: Optional[str]=None, timeout:Optional[int]=None, lock_timeout:Optional[int]=None):
+    # if we don't pass in an owner_id then we use a default which is based on hostname, process id and thread id
+    if owner_id is None:
+        owner_id = default_owner_id()
+
+    # if we're waiting then track that this owner_id is now waiting for this lock_id
+    if timeout != 0:
+        track_wait_target(owner_id, lock_id)
+
+    # try to grab the lock with no timeout first (regardless of wait time)
+    if not get_system().locking.acquire(owner_id, lock_id, 0, lock_timeout):
+        if timeout == 0:
+            # if we're not looking to block then we can just bail here
+            return False
+
+        # if we are not able to immediately grab the lock then check for deadlock conditions
+        check_deadlock(owner_id, lock_id)
+
+        # if that's ok then we wait for as long as we're told to wait
+        if not get_system().locking.acquire(owner_id, lock_id, timeout, lock_timeout):
+            # still didn't get it after the wait period
+            clear_wait_target(owner_id)
+            return False
+
+    # and now the lock is held
+    track_lock_acquire(owner_id, lock_id, lock_timeout)
+
+    # and we are no longer waiting
+    clear_wait_target(owner_id)
+
+def release(lock_id: str, owner_id: str):
+    # actually release the lock first
+    get_system().locking.release(owner_id, lock_id)
     
-    owner.wait_target = target
-    get_system().locking.acquire(owner, lock)
-    owner.wait_target = None
-    owner.held_locks.append(target)
-
-def release(owner_id: str, lock_uuid: str):
-    get_system().locking.release(owner_id, lock_uuid)
+    # and then update tracking
+    track_lock_release(lock_id, owner_id)
