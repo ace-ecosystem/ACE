@@ -30,6 +30,7 @@ msoffice_decrypt
 olefile
 oletools
 openpyxl
+pandas==1.1.1
 pcodedmp
 pip
 plyara==2.0.3
