@@ -172,10 +172,9 @@ def get_business_hour_cycle_time(alerts: pd.DataFrame,
     Args:
         alert_time_df: A pandas DataFrame with an insert_date column
           and a disposition_time column.
-        start_hour: The business time start hour represented as in integer.
-        end_hour: The business time end hour represented as an integer.
-        time_zone: The time zone that should be converted to before business
-          hours are applied.
+        business_hours: None or the businesstime.BusinessTime representation
+          of the business hours to use  for calculating time base
+          statistics with business hours applied.  See `define_business_time()`.
 
     Returns: pd.Series(timedelta) of alert cycle times in business hours
     """
@@ -190,7 +189,6 @@ def get_business_hour_cycle_time(alerts: pd.DataFrame,
         open_hours = business_hours.open_hours.seconds / 3600
         bh_insert_date = _datetime_to_time_zone(alert.insert_date, time_zone=business_hours.time_zone)
         bh_disposition_time = _datetime_to_time_zone(alert.disposition_time, time_zone=business_hours.time_zone)
-        #print(type(bh_insert_date))
         btd = business_hours.businesstimedelta(bh_insert_date, bh_disposition_time)
         btd_hours = btd.seconds / 3600
         bh_cycle_time.append(timedelta(hours=(btd.days * open_hours + btd_hours)))
@@ -209,8 +207,9 @@ def alert_statistics_by_disposition(alerts: pd.DataFrame,
         alerts: A pandas.DataFrame of ACE alerts with the following columns:
           ['month', 'insert_date', 'disposition', 'disposition_time', 
            'disposition_user_id', 'event_time']
-        business_hours: A boolean that if True, will calulate time base 
-          statistics with business hours applied.
+        business_hours: None or the businesstime.BusinessTime representation
+          of the business hours to use  for calculating time base
+          statistics with business hours applied.  See `define_business_time()`.
 
     Returns:
         A pandas.DataFrame where the rows are the calculated statistics and
@@ -280,8 +279,9 @@ def statistics_by_month_by_dispo(alerts: pd.DataFrame,
             ['month', 'insert_date', 'disposition', 'disposition_time',
              'disposition_user_id', 'event_time']
         stats: The statistics you want returned.
-        business_hours: A boolean that if True, will calulate time base 
-          statistics with business hours applied.
+        business_hours: None or the businesstime.BusinessTime representation
+          of the business hours to use  for calculating time base
+          statistics with business hours applied.  See `define_business_time()`.
 
     Returns:
         A dictionary where the key is a statistic found in VALID_ALERT_STATS 
@@ -344,7 +344,7 @@ def statistics_by_month_by_dispo(alerts: pd.DataFrame,
     return stat_data_map
 
 def organize_alerts_by_time_category(alerts: pd.DataFrame,
-                                     business_hours: Optional[businesstime.BusinessTime] = None
+                                     business_hours: businesstime.BusinessTime
                                     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Organize alerts by 'week nights', 'weekends', and 'business hours'.
 
@@ -358,8 +358,8 @@ def organize_alerts_by_time_category(alerts: pd.DataFrame,
 
     Args:
         alerts: A pd.DataFrame of alerts
-        start_hour: The business time start hour represented as in integer.
-        end_hour: The business time end hour represented as an integer.
+        business_hours: The businesstime.BusinessTime representation of the
+          business hours to use. See `define_business_time()`
 
     Retruns:
         Tuple of pd.DataFrame objects in this order:
@@ -372,11 +372,6 @@ def organize_alerts_by_time_category(alerts: pd.DataFrame,
     weekend_indexes = []
     bday_indexes = []
     night_indexes = []
-    
-    if business_hours is None:
-        logging.info(f"using default business time for business time dependent calculation.")
-        # use defaults
-        business_hours = define_business_time()
 
     start_hour = business_hours._start_hour
     end_hour = business_hours._end_hour
@@ -459,7 +454,7 @@ def organize_alerts_by_time_category(alerts: pd.DataFrame,
     return weekend_df, nights_df, bday_df
 
 def generate_hours_of_operation_summary_table(alerts: pd.DataFrame,
-                                              business_hours: Optional[businesstime.BusinessTime] = None
+                                              business_hours: businesstime.BusinessTime
                                              ) -> pd.DataFrame:
     """Cycle-time averages and alert quantities by operating hours and month.
 
@@ -470,8 +465,8 @@ def generate_hours_of_operation_summary_table(alerts: pd.DataFrame,
 
     Args:
         alerts: A pd.DataFrame of alerts
-        start_hour: The business time start hour represented as in integer.
-        end_hour: The business time end hour represented as an integer.
+        business_hours: The businesstime.BusinessTime representation of the
+          business hours to use. See `define_business_time()`
 
     Returns:
         A pd.DataFrame.	    
@@ -558,7 +553,7 @@ def generate_hours_of_operation_summary_table(alerts: pd.DataFrame,
     return hop_df
 
 def generate_overall_summary_table(alerts: pd.DataFrame,
-                                   business_hours: Optional[businesstime.BusinessTime] = None
+                                   business_hours: businesstime.BusinessTime
                                   ) -> pd.DataFrame:
     """Generate an overall statistical summary for alerts by month.
 
@@ -568,8 +563,8 @@ def generate_overall_summary_table(alerts: pd.DataFrame,
 
     Args:
         alerts: A pd.DataFrame of alerts
-        start_hour: The business time start hour represented as in integer.
-        end_hour: The business time end hour represented as an integer.
+        business_hours: The businesstime.BusinessTime representation of the
+          business hours to use. See `define_business_time()`
 
     Returns:
         A pd.DataFrame.	    

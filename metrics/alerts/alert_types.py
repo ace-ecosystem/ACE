@@ -94,6 +94,11 @@ def count_quantites_by_alert_type(start_date: datetime,
         results = cursor.fetchone()
         alert_type_counts[alert_type] = results[0]
 
+    if not alert_type_counts:
+        empty_df = pd.DataFrame()
+        empty_df.name = "Total Alert Type Quantities"
+        return empty_df
+
     at_counts_df = pd.DataFrame.from_dict(alert_type_counts, orient='index')
     at_counts_df.columns = ['Count']
     at_counts_df.index.name = "Alert Type"

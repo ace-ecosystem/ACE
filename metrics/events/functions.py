@@ -180,11 +180,6 @@ def get_incidents_from_events(events: pd.DataFrame, incident_dispositions=INCIDE
     """
 
     incidents = events[events.Disposition.isin(incident_dispositions)]
-    """
-    incidents = events[(events.Disposition == 'INSTALLATION') | ( events.Disposition == 'EXPLOITATION') |
-                (events.Disposition == 'COMMAND_AND_CONTROL') | (events.Disposition == 'EXFIL') |
-                (events.Disposition == 'DAMAGE')]
-    """
-    incidents.drop(columns=['id'], inplace=True)
+    incidents = incidents.drop(columns=['id'])
     incidents.name = "Incidents"
     return incidents

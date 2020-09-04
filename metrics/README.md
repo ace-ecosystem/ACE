@@ -57,8 +57,7 @@ The following independent alert based tables are also available:
 For time-based statistics, you can also calculate based on business hours. When business hours are applied, only the time inside of business hours is counted when calculating time-based statistics.
 You can define business hours as needed with `metrics.alerts.define_business_time()`.
 
-When using the GUI or CLI, defaults are used. The default business start hour is 0600 hours, the default business end hour is 1800 hours. The default time zone is US/Eastern. Default holidays are defined at `metrics.alerts.SiteHolidays`.
-All of these defaults should be made configurable and more flexibility should be introduced for defining holidays.
+The default business start hour is 0600 hours, the default business end hour is 1800 hours. The default time zone is US/Eastern. Default holidays are defined at `metrics.alerts.SiteHolidays`. Holidays are the only defaults that currently can't be overriden. The GUI uses the `SLA` config section to override start hour, end hour, and timezone.
 
 **Expect** metric generation to take about ten times as long when applying business hours. Every alert time field has to be modified before the stats are calculated.
 
@@ -164,7 +163,7 @@ The ability to select ACE data, where the data belongs to a specific company, is
 
 Currently, the project is structured so that every directory in the root `$SAQ_HOME\metrics` directory is an ACE database table, data source, or data target. As of now, metrics are calculated around the `ace.alerts` and `ace.events` database tables and their relevant mapping tables. Any additional functionality should follow this structure. For instance, there is a desire to add metrics around `ace.observables`, which will happen and will likely be placed in an `observables` directory. Another example would be writing functionality that injects and tracks  `$SAQ_HOME\data\stats\modules` statistics to be made available in this metrics lib. Such functionality should go into a new directory, as well.
 
-## Goals and Enhancement Ideas
+## Goals, Enhancement Ideas, To-do
 
 + [x] Create a central location, in the ACE repo, for metrics to be managed in a modular and flexible way.
     - [x] Make metrics a library, on the side of, and not directly interconnected with the ACE codebase.
@@ -175,16 +174,14 @@ Currently, the project is structured so that every directory in the root `$SAQ_H
 
     - [ ] Automatically update the metric pivot tables as the ACE database tables are updated. MySQL database replication looks like a viable solution. This library appears promising: [python-mysql-replication](https://github.com/noplay/python-mysql-replication).
 
-        One way to do this would be to create a daemon service that can run and continuously update the pivot tables. This will allow for real-time like access to the data and also lay a groundwork for real-time graphical metrics to eventually populate a dashboard.
+        One way to do this would be to create a daemon service that can run and continuously update the pivot tables. This will allow for near real-time access to the data and also lay a groundwork for real-time graphical metrics to eventually populate a dashboard.
 
         The pivot table metrics could run in memory in something like REDIS, as long as the metrics service is running. AND/OR.. a time-series database.. or explore more options.
 
-
-
-## TODO
+#### TO-DO
 
 + [ ] Implement pytest based testing.
 + [ ] Make Holidays configurable.
-+ [ ] Make business hours configurable.
-+ [ ] Figure out if these config items should be seperate from ACE or configurable in ACE.
++ [ ] Should config items be seperate from ACE or configurable in ACE?
 + [ ] Add observable statistics.
+    - [ ] Distinguish detection points? yara, indicator, etc.

@@ -2039,6 +2039,16 @@ def metrics():
     selected_companies_map = {}
     tables = []
 
+    # default business hours
+    # Use the SLA config section, for now.
+    time_zone = saq.CONFIG['SLA'].get('time_zone', 'US/Eastern')
+    sla_business_hours = saq.CONFIG['SLA'].get('business_hours', '6,18').split(',')
+    start_hour = int(sla_business_hours[0])
+    end_hour = int(sla_business_hours[1])
+    sla_business_hours = define_business_time(start_hour=start_hour,
+                                              end_hour=end_hour,
+                                              time_zone=time_zone)
+
     if request.method == "POST" and request.form['daterange']:
         post_bool = True
         daterange = request.form['daterange']
@@ -2067,8 +2077,7 @@ def metrics():
 
         # apply business hours before performing time calculations
         if 'business_hours' in request.form:
-            # NOTE: using built in defaults but this should be configurable
-            business_hours = define_business_time()
+            business_hours = sla_business_hours
 
         try:
             daterange_start, daterange_end = daterange.split(' - ')
@@ -2154,17 +2163,25 @@ def metrics():
 
         # Independent tables
         if hours_of_operation:
+            if not business_hours:
+                # business hours requried
+                business_hours = sla_business_hours
+
             if alerts is None:
                 with get_db_connection() as db:
                     alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
-            hop_df = generate_hours_of_operation_summary_table(alerts)
+            hop_df = generate_hours_of_operation_summary_table(alerts, business_hours)
             tables.append(hop_df)
 
         if alert_overall_cycle_time_summary:
+            if not business_hours:
+                # business hours requried
+                business_hours = sla_business_hours
+
             if alerts is None:
                 with get_db_connection() as db:
                     alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
-            overall_ct_summary = generate_overall_summary_table(alerts)
+            overall_ct_summary = generate_overall_summary_table(alerts, business_hours)
             tables.append(overall_ct_summary)
 
         if alert_type_count_breakdown:

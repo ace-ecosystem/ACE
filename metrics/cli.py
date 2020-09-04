@@ -70,8 +70,10 @@ def build_metric_user_parser(user_parser: argparse.ArgumentParser) -> None:
                              help='A list of users to generate statistics for. Default: All users.')
 
     for stat in VALID_ALERT_STATS:
-        user_parser.add_argument(f'--{stat}', action='store_true', dest=f"user_stat_{stat}", help=FRIENDLY_STAT_NAME_MAP[stat])
-    user_parser.add_argument('--all-stats', action='store_true', help="Return all of the available statistics.")
+        user_parser.add_argument(f'--{stat}', action='store_true', dest=f"user_stat_{stat}",
+                                 help=FRIENDLY_STAT_NAME_MAP[stat])
+    user_parser.add_argument('--all-stats', dest='all_user_stats', action='store_true',
+                             help="Return all of the available statistics.")
 
 def build_metric_alert_type_parser(alert_type_parser: argparse.ArgumentParser) -> None:
     """Given an argparse subparser, build a metric alert type parser.
@@ -90,8 +92,10 @@ def build_metric_alert_type_parser(alert_type_parser: argparse.ArgumentParser) -
                              help='An overall breakdown of alert counts by alert type.')
 
     for stat in VALID_ALERT_STATS:
-        alert_type_parser.add_argument(f'--{stat}', action='store_true', dest=f"alert_type_stat_{stat}", help=FRIENDLY_STAT_NAME_MAP[stat])
-    alert_type_parser.add_argument('--all-stats', action='store_true', help="Return all of the available statistics.")
+        alert_type_parser.add_argument(f'--{stat}', action='store_true', dest=f"alert_type_stat_{stat}",
+                                       help=FRIENDLY_STAT_NAME_MAP[stat])
+    alert_type_parser.add_argument('--all-stats', dest='all_at_stats', action='store_true',
+                                   help="Return all of the available statistics.")
 
 def build_metric_alert_parser(alert_parser: argparse.ArgumentParser) -> None:
     """Given an argparse subparser, build a metric alert parser.
@@ -111,8 +115,10 @@ def build_metric_alert_parser(alert_parser: argparse.ArgumentParser) -> None:
                               help="Overall summary of alert cycle times by month" )
 
     for stat in VALID_ALERT_STATS:
-        alert_parser.add_argument(f'--{stat}', action='store_true', dest=f"alert_stat_{stat}", help=FRIENDLY_STAT_NAME_MAP[stat])
-    alert_parser.add_argument('--all-stats', action='store_true', help="Return all of the available statistics.")
+        alert_parser.add_argument(f'--{stat}', action='store_true', dest=f"alert_stat_{stat}",
+                                  help=FRIENDLY_STAT_NAME_MAP[stat])
+    alert_parser.add_argument('--all-stats', dest='all_alert_stats', action='store_true',
+                              help="Return all of the available statistics.")
 
     alert_subparsers = alert_parser.add_subparsers(dest='alert_metric_target')
 
