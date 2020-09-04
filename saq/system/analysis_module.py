@@ -27,6 +27,8 @@ class AnalysisModuleType(Trackable):
     dependencies: List[str]
     # list of required tags (empty list means no requirement)
     tags: List[str]
+    # list of valid analysis modes
+    modes: List[str]
     # the current version of the analysis module type
     version: int
     # how long this analysis module has before it times out (in seconds)
@@ -52,6 +54,7 @@ class AnalysisModuleType(Trackable):
             'directives': self.directives,
             'dependencies': self.dependencies,
             'tags': self.tags,
+            'modes': self.modes,
             'version': self.version,
             'timeout': self.timeout,
             'cache_ttl': self.cache_ttl,
@@ -68,13 +71,17 @@ class AnalysisModuleType(Trackable):
             directives = json_dict['directives'],
             dependencies = json_dict['dependencies'],
             tags = json_dict['tags'],
+            modes = json_dict['modes'],
             version = json_dict['version'],
             timeout = json_dict['timeout'],
             cache_ttl = json_dict['cache_ttl'],
             cache_keys = json_dict['cache_keys'],
         )
 
-    def accepts(self, observable: Observable):
+    def accepts(self, observable: Observable, root: RootAnalysis):
+        if self.modes and root.analysis_mode not in self.modes:
+            return False
+
         if self.observable_types:
             if observable.type not in self.observable_types:
                 return False

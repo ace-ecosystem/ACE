@@ -15,5 +15,5 @@ class AnalysisTrackingInterface(ACESystemInterface):
 def get_root_analysis(*args, **kwargs):
     return get_system().analysis_tracking.get_root_analysis(*args, **kwargs)
 
-def tracking_analysis(*args, **kwargs):
+def track_analysis(*args, **kwargs):
     return get_system().analysis_tracking.track_analysis(*args, **kwargs)

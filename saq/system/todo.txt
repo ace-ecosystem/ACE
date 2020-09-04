@@ -1,0 +1,40 @@
+NOTES FROM REVIEWING EXISTING ENGINE
+* handle detection points (probably in root.set_analysis) and analysis mode switches
+* root.whitelisted <-- deal with whitelisting (automatic cancel in non-correlational mode)
+* keep ace correlate in mind
+* other stuff we do some an analysis becomes an alert
+- move data (maybe no longer needed)
+- insert into database (still needed)
+* index at end of execution (in in the database as an alert)
+* if there is no work left for a RootAnalysis and its left in a non-correlational mode
+  then we probably need to delete it (or maybe not) - mark for expiration - something
+* record analysis execution time - metrics
+* logging
+* add_observable (reintroduces into analysis)
+* add_tag (reintroduces into analysis)
+* analysis "stages" <-- I feel like this should be more about an event driven model
+  PRE-ANALYSIS  - executes analysis modules that execute in "pre" mode <-- do we need this?
+  ANALYSIS      - normal execution
+  POST-ANALYSIS - work queue is empty for thei root analysis, switches to this stage
+  ^ not sure that even make sense any more since you can now have analysis modules that take a really long time
+* exclusions -- where do they live and where are they enforced?
+  I think they need to be enforced by the system
+* deal with some directives (exclude_all)
+* limited analysis
+* when to cancel analysis (disposition set by analyst)
+* "priority" probably doesn't matter anymore
+
+analysis modules should only receive work when ace expects a result back
+however the analysis can still be None
+
+Analysis needs to be updated to be able to record when an error occurs
+
+an analysis module can be MANUAL
+text = "Search QRadar for DNS entries."
+help = "Searches QRadar for DNS entries for this blah blah blah."
+^ don't happen until they are triggered by an analyst in the gui
+
+operational_mode = automated
+operational_mode = manual
+
+user_menu = dns->zeek->Search zeek logs in splunk for this.
