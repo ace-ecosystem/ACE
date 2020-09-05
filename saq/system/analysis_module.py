@@ -2,18 +2,18 @@
 
 from dataclasses import dataclass, field
 import json
+from typing import List, Union
 
 from saq.analysis import Observable, RootAnalysis
 from saq.system import ACESystemInterface, get_system
 from saq.system.constants import *
-from saq.system.tracking import Trackable
 
 class AnalysisModuleTypeVersionError(Exception):
     """Raised when a request for a analysis with an out-of-date version is made."""
     pass
 
 @dataclass
-class AnalysisModuleType(Trackable):
+class AnalysisModuleType():
     """Represents a registration of an analysis module type."""
     # the name of the analysis module type
     name: str
@@ -100,6 +100,16 @@ class AnalysisModuleType(Trackable):
 
         return True
 
+class AnalysisModuleTrackingInterface(ACESystemInterface):
+    def track_analysis_module_type(self, amt: AnalysisModuleType):
+        raise NotImplementedError()
+
+    def get_analysis_module_type(self, name: str) -> Union[AnalysisModuleType, None]:
+        raise NotImplementedError()
+
+    def get_all_analysis_module_types(self) -> List[str]:
+        raise NotImplementedError()
+
 def register_analysis_module_type(self, amt: AnalysisModuleType) -> AnalysisModuleType:
     """Registers the given AnalysisModuleType with the system."""
     current_type = get_analysis_module_type(amt.name)
@@ -118,4 +128,4 @@ def get_analysis_module_type(self, *args, **kwargs):
     return get_system().module_tracking.get_analysis_module_type(*args, **kwargs)
 
 def get_all_analysis_module_types(self):
-    return get_system().module_tracking.get_all_analysis_module_types():
+    return get_system().module_tracking.get_all_analysis_module_types()

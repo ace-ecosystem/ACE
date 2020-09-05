@@ -1,6 +1,7 @@
 # vim: ts=4:sw=4:et:cc=120
 
 from contextlib import contextmanager
+from typing import Union, Optional
 
 from saq.system import ACESystemInterface, get_system
 
@@ -47,6 +48,7 @@ class Lockable():
 
     @contextmanager
     def lock(self, timeout=None, lock_timeout=None):
+        lock_result = None
         try:
             self.lock_owner_id = default_owner_id()
             lock_result = acquire(self.lock_id, self.lock_owner_id, timeout=timeout, lock_timeout=lock_timeout)
@@ -79,7 +81,7 @@ def check_deadlock(requestor_id: str, lock_id: str, chain=[]):
 
     check_deadlock(requestor_id, get_owner_wait_target(lock_owner_id), chain)
 
-class LockTrackingInterface(ACESystemInterface):
+class LockingInterface(ACESystemInterface):
     def get_lock_owner(self, lock_id: str) -> Union[str, None]:
         raise NotImplementedError()
 
@@ -92,37 +94,30 @@ class LockTrackingInterface(ACESystemInterface):
     def track_lock_acquire(self, owner_id: str, lock_id: str, lock_timeout: Optional[int]=None):
         raise NotImplementedError()
 
-    def track_lock_release(self, owner_id: str, lock_id: str):
-        raise NotImplementedError()
-
-def get_lock_owner(lock_id: str) -> Union[str, None]:
-    return get_system().lock_tracking.get_lock_owner(lock_id)
-
-def get_owner_wait_target(owner_id) -> Union[str, None]:
-    return get_system().lock_tracking.get_owner_wait_target(owner_id)
-
-def track_wait_target(owner_id: str, lock_id: str):
-    track_system().lock_tracking.track_wait_target(owner_id, lock_id)
-
-def clear_wait_target(owner_id: str):
-    track_wait_target(owner_id, None)
-
-def track_lock_acquire(owner_id: str, lock_id: str, lock_timeout: Optional[int]=None):
-    get_system().lock_tracking.track_lock_acquire(owner_id, lock_id, lock_timeout)
-
-def track_lock_release(owner_id: str, lock_id: str):
-    get_system().lock_tracking.track_lock_release(owner_id, lock_id)
-
-def default_owner_id():
-    import socket, os, threading
-    return f'{socket.gethostname()}-{os.getpid()}-{threading.get_ident()}'
-
-class LockingInterface(ACESystemInterface):
     def acquire(self, lock_id: str, owner_id: str, timeout: Optional[int]=None, lock_timeout: Optional[int]=None) -> bool:
         raise NotImplementedError()
 
     def release(self, lock_id: str, owner_id: str):
         raise NotImplementedError()
+
+def get_lock_owner(lock_id: str) -> Union[str, None]:
+    return get_system().locking.get_lock_owner(lock_id)
+
+def get_owner_wait_target(owner_id) -> Union[str, None]:
+    return get_system().locking.get_owner_wait_target(owner_id)
+
+def track_wait_target(owner_id: str, lock_id: str):
+    get_system().locking.track_wait_target(owner_id, lock_id)
+
+def clear_wait_target(owner_id: str):
+    track_wait_target(owner_id, None)
+
+def track_lock_acquire(owner_id: str, lock_id: str, lock_timeout: Optional[int]=None):
+    get_system().locking.track_lock_acquire(owner_id, lock_id, lock_timeout)
+
+def default_owner_id():
+    import socket, os, threading
+    return f'{socket.gethostname()}-{os.getpid()}-{threading.get_ident()}'
 
 # timeout > 0 --> wait for timeout seconds
 # timeout = 0  --> try and return immediately regardless of success
@@ -157,10 +152,8 @@ def acquire(lock_id: str, owner_id: Optional[str]=None, timeout:Optional[int]=No
 
     # and we are no longer waiting
     clear_wait_target(owner_id)
+    return True
 
 def release(lock_id: str, owner_id: str):
-    # actually release the lock first
+    # actually release the lock
     get_system().locking.release(owner_id, lock_id)
-    
-    # and then update tracking
-    track_lock_release(lock_id, owner_id)

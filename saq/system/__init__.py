@@ -2,17 +2,10 @@
 #
 # global system components
 
+import logging
+
 class ACESystemInterface:
     pass
-
-from saq.system.work_queue import WorkQueueInterface
-from saq.system.tracking import (
-        AnalysisRequestTrackingInterface,
-        AnalysisModuleTrackingInterface,
-        AnalysisTrackingInterface)
-from saq.system.caching import CachingInterface
-from saq.system.storage import StorageInterface
-from saq.system.locking import LockingInterface, LockTrackingInterface
 
 class ACESystem:
     work_queue = None
@@ -22,7 +15,6 @@ class ACESystem:
     caching = None
     storage = None
     locking = None
-    lock_tracking = None
 
 # the global system object that contains references to all the interfaces
 ace = ACESystem()
@@ -30,24 +22,30 @@ ace = ACESystem()
 def get_system():
     return ace
 
-def register(obj: ACESystemInterface):
+def register_system_interface(obj: ACESystemInterface):
+    from saq.system.work_queue import WorkQueueManagerInterface
+    from saq.system.analysis_request import AnalysisRequestTrackingInterface
+    from saq.system.analysis_module import AnalysisModuleTrackingInterface
+    from saq.system.analysis import AnalysisTrackingInterface
+    from saq.system.caching import CachingInterface
+    from saq.system.storage import StorageInterface
+    from saq.system.locking import LockingInterface
+
     if isinstance(obj, AnalysisRequestTrackingInterface):
-        system.request_tracking = obj
+        ace.request_tracking = obj
     elif isinstance(obj, AnalysisModuleTrackingInterface):
-        system.module_tracking = obj
+        ace.module_tracking = obj
     elif isinstance(obj, AnalysisTrackingInterface):
-        system.analysis_tracking = obj
-    elif isinstance(obj, WorkQueueInterface):
-        system.work_queue = obj
-    elif isisntance(obj, TrackingInterface):
-        system.tracking = obj
-    elif isinstance(obj, CacheInterface):
-        system.caching = obj
+        ace.analysis_tracking = obj
+    elif isinstance(obj, WorkQueueManagerInterface):
+        ace.work_queue_manager = obj
+    elif isinstance(obj, CachingInterface):
+        ace.caching = obj
     elif isinstance(obj, StorageInterface):
-        system.storage = obj
+        ace.storage = obj
     elif isinstance(obj, LockingInterface):
-        system.locking = obj
-    elif isinstance(obj, LockingTrackingInterface):
-        system.lock_tracking = obj
+        ace.locking = obj
     else:
-        raise ValueError(f"invalid or unknown ACESystemInterface type {type(obj)})
+        raise ValueError(f"invalid or unknown ACESystemInterface type {type(obj)})")
+
+    logging.debug(f"registered system interface {obj}")

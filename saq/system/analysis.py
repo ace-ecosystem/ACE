@@ -1,9 +1,10 @@
 # vim: ts=4:sw=4:et:cc=120
 #
 
-from saq.analysis import RootAnalysis
-from saq.system import get_system
-from saq.system.tracking import AnalysisTrackingInterface
+from typing import Union
+
+from saq.analysis import RootAnalysis, Observable, Analysis
+from saq.system import get_system, ACESystemInterface
 
 class AnalysisTrackingInterface(ACESystemInterface):
     def get_root_analysis(self, uuid: str) -> Union[RootAnalysis, None]:

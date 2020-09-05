@@ -2,15 +2,16 @@
 
 import json
 import uuid
+from typing import Union, List
 
-from saq.system import get_system
+from saq.analysis import RootAnalysis, Observable
+from saq.system import ACESystemInterface, get_system
 from saq.system.analysis import get_root_analysis
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.caching import generate_cache_key
-from saq.system.tracking import Trackable, get_tracked_object
 from saq.system.locking import Lockable
 
-class AnalysisRequest(Trackable, Lockable):
+class AnalysisRequest(Lockable):
     """Represents a request to analyze a single observable, or all the observables in a RootAnalysis."""
     def __init__(self, 
             observable: Observable, 
@@ -73,7 +74,7 @@ class AnalysisRequest(Trackable, Lockable):
         })
 
     @staticmethod
-    def from_json(json_data: str) -> AnalysisRequest:
+    def from_json(json_data: str):
         ar = AnalysisRequest()
         result = json.loads(json_data)
 
@@ -152,7 +153,7 @@ class AnalysisRequest(Trackable, Lockable):
     def append_root(self, root: RootAnalysis):
         self.additional_roots.append(root)
 
-    def duplicate(self) -> AnalysisRequest:
+    def duplicate(self):
         result = AnalysisRequest(
                 self.observable,
                 self.analysis_module_type,
@@ -170,6 +171,25 @@ class AnalysisRequest(Trackable, Lockable):
 
     def update(self):
         update_analysis_request(self)
+
+class AnalysisRequestTrackingInterface(ACESystemInterface):
+    def track_analysis_request(self, request: AnalysisRequest):
+        raise NotImplementedError()
+
+    def delete_analysis_request(self, request: AnalysisRequest) -> bool:
+        raise NotImplementedError()
+
+    def update_analysis_request(self, request: AnalysisRequest) -> bool:
+        raise NotImplementedError()
+
+    def get_expired_analysis_request(self, amt: AnalysisModuleType) -> List[AnalysisRequest]:
+        raise NotImplementedError()
+
+    def get_analysis_request(self, key: str) -> Union[AnalysisRequest, None]:
+        raise NotImplementedError()
+
+    def find_analysis_request(self, observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
+        return self.get_analysis_request(generate_cache_key(observable, amt))
 
 def get_analysis_request(*args, **kwargs):
     return get_system().request_tracking.get_analysis_request(*args, **kwargs)

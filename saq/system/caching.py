@@ -1,8 +1,10 @@
 # vim: ts=4:sw=4:et:cc=120
 import hashlib
+from typing import Union, Optional
 
 from saq.analysis import Analysis, Observable
 from saq.system import ACESystemInterface, get_system
+from saq.system.analysis_module import AnalysisModuleType
 
 def generate_cache_key(observable: Observable, analysis_module_type: AnalysisModuleType) -> str:
     """Returns the key that should be used for caching the result of the
