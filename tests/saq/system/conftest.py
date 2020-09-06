@@ -1,7 +1,7 @@
 import threading
 from typing import Union, Optional
 
-from saq.system import register_system_interface
+from saq.system import register_system_interface, get_system
 from saq.system.locking import LockingInterface
 
 import pytest
@@ -18,10 +18,10 @@ class TestLockingInterface(LockingInterface):
     def get_owner_wait_target(self, owner_id: str) -> Union[str, None]:
         return self.owner_wait_targets.get(owner_id)
 
-    def track_wait_target(self, owner_id: str, lock_id: str):
+    def track_wait_target(self, lock_id: str, owner_id: str):
         self.owner_wait_targets[owner_id] = lock_id
 
-    def track_lock_acquire(self, owner_id: str, lock_id: str, lock_timeout: Optional[int]=None):
+    def track_lock_acquire(self, lock_id: str, owner_id: str, lock_timeout: Optional[int]=None):
         self.lock_ownership[lock_id] = owner_id
 
     def acquire(self, lock_id: str, owner_id: str, timeout: Optional[int]=None, lock_timeout: Optional[int]=None) -> bool:
@@ -32,7 +32,7 @@ class TestLockingInterface(LockingInterface):
         arg_blocking = True
         arg_timeout = -1
 
-        if not timeout is None:
+        if timeout is None:
             arg_blocking = True
             arg_timeout = -1
         elif timeout == 0:
@@ -40,7 +40,7 @@ class TestLockingInterface(LockingInterface):
             arg_timeout = -1
         else:
             arg_blocking = True
-            arg_timeout = tiemout
+            arg_timeout = timeout
 
         success = lock.acquire(arg_blocking, arg_timeout)
         return success
@@ -53,8 +53,17 @@ class TestLockingInterface(LockingInterface):
         if self.get_lock_owner(lock_id) != owner_id:
             return False
 
-        self.lock.release()
+        lock.release()
+
+    def reset(self):
+        self.locks = {} # key = lock_id, value = threading.RLock
+        self.lock_ownership = {} # key = lock_id, value = str (owner_id)
+        self.owner_wait_targets = {} # key = owner_id, value = str (lock_id)
 
 @pytest.fixture(autouse=True, scope='session')
 def initialize_system():
     register_system_interface(TestLockingInterface())
+
+@pytest.fixture(autouse=True, scope='function')
+def reset_systems():
+    get_system().locking.reset()
