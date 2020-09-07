@@ -3532,7 +3532,7 @@ class RootAnalysis(Analysis):
     @property
     def all_observables(self):
         """Returns the list of all Observables discovered for this Alert."""
-        return self.observable_store.values()
+        return list(self.observable_store.values())
 
     def get_observables_by_type(self, o_type):
         """Returns the list of Observables that match the given type."""
