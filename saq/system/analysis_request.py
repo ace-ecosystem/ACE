@@ -2,21 +2,22 @@
 
 import json
 import uuid
-from typing import Union, List
+from typing import Union, List, Optional
 
 from saq.analysis import RootAnalysis, Observable
 from saq.system import ACESystemInterface, get_system
 from saq.system.analysis import get_root_analysis
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.caching import generate_cache_key
+from saq.system.constants import *
 from saq.system.locking import Lockable
 
 class AnalysisRequest(Lockable):
     """Represents a request to analyze a single observable, or all the observables in a RootAnalysis."""
     def __init__(self, 
-            observable: Observable, 
-            analysis_module_type: AnalysisModuleType, 
-            root: Union[str, RootAnalysis]):
+            root: Union[str, RootAnalysis],
+            observable: Optional[Observable]=None, 
+            analysis_module_type: Optional[AnalysisModuleType]=None):
         #
         # static data
         #
@@ -141,8 +142,9 @@ class AnalysisRequest(Lockable):
             if self.is_observable_analysis_result:
                 # process both the new observables and the one we already processed
                 # doing so resolves dependencies
-                result = self.result.observables # get all the observables from the Analysis object
-                result.append(self.observable) # and also reprocess our original observable
+                observables = self.result.observables[:] # get all the observables from the Analysis object
+                observables.append(self.observable) # and also reprocess our original observable
+                return observables
             else:
                 # otherwise we just want to look at the observable
                 return [ self.observable ]
@@ -190,6 +192,9 @@ class AnalysisRequestTrackingInterface(ACESystemInterface):
 
     def find_analysis_request(self, observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
         return self.get_analysis_request(generate_cache_key(observable, amt))
+
+def track_analysis_request(*args, **kwargs):
+    return get_system().request_tracking.track_analysis_request(*args, **kwargs)
 
 def get_analysis_request(*args, **kwargs):
     return get_system().request_tracking.get_analysis_request(*args, **kwargs)

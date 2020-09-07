@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 import json
-from typing import List, Union
+from typing import List, Union, Optional
 
 from saq.analysis import Observable, RootAnalysis
 from saq.system import ACESystemInterface, get_system
@@ -20,26 +20,26 @@ class AnalysisModuleType():
     # brief English description of what the module does
     description: str
     # list of supported observable types (empty list supports all observable)
-    observable_types: List[str]
+    observable_types: List[str] = field(default_factory=list)
     # list of required directives (empty list means no requirement)
-    directives: List[str]
+    directives: List[str] = field(default_factory=list)
     # list of other analysis module type names to wait for (empty list means no deps)
-    dependencies: List[str]
+    dependencies: List[str] = field(default_factory=list)
     # list of required tags (empty list means no requirement)
-    tags: List[str]
+    tags: List[str] = field(default_factory=list)
     # list of valid analysis modes
-    modes: List[str]
+    modes: List[str] = field(default_factory=list)
     # the current version of the analysis module type
-    version: int
+    version: str = '1.0.0'
     # how long this analysis module has before it times out (in seconds)
     # by default it takes the global default specified in the configuration file
     # you can set a very high timeout but nothing can never timeout
-    timeout: int
+    timeout: int = 30
     # how long analysis results stay in the cache (in seconds)
-    # a value of 0 means it is not cached
-    cache_ttl: int
+    # a value of None means it is not cached
+    cache_ttl: Optional[int] = None
     # what additional values should be included to determine the cache key?
-    additional_cache_keys: List[str]
+    additional_cache_keys: List[str] = field(default_factory=list)
 
     # Trackable implementation
     @property

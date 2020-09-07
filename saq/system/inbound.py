@@ -59,6 +59,10 @@ def process_analysis_request(ar: AnalysisRequest):
                         ar.analysis_module_type, 
                         ar.result)
 
+            # if this is a RootAnalysis request make sure it is tracked
+            if ar.is_root_analysis_request:
+                track_root_analysis(ar.root)
+
             # for each observable that needs to be analyzed
             for observable in ar.observables:
                 for analysis_module_type in get_all_analysis_module_types():

@@ -10,7 +10,7 @@ class AnalysisTrackingInterface(ACESystemInterface):
     def get_root_analysis(self, uuid: str) -> Union[RootAnalysis, None]:
         raise NotImplementedError()
     
-    def track_analysis(self, root: RootAnalysis, observable: Observable, analysis: Analysis):
+    def track_root_analysis(self, root: RootAnalysis):
         raise NotImplementedError()
 
 def get_root_analysis(*args, **kwargs):
