@@ -92,7 +92,7 @@ def check_deadlock(lock_id: str, requestor_id: str, chain=None):
     if chain and chain[-1] == lock_id:
         return
 
-    chain.append(lock_id) # just for debug info
+    chain.append(lock_id)
 
     if len(chain) > 10:
         print(f'lock_id = {lock_id} requestor_id = {requestor_id} lock_owner_id = {lock_owner_id} chain = {chain}')
@@ -116,7 +116,7 @@ class LockingInterface(ACESystemInterface):
     def acquire(self, lock_id: str, owner_id: str, timeout: Optional[int]=None, lock_timeout: Optional[int]=None) -> bool:
         raise NotImplementedError()
 
-    def release(self, lock_id: str, owner_id: str):
+    def release(self, lock_id: str, owner_id: str) -> bool:
         raise NotImplementedError()
 
 def get_lock_owner(lock_id: str) -> Union[str, None]:
@@ -173,9 +173,9 @@ def acquire(lock_id: str, owner_id: Optional[str]=None, timeout:Optional[int]=No
     clear_wait_target(owner_id)
     return True
 
-def release(lock_id: str, owner_id: Optional[str]=None):
+def release(lock_id: str, owner_id: Optional[str]=None) -> bool:
     if owner_id is None:
         owner_id = default_owner_id()
 
     # actually release the lock
-    get_system().locking.release(lock_id, owner_id)
+    return get_system().locking.release(lock_id, owner_id)
