@@ -41,6 +41,14 @@ class AnalysisModuleType():
     # what additional values should be included to determine the cache key?
     additional_cache_keys: List[str] = field(default_factory=list)
 
+    def version_matches(self, amt) -> bool:
+        """Returns True if the given amt is the same version as this amt."""
+        return ( 
+                self.name == amt.name and
+                self.version == amt.version and
+                sorted(self.additional_cache_keys) == sorted(amt.additional_cache_keys) )
+        # XXX should probably check the other fields as well
+
     # Trackable implementation
     @property
     def tracking_key(self):
@@ -107,10 +115,10 @@ class AnalysisModuleTrackingInterface(ACESystemInterface):
     def get_analysis_module_type(self, name: str) -> Union[AnalysisModuleType, None]:
         raise NotImplementedError()
 
-    def get_all_analysis_module_types(self) -> List[str]:
+    def get_all_analysis_module_types(self) -> List[AnalysisModuleType]:
         raise NotImplementedError()
 
-def register_analysis_module_type(self, amt: AnalysisModuleType) -> AnalysisModuleType:
+def register_analysis_module_type(amt: AnalysisModuleType) -> AnalysisModuleType:
     """Registers the given AnalysisModuleType with the system."""
     current_type = get_analysis_module_type(amt.name)
     if current_type is None:
@@ -121,11 +129,11 @@ def register_analysis_module_type(self, amt: AnalysisModuleType) -> AnalysisModu
     track_analysis_module_type(amt)
     return amt
 
-def track_analysis_module_type(*args, **kwargs):
-    return get_system().module_tracking.track_analysis_module_type(*args, **kwargs)
+def track_analysis_module_type(amt: AnalysisModuleType):
+    return get_system().module_tracking.track_analysis_module_type(amt)
 
-def get_analysis_module_type(self, *args, **kwargs):
-    return get_system().module_tracking.get_analysis_module_type(*args, **kwargs)
+def get_analysis_module_type(name: str) -> Union[AnalysisModuleType, None]:
+    return get_system().module_tracking.get_analysis_module_type(name)
 
-def get_all_analysis_module_types(self):
+def get_all_analysis_module_types() -> List[AnalysisModuleType]:
     return get_system().module_tracking.get_all_analysis_module_types()

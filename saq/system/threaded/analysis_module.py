@@ -1,5 +1,7 @@
 # vim: ts=4:sw=4:et:cc=120
 
+from typing import Union, List
+
 from saq.system.analysis_module import AnalysisModuleTrackingInterface, AnalysisModuleType
 
 class ThreadedAnalysisModuleTrackingInterface(AnalysisModuleTrackingInterface):
@@ -15,3 +17,5 @@ class ThreadedAnalysisModuleTrackingInterface(AnalysisModuleTrackingInterface):
     def get_all_analysis_module_types(self) -> List[str]:
         return self.amt_tracking.values()
 
+    def reset(self):
+        self.amt_tracking = {}

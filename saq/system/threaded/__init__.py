@@ -9,20 +9,22 @@ from saq.system.threaded.caching import ThreadedCachingInterface
 from saq.system.threaded.locking import ThreadedLockingInterface
 from saq.system.threaded.analysis import ThreadedAnalysisTrackingInterface
 from saq.system.threaded.analysis_request import ThreadedAnalysisRequestTrackingInterface
+from saq.system.threaded.analysis_module import ThreadedAnalysisModuleTrackingInterface
+from saq.system.threaded.work_queue import ThreadedWorkQueueManagerInterface
 
 class ThreadedACESystem(ACESystem):
-    work_queue = None
+    work_queue = ThreadedWorkQueueManagerInterface()
     request_tracking = ThreadedAnalysisRequestTrackingInterface()
-    module_tracking = None
+    module_tracking = ThreadedAnalysisModuleTrackingInterface()
     analysis_tracking = ThreadedAnalysisTrackingInterface()
     caching = ThreadedCachingInterface()
     storage = None
     locking = ThreadedLockingInterface()
 
     def reset(self):
-        #self.work_queue.reset()
+        self.work_queue.reset()
         self.request_tracking.reset()
-        #self.module_tracking.reset()
+        self.module_tracking.reset()
         self.analysis_tracking.reset()
         self.caching.reset()
         #self.storage.reset()
