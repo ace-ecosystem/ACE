@@ -18,6 +18,7 @@ class AnalysisRequest(Lockable):
             root: Union[str, RootAnalysis],
             observable: Optional[Observable]=None, 
             analysis_module_type: Optional[AnalysisModuleType]=None):
+
         #
         # static data
         #
@@ -28,6 +29,9 @@ class AnalysisRequest(Lockable):
         self.observable = observable
         # the type of analysis module to execute on this observable
         self.analysis_module_type = analysis_module_type
+        # the key used to cache the analysis result
+        # if this is a root analysis request or if the amt does not support caching then this is None
+        self.cache_key = generate_cache_key(observable, analysis_module_type)
         # the RootAnalysis object this request belongs to or is entirely about
         # this can also be the UUID of the RootAnalysis
         if isinstance(root, str):
@@ -98,27 +102,13 @@ class AnalysisRequest(Lockable):
         return self.tracking_key
 
     #
-    # AnalysisRequest
+    # utility functions
     #
-
-    @property
-    def cache_key(self):
-        if self.is_root_analysis_request:
-            return None
-
-        if self._cache_key is None:
-            self._cache_key = generate_cache_key(self.observable, self.analysis_module_type)
-
-        return self._cache_key
 
     @property
     def is_cachable(self):
         """Returns True if the result of the analysis should be cached."""
         return self.cache_key is not None
-
-    #
-    # utility functions
-    #
 
     @property
     def is_observable_analysis_request(self) -> bool:
@@ -178,13 +168,10 @@ class AnalysisRequestTrackingInterface(ACESystemInterface):
     def track_analysis_request(self, request: AnalysisRequest):
         raise NotImplementedError()
 
-    def delete_analysis_request(self, request: AnalysisRequest) -> bool:
+    def delete_analysis_request(self, key: str) -> bool:
         raise NotImplementedError()
 
-    def update_analysis_request(self, request: AnalysisRequest) -> bool:
-        raise NotImplementedError()
-
-    def get_expired_analysis_request(self, amt: AnalysisModuleType) -> List[AnalysisRequest]:
+    def get_expired_analysis_request(self, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
         raise NotImplementedError()
 
     def get_analysis_request(self, key: str) -> Union[AnalysisRequest, None]:
@@ -193,23 +180,29 @@ class AnalysisRequestTrackingInterface(ACESystemInterface):
     def find_analysis_request(self, observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
         return self.get_analysis_request(generate_cache_key(observable, amt))
 
-def track_analysis_request(*args, **kwargs):
-    return get_system().request_tracking.track_analysis_request(*args, **kwargs)
+    def clear_tracking_by_analysis_module_type(self, amt: AnalysisModuleType):
+        raise NotImplementedError()
 
-def get_analysis_request(*args, **kwargs):
-    return get_system().request_tracking.get_analysis_request(*args, **kwargs)
+def track_analysis_request(request: AnalysisRequest):
+    return get_system().request_tracking.track_analysis_request(request)
 
-def find_analysis_request(*args, **kwargs):
-    return get_system().request_tracking.find_analysis_request(*args, **kwargs)
+def get_analysis_request(key: str) -> Union[AnalysisRequest, None]:
+    return get_system().request_tracking.get_analysis_request(key)
 
-def delete_analysis_request(*args, **kwargs):
-    return get_system().request_tracking.delete_analysis_request(*args, **kwargs)
+def find_analysis_request(observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
+    return get_system().request_tracking.find_analysis_request(observable, amt)
 
-def update_analysis_request(*args, **kwargs):
-    return get_system().request_tracking.update_analysis_request(*args, **kwargs)
+def delete_analysis_request(key: str) -> bool:
+    return get_system().request_tracking.delete_analysis_request(key)
 
-def get_expired_analysis_request(*args, **kwargs):
-    return get_system().request_tracking.get_expired_analysis_request(*args, **kwargs)
+def get_expired_analysis_request(amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
+    """Return the first and oldest expired AnalysisRequest for the given type.
+    Once the AnalysisRequest is returned is it no longer considered expired by the system."""
+    return get_system().request_tracking.get_expired_analysis_request(amt)
+
+def clear_tracking_by_analysis_module_type(amt: AnalysisModuleType):
+    """Deletes tracking for any requests assigned to the given analysis module type."""
+    return get_system().request_tracking.clear_tracking_by_analysis_module_type(amt)
 
 def submit_analysis_request(ar: AnalysisRequest):
     """Submits the given AnalysisRequest to the appropriate queue for analysis."""
