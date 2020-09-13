@@ -18,6 +18,7 @@ from saq.analysis import RootAnalysis
 from saq.crypto import *
 from saq.constants import *
 from saq.database import get_db_connection
+from saq.indicators import Indicator
 from saq.test import *
 from saq.util import storage_dir_from_uuid, workload_storage_dir
 
@@ -368,7 +369,7 @@ class TestCase(ACEModuleTestCase):
         url_logs = [_ for _ in url_logs.split('\n') if _]
 
         self.assertEquals(len(smtp_logs), 1)
-        self.assertEquals(len(url_logs), 3)
+        self.assertEquals(len(url_logs), 2)
 
         url_fields = url_logs[0].split('\x1e')
         self.assertEquals(len(url_fields), 3)
@@ -562,8 +563,7 @@ class TestCase(ACEModuleTestCase):
             ('message_id', b'<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>'),
             ('subject', b'canary #3'),
             ('url', b'http://tldp.org/LDP/abs/html'),
-            ('url', b'https://www.alienvault.com'),
-            ('url', b'http://197.210.28.107')]
+            ('url', b'https://www.alienvault.com')]
 
             for field_name, field_value in expected_values:
                 with self.subTest(field_name=field_name, field_value=field_value):
@@ -573,6 +573,22 @@ class TestCase(ACEModuleTestCase):
                     self.assertIsNotNone(row)
                     value = row[0]
                     self.assertEquals(value, field_value)
+
+        expected_iocs = [
+            Indicator(I_EMAIL_ADDRESS, 'unixfreak0037@gmail.com'),
+            Indicator(I_FQDN, 'gmail.com'),
+            Indicator(I_EMAIL_ADDRESS, 'jwdavison@company.com'),
+            Indicator(I_EMAIL_SUBJECT, 'canary #3'),
+            Indicator(I_MESSAGE_ID, '<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>'),
+            Indicator(I_URL, 'http://tldp.org/LDP/abs/html'),
+            Indicator(I_FQDN, 'tldp.org'),
+            Indicator(I_URI_PATH, '/LDP/abs/html'),
+            Indicator(I_URL, 'https://www.alienvault.com'),
+            Indicator(I_FQDN, 'www.alienvault.com'),
+            Indicator(I_FQDN, 'alienvault.com')
+        ]
+
+        self.assertEquals(sorted(expected_iocs, key=lambda x: (x.type, x.value)), sorted(root.all_iocs, key=lambda x: (x.type, x.value)))
 
     def test_archive_extraction(self):
 
@@ -769,8 +785,7 @@ class TestCase(ACEModuleTestCase):
             ('message_id', b'<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>'),
             ('subject', b'canary #3'),
             ('url', b'http://tldp.org/LDP/abs/html'),
-            ('url', b'https://www.alienvault.com'),
-            ('url', b'http://197.210.28.107')]
+            ('url', b'https://www.alienvault.com')]
 
             for field_name, field_value in expected_values:
                 with self.subTest(field_name=field_name, field_value=field_value):
@@ -1287,85 +1302,3 @@ class TestCase(ACEModuleTestCase):
         self.assertTrue(file_observable.has_tag('no_render'))
         from saq.modules.url import LiveBrowserAnalysis
         self.assertFalse(file_observable.get_analysis(LiveBrowserAnalysis))
-
-    def test_automated_email_remediation(self):
-
-        import saq
-        from saq.database import Remediation
-        from saq.remediation.mail import create_email_remediation_key
-
-        # reduce wait time for checking
-        saq.CONFIG['analysis_module_automated_email_remediation']['update_frequency'] = '1'
-
-        root = create_root_analysis()
-        root.initialize_storage()
-        email_delivery_obervable = root.add_observable(F_EMAIL_DELIVERY, create_email_delivery('<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>', 'jwdavison@company.com'))
-        email_delivery_obervable.add_directive(DIRECTIVE_REMEDIATE)
-        root.save()
-        root.schedule()
-        
-        engine = TestEngine()
-        engine.enable_module('analysis_module_automated_email_remediation', 'test_groups')
-        engine.controlled_stop()
-        engine.start()
-
-        # watch for the remediation entry
-        def _condition():
-            try:
-                r = saq.db.query(Remediation).filter(Remediation.key == create_email_remediation_key('<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>', 'jwdavison@company.com')).first()
-                return r is not None
-            finally:
-                saq.db.remove()
-
-        self.wait_for_condition(_condition)
-        engine.stop()
-        engine.wait()
-
-        # at this point the remediation is started but not completed
-        
-        root = RootAnalysis(storage_dir=root.storage_dir)
-        root.load()
-        from saq.modules.email import AutomatedEmailRemediationAction
-        email_delivery_obervable = root.get_observable(email_delivery_obervable.id)
-        self.assertIsNotNone(email_delivery_obervable)
-        remediation_analysis = email_delivery_obervable.get_analysis(AutomatedEmailRemediationAction)
-        self.assertIsNotNone(remediation_analysis)
-
-        self.assertIsNotNone(remediation_analysis.remediation)
-        self.assertTrue(remediation_analysis.delayed)
-        self.assertTrue(isinstance(remediation_analysis.remediation['id'], int))
-        self.assertEquals(remediation_analysis.remediation['type'], 'email')
-        self.assertEquals(remediation_analysis.remediation['action'], 'remove')
-        self.assertTrue(isinstance(remediation_analysis.remediation['insert_date'], str))
-        self.assertEquals(remediation_analysis.remediation['user_id'], saq.AUTOMATION_USER_ID)
-        self.assertIsNone(remediation_analysis.remediation['result'])
-        self.assertIsNotNone(remediation_analysis.remediation['comment'])
-        self.assertIsNone(remediation_analysis.remediation['successful'])
-        self.assertEquals(remediation_analysis.remediation['status'], 'NEW')
-
-        # now mark the remediation as completed and start the engine back up
-        saq.db.execute(Remediation.__table__.update()
-            .where(Remediation.id == remediation_analysis.remediation['id'])
-            .values(status='COMPLETED', successful=True, result='completed'))
-        saq.db.commit()
-        saq.db.remove()
-
-        engine = TestEngine()
-        engine.enable_module('analysis_module_automated_email_remediation', 'test_groups')
-        engine.controlled_stop()
-        engine.start()
-        engine.wait()
-
-        root = RootAnalysis(storage_dir=root.storage_dir)
-        root.load()
-        from saq.modules.email import AutomatedEmailRemediationAction
-        email_delivery_obervable = root.get_observable(email_delivery_obervable.id)
-        self.assertIsNotNone(email_delivery_obervable)
-        remediation_analysis = email_delivery_obervable.get_analysis(AutomatedEmailRemediationAction)
-        self.assertIsNotNone(remediation_analysis)
-
-        self.assertIsNotNone(remediation_analysis.remediation)
-        self.assertFalse(remediation_analysis.delayed)
-        self.assertIsNotNone(remediation_analysis.remediation['result'])
-        self.assertTrue(remediation_analysis.remediation['successful'])
-        self.assertEquals(remediation_analysis.remediation['status'], 'COMPLETED')

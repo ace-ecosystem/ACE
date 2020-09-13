@@ -10,6 +10,7 @@ import signal
 import sys
 import threading
 import time
+import uuid
 
 from multiprocessing import Manager, RLock, Pipe, Process
 from unittest import TestCase
@@ -20,7 +21,7 @@ import saq.engine
 from saq.analysis import RootAnalysis, _enable_io_tracker, _disable_io_tracker
 from saq.constants import *
 from saq.crypto import get_aes_key
-from saq.database import initialize_database, get_db_connection, use_db
+from saq.database import initialize_database, get_db_connection, use_db, Alert
 from saq.engine import Engine
 from saq.error import report_exception
 from saq.util import storage_dir_from_uuid, workload_storage_dir, abs_path
@@ -345,6 +346,25 @@ def create_root_analysis(tool=None, tool_instance=None, alert_type=None, desc=No
                         analysis_mode=analysis_mode if analysis_mode else 'test_groups',
                         queue=queue if queue else None,
                         instructions=instructions if instructions else None)
+
+def add_fp_alert():
+    root = create_root_analysis(uuid=str(uuid.uuid4()))
+    root.initialize_storage()
+
+    root.add_observable(F_FQDN, 'microsoft.com')
+    root.add_observable(F_URL, 'https://google.com')
+    root.add_observable(F_FILE_NAME, 'calc.exe')
+    root.add_observable(F_HOSTNAME, 'localhost')
+
+    root.save()
+
+    alert = Alert(storage_dir=root.storage_dir)
+    alert.load()
+
+    alert.disposition = DISPOSITION_FALSE_POSITIVE
+    alert.disposition_time = datetime.datetime.now()
+
+    alert.sync()
 
 class ServerProcess(object):
     def __init__(self, args):

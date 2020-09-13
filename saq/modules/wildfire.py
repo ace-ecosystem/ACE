@@ -106,19 +106,8 @@ class WildfireAnalyzer(SandboxAnalysisModule):
         return self.config.getint('frequency')
 
     @property
-    def use_proxy(self):
-        return self.config.getboolean('use_proxy')
-
-    @property
     def query_only(self):
         return self.config.getboolean('query_only')
-
-    @property
-    def proxies(self):
-        if not self.use_proxy:
-            return {}
-
-        return {'http': saq.CONFIG['proxy']['http'], 'https': saq.CONFIG['proxy']['https'] }
 
     @property
     def generated_analysis_type(self):
@@ -163,7 +152,12 @@ class WildfireAnalyzer(SandboxAnalysisModule):
         # request verdict from wildfire
         job = { "apikey": self.api_key, "hash": analysis.sha256 }
         url = "https://wildfire.paloaltonetworks.com/publicapi/get/verdict"
-        r = requests.post(url, data=job, verify=False, proxies=self.proxies)
+        try:
+            r = requests.post(url, data=job, verify=False, proxies=self.proxies)
+        except Exception as e:
+            message = f"error while getting wildfire verdict: {e.__class__} - {e}"
+            logging.error(message)
+            raise ValueError(message)
         if r.status_code != 200:
             analysis.fail("failed to get verdict {}".format(r.status_code), r.text)
             return
@@ -187,7 +181,12 @@ class WildfireAnalyzer(SandboxAnalysisModule):
             logging.debug("submitting {} to wildfire for analysis".format(path))
             file = { "file" : (os.path.basename(path), open(path, 'rb').read()) }
             url = "https://wildfire.paloaltonetworks.com/publicapi/submit/file"
-            r = requests.post(url, data=job, files=file, verify=False, proxies=self.proxies)
+            try:
+                r = requests.post(url, data=job, files=file, verify=False, proxies=self.proxies)
+            except Exception as e:
+                message = f"error while submitting file for wildfire analysis: {e.__class__} - {e}"
+                logging.error(message)
+                raise ValueError(message)
             if r.status_code != 200:
                 analysis.fail("failed to submit file {}".format(r.status_code), r.text)
                 return
@@ -227,7 +226,12 @@ class WildfireAnalyzer(SandboxAnalysisModule):
         # download the report
         logging.debug("downloading wildfire report")
         url = "https://wildfire.paloaltonetworks.com/publicapi/get/report"
-        r = requests.post(url, data=job, verify=False, proxies=self.proxies)
+        try:
+            r = requests.post(url, data=job, verify=False, proxies=self.proxies)
+        except Exception as e:
+            message = f"error while getting wildfire report: {e.__class__} - {e}"
+            logging.error(message)
+            raise ValueError(message)
         if r.status_code != 200:
             analysis.fail("failed to get report {}".format(r.status_code), r.text)
             return
@@ -306,7 +310,12 @@ class WildfireAnalyzer(SandboxAnalysisModule):
                                     # download sample
                                     job = { "apikey": self.api_key, "hash": file.get('md5') }
                                     url = "https://wildfire.paloaltonetworks.com/publicapi/get/sample"
-                                    r = requests.post(url, data=job, verify=False, proxies=self.proxies)
+                                    try:
+                                        r = requests.post(url, data=job, verify=False, proxies=self.proxies)
+                                    except Exception as e:
+                                        message = f"error while getting wildfire sample: {e.__class__} - {e}"
+                                        logging.error(message)
+                                        raise ValueError(message)
                                     if (r.status_code == 200):
                                         outpath = join(wildfire_dir, "{}.exe".format(file.get('md5')))
                                         with open(outpath, "wb") as fp:

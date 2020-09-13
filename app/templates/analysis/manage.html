@@ -9,9 +9,7 @@
             <button id="btn-take-ownership" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-lock"></span> Take Ownership</button>
             <button id="btn-assign-ownership-dialog" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#assign_ownership_modal" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %} ><span class="glyphicon glyphicon-user"></span> Assign Ownership</button>
             <button id="btn-show-add-tag" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#tag_modal" uuid=""><span class="glyphicon glyphicon-tags"></span> Add Tag(s)</button>
-            <!--<button id="btn-remediate-alerts" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('email_remediation') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-envelope"></span> Email Remediation</button>-->
-            <button id="btn-mass-remediation" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-remove"></span> Remediation</button>
-            <!--<button id="btn-unremediate-alerts" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-ok"></span> Un-Remediate Email(s)</button>-->
+            <button type="button" class="btn btn-default btn-sm" onclick="show_remediation_targets(get_all_checked_alerts())"><span class="glyphicon glyphicon-remove"></span> Remediation</button>
             <button id="btn-add-to-event" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#event_modal" {%if not ace_config['gui'].getboolean('event_management') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add To Event</button>
         </div>
     </div>
@@ -61,7 +59,7 @@
                         <td>
                             <label><input type="checkbox" name="detail_{{alert.uuid}}" {% if alert.uuid in session['checked'] %}checked{% endif %}></input></label>
                         </td>
-                        <td style="white-space: nowrap;" title="{{alert.insert_date}}">{{alert.display_insert_date}}</td>
+                        <td style="white-space: nowrap;" title="{{alert.insert_date}}" id="alert_date_{{ alert.uuid }}">{{alert.display_insert_date}}</td>
                         <td>
                             <img src="{{url_for('static', filename='images/alert_icons/{}.png'.format(alert.icon))}}">
                             <a href="{{ url_for('analysis.index', direct=alert.uuid) }}">({{alert.detection_count}}) {{alert.description}}</a>
@@ -80,10 +78,12 @@
                                     <span class="label {{tag.css_class}}" style="cursor:pointer" onmousedown="add_filter('Tag', ['{{tag.name}}'])">{{tag.name}}</span>
                                 {% endfor %}
                             {% endif %}
-                            {% if alert_remediations[alert.uuid]|length != 0 %}
-                                {% for remediation in alert_remediations[alert.uuid] %}
-                                <span class="label {{remediation['css_class']}}" style="cursor:pointer" >{{remediation['result']}}</span>
-                                {% endfor %}
+                            {% if alert.remediation_status == 'success' %}
+                                <span class="label label-success" style="cursor:pointer" >remediated</span>
+                            {% elif alert.remediation_status == 'failed' %}
+                                <span class="label label-danger" style="cursor:pointer" >remediation failed</span>
+                            {% elif alert.remediation_status == 'processing' %}
+                                <span class="label label-warning" style="cursor:pointer" >remediating</span>
                             {% endif %}
                             {% if comments[alert.uuid]|length != 0 %}
                                 {% for comment in comments[alert.uuid] %}
@@ -102,9 +102,7 @@
                             <span style="cursor:pointer" onmousedown='add_filter("Disposition", ["{{alert.disposition}}"])'>{{alert.disposition}}</span>
                         </td>
                         {% endif %}
-                        <td style="white-space: nowrap;">
-                            {{alert.status}}
-                        </td>
+                        <td id="alert_status_{{ alert.uuid }}" style="white-space: nowrap;">{{alert.status}}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -127,7 +125,6 @@
 <!-- filter dialog -->
 <div class="modal fade" id="filter_modal" tabindex="-1" role="dialog" aria-labelledby="filter_modal_label" aria-hidden="true">
     <form onsubmit="return apply_filter();">
-    <input type="hidden" id="nav_move" name="nav_move" value=""/>
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
@@ -143,7 +140,7 @@
                 <button type="button" class="btn btn-default" onmousedown='new_filter_option()'><span class="glyphicon glyphicon-plus-sign"></span> Add</button>
                 <button type="button" class="btn btn-default" onmousedown='removeElements("filter_row_")'><span class="glyphicon glyphicon-remove"></span> Clear</button>
                 <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary" onmousedown='apply_filter()'>Apply</button>
+                <button type="submit" class="btn btn-primary">Apply</button>
             </div>
         </div>
     </div>

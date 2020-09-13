@@ -2457,7 +2457,7 @@ class TestCase(ACEEngineTestCase):
 
         # we should have recorded a failed analysis
         from saq.modules.test import BasicTestAnalysis
-        self.assertTrue(observable.get_analysis_failed(BasicTestAnalysis))
+        self.assertTrue(root.is_analysis_failed(BasicTestAnalysis, observable))
 
         # the low priority analysis module should have still executed
         from saq.modules.test import LowPriorityAnalysis
@@ -2496,7 +2496,9 @@ class TestCase(ACEEngineTestCase):
 
         # we should have recorded a failed analysis
         from saq.modules.test import BasicTestAnalysis
-        self.assertTrue(observable.get_analysis_failed(BasicTestAnalysis))
+        analysis = observable.get_analysis(BasicTestAnalysis)
+        self.assertIsNone(analysis)
+        self.assertTrue(root.is_analysis_failed(BasicTestAnalysis, observable))
 
         # the low priority analysis module should have still executed
         from saq.modules.test import LowPriorityAnalysis

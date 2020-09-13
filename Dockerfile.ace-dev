@@ -1,6 +1,6 @@
 FROM ace-base:latest
 USER root
-RUN apt -y install git vim screen default-mysql-client man htop net-tools ctags strace
+RUN apt-get -y install git vim screen default-mysql-client man htop net-tools ctags strace
 RUN rmdir /opt/signatures && ln -s /opt/ace/etc/yara /opt/signatures
 USER ace
 WORKDIR /opt/ace

@@ -206,40 +206,6 @@ def search_archive(source, message_ids, excluded_emails=[]):
     if not index:
         return _buffer
 
-    # get current remediation history for these emails
-    with get_db_connection() as db:
-        c = db.cursor()
-
-        c.execute("""SELECT r.`id`, r.`type`, r.`action`, r.`insert_date`, 
-                            u.`username`, r.`key`, r.`result`, r.`comment`, r.`successful`,
-                            r.`company_id`, r.`lock`, r.`lock_time`, r.`status`
-                     FROM remediation r JOIN users u ON r.user_id = u.id WHERE r.`key` in ( {} )
-                     ORDER BY r.insert_date ASC""".format(','.join(['%s' for _ in index.keys()])), 
-                 tuple(index.keys()))
-
-        for row in c:
-            ( _id, _type, _action, _insert_date, _user, _key, _result, _comment, _successful,
-              _company_id, _lock, _lock_time, _status ) = row
-
-            if _key not in index:
-                logging.error(f"missing {_key} in item index")
-                continue
-
-            index[_key].remediation_history.append({
-                'id': _id,
-                'type': _type,
-                'action': _action,
-                'insert_date': str(_insert_date),
-                'user': _user,
-                'key': _key,
-                'result': _result,
-                'comment': _comment,
-                'successful': _successful,
-                'company_id': _company_id,
-                'lock': _lock,
-                'lock_time': str(_lock_time),
-                'status': _status})
-
     return _buffer
 
 def maintain_archive(verbose=False):

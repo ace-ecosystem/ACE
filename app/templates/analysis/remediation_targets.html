@@ -1,0 +1,18 @@
+<table class="table table-striped">
+    <tr>
+        <td><input type="checkbox" onclick="toggle_checkboxes(this, 'remediation_target')"/></td>
+        <td width="100">Type</td>
+        <td>Target</td>
+        <td width="115">Status</td>
+    </tr>
+    {% for target in targets %}
+    <tr class="{{target.css_class}}">
+        <td>
+            <input type="checkbox" name="remediation_target" id="{{target.id}}" {% if target.state == "new" %}checked{% endif %} />
+        </td>
+        <td>{{target.type}}</td>
+        <td>{{target.value|e}}</td>
+        <td>{{target.state}}</td>
+    </tr>
+    {% endfor %}
+</table>

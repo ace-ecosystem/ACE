@@ -71,6 +71,9 @@ def create_app():
 
     from .analysis import analysis as analysis_blueprint
     app.register_blueprint(analysis_blueprint)
+
+    from .events import events as events_blueprint
+    app.register_blueprint(events_blueprint)
     
     #from .cloudphish import cloudphish as cloudphish_blueprint
     #app.register_blueprint(cloudphish_blueprint)

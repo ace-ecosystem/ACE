@@ -53,7 +53,7 @@ setuptools_git
 six
 tld
 tzlocal
-urlfinderlib
+urlfinderlib==0.15.1
 vxstreamlib
 yara_scanner==1.0.15
 python-whois
@@ -67,3 +67,6 @@ fastapi
 selenium
 docker
 redis
+fakeredis
+distorm3
+requests-mock

@@ -130,6 +130,25 @@ def mock_queue():
             return
     yield MockJobQueue()
 
+@pytest.fixture(scope='function')
+def mock_driver():
+    """Mocks a selenium WebDriver for unit tests."""   
+    class MockDriver:
+        def __init__(self):
+            pass
+        def execute(self, driver_command, params=None):
+            return True
+    yield MockDriver()
+
+@pytest.fixture(scope='function')
+def mock_webdriver_not_ready():
+    """Mocks a selenium WebDriver for unit tests."""   
+    class MockDriver:
+        def __init__(self):
+            pass
+        def execute(self, driver_command, params=None):
+            raise Exception("Fake Exception")
+    yield MockDriver()
 
 # --------------------------------------------------------------
 # Tests
@@ -303,6 +322,7 @@ def test_render_success(mock_webdriver, mock_storage, caplog):
 
     # Execute
     output = render.render(
+        driver=mock_webdriver,
         content='https://google.com',
         content_type=ContentTypeEnum.url,
         output_type='redis',
@@ -323,6 +343,35 @@ def test_render_success(mock_webdriver, mock_storage, caplog):
     assert output == 'fake_data'
     assert mock_webdriver.is_quit == True
 
+@pytest.mark.unit
+@pytest.mark.slow
+def test_render_waits_for_selenium_ready(mock_webdriver_not_ready, caplog):
+    """Tests that a WebDriver that is not ready will not execute rendering"""
+    # Setup
+    def mock_render(*args, **kwargs):
+         return ''
+    
+    class MockStorage:
+        def __init__(self):
+            pass
+        def load(self, *args, **kwargs):
+            return 'blah'
+        def save(self, *args, **kwargs):
+            return True
+
+    # Execute
+    render.run(
+        sleep=5, 
+        job_queue=mock_queue, 
+        job=mock_job, 
+        render=mock_render, 
+        storage=MockStorage(), 
+        driver=mock_webdriver_not_ready,
+    )
+
+    # Verify
+    assert f'waiting for selenium' in caplog.text
+
 
 @pytest.mark.unit
 def test_render_no_screenshot_returned(mock_webdriver, mock_storage, caplog):
@@ -339,6 +388,7 @@ def test_render_no_screenshot_returned(mock_webdriver, mock_storage, caplog):
     # Execute
     with pytest.raises(ValueError):
         _ = render.render(
+            driver=mock_webdriver,
             content='https://google.com',
             content_type=ContentTypeEnum.url,
             output_type=OutputTypeEnum.redis,
@@ -372,6 +422,7 @@ def test_render_unknown_exception(mock_webdriver, mock_storage, caplog):
     # Execute
     with pytest.raises(ValueError):
         render.render(
+            driver=mock_webdriver,
             content='https://google.com',
             content_type=ContentTypeEnum.url,
             output_type=OutputTypeEnum.redis,
@@ -392,12 +443,13 @@ def test_render_unknown_exception(mock_webdriver, mock_storage, caplog):
 
 
 @pytest.mark.unit
-def test_run_completed(mock_job, mock_queue):
+def test_run_completed(mock_job, mock_queue, mock_driver):
     """Test run function for a successful run."""
 
     # Setup
     def mock_render(*args, **kwargs):
         return
+    
     class MockStorage:
         def __init__(self):
             pass
@@ -407,14 +459,20 @@ def test_run_completed(mock_job, mock_queue):
             return True
 
     # Execute
-    render.run(sleep=5, job_queue=mock_queue, job=mock_job, render=mock_render, storage=MockStorage())
+    render.run(
+        sleep=5, 
+        job_queue=mock_queue, 
+        job=mock_job, 
+        render=mock_render, 
+        storage=MockStorage(), 
+        driver=mock_driver,
+    )
 
     # Verify
     assert mock_job.status is StatusEnum.complete
 
-
 @pytest.mark.unit
-def test_run_failed(mock_job, mock_queue):
+def test_run_failed(mock_job, mock_queue, mock_driver):
     """Test run function when the run fails."""
 
     # Setup
@@ -422,14 +480,20 @@ def test_run_failed(mock_job, mock_queue):
         raise ValueError('raising an error')
 
     # Execute
-    render.run(sleep=5, job_queue=mock_queue, job=mock_job, render=mock_render)
+    render.run(
+        sleep=5, 
+        job_queue=mock_queue, 
+        job=mock_job, 
+        render=mock_render, 
+        driver=mock_driver,
+    )
 
     # Verify
     assert mock_job.status is StatusEnum.failed
 
 
 @pytest.mark.unit
-def test_run_storage_not_saved(mock_job, mock_queue, caplog):
+def test_run_storage_not_saved(mock_job, mock_queue, mock_driver, caplog):
     """Test run function when the screenshot is not saved to storage."""
 
     # Setup
@@ -441,7 +505,14 @@ def test_run_storage_not_saved(mock_job, mock_queue, caplog):
 
     # Execute
     with pytest.raises(ValueError):
-        render.run(sleep=5, job_queue=mock_queue, job=mock_job, render=mock_render, storage=EmptyStorage)
+        render.run(
+            sleep=5, 
+            job_queue=mock_queue, 
+            job=mock_job, 
+            render=mock_render, 
+            storage=EmptyStorage,
+            driver=mock_driver,
+        )
 
     # Verify
     assert mock_job.status is StatusEnum.failed

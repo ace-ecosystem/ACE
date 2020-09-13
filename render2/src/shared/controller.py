@@ -55,20 +55,13 @@ def heartbeat():
 #       need to implement a uvicorn middleware to properly handle redirects. See: 
 #       https://github.com/encode/uvicorn/blob/master/uvicorn/middleware/proxy_headers.py
 
-
 @app.post("/job", status_code=status.HTTP_201_CREATED, response_model=JobOut)
 @app.post("/job/", status_code=status.HTTP_201_CREATED, response_model=JobOut)
-def create_job(job: JobIn, queue: Queue = Depends()):
+def create_job(job: JobIn, response: Response, queue: Queue = Depends()):
     # generate UUID
     id = uuid.uuid5(uuid.NAMESPACE_DNS, job.content)
     id_string = str(id)
     
-    already_id = queue.q.get_job(id_string)
-    # check if id already exists
-    if already_id is not None:
-        logger.error(f'unable to create new job. job "{id_string}" already exists.')
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT)
-
     # convert to dictionary
     try:
         json_job = jsonable_encoder(job)
@@ -76,29 +69,24 @@ def create_job(job: JobIn, queue: Queue = Depends()):
         _job_for_logging = prep_for_logging(job.dict())
         logger.error(f'unable to serialize job to json: "{_job_for_logging}". {e.__class__}, {e}')
 
-
-    # update attributes
-    json_job["id"] = id_string
-    json_job["status"] = "queued"
-
-    # create job in redis
-    queue.q.add_job(json_job)
+    preexisting_job = queue.q.get_job(id_string)
+    # check if id already exists
+    if preexisting_job is not None:
+        json_job = preexisting_job
+        # since the job is not being created, return 200 instead of 201
+        response.status_code = status.HTTP_200_OK
+        logger.info(f'found duplicate job: "{id_string}" already exists: {prep_for_logging(json_job)}.')
+    else:
+        # create a new job
+        # update attributes
+        json_job["id"] = id_string
+        json_job["status"] = "queued"
+        # add to queue
+        queue.q.add_job(json_job)
+        logger.info(f'created new job: {prep_for_logging(json_job)}')
     
-    # convert to model
-    try:
-        return_job = JobOut(**json_job)
-    except Exception as e:
-        logger.error(
-            f'unable to convert json to Job: "{prep_for_logging(json_job)}". {e.__class__}, {e} - '
-            f'returning an HTTP 500'
-        )
-        # If we don't have a return job, then we can't return it. So raise a 500 error.
-        # Redis key expiry set in 'queue.q.add_job()` will make sure the job gets garbage collected
-        # within redis.
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    # return JSON
-    logger.info(f'created new job: {prep_for_logging(return_job.dict())}')
+    # convert and return JobOut
+    return_job = convert_json_to_return_job(json_job)
     return return_job
 
 
@@ -124,16 +112,16 @@ def get_job(job_id: str, queue: Queue = Depends()):
     logger.info(f'returning job "{job_id}": {prep_for_logging(job.dict())}')
     return job
 
-
-@app.delete("/job/{job_id}", status_code=status.HTTP_200_OK)
-def delete_job(job_id: str, queue: Queue = Depends()):
-    job_dict = queue.q.get_job(job_id)
-    
-    if job_dict is not None:
-        queue.q.remove_job(job_id)
-        logger.info(f'deleted job "{job_id}": {prep_for_logging(job_dict)}')
-    else:
-        logger.info(f'job "{job_id}" was not found and could not be deleted')
-
-    # always return 200, even if job did not exist
-    return Response(status_code=status.HTTP_200_OK)
+# Utility
+def convert_json_to_return_job(json_job) -> JobOut:
+    try:
+        return JobOut(**json_job)
+    except Exception as e:
+        logger.error(
+            f'unable to convert json to Job: "{prep_for_logging(json_job)}". {e.__class__}, {e} - '
+            f'returning an HTTP 500'
+        )
+        # If we don't have a return job, then we can't return it. So raise a 500 error.
+        # Redis key expiry set in 'queue.q.add_job()` will make sure the job gets garbage collected
+        # within redis.
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
