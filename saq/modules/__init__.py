@@ -19,7 +19,6 @@ import saq
 from saq.analysis import Analysis, Observable, MODULE_PATH, SPLIT_MODULE_PATH
 from saq.constants import *
 from saq.error import report_exception
-import saq.ldap
 from saq.network_semaphore import NetworkSemaphoreClient
 from saq.splunk import SplunkQueryObject
 from saq.util import create_timedelta, parse_event_time, create_directory, atomic_open
@@ -793,11 +792,6 @@ class AnalysisModule(object):
                 logging.debug(f"{obj} is already covered by another {self} analysis")
                 return False
 
-            # did analysis fail for this observable?
-            if obj.get_analysis_failed(self, self.instance):
-                logging.debug(f"analysis by {self} has already failed for {obj}")
-                return False
-
         # try to load analysis from cache first
         if self.load_cached_analysis(obj):
             analysis_result = True
@@ -999,61 +993,6 @@ class TagAnalysisModule(AnalysisModule):
 
     def is_excluded(self, observable):
         return False 
-
-class LDAPAnalysisModule(AnalysisModule):
-    """An analysis module that uses LDAP."""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # some additional parameters for Tivoli queries
-        self.tivoli_ldap_enabled = saq.CONFIG.getboolean('ldap', 'tivoli_enabled')
-        self.tivoli_server = saq.CONFIG.get('ldap', 'tivoli_server')
-        self.tivoli_ldap_port = saq.CONFIG.getint('ldap', 'tivoli_ldap_port')
-        self.tivoli_bind_user = saq.CONFIG.get('ldap', 'tivoli_bind_user')
-        self.tivoli_bind_password = saq.CONFIG.get('ldap', 'ldap_bind_password')
-        self.tivoli_base_dn = saq.CONFIG.get('ldap', 'tivoli_base_dn')
-
-    def ldap_query(self, query):
-        entries = saq.ldap.query(query)
-        if len(entries) > 0:
-            return entries[0]['attributes']
-        return None
-
-    def tivoli_ldap_query(self, query):
-
-        if not self.tivoli_ldap_enabled:
-            return None
-
-        from ldap3 import Server, Connection, SIMPLE, SYNC, ASYNC, SUBTREE, ALL, ALL_ATTRIBUTES
-        import json
-
-        try:
-            logging.debug("connecting to tivoli ldap server {} on port {}".format(self.tivoli_server, self.tivoli_ldap_port))
-            with Connection(
-                Server(self.tivoli_server, port = self.tivoli_ldap_port , get_info = ALL),
-                auto_bind = False,
-                client_strategy = SYNC,
-                user=self.tivoli_bind_user,
-                password=self.tivoli_bind_password,
-                authentication=SIMPLE,
-                check_names=True) as c:
-
-                logging.debug("running tivoli ldap query for ({})".format(query))
-                c.search(self.tivoli_base_dn, '({})'.format(query), SUBTREE, attributes = ALL_ATTRIBUTES)
-
-                # a little hack to move the result into json
-                response = json.loads(c.response_to_json())
-                result = c.result
-
-                if len(response['entries']) < 1:
-                    return None
-
-                # XXX not sure about the 0 here, I guess only if we only looking for one thing at a time
-                return response['entries'][0]['attributes']
-
-        except Exception as e:
-            logging.warning("failed tivoli ldap query {}: {}".format(query, e))
-            return None
 
 def splunktime_to_datetime(splunk_time):
     """Convert a splunk time in 2015-02-19T09:50:49.000-05:00 format to a datetime object."""

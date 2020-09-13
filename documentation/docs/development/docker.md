@@ -11,7 +11,7 @@ You can use docker to develop in ACE.
 
 - Execute `bin/initialize_docker.py` which sets up random passwords for a development environment.
 - Execute `bin/reset-dev-container.sh` which builds the images, starts and configures the container.
-- OPTIONAL: Execute `bin/attach-docker-dev.sh` to attach to the running container.
+- OPTIONAL: Execute `bin/attach-dev-container.sh` to attach to the running container.
 
 ## Windows Setup Instructions (Powershell)
 

@@ -116,7 +116,7 @@ class TestRenderControllerClient:
 
         assert job_id == MOCK_JOB_ID
 
-    @pytest.mark.unit
+    @pytest.mark.integration
     def test_watch_in_progress(self):
         def mock_request(*args, **kwargs):
             assert args[0] == f'{TEST_URI}/job/{MOCK_JOB_ID}'

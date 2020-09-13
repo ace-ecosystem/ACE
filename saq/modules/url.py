@@ -629,6 +629,8 @@ class CrawlphishAnalyzer(AnalysisModule):
 
         self._initialized = False
 
+        self.auto_crawl_all_alert_urls = self.config.getboolean('auto_crawl_all_alert_urls')
+
     def verify_environment(self):
         self.verify_config_exists('whitelist_path')
         #self.verify_path_exists(self.config['whitelist_path'])
@@ -708,9 +710,26 @@ class CrawlphishAnalyzer(AnalysisModule):
 
     @property
     def required_directives(self):
-        return [ DIRECTIVE_CRAWL ]
+        if self.auto_crawl_all_alert_urls:
+            # required directive for auto_crawl_root_level URLs addressed in custom_requirement
+            return []
+        else:
+            return [DIRECTIVE_CRAWL]
+
+    def custom_requirement(self, observable):
+        if self.auto_crawl_all_alert_urls:
+            return True
+            # if self.root.has_observable(observable) or observable.has_directive(DIRECTIVE_CRAWL):
+            #     return True
+            # else:
+            #     return False
+
+        # custom requirement does not apply if not crawling all root level URLs
+        else:
+            return True
 
     def execute_analysis(self, url):
+        from saq.modules.render import RenderAnalyzer
 
         if not self._initialized:
             # used to decide what URLs to actually crawl
@@ -902,6 +921,9 @@ class CrawlphishAnalyzer(AnalysisModule):
             if final_url:
                 final_url.add_tag('redirection_target')
                 final_url.add_relationship(R_REDIRECTED_FROM, url)
+                final_url.exclude_analysis(RenderAnalyzer)
+                final_url.exclude_analysis(CrawlphishAnalyzer)
+                analysis.iocs.add_url_iocs(final_url.value, tags=['crawlphish', 'redirection_target'])
 
         #if len(response.history) > 1:
             #url.add_tag('redirection')
@@ -911,7 +933,7 @@ class CrawlphishAnalyzer(AnalysisModule):
         if download: 
             download.add_relationship(R_DOWNLOADED_FROM, final_url if final_url else url)
             # HTML files pulled with crawlphish will automatically attempt to be Rendered, so calling this is redundant
-            download.add_directive(DIRECTIVE_NO_RENDER)
+            download.exclude_analysis(RenderAnalyzer)
             # only extract if non-error http response
             if response.status_code >= 200 and response.status_code <= 299:
                 download.add_directive(DIRECTIVE_EXTRACT_URLS)
@@ -1245,6 +1267,7 @@ class ProtectedURLAnalyzer(AnalysisModule):
         analysis.protection_type = protection_type
         analysis.extracted_url = extracted_url
         extracted_url = analysis.add_observable(F_URL, extracted_url)
+        analysis.iocs.add_url_iocs(extracted_url, tags=['protected_url'])
 
         # don't analyze the extracted url with this module again
         extracted_url.exclude_analysis(self)

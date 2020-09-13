@@ -41,7 +41,6 @@ def prep_for_logging(job_details: dict, max_length: int = MAX_LENGTH) -> dict:
 def get_logger(module_name: str) -> logging.Logger:
     """Configures a logger for each module"""
     logger = logging.getLogger(module_name)
-    logger = logging.getLogger('logger')
     logger.setLevel(logging.INFO)
     handler = logging.StreamHandler(sys.stdout)
     formatter = TruncatingFormatter(f'%(asctime)s {module_name.upper()}[%(levelname)s] %(message)s')

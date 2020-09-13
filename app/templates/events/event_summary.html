@@ -1,0 +1,63 @@
+<div class="panel-heading">
+    <h3 class="panel-title">Event Summary</h3>
+</div>
+<div class="panel-body">
+    <p>
+        <strong>Description: </strong>{{ event.comment }}
+    </p>
+    <table class="table table-bordered table-condensed">
+        <tr>
+            <th>Event Time</th>
+            <th>Alert Time</th>
+            <th>Ownership Time</th>
+            <th>Disposition Time</th>
+            <th>Contain Time</th>
+            <th>Remediation Time</th>
+        </tr>
+        <tr>
+            <td>{{ event.event_time }}</td>
+            <td>{{ event.alert_time }}</td>
+            <td>{{ event.ownership_time }}</td>
+            <td>{{ event.disposition_time }}</td>
+            <td>{{ event.contain_time }}</td>
+            <td>{{ event.remediation_time }}</td>
+        </tr>
+    </table>
+</div>
+
+<div class="panel-body">
+    <table class="table table-bordered table-condensed">
+        <tr>
+            <th class="text-nowrap">Disposition</th>
+            <th class="text-nowrap">Status</th>
+            <th class="text-nowrap">Remediation</th>
+            <th class="text-nowrap">Type</th>
+            <th class="text-nowrap">Vector</th>
+            <th class="text-nowrap">Risk Level</th>
+            <th class="text-nowrap">Prevention Tool</th>
+            <th class="text-nowrap">Campaign</th>
+            <th class="text-nowrap">Threat Types</th>
+            <th class="text-nowrap">Threat Names</th>
+        </tr>
+        <tr>
+            <td>{{ event.disposition }}</td>
+            <td>{{ event.status }}</td>
+            <td>{{ event.remediation }}</td>
+            <td>{{ event.type }}</td>
+            <td>{{ event.vector }}</td>
+            <td>{{ event.risk_level }}</td>
+            <td>{{ event.prevention_tool }}</td>
+            <td>{{ event.campaign.name }}</td>
+            <td>
+                {% for t in event.threats %}
+                <span class="label label-default">{{t}}</span>
+                {% endfor %}
+            </td>
+            <td>
+                {% for mal in event.malware %}
+                <span class="label label-danger">{{mal.name}}</span>
+                {% endfor %}
+            </td>
+        </tr>
+    </table>
+</div>

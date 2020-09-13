@@ -85,7 +85,6 @@ It has the following endpoints:
 | ------------ | ------- | ----------- | ----------- | --- |
 | `job/`         | POST    | `{`<br>`  "content_type": "url",`<br>`  "content": "https://www.google.com" `<br>`  "output_type": "redis",`<br>`  "width": 1024,`<br>`  "height": 1024`<br>`}` | `{`<br>`  "id": "b5530f79-9084-394d-b8d0-8e1ec8c77dc5",`<br>`  "content_type": "url",`<br>`  "content": "https://www.google.com",`<br>`  "output_type": "redis",`<br>`  "width": 0,`<br>`  "height": 0`,<br>`  "status": "queued",`<br>`  "data": null`<br>`}` | `201`, `409`, `422`, `500` |
 | `job/{job_id}` | GET     |     | `{`<br>`  "id": "b5530f79-9084-394d-b8d0-8e1ec8c77dc5",`<br>`  "content_type": "url",`<br>`  "content": "https://www.google.com",`<br>`  "output_type": "redis",`<br>`  "width": 0,`<br>`  "height": 0`,<br>`  "status": "processing",`<br>`  "data": "base64string`<br>`}` | `404`, `500` |
-| `job/{job_id}` | DELETE  |     |    | `200` |
 | `ping/`        | GET     |     |    | `200` |
 
 
@@ -116,14 +115,13 @@ You can import the test suite through Postman using the `tests/render2/RenderTes
 - **Happy Path URL**    - this suite replicates the [ACE Render Analysis Module's](../modules/render_analyzer.md) behavior for a job containing just a URL:
     - POST a new job.
     - GET the newly created job until job status resolves.
-    - DELETE the job.
 - **Happy Path HTML**   - this suite replicates the [ACE Render Analysis Module's](../modules/render_analyzer.md) behavior for a job containing pre-crawled HTML, similar to the above.
 - **Sad Path**          - this suite tests all of the controller's data validation for incorrect values
 - **Misc**              - this suite contains miscellaneous requests, such as the `/ping` heartbeat and redirect behavior.
 
 ## Redis
 
-Redis is configured to communicate with both the **Controller** and the **Renderer**
+Redis is configured to communicate with both the **Controller** and the **Renderer**. Redis controls the lifetime of jobs (completed or not) through it's expiry settings.
 
 ### Configuration
 

@@ -13,7 +13,6 @@ class TestCase(ACEModuleTestCase):
         root = create_root_analysis()
         root.initialize_storage()
         url = root.add_observable(F_URL, 'http://www.google.com')
-        url.add_directive(DIRECTIVE_RENDER)
         root.save()
         root.schedule()
 
@@ -46,7 +45,6 @@ class TestCase(ACEModuleTestCase):
         target_file = 'test.html'
 
         file_observable = root.add_observable(F_FILE, target_file)
-        file_observable.add_directive(DIRECTIVE_RENDER)
         root.save()
         root.schedule()
 

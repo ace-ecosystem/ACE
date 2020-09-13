@@ -30,6 +30,7 @@ fi
 docker-compose -f docker-compose-dev.yml stop
 docker container rm ace-dev > /dev/null 2>&1
 docker container rm ace-db-dev > /dev/null 2>&1
+docker container rm ace-redis-dev > /dev/null 2>&1
 docker volume rm ace-data-dev > /dev/null 2>&1
 docker volume rm ace-db-dev > /dev/null 2>&1
 #docker volume rm ace-home-dev > /dev/null 2>&1
@@ -59,7 +60,17 @@ do
     if [[ "$f" == *"_container.sh"* ]]
     then
         echo "executing $f in container..."
-        docker exec -it -u ace ace-dev /bin/bash -il "docker/provision/ace/site/$f"
+
+        # if the file name has _root_ in it then we execute it as root
+        user=ace
+        if [[ "$f" == *"_root_"* ]]
+        then
+            echo "executing $f as root..."
+            user=root
+        fi
+
+        docker exec -it -u $user ace-dev /bin/bash -il "docker/provision/ace/site/$f"
+
     elif [[ "$f" == *".sh"* ]]
     then
         echo "executing $f on host..."
