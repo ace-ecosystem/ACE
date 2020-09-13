@@ -36,6 +36,7 @@ fi
 ace -L etc/gui_logging.ini start-gui &
 
 GUI_PID=$!
+echo "$GUI_PID" > data/var/daemon/gui.pid
 
 if [ ! -e etc/api_logging.ini ]
 then
@@ -44,6 +45,7 @@ fi
 ace -L etc/api_logging.ini start-api &
 
 API_PID=$!
+echo "$API_PID" > data/var/daemon/api.pid
 
 while :
 do

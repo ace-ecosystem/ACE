@@ -1,0 +1,26 @@
+<tr id="event_alerts_{{event.id}}">
+<td colspan="11">
+    <table class="table table-bordered table-condensed">
+        <tr><td class="event-cell">Comment</td><td>{{event.commentf}}</td></tr>
+        <tr>
+            <td class="event-cell">Companies</td>
+            <td>
+                {% for company in event.companies %}
+                <span>{{company.name}} </span>
+                {% endfor %}
+            </td>
+        </tr>
+    </table>
+    <table class="table table-bordered table-condensed">
+        <tr><th>Event Times (UTC)</th
+        ></tr>
+        <tr><td class="event-cell">Event Time</td><td>{{event.event_time}}</td></tr>
+        <tr><td class="event-cell">Alert Time</td><td>{{event.alert_time}}</td></tr>
+        <tr><td class="event-cell">Ownership Time</td><td>{{event.ownership_time}}</td></tr>
+        <tr><td class="event-cell">Disposition Time</td><td>{{event.disposition_time}}</td></tr>
+        <tr><td class="event-cell">Contain Time</td><td>{{event.contain_time}}</td></tr>
+        <tr><td class="event-cell">Remediation Time</td><td>{{event.remediation_time}}</td></tr>
+    </table>
+    {% include "events/event_alerts.html" %}
+</td>
+</tr>

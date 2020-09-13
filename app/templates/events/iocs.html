@@ -1,0 +1,21 @@
+<div class="panel-heading">
+    <h3 class="panel-title">IOC Summary</h3>
+</div>
+<div class="panel-body" style="overflow: scroll;">
+    <table class="table table-bordered table-condensed">
+        <tr>
+            <th>Status</th>
+            <th>Type</th>
+            <th>Value</th>
+            <th>Tags</th>
+        </tr>
+        {% for ioc in iocs %}
+        <tr>
+            <td>{{ ioc['status'] }}</td>
+            <td>{{ ioc['type'] }}</td>
+            <td>{{ ioc['value'] }}</td>
+            <td>{{ ', '.join(ioc['tags']) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>

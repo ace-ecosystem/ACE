@@ -1,6 +1,8 @@
 import base64
+import binascii
 import csv
 import datetime
+import distorm3
 import email.parser
 import fnmatch
 import gc
@@ -194,6 +196,48 @@ def _safe_filename(s):
 
     # make sure we don't allow parent dir
     return ("".join(_safe_char(c) for c in s).rstrip("_")).replace('..', '_') # turn parent dir into bemused face
+
+def disassemble(path, offset, first_instr_offset, match_len, context_bytes, decoder):
+    """
+        Try to disassemble the context_bytes provided so that an instruction starts on the first byte of the yara match (first_instr_offset)
+        Typically asm signatures should land this way.
+    """
+    rtn = None
+    for off in range(0, first_instr_offset):
+        instructions = distorm3.Decode(offset+off, context_bytes[off:], decoder) 
+        for instr in instructions:
+            #If one of the instructions aligns with the first byte of the signature match, then our alignment is probably correct. Return result
+            if instr[0] == first_instr_offset:
+                return render_disassembly(instructions, offset+first_instr_offset, match_len)
+    # We failed to align an instruction with the signature match. Just disassemble from the start of context
+    logging.debug('Failed to align disassembly with context: {} first byte offset: 0x{}'.format(binascii.hexlify(context_bytes), first_instr_offset))
+    return render_disassembly(distorm3.Decode(offset, context_bytes, decoder), offset+first_instr_offset, match_len)
+
+def render_disassembly(dis, match_offset, match_len, context_lines=4):
+    """
+        Accepts a DecodeGenerator from distorm and returns a string that will be directly rendered in the ICE yara results page
+        dis: DecodeGenerator from distorm.Decode()
+        match_offset: offset into the file where the match occured
+        match_len: Length of yara  match
+        context_lines: How many lines of disassembly to return before and after the matching lines
+    """
+    lines = []
+    first_line = None
+    last_line = None
+    for i in range(len(dis)):
+        instr = dis[i]
+        asm = '0x{:08X}     {:<20}{}'.format(instr[0], instr[3], instr[2])
+        if instr[0] >= match_offset and instr[0]  < match_offset+match_len:
+            lines.append('<b>{}</b>'.format(asm))
+            if not first_line:
+                first_line = i
+        else:
+            lines.append(asm)
+            if first_line and not last_line:
+                last_line = i
+    lines = lines[:first_line][-context_lines-1:] + lines[first_line:last_line] + lines[last_line:][:context_lines]
+    logging.error('Rendered disassembly: {}'.format('\n'.join(lines)))
+    return '\n'.join(lines)
         
 """File Analysis Routines"""
 
@@ -2521,6 +2565,8 @@ class YaraScanner_v3_4(AnalysisModule):
                     if m:
                         analysis.add_observable(F_INDICATOR, 'sip:{}'.format(m.group(1)))
 
+
+
             yara_result['context'] = []
             for position, string_id, value in yara_result['strings']:
                 # we want some context around what we matched
@@ -2543,6 +2589,31 @@ class YaraScanner_v3_4(AnalysisModule):
                     stdout, _ = p.communicate()
                     p.wait()
                     yara_result['context'].append([position, string_id, value, stdout])
+
+                # build disassembly output if the rule specifies this
+                if 'asm' in yara_result['tags']:
+                    decoder = None
+                    if string_id.endswith('x86'):
+                        # 32-bit x86
+                        decoder = distorm3.Decode32Bits
+                    elif string_id.endswith('x64'):
+                        decoder = distorm3.Decode64Bits
+                        # 64-bit x86
+                        pass
+                    elif string_id.endswith('A32'):
+                        # 32-bit ARM
+                        pass
+                    elif string_id.endswith('A64'):
+                        #64-bit ARM
+                        pass
+                    if decoder:
+                        try:
+                            first_instr_offset = position - start_byte
+                            # Add a fifth item to the context list of the last yara_result added. app/templates/analysis/yara_analysis* will render this appropriately
+                            yara_result['context'][-1].append(disassemble(_full_path, position, first_instr_offset, len(value), context_data, decoder))
+                        except Exception as e:
+                            report_exception()
+                            yara_result['context'][-1].append(disassemble('Failed to disassemble'))
 
             # did this rule have any tags?
             for tag in yara_result['tags']:
@@ -3389,6 +3460,8 @@ class URLExtractionAnalyzer(AnalysisModule):
 
     def execute_analysis(self, _file):
         from saq.modules.cloudphish import CloudphishAnalyzer
+        from saq.modules.url import CrawlphishAnalyzer
+        from saq.modules.render import RenderAnalyzer
 
         # we need file type analysis first
         file_type_analysis = self.wait_for_analysis(_file, FileTypeAnalysis)
@@ -3430,6 +3503,7 @@ class URLExtractionAnalyzer(AnalysisModule):
         extracted_ordered_urls, analysis.details['urls_grouped_by_domain'] = self.order_urls_by_interest(extracted_urls)
         for url in extracted_ordered_urls:
             url_observable = analysis.add_observable(F_URL, url)
+            analysis.iocs.add_url_iocs(url)
             if url_observable:
                 analysis.details['urls'].append(url_observable.value)
                 logging.debug("extracted url {} from {}".format(url_observable.value, _file.value))
@@ -3438,6 +3512,8 @@ class URLExtractionAnalyzer(AnalysisModule):
                 if _file.has_relationship(R_DOWNLOADED_FROM):
                     logging.info("excluding analysis for url {} by cloudphish for downloaded file".format(url))
                     url_observable.exclude_analysis(CloudphishAnalyzer)
+                    url_observable.exclude_analysis(CrawlphishAnalyzer)
+                    url_observable.exclude_analysis(RenderAnalyzer)
 
         return True
 
@@ -3761,6 +3837,7 @@ class MetaRefreshExtractionAnalyzer(AnalysisModule):
                     if text.strip().lower().startswith("url="):
                         url = text[4:]
                         url_observable = analysis.add_observable(F_URL, url)
+                        analysis.iocs.add_url_iocs(url)
                         if url_observable:
                             url_observable.add_directive(DIRECTIVE_CRAWL)
                         logging.info("found meta refresh url {} from {}".format(url, _file))
@@ -3859,6 +3936,7 @@ class OfficeXMLRelationshipExternalURLAnalyzer(AnalysisModule):
 
         for url in parser_target.urls:
             url = analysis.add_observable(F_URL, url)
+            analysis.iocs.add_url_iocs(url)
             url.add_directive(DIRECTIVE_FORCE_DOWNLOAD)
             _file.add_detection_point('{} contains a link to an external oleobject'.format(_file.value))
 

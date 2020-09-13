@@ -163,15 +163,6 @@ class ObservableActionClearCloudphishAlert(ObservableAction):
         self.icon = 'thumbs-down'
         self.display = saq.CONFIG.getboolean('gui', 'clear_cloudphish_alert', fallback=True)
 
-class ObservableActionRemediateEmail(ObservableAction):
-    """Action to remediate a given email (referenced by message-id)."""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name = ACTION_REMEDIATE_EMAIL
-        self.description = "Remediate Email"
-        self.jinja_action_path = 'analysis/observable_actions/remediate_email.html'
-        self.icon = 'remove'
-
 class ObservableActionDownloadFile(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -316,27 +307,11 @@ class ObservableActionUnWhitelist(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/un_whitelist.html'
         self.icon = 'remove'
 
-class ObservableActionRemediate(ObservableAction):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name = ACTION_REMEDIATE
-        self.description = "Remediate"
-        self.jinja_action_path = 'analysis/observable_actions/remediate.html'
-        self.icon = 'remove-circle'
-
-class ObservableActionRestore(ObservableAction):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name = ACTION_RESTORE
-        self.description = "Undo Remediation"
-        self.jinja_action_path = 'analysis/observable_actions/restore.html'
-        self.icon = 'ok-circle'
-
 class ObservableActionUrlCrawl(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = ACTION_URL_CRAWL
-        self.description = "Download HTML & Render screenshot of URL"
+        self.description = "Download & render screenshot of URL content"
         self.jinja_action_path = 'analysis/observable_actions/url_crawl.html'
         self.icon = 'download-alt'
 

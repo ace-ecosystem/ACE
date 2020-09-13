@@ -2,6 +2,7 @@ import time
 
 import pytest
 
+from saq.indicators import IndicatorList
 from saq.modules.file_analysis import URLExtractionAnalyzer
 
 
@@ -9,6 +10,7 @@ class MockAnalysis(object):
     def __init__(self):
         self.details = {}
         self.observables = []
+        self.iocs = IndicatorList()
 
     def add_observable(self, *args, **kwargs):
         self.observables.append(args)
@@ -77,7 +79,7 @@ class TestUrlExtraction:
 
         assert expected_extracted_urls_filtered == extracted_urls_filtered
 
-    @pytest.mark.parametrize('test_file', ['sample_plain', 'sample_html', 'sample_xml', 'sample_dat', 'sample_rfc822'])
+    @pytest.mark.parametrize('test_file', ['sample_html', 'sample_xml', 'sample_dat', 'sample_rfc822', 'sample_rfc822_plaintext_body'])
     @pytest.mark.unit
     def test_execute_analysis(self, monkeypatch, datadir, test_file):
         url_extraction_analysis = MockAnalysis()
@@ -115,15 +117,10 @@ class TestUrlExtraction:
 
         expected_analysis_observables = list()
         with open(datadir / f'{test_file}.out') as f:
-            for line in f:
-                line = line.strip()
-                expected_analysis_observables.append(line)
+            expected_urls = f.read().splitlines()
 
-        expected_analysis_observables = set(expected_analysis_observables)
+        expected_observables = {('url', u) for u in expected_urls}
 
         assert url_extraction_completed
-        for type, value in url_extraction_analysis.observables:
-            assert type == 'url'
 
-        assert set([value for type, value in url_extraction_analysis.observables]) == expected_analysis_observables
-        #assert str(url_extraction_analysis.observables) == expected_analysis_observables
+        assert set(url_extraction_analysis.observables) == expected_observables

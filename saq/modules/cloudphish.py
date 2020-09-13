@@ -578,7 +578,7 @@ class CloudphishRequestAnalyzer(AnalysisModule):
             file_observable = crawlphish_analysis.find_observable(lambda o: o.type == F_FILE)
 
             if not file_observable:
-                logging.info("nothing downloaded from {}".format(url_observable.value))
+                logging.info("nothing downloaded from {}".format(url.value))
             else:
                 logging.debug("found downloaded file {} for {}".format(file_observable, url))
                 file_observable.compute_hashes()

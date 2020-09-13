@@ -11,17 +11,21 @@ import uuid
 import warnings
 import random
 import re
+import json
 
 from contextlib import closing, contextmanager
+from typing import Dict, List, Set
+from urllib.parse import urlsplit
 
 import saq
 import saq.analysis
 import saq.constants
 
-from saq.analysis import RootAnalysis
+from saq.analysis import RootAnalysis, Indicator, IndicatorList
+from saq.constants import *
 from saq.error import report_exception
 from saq.performance import track_execution_time
-from saq.util import abs_path, validate_uuid, create_timedelta
+from saq.util import abs_path, validate_uuid, create_timedelta, find_all_url_domains
 from sqlalchemy.orm import aliased
 
 import pytz
@@ -599,6 +603,13 @@ class Event(Base):
         return uuids
 
     @property
+    def alert_objects(self) -> List['Alert']:
+        alerts = [m.alert for m in self.alert_mappings]
+        for alert in alerts:
+            alert.load()
+        return alerts
+
+    @property
     def malware_names(self):
         names = []
         for mal in self.malware:
@@ -628,7 +639,11 @@ class Event(Base):
 
     @property
     def disposition(self):
-        disposition = None
+        if not self.alert_mappings:
+            disposition = saq.constants.DISPOSITION_DELIVERY
+        else:
+            disposition = None
+
         for alert_mapping in self.alert_mappings:
             if alert_mapping.alert.disposition is None:
                 logging.warning(f"alert {alert_mapping.alert} added to event without disposition {alert_mapping.event_id}")
@@ -659,6 +674,94 @@ class Event(Base):
             return "{}display/integral/{}+{}".format(domain, date, name)
         else:
             return None
+
+    @property
+    def alert_with_email_and_screenshot(self) -> 'saq.database.Alert':
+        return next((a for a in self.alert_objects if a.has_email_analysis and a.has_renderer_screenshot), None)
+
+    @property
+    def all_emails(self) -> Set['saq.modules.email.EmailAnalysis']:
+        emails = set()
+
+        for alert in self.alert_objects:
+            observables = alert.find_observables(lambda o: o.get_analysis(saq.modules.email.EmailAnalysis))
+            email_analyses = {o.get_analysis(saq.modules.email.EmailAnalysis) for o in observables}
+
+            # Inject the alert's UUID into the EmailAnalysis so that we maintain a link of alert->email
+            for email_analysis in email_analyses:
+                email_analysis.alert_uuid = alert.uuid
+
+            emails |= email_analyses
+
+        return emails
+
+    @property
+    def all_iocs(self) -> List[Indicator]:
+        iocs = IndicatorList()
+
+        for alert in self.alert_objects:
+            for analysis in alert.all_analysis:
+                for ioc in analysis.iocs:
+                    iocs.append(ioc)
+
+        for alert in self.alert_objects:
+            for observable_ioc in alert.observable_iocs:
+                if observable_ioc not in iocs:
+                    iocs.append(observable_ioc)
+
+        if any(a.has_email_analysis for a in self.alert_objects):
+            for ioc in iocs:
+                ioc.tags += ['phish']
+
+        return sorted(iocs, key=lambda x: (x.type, x.value))
+
+    @property
+    def all_url_domain_counts(self) -> Dict[str, int]:
+        url_domain_counts = {}
+
+        for alert in self.alert_objects:
+            domain_counts = find_all_url_domains(alert)
+            for d in domain_counts:
+                if d not in url_domain_counts:
+                    url_domain_counts[d] = domain_counts[d]
+                else:
+                    url_domain_counts[d] += domain_counts[d]
+
+        return url_domain_counts
+
+    @property
+    def all_urls(self) -> Set[str]:
+        urls = set()
+
+        for alert in self.alert_objects:
+            observables = alert.find_observables(lambda o: o.type == F_URL)
+            urls |= {o.value for o in observables}
+
+        return urls
+
+    @property
+    def all_user_analysis(self) -> Set['saq.modules.user.UserAnalysis']:
+        user_analysis = set()
+
+        for alert in self.alert_objects:
+            observables = alert.find_observables(lambda o: o.get_analysis(saq.modules.user.UserAnalysis))
+            user_analysis |= {o.get_analysis(saq.modules.user.UserAnalysis) for o in observables}
+
+        return user_analysis
+
+    @property
+    def showable_tags(self) -> Dict[str, list]:
+        special_tag_names = [tag for tag in saq.CONFIG['tags'] if saq.CONFIG['tags'][tag] in ['special', 'hidden']]
+
+        results = {}
+        for alert in self.alert_objects:
+            results[alert.uuid] = []
+            for tag in alert.sorted_tags:
+                if tag.name not in special_tag_names:
+                    results[alert.uuid].append(tag)
+
+        return results
+
 
 class EventMapping(Base):
 
@@ -856,6 +959,59 @@ class Alert(RootAnalysis, Base):
         TIMESTAMP,
         nullable=True)
 
+    def get_observables(self):
+        query = saq.db.query(Observable)
+        query = query.join(ObservableMapping, Observable.id == ObservableMapping.observable_id)
+        query = query.join(Alert, ObservableMapping.alert_id == Alert.id)
+        query = query.filter(Alert.uuid == self.uuid)
+        query = query.group_by(Observable.id)
+        return query.all()
+
+    def get_remediation_targets(self):
+        # XXX hack to get around circular import - probably need to merge some modules into one
+        from saq.observables import create_observable
+
+        # get observables for this alert
+        observables = self.get_observables()
+
+        # get remediation targets for each observable
+        targets = {}
+        for o in observables:
+            observable = create_observable(o.type, o.display_value)
+            for target in observable.remediation_targets:
+                targets[target.id] = target
+
+        # return sorted list of targets
+        targets = list(targets.values())
+        targets.sort(key=lambda x: f"{x.type}|{x.value}")
+        return targets
+
+    def get_remediation_status(self):
+        targets = self.get_remediation_targets()
+        remediations = []
+        for target in targets:
+            if len(target.history) > 0:
+                remediations.append(target.history[0])
+
+        if len(remediations) == 0:
+            return 'new'
+
+        s = 'success'
+        for r in remediations:
+            if not r.successful:
+                return 'failed'
+            if r.status != 'COMPLETED':
+                s = 'processing'
+        return s
+
+    @property
+    def remediation_status(self):
+        return self._remediation_status if hasattr(self, '_remediation_status') else self.get_remediation_status()
+
+    @property
+    def remediation_targets(self):
+        return self._remediation_targets if hasattr(self, '_remediation_targets') else self.get_remediation_targets()
+
     def _datetime_to_sla_time_zone(self, dt=None):
         """Returns a datetime.datetime object to it's equivalent in the SLA time zone."""
         if dt is not None:
@@ -869,6 +1025,47 @@ class Alert(RootAnalysis, Base):
         # however, the replace method trys to be smart and convert the time back to UTC.. so we explicitly
         # make replace keep the hour set to the business time zone hour UGH
         return dt.replace(hour=dt.hour, tzinfo=None)
+
+    @property
+    def observable_iocs(self) -> IndicatorList:
+        indicators = IndicatorList()
+
+        for ob in self.find_observables(lambda o: o.type == F_EMAIL_ADDRESS):
+            indicators.append(Indicator(I_EMAIL_ADDRESS, ob.value))
+
+        for ob in self.find_observables(lambda o: o.type == F_URL):
+            indicators.add_url_iocs(ob.value)
+
+        return indicators
+
+    @property
+    def all_email_analysis(self) -> List['saq.modules.email.EmailAnalysis']:
+        observables = self.find_observables(lambda o: o.get_analysis(saq.modules.email.EmailAnalysis))
+        return [o.get_analysis(saq.modules.email.EmailAnalysis) for o in observables]
+
+    @property
+    def has_email_analysis(self) -> bool:
+        return bool(self.find_observable(lambda o: o.get_analysis(saq.modules.email.EmailAnalysis)))
+
+    @property
+    def has_renderer_screenshot(self) -> bool:
+        return any(
+            o.type == F_FILE and o.is_image and o.value.startswith('renderer_') and o.value.endswith('.png')
+            for o in self.all_observables
+        )
+
+    @property
+    def screenshots(self) -> List[dict]:
+        return [
+            {'alert_id': self.uuid, 'observable_id': o.id, 'scaled_width': o.scaled_width, 'scaled_height': o.scaled_height}
+            for o in self.all_observables
+            if (
+                    o.type == F_FILE
+                    and o.is_image
+                    and o.value.startswith('renderer_')
+                    and o.value.endswith('.png')
+            )
+        ]
 
     @property
     def sla(self):
@@ -1165,7 +1362,7 @@ class Alert(RootAnalysis, Base):
             Alert.KEY_OWNER_ID: self.owner_id,
             Alert.KEY_OWNER_TIME: self.owner_time,
             Alert.KEY_REMOVAL_USER_ID: self.removal_user_id,
-            Alert.KEY_REMOVAL_TIME: self.removal_time,
+            Alert.KEY_REMOVAL_TIME: self.removal_time
         })
         return result
 
@@ -1846,11 +2043,6 @@ class PersistenceSource(Base):
         primary_key=True,
         autoincrement=True)
 
-    company_id = Column(
-        Integer,
-        ForeignKey('company.id'),
-        primary_key=True)
-
     name = Column(
         String(256),
         nullable=False)
@@ -1867,7 +2059,7 @@ class Persistence(Base):
     source_id = Column(
         Integer,
         ForeignKey('persistence_source.id'),
-        primary_key=True)
+    )
 
     permanent = Column(
         Integer,
@@ -1983,7 +2175,7 @@ class Remediation(Base):
         primary_key=True)
 
     type = Column(
-        Enum('email', 'test'), # should use the values in saq.remediation.constants
+        String,
         nullable=False,
         default='email')
 
@@ -1998,6 +2190,12 @@ class Remediation(Base):
         index=True,
         server_default=text('CURRENT_TIMESTAMP'))
 
+    update_time = Column(
+        TIMESTAMP, 
+        nullable=True, 
+        index=True,
+        server_default=None)
+
     user_id = Column(
         Integer,
         ForeignKey('users.id'),
@@ -2009,9 +2207,28 @@ class Remediation(Base):
         String,
         nullable=False)
 
+    restore_key = Column(
+        String,
+        nullable=True,
+        default=None)
+
     result = Column(
         String,
         nullable=True)
+
+    _results = None
+
+    @property
+    def results(self):
+        if self._results is None:
+            try:
+                if self.result is None:
+                    self._results = {}
+                else:
+                    self._results = json.loads(self.result)
+            except:
+                self._results = {'remediator_deprecated': {'complete': True, 'success':self.successful, 'result':self.result}}
+        return self._results
 
     comment = Column(
         String,
@@ -2038,11 +2255,6 @@ class Remediation(Base):
         BOOLEAN,
         nullable=True,
         default=None)
-
-    company_id = Column(
-        Integer,
-        ForeignKey('company.id'),
-        nullable=True)
 
     lock = Column(
         String(36), 
@@ -2393,6 +2605,7 @@ class DelayedAnalysis(Base):
         index=True)
 
     node_id = Column(
+        Integer,
         nullable=False, 
         index=True)
 

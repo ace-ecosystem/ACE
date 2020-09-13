@@ -1,0 +1,46 @@
+<table class="table table-striped">
+    <tr>
+        <th></th>
+        <th width="100">Type</th>
+        <th>Target</td>
+        <th width="115">Status</th>
+    </tr>
+    {% for target in targets %}
+    <tr class="{{target.css_class}}">
+        <td>
+            <button onclick="toggle('result_target_history_{{target.id}}'); toggle_chevron('result_target_history_button_{{target.id}}')" type="button" class="btn btn-default btn-xs"><span id="result_target_history_button_{{target.id}}" class="glyphicon glyphicon-chevron-down"></span></button>
+        </td>
+        <td>{{target.type}}</td>
+        <td>{{target.value}}</td>
+        <td>{{target.state}}</td>
+    </tr>
+    <tr id='result_target_history_{{target.id}}' style="display:none;">
+        <td colspan="4">
+            {% if target.history | length == 0 or target.history[0].results | length == 0 %}
+                No remedation actions have been taken for this target.
+            {% else %}
+                <table class="table table-condensed">
+                    <tr>
+                        <th width="150">Status</th>
+                        <th>Details</th>
+                    </tr>
+                    <tr>
+                        <td>{{target.history[0].status}}</td>
+                        <td>
+                            <table class="table table-condensed">
+                                {% for k, v in target.history[0].results.items() %}
+                                <tr>
+                                    <td width="130">{{k[11:]}}</td>
+                                    <td width="100">{{v['status']}}</td>
+                                    <td>{{v['message']}}</td>
+                                </tr>
+                                {% endfor %}
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>

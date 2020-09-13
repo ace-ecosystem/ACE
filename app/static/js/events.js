@@ -8,7 +8,7 @@ function load_event_alerts(event_id) {
 
     $.ajax({
         dataType: "html",
-        url: 'event_alerts',
+        url: 'manage_event_summary',
         data: { event_id: event_id },
         success: function(data, textStatus, jqXHR) {
             $('#event_row_' + event_id).after(data);

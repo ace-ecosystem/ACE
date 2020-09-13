@@ -4,15 +4,24 @@ ENV SAQ_USER ace
 ENV SAQ_GROUP ace
 ENV TZ UTC
 ENV DEBIAN_FRONTEND noninteractive
+# by default we use uid and guid 1000 inside the linux container
+# for the development environment this needs to map to whatever uid is being used
+# for the bind mounts to work in linux (not sure about macos or windows yet)
+# these params are set in the docker build script
 ARG SAQ_USER_ID=1000
 ARG SAQ_GROUP_ID=1000
+ARG http_proxy
+ARG https_proxy
+ENV http_proxy $http_proxy
+ENV https_proxy $https_proxy
+COPY docker/provision/ace/etc/apt/proxy.conf /etc/apt/apt.conf.d/proxy.conf
 RUN groupadd ace \
     && useradd -g ace -G sudo -m -s /bin/bash -u $SAQ_USER_ID ace \
     && sed -i -e 's/main$/main contrib non-free/g' /etc/apt/sources.list \
-    && apt -y update \
-    && apt -y install --no-install-recommends apt-utils \
+    && apt-get -y update \
+    && apt-get -y install --no-install-recommends apt-utils \
     && mkdir -p /usr/share/man/man1/ \
-    && apt -y install --no-install-recommends \
+    && apt-get -y install --no-install-recommends \
         ca-certificates \
         nmap \
         libldap2-dev \

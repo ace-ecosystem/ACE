@@ -176,11 +176,5 @@ class RenderControllerClient(BaseRenderClient):
         except Exception as e:
             logging.error(f"Failed to retrieve completed Renderer data: {e}")
             raise
-
-        finally:
-            request_method = kwargs.get('request_method') or requests.delete
-
-            # delete the render job for cleanup
-            r = request_method(f'{self.uri}/job/{self.id}', verify=self.verify, cert=self.client_cert, auth=self.auth_token)
-            if r.status_code != requests.codes.ok:
-                r.raise_for_status()
+        
+        # The renderer cleans up its own jobs, no need to delete
