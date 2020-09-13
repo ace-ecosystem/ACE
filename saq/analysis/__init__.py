@@ -349,7 +349,8 @@ class Tag(object):
 
         # does this tag exist in the configuration file?
         try:
-            self.level = saq.CONFIG['tags'][tag_name_lookup]
+            if hasattr(saq, 'CONFIG'):
+                self.level = saq.CONFIG['tags'][tag_name_lookup]
         except KeyError:
             self.level = TAG_LEVEL_INFO
 
@@ -365,7 +366,8 @@ class Tag(object):
             self.score = 10
 
         try:
-            self.css_class = saq.CONFIG['tag_css_class'][self.level]
+            if hasattr(saq, 'CONFIG'):
+                self.css_class = saq.CONFIG['tag_css_class'][self.level]
         except KeyError:
             logging.error("invalid tag level {}".format(self.level))
     
@@ -425,12 +427,13 @@ class TaggableObject(EventSource):
     def add_tag(self, tag):
         assert isinstance(tag, str)
         if tag in [t.name for t in self.tags]:
-            return
+            return self
 
         t = Tag(name=tag)
         self.tags.append(t)
         logging.debug("added {} to {}".format(t, self))
         self.fire_event(self, EVENT_TAG_ADDED, t)
+        return self
 
     def clear_tags(self):
         self._tags = []
@@ -1457,6 +1460,8 @@ class Observable(TaggableObject, DetectableObject):
             logging.debug("added directive {} to {}".format(directive, self))
             self.fire_event(self, EVENT_DIRECTIVE_ADDED, directive)
 
+        return self
+
     def has_directive(self, directive):
         """Returns True if this Observable has this directive."""
         if self.directives:
@@ -1469,6 +1474,8 @@ class Observable(TaggableObject, DetectableObject):
         if directive in self.directives:
             self.directives.remove(directive)
             logging.debug("removed directive {} from {}".format(directive, self))
+
+        return self
 
     def copy_directives_to(self, target):
         """Copies all directives applied to this Observable to another Observable."""
@@ -1707,6 +1714,8 @@ class Observable(TaggableObject, DetectableObject):
         super().add_tag(*args, **kwargs)
         for target in self.links:
             target.add_tag(*args, **kwargs)
+
+        return self
 
     # typically tag mapping is looked up using the type and value of the observable
     # in some cases we actually want to look up something else
@@ -2341,7 +2350,8 @@ class RootAnalysis(Analysis):
             self.location = location
         else:
             # if a location is not specified then we default to locally defined value
-            self.location = saq.SAQ_NODE
+            if hasattr(saq, 'SAQ_NODE'):
+                self.location = saq.SAQ_NODE
 
         self._storage_dir = None
         if storage_dir:
@@ -2371,14 +2381,16 @@ class RootAnalysis(Analysis):
         if not self._company_name:
             try:
                 # we take the default company ownership from the config file (if specified)
-                self._company_name = saq.CONFIG['global']['company_name']
+                if hasattr(saq, 'CONFIG'):
+                    self._company_name = saq.CONFIG['global']['company_name']
             except KeyError:
                 pass
 
         if not self._company_id:
             try:
                 # we take the default company ownership from the config file (if specified)
-                self._company_id = saq.CONFIG['global'].getint('company_id')
+                if hasattr(saq, 'CONFIG'):
+                    self._company_id = saq.CONFIG['global'].getint('company_id')
             except KeyError:
                 pass
 

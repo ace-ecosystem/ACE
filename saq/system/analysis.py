@@ -13,8 +13,8 @@ class AnalysisTrackingInterface(ACESystemInterface):
     def track_root_analysis(self, root: RootAnalysis):
         raise NotImplementedError()
 
-def get_root_analysis(*args, **kwargs):
-    return get_system().analysis_tracking.get_root_analysis(*args, **kwargs)
+def get_root_analysis(uuid: str) -> Union[RootAnalysis, None]:
+    return get_system().analysis_tracking.get_root_analysis(uuid)
 
-def track_analysis(*args, **kwargs):
-    return get_system().analysis_tracking.track_analysis(*args, **kwargs)
+def track_analysis(root: RootAnalysis):
+    return get_system().analysis_tracking.track_analysis(root)

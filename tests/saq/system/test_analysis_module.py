@@ -2,6 +2,9 @@
 
 import pytest
 
+from saq.analysis import RootAnalysis, Observable
+from saq.constants import *
+from saq.test import F_TEST
 from saq.system.analysis_module import (
         AnalysisModuleType, 
         AnalysisModuleTypeVersionError, 
@@ -72,3 +75,54 @@ def test_register_existing_analysis_module_type():
     with pytest.raises(AnalysisModuleTypeVersionError):
         get_work_queue(amt_1) is wq # now this request is invalid because am1 is an older version
     assert get_work_queue(amt_1_upgraded_version) # but this works
+
+class TempAnalysisModuleType(AnalysisModuleType):
+    def __init__(self, *args, **kwargs):
+        super().__init__(name='test', description='test', *args, **kwargs)
+
+     
+@pytest.mark.parametrize('amt,observable,expected_result', [
+    # no requirements at all
+    (TempAnalysisModuleType(), RootAnalysis().add_observable(F_TEST, 'test'), True),
+    # correct observable type
+    (TempAnalysisModuleType(observable_types=[F_TEST]), RootAnalysis().add_observable(F_TEST, 'test'), True),
+    # incorrect observable type
+    (TempAnalysisModuleType(observable_types=[F_TEST]), RootAnalysis().add_observable(F_IPV4, '1.2.3.4'), False),
+    # multiple observable types (currently OR)
+    (TempAnalysisModuleType(observable_types=[F_TEST, F_IPV4]), RootAnalysis().add_observable(F_IPV4, '1.2.3.4'), True),
+    # correct analysis mode
+    (TempAnalysisModuleType(modes=[ANALYSIS_MODE_CORRELATION]), 
+        RootAnalysis(analysis_mode=ANALYSIS_MODE_CORRELATION).add_observable(F_IPV4, '1.2.3.4'), True),
+    # incorrect analysis mode
+    (TempAnalysisModuleType(modes=[ANALYSIS_MODE_ANALYSIS]), 
+        RootAnalysis(analysis_mode=ANALYSIS_MODE_CORRELATION).add_observable(F_IPV4, '1.2.3.4'), False),
+    # multiple analysis modes (currently OR)
+    (TempAnalysisModuleType(modes=[ANALYSIS_MODE_ANALYSIS, ANALYSIS_MODE_CORRELATION]), 
+        RootAnalysis(analysis_mode=ANALYSIS_MODE_CORRELATION).add_observable(F_IPV4, '1.2.3.4'), True),
+    # valid directive
+    (TempAnalysisModuleType(directives=[DIRECTIVE_CRAWL]), RootAnalysis().add_observable(F_IPV4, '1.2.3.4').add_directive(DIRECTIVE_CRAWL), True),
+    # invalid directive
+    (TempAnalysisModuleType(directives=[DIRECTIVE_CRAWL]), RootAnalysis().add_observable(F_IPV4, '1.2.3.4'), False),
+    # multiple directives (currently AND)
+    (TempAnalysisModuleType(directives=[DIRECTIVE_CRAWL, DIRECTIVE_SANDBOX]), 
+        RootAnalysis().add_observable(F_IPV4, '1.2.3.4').add_directive(DIRECTIVE_CRAWL).add_directive(DIRECTIVE_SANDBOX), True),
+    # multiple directives missing one (currently AND)
+    (TempAnalysisModuleType(directives=[DIRECTIVE_CRAWL, DIRECTIVE_SANDBOX]), 
+        RootAnalysis().add_observable(F_IPV4, '1.2.3.4').add_directive(DIRECTIVE_CRAWL), False),
+    # valid tag
+    (TempAnalysisModuleType(tags=['test']), RootAnalysis().add_observable(F_IPV4, '1.2.3.4').add_tag('test'), True),
+    # invalid tag
+    (TempAnalysisModuleType(tags=['test']), RootAnalysis().add_observable(F_IPV4, '1.2.3.4'), False),
+    # multiple tags (currently AND)
+    (TempAnalysisModuleType(tags=['test_1', 'test_2']), 
+        RootAnalysis().add_observable(F_IPV4, '1.2.3.4').add_tag('test_1').add_tag('test_2'), True),
+    # multiple tags missing one
+    (TempAnalysisModuleType(tags=['test_1', 'test_2']), 
+        RootAnalysis().add_observable(F_IPV4, '1.2.3.4').add_tag('test_1'), False),
+    # valid dependency TODO
+    # TODO need to start making modifications to RootAnalysis, Analysis and Observable to support this new system
+    #(TempAnalysisModuleType(dependencies=['analysis_module']), RootAnalysis().add_observable(F_IPV4, '1.2.3.4'), True),
+])
+@pytest.mark.integration
+def test_accepts(amt: AnalysisModuleType, observable: Observable, expected_result: bool):
+    assert amt.accepts(observable) == expected_result

@@ -86,23 +86,31 @@ class AnalysisModuleType():
             cache_keys = json_dict['cache_keys'],
         )
 
-    def accepts(self, observable: Observable, root: RootAnalysis):
-        if self.modes and root.analysis_mode not in self.modes:
+    def accepts(self, observable: Observable) -> bool:
+
+        # TODO conditions are OR vertical AND horizontal?
+
+        # OR
+        if self.modes and observable.root.analysis_mode not in self.modes:
             return False
 
+        # OR
         if self.observable_types:
             if observable.type not in self.observable_types:
                 return False
 
+        # AND
         for directive in self.directives:
             if not observable.has_directive(directive):
                 return False
 
+        # AND
         for tag in self.tags:
             if not observable.has_tag(tag):
                 return False
 
-        if dep in self.dependencies:
+        # AND (this is correct)
+        for dep in self.dependencies:
             if not observable.analysis_completed(dep):
                 return False
 

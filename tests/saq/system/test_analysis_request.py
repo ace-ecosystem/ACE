@@ -129,3 +129,8 @@ def test_get_expired_analysis_request():
     assert get_expired_analysis_request(request.analysis_module_type) == request
     assert request.status == TRACKING_STATUS_PROCESSING
     assert get_expired_analysis_request(request.analysis_module_type) is None
+
+@pytest.mark.integration
+def test_is_cachable():
+    assert AnalysisRequest(observable=observable, analysis_module_type=amt).is_cachable
+    assert not AnalysisRequest(root=RootAnalysis()).is_cachable

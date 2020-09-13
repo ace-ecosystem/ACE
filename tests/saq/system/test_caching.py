@@ -103,8 +103,7 @@ def test_generate_cache_key_no_cache():
     (None, None),
     ])
 def test_generate_cache_invalid_parameters(observable, amt):
-    with pytest.raises(RuntimeError):
-        generate_cache_key(observable, amt)
+    assert generate_cache_key(observable, amt) is None
 
 @pytest.mark.integration
 def test_cache_analysis():

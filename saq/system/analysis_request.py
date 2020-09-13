@@ -15,7 +15,7 @@ from saq.system.locking import Lockable
 class AnalysisRequest(Lockable):
     """Represents a request to analyze a single observable, or all the observables in a RootAnalysis."""
     def __init__(self, 
-            root: Union[str, RootAnalysis],
+            root: Union[str, RootAnalysis]=None,
             observable: Optional[Observable]=None, 
             analysis_module_type: Optional[AnalysisModuleType]=None):
 
