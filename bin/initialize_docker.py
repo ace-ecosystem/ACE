@@ -138,11 +138,11 @@ password = {user_password}""")
                 with open('proxy_settings.txt', 'w') as fp:
                     fp.write(http_proxy)
 
-    if http_proxy and https_proxy:
-        target_dir = os.path.join('docker', 'provision', 'ace', 'etc', 'apt')
-        os.makedirs(target_dir, exist_ok=True)
-        target_path = os.path.join(target_dir, 'proxy.conf')
+    target_dir = os.path.join('docker', 'provision', 'ace', 'etc', 'apt')
+    os.makedirs(target_dir, exist_ok=True)
+    target_path = os.path.join(target_dir, 'proxy.conf')
 
+    if http_proxy and https_proxy:
         write_proxy_settings = False
         if os.path.exists(target_path):
             with open(target_path, 'r') as fp:
@@ -158,6 +158,10 @@ password = {user_password}""")
                 fp.write(f"""Acquire::http::Proxy "{http_proxy}";
 Acquire::https::Proxy "{https_proxy}";
 """)
+    
+    if not os.path.exists(target_path):
+        with open(target_path, 'w') as fp:
+            pass
 
 if __name__ == '__main__':
     main()
