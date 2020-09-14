@@ -24,6 +24,7 @@ class WorkQueueManagerInterface(ACESystemInterface):
         raise NotImplementedError()
 
 def get_work_queue(amt: AnalysisModuleType) -> Union[WorkQueue, None]:
+
     # if this amt does not match what is already on record then it needs to fail
     existing_amt = get_analysis_module_type(amt.name)
     if existing_amt and not existing_amt.version_matches(amt):

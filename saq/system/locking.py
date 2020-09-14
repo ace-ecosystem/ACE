@@ -61,6 +61,12 @@ class Lockable():
             if lock_result:
                 release(self.lock_id, self.lock_owner_id)
 
+    def acquire(self, timeout:Optional[int]=None, lock_timeout:Optional[int]=None) -> bool:
+        return acquire(self.lock_id, self.lock_owner_id, timeout, lock_timeout)
+
+    def release(self) -> bool:
+        return release(self.lock_id, self.lock_owner_id)
+
 # P1 -> L1
 # P2 -> L2
 # P1 *> L2
@@ -142,7 +148,7 @@ def default_owner_id():
 # timeout = 0  --> try and return immediately regardless of success
 # timeout = None --> wait forever
 
-def acquire(lock_id: str, owner_id: Optional[str]=None, timeout:Optional[int]=None, lock_timeout:Optional[int]=None):
+def acquire(lock_id: str, owner_id: Optional[str]=None, timeout:Optional[int]=None, lock_timeout:Optional[int]=None) -> bool:
     # if we don't pass in an owner_id then we use a default which is based on hostname, process id and thread id
     if owner_id is None:
         owner_id = default_owner_id()

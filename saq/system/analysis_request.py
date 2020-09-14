@@ -10,6 +10,7 @@ from saq.system.analysis import get_root_analysis
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.caching import generate_cache_key
 from saq.system.constants import *
+from saq.system.exceptions import InvalidWorkQueueError
 from saq.system.locking import Lockable
 
 class AnalysisRequest(Lockable):
@@ -162,7 +163,7 @@ class AnalysisRequest(Lockable):
         submit_analysis_request(self)
 
     def update(self):
-        update_analysis_request(self)
+        track_analysis_request(self)
 
 class AnalysisRequestTrackingInterface(ACESystemInterface):
     def track_analysis_request(self, request: AnalysisRequest):
@@ -171,7 +172,7 @@ class AnalysisRequestTrackingInterface(ACESystemInterface):
     def delete_analysis_request(self, key: str) -> bool:
         raise NotImplementedError()
 
-    def get_expired_analysis_request(self, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
+    def get_expired_analysis_requests(self) -> List[AnalysisRequest]:
         raise NotImplementedError()
 
     def get_analysis_request(self, key: str) -> Union[AnalysisRequest, None]:
@@ -195,10 +196,9 @@ def find_analysis_request(observable: Observable, amt: AnalysisModuleType) -> Un
 def delete_analysis_request(key: str) -> bool:
     return get_system().request_tracking.delete_analysis_request(key)
 
-def get_expired_analysis_request(amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
-    """Return the first and oldest expired AnalysisRequest for the given type.
-    Once the AnalysisRequest is returned is it no longer considered expired by the system."""
-    return get_system().request_tracking.get_expired_analysis_request(amt)
+def get_expired_analysis_requests() -> List[AnalysisRequest]:
+    """Returns all AnalysisRequests that are in the TRACKING_STATUS_ANALYZING state and have expired."""
+    return get_system().request_tracking.get_expired_analysis_requests()
 
 def clear_tracking_by_analysis_module_type(amt: AnalysisModuleType):
     """Deletes tracking for any requests assigned to the given analysis module type."""
@@ -206,6 +206,25 @@ def clear_tracking_by_analysis_module_type(amt: AnalysisModuleType):
 
 def submit_analysis_request(ar: AnalysisRequest):
     """Submits the given AnalysisRequest to the appropriate queue for analysis."""
-    get_system().work_queue.get_work_queue(ar.analysis_module_type).put(ar)
     ar.status = TRACKING_STATUS_QUEUED
     ar.update()
+
+    # NOTE that we bypass the get_work_queue call since that checks the module version
+    work_queue = get_system().work_queue.get_work_queue(ar.analysis_module_type)
+    if work_queue is None:
+        raise InvalidWorkQueueError()
+
+    work_queue.put(ar)
+
+def process_expired_analysis_requests():
+    """Moves all unlocked expired analysis requests back into the queue."""
+    for request in get_expired_analysis_requests():
+        if request.acquire(timeout=0):
+            try:
+                # re-submit the analysis request
+                # this changes the status and thus takes it out of expiration
+                request.submit()
+            except InvalidWorkQueueError:
+                delete_analysis_request(request.id)
+            finally:
+                request.release()

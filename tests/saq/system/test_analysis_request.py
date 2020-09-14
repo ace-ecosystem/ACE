@@ -11,12 +11,15 @@ from saq.system.analysis_request import (
         delete_analysis_request,
         find_analysis_request,
         get_analysis_request,
-        get_expired_analysis_request,
+        get_expired_analysis_requests,
+        process_expired_analysis_requests,
         track_analysis_request,
         )
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.constants import *
+from saq.system.exceptions import InvalidWorkQueueError
 from saq.test import F_TEST
+from saq.system.work_queue import add_work_queue
 
 amt = AnalysisModuleType(
         name='test',
@@ -126,9 +129,48 @@ def test_get_expired_analysis_request():
     track_analysis_request(request)
     request.status = TRACKING_STATUS_ANALYZING
     track_analysis_request(request)
-    assert get_expired_analysis_request(request.analysis_module_type) == request
-    assert request.status == TRACKING_STATUS_PROCESSING
-    assert get_expired_analysis_request(request.analysis_module_type) is None
+    assert get_expired_analysis_requests() == [request]
+
+@pytest.mark.integration
+def test_process_expired_analysis_request():
+    amt = AnalysisModuleType(
+            name='test',
+            description='test',
+            version='1.0.0',
+            timeout=0,
+            cache_ttl=600)
+    
+    root = RootAnalysis()
+    observable = root.add_observable(F_TEST, TEST_1)
+    request = AnalysisRequest(root, observable, amt)
+    track_analysis_request(request)
+    request.status = TRACKING_STATUS_ANALYZING
+    track_analysis_request(request)
+    assert get_expired_analysis_requests() == [request]
+    add_work_queue(amt.name)
+    process_expired_analysis_requests()
+    assert request.status == TRACKING_STATUS_QUEUED
+    assert not get_expired_analysis_requests()
+
+@pytest.mark.integration
+def test_process_expired_analysis_request_invalid_work_queue():
+    amt = AnalysisModuleType(
+            name='test',
+            description='test',
+            version='1.0.0',
+            timeout=0,
+            cache_ttl=600)
+    
+    root = RootAnalysis()
+    observable = root.add_observable(F_TEST, TEST_1)
+    request = AnalysisRequest(root, observable, amt)
+    track_analysis_request(request)
+    request.status = TRACKING_STATUS_ANALYZING
+    track_analysis_request(request)
+    assert get_expired_analysis_requests() == [request]
+    process_expired_analysis_requests()
+    assert get_analysis_request(request.id) is None
+    assert not get_expired_analysis_requests()
 
 @pytest.mark.integration
 def test_is_cachable():
