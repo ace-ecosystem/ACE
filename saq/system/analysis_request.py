@@ -165,6 +165,9 @@ class AnalysisRequest(Lockable):
     def update(self):
         track_analysis_request(self)
 
+    def delete(self) -> bool:
+        return delete_analysis_request(self.id)
+
 class AnalysisRequestTrackingInterface(ACESystemInterface):
     def track_analysis_request(self, request: AnalysisRequest):
         raise NotImplementedError()
