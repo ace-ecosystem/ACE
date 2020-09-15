@@ -13,6 +13,7 @@ class ACESystem:
     caching = None
     storage = None
     locking = None
+    config = None
 
 # the global system object that contains references to all the interfaces
 ace = ACESystem()

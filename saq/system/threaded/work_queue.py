@@ -9,7 +9,9 @@ from saq.system.work_queue import WorkQueueManagerInterface, WorkQueue
 
 class ThreadedWorkQueue(WorkQueue):
 
-    queue = queue.Queue()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.queue = queue.Queue()
 
     def put(self, analysis_request: AnalysisRequest):
         self.queue.put(analysis_request)

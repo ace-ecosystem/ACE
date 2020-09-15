@@ -13,17 +13,20 @@ from saq.system.caching import generate_cache_key
 
 class ThreadedAnalysisRequestTrackingInterface(AnalysisRequestTrackingInterface):
 
-    # we have different ways to tracking the requests
-    # track by AnalysisRequest.id
-    analysis_requests = {} # key = AnalysisRequest.id, value = AnalysisRequest
-    # track by the cache index, if it exists
-    cache_index = {} # key = generate_cache_key(observable, amt), value = AnalysisRequest
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    # expiration tracking
-    expiration_tracking = {} # key = request.id, value = of (datetime, request)
+        # we have different ways to tracking the requests
+        # track by AnalysisRequest.id
+        self.analysis_requests = {} # key = AnalysisRequest.id, value = AnalysisRequest
+        # track by the cache index, if it exists
+        self.cache_index = {} # key = generate_cache_key(observable, amt), value = AnalysisRequest
 
-    # sync changes to any of these tracking dicts
-    sync_lock = threading.RLock()
+        # expiration tracking
+        self.expiration_tracking = {} # key = request.id, value = of (datetime, request)
+
+        # sync changes to any of these tracking dicts
+        self.sync_lock = threading.RLock()
     
     def track_analysis_request(self, request: AnalysisRequest):
         with self.sync_lock:

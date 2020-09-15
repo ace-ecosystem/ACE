@@ -11,7 +11,7 @@ from saq.system.analysis_module import AnalysisModuleType
 from saq.system.caching import generate_cache_key
 from saq.system.constants import *
 from saq.system.exceptions import InvalidWorkQueueError
-from saq.system.locking import Lockable
+from saq.system.locking import Lockable, acquire, release
 
 class AnalysisRequest(Lockable):
     """Represents a request to analyze a single observable, or all the observables in a RootAnalysis."""
@@ -206,6 +206,7 @@ def clear_tracking_by_analysis_module_type(amt: AnalysisModuleType):
 
 def submit_analysis_request(ar: AnalysisRequest):
     """Submits the given AnalysisRequest to the appropriate queue for analysis."""
+    ar.owner = None
     ar.status = TRACKING_STATUS_QUEUED
     ar.update()
 
@@ -218,13 +219,20 @@ def submit_analysis_request(ar: AnalysisRequest):
 
 def process_expired_analysis_requests():
     """Moves all unlocked expired analysis requests back into the queue."""
-    for request in get_expired_analysis_requests():
-        if request.acquire(timeout=0):
-            try:
-                # re-submit the analysis request
-                # this changes the status and thus takes it out of expiration
-                request.submit()
-            except InvalidWorkQueueError:
-                delete_analysis_request(request.id)
-            finally:
-                request.release()
+
+    # if there is another process already doing this then we don't need to
+    if not acquire(SYSTEM_LOCK_EXPIRED_ANALYSIS_REQUESTS, 0):
+        return
+
+    try:
+        for request in get_expired_analysis_requests():
+            if request.acquire(timeout=0):
+                try:
+                    # re-submit the analysis request
+                    # this changes the status and thus takes it out of expiration
+                    request.submit()
+                except InvalidWorkQueueError:
+                    delete_analysis_request(request.id)
+    finally:
+        release(SYSTEM_LOCK_EXPIRED_ANALYSIS_REQUESTS)
+

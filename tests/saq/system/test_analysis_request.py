@@ -33,6 +33,8 @@ observable = create_observable(F_TEST, '1.2.3.4')
 TEST_1 = 'test_1'
 TEST_2 = 'test_2'
 
+TEST_OWNER = 'test_owner'
+
 @pytest.mark.unit
 def test_is_observable_analysis_request():
     request = AnalysisRequest(RootAnalysis(), observable, amt)

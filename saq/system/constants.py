@@ -15,3 +15,6 @@ TRACKING_STATUS_PROCESSING = 'processing'
 TRACKING_STATUS_FINISHED = 'finished'
 TRACKING_STATUS_EXPIRED = 'expired'
 
+# system-level locks
+# TODO these locks should not be acquire-able externally
+SYSTEM_LOCK_EXPIRED_ANALYSIS_REQUESTS = 'ace:expired_analysis_requests'
