@@ -198,6 +198,7 @@ class GraphResourceCollector(Collector):
 
         self.query_frequency = create_timedelta(self.service_config['query_frequency'])
         self.initial_range = create_timedelta(self.service_config['initial_range'])
+        self.alert_queue = self.service_config.get('alert_queue', fallback=saq.constants.QUEUE_DEFAULT)
 
         # Graph Resource configuration directories
         self.resource_dirs = self.service_config.get('resource_dirs', fallback=None)
@@ -556,7 +557,8 @@ class GraphResourceCollector(Collector):
                         details = submission_data,
                         observables = self.parse_events_for_observables(resource, submission_data['events']),
                         tags = [],
-                        files = [])
+                        files = [],
+                        queue = self.alert_queue)
 
                     self.queue_submission(submission)
 
@@ -586,7 +588,8 @@ class GraphResourceCollector(Collector):
                                         },
                             observables = self.parse_events_for_observables(resource, event),
                             tags = [],
-                            files = [])
+                            files = [],
+                            queue = self.alert_queue)
 
                         self.queue_submission(submission)
 
