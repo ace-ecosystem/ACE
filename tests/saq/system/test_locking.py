@@ -4,17 +4,23 @@ import threading
 import pytest
 
 from saq.system.locking import (
+        DeadlockException,
         Lockable, 
         acquire, 
-        release, 
-        DeadlockException,
-        get_lock_owner, 
         default_owner_id,
+        get_lock_owner, 
+        lock,
+        release, 
         )
 
 LOCK_1 = 'lock_1'
 LOCK_2 = 'lock_2'
 OWNER_1 = 'owner_1'
+
+@pytest.mark.integration
+def test_lock():
+    with lock(LOCK_1):
+        pass
 
 @pytest.mark.integration
 def test_lockable():

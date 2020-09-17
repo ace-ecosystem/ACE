@@ -22,7 +22,7 @@ import uuid
 import dateutil.parser
 import requests
 
-from typing import List
+from typing import List, Union
 from urllib.parse import urlsplit
 
 import saq
@@ -479,6 +479,9 @@ class Analysis(TaggableObject, DetectableObject):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # unique ID
+        self.uuid = str(uuid.uuid4())
+
         # a reference to the RootAnalysis object this analysis belongs to 
         self.root = None
 
@@ -755,7 +758,8 @@ class Analysis(TaggableObject, DetectableObject):
             Analysis.KEY_COMPLETED: self.completed,
             Analysis.KEY_ALERTED: self.alerted,
             Analysis.KEY_DELAYED: self.delayed,
-            Analysis.KEY_IOCS: self.iocs.json
+            Analysis.KEY_IOCS: self.iocs.json,
+            Analysis.KEY_UUID: self.uuid,
         })
         return result
 
@@ -791,6 +795,9 @@ class Analysis(TaggableObject, DetectableObject):
 
         if Analysis.KEY_IOCS in value:
             self.iocs = value[Analysis.KEY_IOCS]
+
+        if Analysis.KEY_UUID in value:
+            self.uuid = value[Analysis.KEY_UUID]
 
     @property
     def iocs(self):
@@ -1925,6 +1932,8 @@ class Observable(TaggableObject, DetectableObject):
 
         # set the document root for this analysis
         analysis.root = self.root
+        # XXX bad design
+        analysis.root.analysis_map[analysis.uuid] = analysis
         # set the source of the Analysis
         analysis.observable = self
 
@@ -2516,6 +2525,9 @@ class RootAnalysis(Analysis):
         # (note that we also need to add these global event listeners when we deserialize)
         self.add_event_listener(EVENT_TAG_ADDED, self._fire_global_events)
         self.add_event_listener(EVENT_OBSERVABLE_ADDED, self._fire_global_events)
+
+        # utility map to quickly look up Analysis objects
+        self.analysis_map = {}
 
     def _fire_global_events(self, source, event_type, *args, **kwargs):
         """Fires EVENT_GLOBAL_* events."""
@@ -3442,6 +3454,7 @@ class RootAnalysis(Analysis):
         # load the Observable references in the Analysis objects
         for analysis in self.all_analysis:
             analysis._load_observable_references()
+            self.analysis_map[anaysis.uuid] = analysis
 
         # load Tag objects for analysis
         for analysis in self.all_analysis:
@@ -3745,8 +3758,13 @@ class RootAnalysis(Analysis):
         else:
             raise ValueError("invalid type {} passed to iterate_all_references".format(type(target)))
 
-    def get_observable(self, uuid):
+    def get_observable(self, uuid_or_observable:Union[str, Observable]):
         """Returns the Observable object for the given uuid."""
+        if isinstance(uuid_or_observable, Observable):
+            uuid = uuid_or_observable.id
+        else:
+            uuid = uuid_or_observable
+
         return self.observable_store[uuid]
 
     def get_observable_by_spec(self, o_type, o_value, o_time=None):
@@ -3757,6 +3775,9 @@ class RootAnalysis(Analysis):
                 return o
 
         return None
+
+    def get_analysis(self, uuid: str) -> Analysis:
+        return self.analysis_map.get(uuid)
 
     @property
     def all_detection_points(self):

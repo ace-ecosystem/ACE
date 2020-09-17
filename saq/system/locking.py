@@ -185,3 +185,16 @@ def release(lock_id: str, owner_id: Optional[str]=None) -> bool:
 
     # actually release the lock
     return get_system().locking.release(lock_id, owner_id)
+
+@contextmanager
+def lock(lock_id: str, timeout:Optional[int]=None, lock_timeout:Optional[int]=None):
+    try:
+        lock_result = acquire(lock_id, timeout=timeout, lock_timeout=lock_timeout)
+
+        if not lock_result:
+            raise LockAcquireFailed()
+        else:
+            yield lock_result
+    finally:
+        if lock_result:
+            release(lock_id)

@@ -1,0 +1,7 @@
+interesting note
+the json of the Analysis is currently saved in the RootAnalysis object
+but the details is saved to a JSON file
+Analysis.save() <-- track_analysis
+Observable._load_analysis <-- get_analysis
+RootAnalysis.save() <-- track_root_analysis
+RootAnalysis.load() <-- get_root_analysis
