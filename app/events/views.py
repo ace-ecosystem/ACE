@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import os
 import pytz
@@ -9,6 +10,7 @@ from saq.constants import *
 from saq.database import get_db_connection, Event, EventMapping, Malware, MalwareMapping, Company, CompanyMapping, \
     Campaign, set_dispositions
 from saq.error import report_exception
+from saq.tip import tip_factory
 from saq.util import create_histogram_string
 
 from app import db
@@ -48,6 +50,34 @@ def get_current_event():
         logging.error(f"Could not get event {event_id}: {e}")
 
     return None
+
+
+@events.route('/add_indicators_to_event_in_tip', methods=['POST'])
+@login_required
+def add_indicators_to_event_in_tip():
+    event = get_current_event()
+
+    tip = tip_factory()
+
+    result = tip.add_indicators_to_event_in_tip(event.uuid, event.all_iocs)
+    if result:
+        return json.dumps({'success': True}), 200, {'Content-Type': 'application/json'}
+    else:
+        return json.dumps({'success': False}), 403, {'Content-Type': 'application/json'}
+
+
+@events.route('/create_event_in_tip', methods=['POST'])
+@login_required
+def create_event_in_tip():
+    event = get_current_event()
+
+    tip = tip_factory()
+
+    result = tip.create_event_in_tip(event.name, event.uuid, url_for('events.index', direct=event.id, _external=True))
+    if result:
+        return json.dumps({'success': True}), 200, {'Content-Type': 'application/json'}
+    else:
+        return json.dumps({'success': False}), 403, {'Content-Type': 'application/json'}
 
 
 @events.route('/analysis', methods=['GET', 'POST'])
@@ -106,6 +136,7 @@ def manage():
 
     filters = {
         'filter_event_open': SearchFilter('filter_event_open', FILTER_TYPE_CHECKBOX, True),
+        'filter_event_completed': SearchFilter('filter_event_completed', FILTER_TYPE_CHECKBOX, True),
         'event_daterange': SearchFilter('event_daterange', FILTER_TYPE_TEXT, ''),
         'filter_event_type': SearchFilter('filter_event_type', FILTER_TYPE_SELECT, 'ANY'),
         'filter_event_vector': SearchFilter('filter_event_vector', FILTER_TYPE_SELECT, 'ANY'),
@@ -143,8 +174,13 @@ def manage():
             del session[filter_name]
 
     query = db.session.query(Event)
-    if filters['filter_event_open'].value:
-        query = query.filter(Event.status == 'OPEN')
+    if filters['filter_event_open'].value and filters['filter_event_completed']:
+        query = query.filter(or_(Event.status == 'OPEN', Event.status == 'COMPLETED'))
+    else:
+        if filters['filter_event_open'].value:
+            query = query.filter(Event.status == 'OPEN')
+        if filters['filter_event_completed'].value:
+            query = query.filter(Event.status == 'COMPLETED')
     if filters['event_daterange'].value != '':
         try:
             daterange_start, daterange_end = filters['event_daterange'].value.split(' - ')
@@ -423,6 +459,11 @@ def edit_event():
             flash("unable to set disposition (review error logs)")
             logging.error("unable to set disposition for {} alerts: {}".format(len(alert_uuids), e))
             report_exception()
+
+    if event_status == 'CLOSED':
+        tip = tip_factory()
+        event = get_current_event()
+        tip.add_indicators_to_event_in_tip(event.uuid, event.all_iocs)
 
     if '/manage' in request.referrer:
         return redirect(url_for('events.manage'))

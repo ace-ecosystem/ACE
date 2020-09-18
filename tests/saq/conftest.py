@@ -3,6 +3,7 @@ import os.path
 import shutil
 
 from pathlib import Path
+from urllib.parse import urljoin
 
 import pytest
 pytest.register_assert_rewrite("tests.saq.requests")

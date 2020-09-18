@@ -769,17 +769,19 @@ class EventsAPITestCase(ACEEngineTestCase):
             `remediation`,
             `status`,
             `comment`,
-            `campaign_id`)
+            `campaign_id`,
+            `uuid`)
             VALUES
-            ("2019-03-06",
-            "test event",
-            "phish",
-            "corporate email",
-            "response team",
-            "not remediated",
-            "OPEN",
-            "blah blah blah",
-            1);""")
+            ('2019-03-06',
+            'test event',
+            'phish',
+            'corporate email',
+            'response team',
+            'not remediated',
+            'OPEN',
+            'blah blah blah',
+            1,
+            '12345678-1234-1234-1234-123456789ab');""")
         db.commit()
 
         c.execute("SELECT id FROM events WHERE name='test event'")

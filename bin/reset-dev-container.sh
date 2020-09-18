@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 
-FULL_RESET=""
+FULL_RESET="-r"
 RESET_SSL=""
 while getopts "fs" opt
 do
@@ -39,18 +39,32 @@ docker-compose -f docker-compose-dev.yml up -d
 docker exec -it -u root ace-dev /bin/bash -c "docker/provision/ace/install $FULL_RESET $RESET_SSL -t DEVELOPMENT"
 
 # wait for the database to come up...
-echo -n "waiting for database..."
+echo -n "waiting for database"
 while :
 do
-    if docker exec -t -u ace ace-dev /bin/bash -i -c 'ace test-database-connections' > /dev/null 2>&1
+    if ( docker logs ace-db-dev 2>&1 | sed -ne '/GENERATED ROOT PASSWORD/,$ p' | grep 'mysqld: ready for connections' > /dev/null 2>&1 )
     then
-        echo
         break
     fi
 
     echo -n .
     sleep 1
 done
+
+if ! ( docker logs ace-db-dev 2>&1 | grep '^DATABASE BUILD OK$' > /dev/null 2>&1 )
+then
+    echo
+    echo "WHAT DID YOU DO!?"
+    echo "=============================================="
+    echo
+    echo "are you making changes to the schema?"
+    echo 'use the following command to investigate'
+    echo
+    echo 'docker logs ace-db-dev 2>&1 | less'
+    echo
+    echo "=============================================="
+    exit 1
+fi
 
 docker exec -t -u ace ace-dev /bin/bash -i -c 'ace user add --password=analyst analyst analyst@localhost'
 

@@ -1,0 +1,92 @@
+{
+    "User": {
+        "id": "1",
+        "password": "*****",
+        "org_id": "1",
+        "email": "admin@admin.test",
+        "autoalert": false,
+        "authkey": "asdf",
+        "invited_by": "0",
+        "gpgkey": null,
+        "certif_public": "",
+        "nids_sid": "4000000",
+        "termsaccepted": false,
+        "newsread": "1591366612",
+        "role_id": "1",
+        "change_pw": "0",
+        "contactalert": false,
+        "disabled": false,
+        "expiration": null,
+        "current_login": "1600035117",
+        "last_login": "1599826552",
+        "force_logout": false,
+        "date_created": null,
+        "date_modified": "1589942314"
+    },
+    "Role": {
+        "id": "1",
+        "name": "admin",
+        "created": "2020-05-15 18:40:47",
+        "modified": "2020-05-15 18:40:47",
+        "perm_add": true,
+        "perm_modify": true,
+        "perm_modify_org": true,
+        "perm_publish": true,
+        "perm_delegate": true,
+        "perm_sync": true,
+        "perm_admin": true,
+        "perm_audit": true,
+        "perm_auth": true,
+        "perm_site_admin": true,
+        "perm_regexp_access": true,
+        "perm_tagger": true,
+        "perm_template": true,
+        "perm_sharing_group": true,
+        "perm_tag_editor": true,
+        "perm_sighting": true,
+        "perm_object_template": true,
+        "default_role": false,
+        "memory_limit": "",
+        "max_execution_time": "",
+        "restricted_to_site_admin": false,
+        "perm_publish_zmq": true,
+        "perm_publish_kafka": true,
+        "perm_decaying": true,
+        "enforce_rate_limit": false,
+        "rate_limit_count": "0",
+        "permission": "3",
+        "permission_description": "publish"
+    },
+    "UserSetting": {
+        "dashboard": [
+            {
+                "widget": "MispStatusWidget",
+                "position": {
+                    "x": "0",
+                    "y": "0",
+                    "width": "12",
+                    "height": "9"
+                }
+            }
+        ],
+        "homepage": {
+            "path": "/dashboards"
+        }
+    },
+    "Organisation": {
+        "id": "1",
+        "name": "ORGNAME",
+        "date_created": "2020-05-20 02:17:51",
+        "date_modified": "2020-05-20 02:17:51",
+        "description": "Automatically generated admin organisation",
+        "type": "ADMIN",
+        "nationality": "Not specified",
+        "sector": "",
+        "created_by": "0",
+        "uuid": "12345678-1234-1234-1234-1234567890ab",
+        "contacts": null,
+        "local": true,
+        "restricted_to_domain": [],
+        "landingpage": null
+    }
+}

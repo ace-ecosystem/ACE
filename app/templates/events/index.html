@@ -20,6 +20,9 @@
                                     <button class="btn btn-default btn-xs" type="button" onclick="edit_event('{{event.id}}')" title="Edit Event">
                                         <span class="glyphicon glyphicon-pencil"></span>
                                     </button>
+                                    <button class="btn btn-default btn-xs" type="button" onclick="create_event_in_tip('{{ event.id }}')" id="create_event_in_tip" title="Create Event in TIP">
+                                        <span class="glyphicon glyphicon-export"></span>
+                                    </button>
                                     <script type="text/javascript">
                                         $('#copy_link_action_{{unique_reference}}').on('click', function () {
                                             // see app/static/js/ace.js

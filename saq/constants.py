@@ -318,6 +318,7 @@ DISPOSITION_RANK = {
 DIRECTIVE_ARCHIVE = 'archive'
 DIRECTIVE_COLLECT_FILE = 'collect_file'
 DIRECTIVE_CRAWL = 'crawl'
+DIRECTIVE_CRAWL_EXTRACTED_URLS = 'crawl_extracted_urls'
 DIRECTIVE_DELAY = 'delay'
 DIRECTIVE_EXCLUDE_ALL = 'exclude_all'
 DIRECTIVE_EXTRACT_EMAIL = 'extract_email'
@@ -340,6 +341,7 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'archive the file',
     DIRECTIVE_COLLECT_FILE: 'collect the file from the remote endpoint',
     DIRECTIVE_CRAWL: 'crawl the URL',
+    DIRECTIVE_CRAWL_EXTRACTED_URLS: 'crawl all extracted URLs',
     DIRECTIVE_DELAY: 'instructs various analysis modules to delay the analysis',
     DIRECTIVE_EXCLUDE_ALL: 'instructs ACE to NOT analyze this observable at all',
     DIRECTIVE_EXTRACT_EMAIL: 'extract email from exchange or o365',
@@ -359,10 +361,12 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
 }
 
+# NOTE this really isn't used any more
 VALID_DIRECTIVES = [
     DIRECTIVE_ARCHIVE,
     DIRECTIVE_COLLECT_FILE,
     DIRECTIVE_CRAWL,
+    DIRECTIVE_CRAWL_EXTRACTED_URLS,
     DIRECTIVE_DELAY,
     DIRECTIVE_EXCLUDE_ALL,
     DIRECTIVE_EXTRACT_EMAIL,
@@ -548,14 +552,27 @@ EVENT_REMEDIATION_DEFAULT = 'not remediated'
 EVENT_CAMPAIGN_ID_DEFAULT = '1'
 
 # --- Indicators
-I_EMAIL_ADDRESS = 'email_address'
+I_DOMAIN = 'domain'
+I_EMAIL_ATTACHMENT_NAME = 'email_attachment_name'
+I_EMAIL_CC_ADDRESS = 'email_cc_address'
+I_EMAIL_FROM_ADDRESS = 'email_from_address'
+I_EMAIL_FROM_ADDRESS_DOMAIN = 'email_from_address_domain'
+I_EMAIL_MESSAGE_ID = 'email_message_id'
 I_EMAIL_SUBJECT = 'email_subject'
-I_EMAIL_X_MAILER = 'x_mailer'
-I_FILE_NAME = 'file_name'
-I_FQDN = 'fqdn'
-I_IPV4 = 'ipv4'
+I_EMAIL_TO_ADDRESS = 'email_to_address'
+I_EMAIL_X_AUTH_ID = 'email_x_auth_id'
+I_EMAIL_X_MAILER = 'email_x_mailer'
+I_EMAIL_X_ORIGINAL_SENDER = 'email_x_original_sender'
+I_EMAIL_X_ORIGINATING_IP = 'email_x_originating_ip'
+I_EMAIL_REPLY_TO = 'email_reply_to_address'
+I_EMAIL_RETURN_PATH = 'email_return_path_address'
+I_EMAIL_X_SENDER = 'email_x_sender_address'
+I_EMAIL_X_SENDER_ID = 'email_x_sender_id_address'
+I_EMAIL_X_SENDER_IP = 'email_x_sender_ip'
+I_FILE_NAME = 'filename'
+I_IP_DEST = 'ip_dest'
+I_IP_SOURCE = 'ip_src'
 I_MD5 = 'md5'
-I_MESSAGE_ID = 'message_id'
 I_SHA1 = 'sha1'
 I_SHA256 = 'sha256'
 I_URI_PATH = 'uri_path'

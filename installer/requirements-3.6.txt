@@ -36,6 +36,7 @@ plyara==2.0.3
 psutil 
 pyasn1 
 pylint
+pymisp==2.4.130
 pymongo==2.8
 pysip
 pysocks
@@ -43,11 +44,13 @@ pytest
 pytest-datadir
 pytest-print
 pytest-pythonpath
+pytest-randomly
 python-dotenv
 python-magic
 python-memcached
 pytz 
 requests
+requests-mock
 sandboxapi
 setuptools_git 
 six

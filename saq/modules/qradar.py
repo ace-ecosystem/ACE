@@ -92,7 +92,7 @@ class QRadarAPIAnalyzer(BaseAPIAnalyzer):
                 event_time = None
 
             self.process_qradar_event(analysis, observable, event, event_time)
-            self.extract_result_observables(analysis, query_results[event], observable, event_time)
+            self.extract_result_observables(analysis, event, observable, event_time)
 
 
 KEY_METHOD_MAP = 'method_map'
