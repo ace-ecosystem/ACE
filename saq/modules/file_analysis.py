@@ -2323,6 +2323,11 @@ class YaraScanner_v3_4(AnalysisModule):
         return abs_path(saq.CONFIG['service_yara']['signature_dir'])
 
     @property
+    def save_scan_failures(self):
+        """If this is True then files that fail scanning are saved for later analysis."""
+        return self.config.getboolean('save_scan_failures')
+
+    @property
     def generated_analysis_type(self):
         return YaraScanResults_v3_4
 
@@ -2520,17 +2525,17 @@ class YaraScanner_v3_4(AnalysisModule):
             logging.error("error scanning file {}: {}".format(local_file_path, e))
             
             # we copy the files we cannot scan to a directory where we can debug it later
-            #if self.scan_failure_dir is not None:
-                #try:
-                    #dest_path = os.path.join(self.scan_failure_dir, os.path.basename(local_file_path))
-                    #while os.path.exists(dest_path):
-                        #dest_path = '{}_{}'.format(dest_path, datetime.datetime.now().strftime('%Y%m%d%H%M%S-%f'))
+            if self.save_scan_failures and self.scan_failure_dir is not None:
+                try:
+                    dest_path = os.path.join(self.scan_failure_dir, os.path.basename(local_file_path))
+                    while os.path.exists(dest_path):
+                        dest_path = '{}_{}'.format(dest_path, datetime.datetime.now().strftime('%Y%m%d%H%M%S-%f'))
 #
-                    #shutil.copy(local_file_path, dest_path)
-                    #logging.debug("copied {} to {}".format(local_file_path, dest_path))
-                #except Exception as e:
-                    #logging.error("unable to copy {} to {}: {}".format(local_file_path, self.scan_failure_dir, e))
-                    #report_exception()
+                    shutil.copy(local_file_path, dest_path)
+                    logging.debug("copied {} to {}".format(local_file_path, dest_path))
+                except Exception as e:
+                    logging.error("unable to copy {} to {}: {}".format(local_file_path, self.scan_failure_dir, e))
+                    report_exception()
             
             return False
 
@@ -3385,6 +3390,11 @@ class URLExtractionAnalyzer(AnalysisModule):
         """The max file size to extract URLs from (in bytes.)"""
         return self.config.getint("max_file_size") * 1024 * 1024
 
+    @property
+    def max_extracted_urls(self):
+        """The maximum number of urls to extract from a single file."""
+        return self.config.getint("max_extracted_urls")
+
     @staticmethod
     def order_urls_by_interest(extracted_urls):
         """Sort the extracted urls into a list by their domain+TLD frequency and path extension.
@@ -3468,6 +3478,8 @@ class URLExtractionAnalyzer(AnalysisModule):
         if file_type_analysis is None:
             return False
 
+        self.wait_for_analysis(_file, YaraScanResults_v3_4)
+
         local_file_path = get_local_file_path(self.root, _file)
         if not os.path.exists(local_file_path):
             logging.error("cannot find local file path for {}".format(_file.value))
@@ -3495,6 +3507,10 @@ class URLExtractionAnalyzer(AnalysisModule):
         with open(local_file_path, 'rb') as fp:
             extracted_urls = find_urls(fp.read(), base_url=base_url)
             logging.debug("extracted {} urls from {}".format(len(extracted_urls), local_file_path))
+            if len(extracted_urls) > self.max_extracted_urls:
+                extracted_urls = list(extracted_urls)
+                extracted_urls = set(extracted_urls[:self.max_extracted_urls])
+                logging.debug("limited extracted from {} to {}".format(local_file_path, len(extracted_urls)))
 
         extracted_urls = list(filter(self.filter_excluded_domains, extracted_urls))
         analysis = self.create_analysis(_file)
@@ -3508,12 +3524,15 @@ class URLExtractionAnalyzer(AnalysisModule):
                 analysis.details['urls'].append(url_observable.value)
                 logging.debug("extracted url {} from {}".format(url_observable.value, _file.value))
 
-                # don't download from links that came from files downloaded from the internet
-                if _file.has_relationship(R_DOWNLOADED_FROM):
-                    logging.info("excluding analysis for url {} by cloudphish for downloaded file".format(url))
-                    url_observable.exclude_analysis(CloudphishAnalyzer)
-                    url_observable.exclude_analysis(CrawlphishAnalyzer)
-                    url_observable.exclude_analysis(RenderAnalyzer)
+                if _file.has_directive(DIRECTIVE_CRAWL_EXTRACTED_URLS):
+                    url_observable.add_directive(DIRECTIVE_CRAWL)
+                else:
+                    # don't download from links that came from files downloaded from the internet
+                    if _file.has_relationship(R_DOWNLOADED_FROM):
+                        logging.info("excluding analysis for url {} by cloudphish for downloaded file".format(url))
+                        url_observable.exclude_analysis(CloudphishAnalyzer)
+                        url_observable.exclude_analysis(CrawlphishAnalyzer)
+                        url_observable.exclude_analysis(RenderAnalyzer)
 
         return True
 

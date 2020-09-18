@@ -35,6 +35,9 @@ import pymysql.err
 
 from businesstime.holidays import Holidays
 
+def generate_uuid():
+    return str(uuid.uuid4())
+
 class _database_pool(object):
     def __init__(self, name):
         # the name of the database this is a pool for
@@ -545,9 +548,10 @@ class Event(Base):
     __tablename__ = 'events'
 
     id = Column(Integer, nullable=False, primary_key=True)
+    uuid = Column(String(36), unique=True, nullable=False, default=generate_uuid)
     creation_date = Column(DATE, nullable=False)
     name = Column(String(128), nullable=False)
-    status = Column(Enum('OPEN','CLOSED','IGNORE'), nullable=False)
+    status = Column(Enum('OPEN','CLOSED','IGNORE','COMPLETED'), nullable=False)
     remediation = Column(Enum('not remediated','cleaned with antivirus','cleaned manually','reimaged','credentials reset','removed from mailbox','network block','NA'), nullable=False)
     comment = Column(Text)
     vector = Column(Enum('corporate email','webmail','usb','website','unknown'), nullable=False)
@@ -571,6 +575,7 @@ class Event(Base):
     def json(self):
         return {
             'id': self.id,
+            'uuid': self.uuid,
             'alerts': self.alerts,
             'campaign': self.campaign.name if self.campaign else None,
             'comment': self.comment,
@@ -681,6 +686,8 @@ class Event(Base):
 
     @property
     def all_emails(self) -> Set['saq.modules.email.EmailAnalysis']:
+        from saq.modules.email import EmailAnalysis
+
         emails = set()
 
         for alert in self.alert_objects:
@@ -741,11 +748,12 @@ class Event(Base):
 
     @property
     def all_user_analysis(self) -> Set['saq.modules.user.UserAnalysis']:
+        from saq.modules.user import UserAnalysis
         user_analysis = set()
 
         for alert in self.alert_objects:
-            observables = alert.find_observables(lambda o: o.get_analysis(saq.modules.user.UserAnalysis))
-            user_analysis |= {o.get_analysis(saq.modules.user.UserAnalysis) for o in observables}
+            observables = alert.find_observables(lambda o: o.get_analysis(UserAnalysis))
+            user_analysis |= {o.get_analysis(UserAnalysis) for o in observables}
 
         return user_analysis
 
@@ -1029,10 +1037,6 @@ class Alert(RootAnalysis, Base):
     @property
     def observable_iocs(self) -> IndicatorList:
         indicators = IndicatorList()
-
-        for ob in self.find_observables(lambda o: o.type == F_EMAIL_ADDRESS):
-            indicators.append(Indicator(I_EMAIL_ADDRESS, ob.value))
-
         for ob in self.find_observables(lambda o: o.type == F_URL):
             indicators.add_url_iocs(ob.value)
 
@@ -1040,11 +1044,13 @@ class Alert(RootAnalysis, Base):
 
     @property
     def all_email_analysis(self) -> List['saq.modules.email.EmailAnalysis']:
+        from saq.modules.email import EmailAnalysis
         observables = self.find_observables(lambda o: o.get_analysis(saq.modules.email.EmailAnalysis))
         return [o.get_analysis(saq.modules.email.EmailAnalysis) for o in observables]
 
     @property
     def has_email_analysis(self) -> bool:
+        from saq.modules.email import EmailAnalysis
         return bool(self.find_observable(lambda o: o.get_analysis(saq.modules.email.EmailAnalysis)))
 
     @property

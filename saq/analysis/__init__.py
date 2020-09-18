@@ -30,6 +30,7 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.indicators import Indicator, IndicatorList
 from saq.submission import Submission
+from saq.tip import tip_factory
 from saq.util import *
 
 STATE_KEY_WHITELISTED = 'whitelisted'
@@ -537,6 +538,9 @@ class Analysis(TaggableObject, DetectableObject):
         # List of IOCs that the analysis contains
         self._iocs = IndicatorList()
 
+        # Intel database / TIP to use
+        self._tip = None
+
     def define_dict_property(self, name, _type, docstring=None):
         def _getter(self):
             if self.details is None:
@@ -788,6 +792,13 @@ class Analysis(TaggableObject, DetectableObject):
 
         if Analysis.KEY_IOCS in value:
             self.iocs = value[Analysis.KEY_IOCS]
+
+    @property
+    def tip(self):
+        if self._tip is None:
+            self._tip = tip_factory()
+
+        return self._tip
 
     @property
     def iocs(self):
@@ -1088,8 +1099,9 @@ class Analysis(TaggableObject, DetectableObject):
 
         return observable
 
-    def add_ioc(self, type_: str, value: str, status: str = 'New', tags: List[str] = []):
-        self.iocs.append(Indicator(type_, value, status=status, tags=tags))
+    def add_ioc(self, indicator_type: str, indicator_value: str, status: str = '', tags: List[str] = []):
+        indicator = self.tip.create_indicator(indicator_type, indicator_value, status=status, tags=tags)
+        self.iocs.append(indicator)
 
     def tag_detection(self, source, event, tag):
         """Adds detections points when tags are added if their score is > 0."""

@@ -1484,13 +1484,13 @@ class EmailAnalyzer(AnalysisModule):
                 mail_from = address
 
                 if is_local_email_domain(address):
-                    analysis.add_ioc(I_EMAIL_ADDRESS, address, status='Informational', tags=['from_address'])
+                    analysis.add_ioc(I_EMAIL_FROM_ADDRESS, address, status='Informational', tags=['from_address'])
                     if len(address.split('@')) > 1:
-                        analysis.add_ioc(I_FQDN, address.split('@')[1], status='Informational', tags=['from_domain'])
+                        analysis.add_ioc(I_DOMAIN, address.split('@')[1], status='Informational', tags=['from_domain'])
                 else:
-                    analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['from_address'])
+                    analysis.add_ioc(I_EMAIL_FROM_ADDRESS, address, tags=['from_address'])
                     if len(address.split('@')) > 1:
-                        analysis.add_ioc(I_FQDN, address.split('@')[1], tags=['from_domain'])
+                        analysis.add_ioc(I_DOMAIN, address.split('@')[1], tags=['from_domain'])
 
                 from_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if from_address:
@@ -1506,9 +1506,9 @@ class EmailAnalyzer(AnalysisModule):
                     mail_to = address
 
                 if is_local_email_domain(address):
-                    analysis.add_ioc(I_EMAIL_ADDRESS, address, status='Informational', tags=['to_address'])
+                    analysis.add_ioc(I_EMAIL_TO_ADDRESS, address, status='Informational', tags=['to_address'])
                 else:
-                    analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['to_address'])
+                    analysis.add_ioc(I_EMAIL_TO_ADDRESS, address, tags=['to_address'])
 
                 to_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if to_address and mail_from:
@@ -1524,9 +1524,9 @@ class EmailAnalyzer(AnalysisModule):
                     mail_to = address
 
                 if is_local_email_domain(address):
-                    analysis.add_ioc(I_EMAIL_ADDRESS, address, status='Informational', tags=['to_address'])
+                    analysis.add_ioc(I_EMAIL_TO_ADDRESS, address, status='Informational', tags=['to_address'])
                 else:
-                    analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['to_address'])
+                    analysis.add_ioc(I_EMAIL_TO_ADDRESS, address, tags=['to_address'])
 
                 to_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if to_address:
@@ -1538,9 +1538,9 @@ class EmailAnalyzer(AnalysisModule):
             email_details[KEY_CC] = get_address_list(target_email, 'cc')
             for address in email_details[KEY_CC]:
                 if is_local_email_domain(address):
-                    analysis.add_ioc(I_EMAIL_ADDRESS, address, status='Informational', tags=['cc_address'])
+                    analysis.add_ioc(I_EMAIL_CC_ADDRESS, address, status='Informational', tags=['cc_address'])
                 else:
-                    analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['cc_address'])
+                    analysis.add_ioc(I_EMAIL_CC_ADDRESS, address, tags=['cc_address'])
 
                 cc_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if cc_address:
@@ -1551,7 +1551,7 @@ class EmailAnalyzer(AnalysisModule):
         if 'x-sender' in target_email:
             email_details[KEY_X_SENDER] = get_address_list(target_email, 'x-sender')
             for address in email_details[KEY_X_SENDER]:
-                analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['x-sender'])
+                analysis.add_ioc(I_EMAIL_X_SENDER, address, tags=['x-sender'])
 
                 x_sender_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if x_sender_address:
@@ -1560,7 +1560,7 @@ class EmailAnalyzer(AnalysisModule):
         if 'x-sender-id' in target_email:
             email_details[KEY_X_SENDER_ID] = get_address_list(target_email, 'x-sender-id')
             for address in email_details[KEY_X_SENDER_ID]:
-                analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['x-sender-id'])
+                analysis.add_ioc(I_EMAIL_X_SENDER_ID, address, tags=['x-sender-id'])
 
                 x_sender_id_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if x_sender_id_address:
@@ -1569,7 +1569,7 @@ class EmailAnalyzer(AnalysisModule):
         if 'x-auth-id' in target_email:
             email_details[KEY_X_AUTH_ID] = get_address_list(target_email, 'x-auth-id')
             for address in email_details[KEY_X_AUTH_ID]:
-                analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['x-auth-id'])
+                analysis.add_ioc(I_EMAIL_X_AUTH_ID, address, tags=['x-auth-id'])
 
                 x_auth_id_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if x_auth_id_address:
@@ -1578,7 +1578,7 @@ class EmailAnalyzer(AnalysisModule):
         if 'x-original-sender' in target_email:
             email_details[KEY_X_ORIGINAL_SENDER] = get_address_list(target_email, 'x-original-sender')
             for address in email_details[KEY_X_ORIGINAL_SENDER]:
-                analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['x-original-sender'])
+                analysis.add_ioc(I_EMAIL_X_ORIGINAL_SENDER, address, tags=['x-original-sender'])
 
                 x_original_sender_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if x_original_sender_address:
@@ -1590,7 +1590,7 @@ class EmailAnalyzer(AnalysisModule):
             if address:
                 email_details[KEY_REPLY_TO_ADDRESS] = address
 
-                analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['reply_to'])
+                analysis.add_ioc(I_EMAIL_REPLY_TO, address, tags=['reply_to'])
 
                 reply_to = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if reply_to:
@@ -1602,7 +1602,7 @@ class EmailAnalyzer(AnalysisModule):
             email_details[KEY_RETURN_PATH] = target_email['return-path']
             address = normalize_email_address(target_email['return-path'])
             if address:
-                analysis.add_ioc(I_EMAIL_ADDRESS, address, tags=['return_path'])
+                analysis.add_ioc(I_EMAIL_RETURN_PATH, address, tags=['return_path'])
 
                 return_path = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if return_path:
@@ -1622,7 +1622,7 @@ class EmailAnalyzer(AnalysisModule):
                     F_MESSAGE_ID, 
                     normalize_message_id(target_email['message-id']),
                     o_time=received_time)
-            analysis.add_ioc(I_MESSAGE_ID, target_email['message-id'], status='Informational')
+            analysis.add_ioc(I_EMAIL_MESSAGE_ID, target_email['message-id'], status='Informational')
 
             if message_id_observable: 
                 # this module will extract an email from the archives based on the message-id
@@ -1675,7 +1675,7 @@ class EmailAnalyzer(AnalysisModule):
             value = target_email['x-originating-ip']
             value = re.sub(r'[^0-9\.]', '', value) # these seem to have extra characters added
             email_details[KEY_ORIGINATING_IP] = value
-            analysis.add_ioc(I_IPV4, value, tags=['x-originating-ip'])
+            analysis.add_ioc(I_EMAIL_X_ORIGINATING_IP, value, tags=['x-originating-ip'])
             ipv4 = analysis.add_observable(F_IPV4, value, o_time=received_time)
             if ipv4:
                 ipv4.add_tag('sender_ip')
@@ -1684,7 +1684,7 @@ class EmailAnalyzer(AnalysisModule):
             value = target_email['x-sender-ip']
             value = re.sub(r'[^0-9\.]', '', value)  # these seem to have extra characters added
             email_details[KEY_X_SENDER_IP] = value
-            analysis.add_ioc(I_IPV4, value, tags=['x-sender-ip'])
+            analysis.add_ioc(I_EMAIL_X_SENDER_IP, value, tags=['x-sender-ip'])
             ipv4 = analysis.add_observable(F_IPV4, value, o_time=received_time)
             if ipv4:
                 ipv4.add_tag('sender_ip')
@@ -1748,6 +1748,7 @@ class EmailAnalyzer(AnalysisModule):
                                 logging.warning(str(e))
 
                     file_name = re.sub(r'[\r\n]', '', file_name)
+                    analysis.add_ioc(I_EMAIL_ATTACHMENT_NAME, file_name, tags=['attachment'])
 
                 else:
                     file_name = '{}.unknown_{}_{}_000'.format(_file.value, target.get_content_maintype(), 

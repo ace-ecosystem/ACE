@@ -20,6 +20,7 @@ from saq.constants import *
 from saq.database import get_db_connection
 from saq.indicators import Indicator
 from saq.test import *
+from saq.tip import tip_factory
 from saq.util import storage_dir_from_uuid, workload_storage_dir
 
 class TestCase(ACEModuleTestCase):
@@ -574,18 +575,20 @@ class TestCase(ACEModuleTestCase):
                     value = row[0]
                     self.assertEquals(value, field_value)
 
+        tip = tip_factory()
         expected_iocs = [
-            Indicator(I_EMAIL_ADDRESS, 'unixfreak0037@gmail.com'),
-            Indicator(I_FQDN, 'gmail.com'),
-            Indicator(I_EMAIL_ADDRESS, 'jwdavison@company.com'),
-            Indicator(I_EMAIL_SUBJECT, 'canary #3'),
-            Indicator(I_MESSAGE_ID, '<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>'),
-            Indicator(I_URL, 'http://tldp.org/LDP/abs/html'),
-            Indicator(I_FQDN, 'tldp.org'),
-            Indicator(I_URI_PATH, '/LDP/abs/html'),
-            Indicator(I_URL, 'https://www.alienvault.com'),
-            Indicator(I_FQDN, 'www.alienvault.com'),
-            Indicator(I_FQDN, 'alienvault.com')
+            tip.create_indicator(I_EMAIL_FROM_ADDRESS, 'unixfreak0037@gmail.com'),
+            tip.create_indicator(I_DOMAIN, 'gmail.com'),
+            tip.create_indicator(I_EMAIL_TO_ADDRESS, 'jwdavison@company.com'),
+            tip.create_indicator(I_EMAIL_RETURN_PATH, 'unixfreak0037@gmail.com'),
+            tip.create_indicator(I_EMAIL_SUBJECT, 'canary #3'),
+            tip.create_indicator(I_EMAIL_MESSAGE_ID, '<CANTOGZsMiMb+7aB868zXSen_fO=NS-qFTUMo9h2eHtOexY8Qhw@mail.gmail.com>'),
+            tip.create_indicator(I_URL, 'http://tldp.org/LDP/abs/html'),
+            tip.create_indicator(I_DOMAIN, 'tldp.org'),
+            tip.create_indicator(I_URI_PATH, '/LDP/abs/html'),
+            tip.create_indicator(I_URL, 'https://www.alienvault.com'),
+            tip.create_indicator(I_DOMAIN, 'www.alienvault.com'),
+            tip.create_indicator(I_DOMAIN, 'alienvault.com')
         ]
 
         self.assertEquals(sorted(expected_iocs, key=lambda x: (x.type, x.value)), sorted(root.all_iocs, key=lambda x: (x.type, x.value)))

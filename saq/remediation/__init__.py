@@ -200,6 +200,7 @@ class RemediationService(ACEService):
 
     def get_targets(self):
         # find targets to process
+        logging.info('looking for new targets')
         query = saq.db.query(Remediation)
         query = query.filter(or_(
             Remediation.lock == None,
@@ -218,6 +219,7 @@ class RemediationService(ACEService):
         if len(target_ids) == 0:
             time.sleep(1)
             return []
+        logging.info(f'found {len(target_ids)} targets')
 
         # attempt to lock found targets
         update = Remediation.__table__.update()

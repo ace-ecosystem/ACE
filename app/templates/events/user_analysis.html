@@ -12,14 +12,42 @@
             <th>Manager Email</th>
         </tr>
         {% for user in user_analysis %}
-        <tr>
-            <td>{{ user.jinja_details['ldap']['cn'] }}</td>
-            <td><a href="mailto:{{user.jinja_details['ldap']['mail']}}">{{user.jinja_details['ldap']['mail']}}</a></td>
-            <td>{{ user.jinja_details['ldap']['company'] }}</td>
-            <td>{{ user.jinja_details['ldap']['department'] }}</td>
-            <td>{{ user.jinja_details['ldap']['title'] }}</td>
-            <td><a href="mailto:{{user.jinja_details['manager_ldap']['mail']}}">{{user.jinja_details['manager_ldap']['mail']}}</a></td>
-        </tr>
+            {% if 'ldap' in user.jinja_details %}
+                <tr>
+                    <td>
+                        {% if 'cn' in user.jinja_details['ldap'] %}
+                            {{ user.jinja_details['ldap']['cn'] }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if 'mail' in user.jinja_details['ldap'] %}
+                            <a href="mailto:{{user.jinja_details['ldap']['mail']}}">{{user.jinja_details['ldap']['mail']}}</a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if 'company' in user.jinja_details['ldap'] %}
+                            {{ user.jinja_details['ldap']['company'] }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if 'department' in user.jinja_details['ldap'] %}
+                            {{ user.jinja_details['ldap']['department'] }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if 'title' in user.jinja_details['ldap'] %}
+                            {{ user.jinja_details['ldap']['title'] }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if 'manager_ldap' in user.jinja_details %}
+                            {% if 'mail' in user.jinja_details['manager_ldap'] %}
+                                <a href="mailto:{{user.jinja_details['manager_ldap']['mail']}}">{{user.jinja_details['manager_ldap']['mail']}}</a>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endif %}
         {% endfor %}
     </table>
 </div>

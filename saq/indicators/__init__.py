@@ -4,6 +4,7 @@ import tld
 
 from collections import UserList
 from typing import Iterable, List, Union
+from urlfinderlib.url import URL
 from urllib.parse import urlsplit
 
 from saq.constants import *
@@ -28,6 +29,17 @@ class Indicator:
     def tags(self, value):
         self._tags = value
 
+    @staticmethod
+    def from_dict(indicator_dict: dict) -> 'Indicator':
+        indicator = Indicator(indicator_dict['type'], indicator_dict['value'])
+
+        if 'status' in indicator_dict:
+            indicator.status = indicator_dict['status']
+        if 'tags' in indicator_dict:
+            indicator.tags = indicator_dict['tags']
+
+        return indicator
+
     def __eq__(self, other):
         return self.type == other.type and self.value == other.value
 
@@ -42,10 +54,17 @@ class Indicator:
 
 
 class IndicatorList(UserList):
+    def __init__(self):
+        super().__init__()
+
+        from saq.tip import tip_factory
+
+        self.tip = tip_factory()
+
     def append(self, indicator: Union[Indicator, dict]):
         if isinstance(indicator, dict):
             try:
-                indicator = Indicator(indicator['type'], indicator['value'], status=indicator['status'], tags=indicator['tags'])
+                indicator = Indicator.from_dict(indicator)
             except KeyError:
                 logging.error(f'Trying to add invalid indicator to list: {indicator}')
                 return
@@ -58,36 +77,37 @@ class IndicatorList(UserList):
             else:
                 self.data.append(indicator)
 
-    def add_url_iocs(self, urls: Union[List[str], str], status: str = 'New', tags: List[str] = []):
+    def add_url_iocs(self, urls: Union[List[str], str], status: str = '', tags: List[str] = []):
         if isinstance(urls, str):
             urls = [urls]
 
         for url in urls:
-            try:
-                split_url = urlsplit(url)
-            except ValueError:
-                continue
+            for permutation in URL(url).permutations:
+                try:
+                    split_url = urlsplit(permutation)
+                except ValueError:
+                    continue
 
-            self.append(Indicator(I_URL, url, status=status, tags=tags))
+                self.append(self.tip.create_indicator(I_URL, permutation, status=status, tags=tags))
 
-            try:
-                ipaddress.ip_address(split_url.hostname)
-                self.append(Indicator(I_IPV4, split_url.hostname, status=status, tags=tags))
-            except ValueError:
-                self.append(Indicator(I_FQDN, split_url.hostname, status=status, tags=tags))
+                try:
+                    ipaddress.ip_address(split_url.hostname)
+                    self.append(self.tip.create_indicator(I_IP_DEST, split_url.hostname, status=status, tags=tags))
+                except ValueError:
+                    self.append(self.tip.create_indicator(I_DOMAIN, split_url.hostname, status=status, tags=tags))
 
-            fld = tld.get_fld(url, fix_protocol=True, fail_silently=True)
-            if fld:
-                self.append(Indicator(I_FQDN, fld, status=status, tags=tags))
+                fld = tld.get_fld(url, fix_protocol=True, fail_silently=True)
+                if fld:
+                    self.append(self.tip.create_indicator(I_DOMAIN, fld, status=status, tags=tags))
 
-            if split_url.path:
-                self.append(Indicator(I_URI_PATH, split_url.path, status=status, tags=tags))
+                if split_url.path:
+                    self.append(self.tip.create_indicator(I_URI_PATH, split_url.path, status=status, tags=tags))
 
-            if split_url.query:
-                self.append(Indicator(I_URI_PATH, split_url.query, status=status, tags=tags))
+                if split_url.query:
+                    self.append(self.tip.create_indicator(I_URI_PATH, split_url.query, status=status, tags=tags))
 
-            if split_url.fragment:
-                self.append(Indicator(I_URI_PATH, split_url.fragment, status=status, tags=tags))
+                if split_url.fragment:
+                    self.append(self.tip.create_indicator(I_URI_PATH, split_url.fragment, status=status, tags=tags))
 
     @property
     def json(self) -> List[dict]:

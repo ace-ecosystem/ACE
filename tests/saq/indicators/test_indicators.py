@@ -1,7 +1,8 @@
 import pytest
 
-from saq.indicators import Indicator, IndicatorList
 from saq.constants import *
+from saq.indicators import Indicator, IndicatorList
+from saq.tip import tip_factory
 
 
 @pytest.mark.unit
@@ -32,6 +33,17 @@ def test_indicator_equal():
 
 
 @pytest.mark.unit
+def test_indicator_from_dict():
+    indicator_dict = {'type': 'email-src', 'value': 'badguy@evil.com', 'tags': ['test_tag1', 'test_tag2']}
+    indicator = Indicator.from_dict(indicator_dict)
+    assert isinstance(indicator, Indicator)
+    assert indicator.type == indicator_dict['type']
+    assert indicator.value == indicator_dict['value']
+    assert indicator.status == 'New'
+    assert indicator.tags == indicator_dict['tags']
+
+
+@pytest.mark.unit
 def test_indicatorlist_append():
     indicators = IndicatorList()
     assert len(indicators) == 0
@@ -50,14 +62,16 @@ def test_indicatorlist_append():
 
 @pytest.mark.unit
 def test_indicatorlist_url_iocs():
+    tip = tip_factory()
+
     indicators = IndicatorList()
     indicators.add_url_iocs('http://www.test.com/index.html')
 
     expected_iocs = [
-        Indicator(I_URL, 'http://www.test.com/index.html'),
-        Indicator(I_FQDN, 'www.test.com'),
-        Indicator(I_FQDN, 'test.com'),
-        Indicator(I_URI_PATH, '/index.html')
+        Indicator(tip.ioc_type_mappings[I_URL], 'http://www.test.com/index.html'),
+        Indicator(tip.ioc_type_mappings[I_DOMAIN], 'www.test.com'),
+        Indicator(tip.ioc_type_mappings[I_DOMAIN], 'test.com'),
+        Indicator(tip.ioc_type_mappings[I_URI_PATH], '/index.html')
     ]
 
-    assert sorted(expected_iocs, key=lambda x: (x.type, x.value)) == sorted(indicators, key=lambda x: (x.type, x.value))
+    assert set(indicators) == set(expected_iocs)

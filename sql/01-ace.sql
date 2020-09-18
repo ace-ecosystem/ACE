@@ -270,6 +270,7 @@ DROP TABLE IF EXISTS `events`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `events` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(36) CHARACTER SET ascii NOT NULL,
   `creation_date` date NOT NULL,
   `name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
   `type` enum('phish','recon','host compromise','credential compromise','web browsing') NOT NULL,
@@ -277,7 +278,7 @@ CREATE TABLE `events` (
   `risk_level` enum('1','2','3') NOT NULL,
   `prevention_tool` enum('response team','ips','fw','proxy','antivirus','email filter','application whitelisting','user') NOT NULL,
   `remediation` enum('not remediated','cleaned with antivirus','cleaned manually','reimaged','credentials reset','removed from mailbox','network block','NA') NOT NULL,
-  `status` enum('OPEN','CLOSED','IGNORE') NOT NULL,
+  `status` enum('OPEN','CLOSED','IGNORE','COMPLETED') NOT NULL,
   `comment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci,
   `campaign_id` int(11) NOT NULL,
   `event_time` datetime DEFAULT NULL,
@@ -287,6 +288,7 @@ CREATE TABLE `events` (
   `contain_time` datetime DEFAULT NULL,
   `remediation_time` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uuid` (`uuid`),
   UNIQUE KEY `creation_date` (`creation_date`,`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;

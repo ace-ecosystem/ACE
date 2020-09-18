@@ -1,5 +1,10 @@
 <div class="panel-heading">
-    <h3 class="panel-title">IOC Summary</h3>
+    <h3 class="panel-title">
+        IOC Summary
+        <button class="btn btn-default btn-xs" type="button" onclick="add_indicators_to_event_in_tip('{{ event.id }}')" id="add_indicators_to_event_in_tip" title="Add Indicators to Event in TIP">
+            <span class="glyphicon glyphicon-export"></span>
+        </button>
+    </h3>
 </div>
 <div class="panel-body" style="overflow: scroll;">
     <table class="table table-bordered table-condensed">

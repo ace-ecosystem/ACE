@@ -18,7 +18,7 @@ import smtplib
 import socket
 import tempfile
 import traceback
-import uuid
+import uuid as uuidlib
 import zipfile
 import time
 
@@ -69,6 +69,7 @@ from saq.error import report_exception
 from saq.gui import GUIAlert
 from saq.performance import record_execution_time
 from saq.proxy import proxies
+from saq.tip import tip_factory
 from saq.util import abs_path, find_all_url_domains, create_histogram_string
 from saq.file_upload import *
 from saq.observables import create_observable
@@ -102,7 +103,7 @@ DEFAULT_PRUNE = True
 @analysis.context_processor
 def generic_functions():
     def generate_unique_reference():
-        return str(uuid.uuid4())
+        return str(uuidlib.uuid4())
 
     return { 'generate_unique_reference': generate_unique_reference }
 
@@ -541,7 +542,7 @@ def download_file():
         return response
     elif mode == 'zip':
         try:
-            dest_file = '{}.zip'.format(os.path.join(saq.TEMP_DIR, str(uuid.uuid4())))
+            dest_file = '{}.zip'.format(os.path.join(saq.TEMP_DIR, str(uuidlib.uuid4())))
             logging.debug("creating encrypted zip file {} for {}".format(dest_file, full_path))
             p = Popen(['zip', '-e', '--junk-paths', '-P', 'infected', dest_file, full_path])
             p.wait()
@@ -1151,10 +1152,10 @@ def add_to_event():
                 result = c.fetchone()
                 event_id = result[0]
             else:
-                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, risk_level, 
+                c.execute("""INSERT INTO events (uuid, creation_date, name, status, remediation, campaign_id, type, vector, risk_level, 
                 prevention_tool, comment, event_time, alert_time, ownership_time, disposition_time, 
-                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_risk_level,
+                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (str(uuidlib.uuid4()), creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_risk_level,
                  event_prevention, event_comment, event_time, alert_time, ownership_time, disposition_time, contain_time,
                  remediation_time))
 
@@ -1162,6 +1163,14 @@ def add_to_event():
                 c.execute("""SELECT LAST_INSERT_ID()""")
                 result = c.fetchone()
                 event_id = result[0]
+
+                c.execute("""SELECT uuid FROM events WHERE id=%s""", event_id)
+                result = c.fetchone()
+                event_uuid = result[0]
+
+                # Create the event in the TIP
+                tip = tip_factory()
+                tip.create_event_in_tip(event_name, event_uuid, url_for('events.index', direct=event_id, _external=True))
 
         for uuid in alert_uuids:
             c.execute("""SELECT id, company_id FROM alerts WHERE uuid = %s""", uuid)
@@ -2712,7 +2721,7 @@ def index():
     class TreeNode(object):
         def __init__(self, obj, parent=None):
             # unique ID that can be used in the GUI to track nodes
-            self.uuid = str(uuid.uuid4())
+            self.uuid = str(uuidlib.uuid4())
             # Analysis or Observable object
             self.obj = obj
             self.parent = parent
@@ -2964,7 +2973,7 @@ def upload_file():
         alert.details = {'user': current_user.username, 'comment': comment}
 
         # XXX database.Alert does not automatically create this
-        alert.uuid = str(uuid.uuid4())
+        alert.uuid = str(uuidlib.uuid4())
 
         # we use a temporary directory while we process the file
         alert.storage_dir = os.path.join(

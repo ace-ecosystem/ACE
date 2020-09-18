@@ -26,7 +26,6 @@ from multiprocessing import Process, Queue, Semaphore, Event, Pipe, cpu_count, a
 from operator import attrgetter
 from queue import PriorityQueue, Empty, Full
 from subprocess import Popen, PIPE
-from typing import Optional
 
 import saq
 import saq.analysis
@@ -60,13 +59,10 @@ CURRENT_ENGINE = None
 STATE_PRE_ANALYSIS_EXECUTED = 'pre_analysis_executed'
 STATE_POST_ANALYSIS_EXECUTED = 'post_analysis_executed'
 
-def translate_node(node: str, node_translation: Optional[dict] = None) -> str:
+def translate_node(node: str) -> str:
     """Return the correct node taking node transaction into account."""
-    if node_translation is None:
-        node_translation = saq.CONFIG['node_translation']
-
-    for key in node_translation.keys():
-        src, target = node_translation[key].split(',')
+    for key in saq.CONFIG['node_translation'].keys():
+        src, target = saq.CONFIG['node_translation'][key].split(',')
         if node == src:
             logging.debug("translating node {} to {}".format(node, target))
             return target
@@ -2310,7 +2306,8 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
             self.root = self.delayed_analysis_request.root
 
             # reset the delay flag for this analysis
-            self.delayed_analysis_request.analysis.delayed = False
+            if self.delayed_analysis_request.analysis:
+                self.delayed_analysis_request.analysis.delayed = False
 
         elif isinstance(work_item, RootAnalysis):
             self.root = work_item
