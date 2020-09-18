@@ -3478,7 +3478,10 @@ class URLExtractionAnalyzer(AnalysisModule):
         if file_type_analysis is None:
             return False
 
-        self.wait_for_analysis(_file, YaraScanResults_v3_4)
+        # IF we've got yara enabled THEN wait for it
+        # otherrwise don't worry about it eh?
+        if saq.CONFIG['analysis_module_yara_scanner_v3_4'].getboolean('enabled'):
+            self.wait_for_analysis(_file, YaraScanResults_v3_4)
 
         local_file_path = get_local_file_path(self.root, _file)
         if not os.path.exists(local_file_path):
