@@ -40,6 +40,10 @@ def login():
             return render_template('auth/login.html', form=form)
 
         if user is not None and user.verify_password(form.password.data):
+            if not user.enabled:
+                flash('User is disabled.')
+                return render_template('auth/login.html', form=form)
+
             login_user(user, form.remember_me.data)
             
             if 'current_storage_dir' in session:

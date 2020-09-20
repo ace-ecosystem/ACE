@@ -417,7 +417,9 @@
                     <div class="col-xs-12">
                         <select name="selected_user_id" class="form-control">
                             {% for user in all_users %}
-                            <option value="{{user.id}}">{{user.gui_display}}</option>
+			        {% if user.enabled %}
+                                    <option value="{{user.id}}">{{user.gui_display}}</option>
+				{% endif %}
                             {% endfor %}
                         </select>
                     </div>

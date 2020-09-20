@@ -1522,6 +1522,12 @@ def modify_user(args):
         if args.display_name:
             c.execute("""UPDATE users SET display_name = %s WHERE id = %s""", ( args.display_name, user_id ))
 
+        if args.enable:
+            c.execute("""UPDATE users SET enabled = True WHERE id = %s""", ( user_id ))
+
+        if args.disable:
+            c.execute("""UPDATE users SET enabled = False WHERE id = %s""", ( user_id ))
+
         db.commit()
 
     logging.info("modified user {0}".format(u.username))
@@ -1534,6 +1540,8 @@ modify_user_parser.add_argument('-p', '--password', action='store_true', dest='p
 modify_user_parser.add_argument('-z', '--timezone', required=False, default=None, help="The timezone the user is in. Defaults to UTC.")
 modify_user_parser.add_argument('-q', '--default_queue', required=False, default=None, help="Change the default queue the user is assigned to.")
 modify_user_parser.add_argument('-n', '--display-name', required=False, default=None, help="Change the user's display name.")
+modify_user_parser.add_argument('--enable', action='store_true', required=False, default=None, help="Enable the user.")
+modify_user_parser.add_argument('--disable', action='store_true', required=False, default=None, help="Disable the user.")
 modify_user_parser.set_defaults(func=modify_user)
 
 # XXX DEPRECATED
@@ -1568,13 +1576,14 @@ delete_user_parser.set_defaults(func=delete_user)
 def list_users(args):
     import saq
     from saq.database import User
-    print("{:<6}{:<15}{:<25}{:<40}{}".format('Id', 'User', 'Name', 'Queue', 'TZ'))
+    print("{:<6}{:<15}{:<25}{:<40}{:<25}{}".format('Id', 'User', 'Name', 'Queue', 'Enabled', 'TZ'))
     for user in saq.db.query(User).order_by(User.username):
-        print("{:<6}{:<15}{:<25}{:<40}{}".format(
+        print("{:<6}{:<15}{:<25}{:<40}{:<25}{}".format(
               user.id, 
               user.username, 
               '' if user.display_name is None else user.display_name, 
               user.queue,
+              'True' if user.enabled else 'False',
               user.timezone))
 
     sys.exit(0)
