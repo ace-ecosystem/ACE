@@ -366,6 +366,7 @@ import logging
 import os.path
 from sqlalchemy import (
         BigInteger,
+        Boolean,
         Column,
         DATE,
         DATETIME,
@@ -508,6 +509,7 @@ class User(UserMixin, Base):
         String(64),
         nullable=False,
         default=saq.constants.QUEUE_DEFAULT)
+    enabled = Column(Boolean, unique=False, default=True)
 
     def __str__(self):
         return self.username
