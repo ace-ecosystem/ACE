@@ -49,7 +49,7 @@ done
 	#echo 'export SAQ_ENC=ace'  >> $SAQ_HOME/load_local_environment
 #fi
 
-if [ ! -e etc/brotex.whitelist -o -n "$RESET" ]
+if [ ! -e etc/brotex.whitelist ]
 then
     cp -a etc/brotex.whitelist.sample etc/brotex.whitelist || fail "unable to configure brotex.whitelist"
 fi

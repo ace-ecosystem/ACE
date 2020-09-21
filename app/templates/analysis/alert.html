@@ -143,8 +143,8 @@
                 {% endif %}
 
                 {% for tag in observable_node.obj.tags %}{% if tag.level != 'hidden' %}<span class="label {{tag.css_class}}">{{ tag }}</span>{% if tag.name.lower().startswith('atos') %} 🤡 {% endif %}{% endif %}{% endfor %}
-                {% if observable_node.disposition_history %}
-                    {% for disposition, count, percentage in observable_node.disposition_history %}
+                {% if observable_node.obj.disposition_history %}
+                    {% for disposition, count, percentage in observable_node.obj.disposition_history %}
                         {% if count != 1 or disposition != alert.disposition %}
                             <span onmouseover="this.style.textDecoration='underline';" onmouseleave="this.style.textDecoration='';" onmousedown="set_filters({'Observable':[['{{observable_node.obj.type}}',decodeURIComponent(atob('{{observable_node.obj.value | b64escape}}'))]],'Disposition':['{{disposition}}']})" class="label label-{{disposition_css_mapping[disposition]}}">{% if disposition == None %}Open{% else %}{{disposition}}{% endif %} {{percentage | int}}% ({{count}})</span>
                         {% endif %}
@@ -195,77 +195,63 @@
     {% endif %}
 {% endmacro %}
 
-{% for entry in email_remediations %}
-    {# sometimes embedded emails do not have the recipient
-       these can't be remediated anyways #}
-    {% if entry.recipient %}
+{% if alert.remediation_targets | length > 0 %}
 <div class="panel panel-default">
     <div class="panel-heading">
-        <h3 class="panel-title">Email Remediation History - {{entry.message_id}}</h3>
+        <h3 class="panel-title">Remediation Targets <a role="button" data-toggle="collapse" data-target="#collapse_remediation_targets" aria-expanded="true" aria-controls="collapse_remediation_targets">(hide/show)</a></h3>
     </div>
-    <div class="panel-body">
-        <h6>From: <font color="red">{{entry.sender}}</font> 
-            To: <font color="blue">{{entry.recipient}}</font>
-            Subject: <font color="green">{{entry.subject}}</font>
-        </h6>
-        {% if entry.remediation_history | length == 0 %}
-            <tr>
-                <td colspan="4"><i>No remediations have been attempted.</i></td>
-            </tr>
-        {% else %}
-            <table class="table">
-            <tr>
-                <td>Action</td>
-                <td>Date</td>
-                <td>User</td>
-                <td>Result</td>
-            </tr>
-            {#{% for entry in email_remediations %}#}
-                {% for history in entry.remediation_history %}
-                    <tr>
-                        <td>{{history['action']}}</td>
-                        <td style="white-space: nowrap">{{history['insert_date']}}</td>
-                        <td>{{history['user']}}</td>
-                        <td><pre>{{history['result']}}</pre></td>
-                    </tr>
-                {% endfor %}
-            {#{% endfor %}#}
-            </table>
-        {% endif %}
-    </div>
-</div>
-    {% endif %}
-{% endfor %}
-
-{% if remediation_history %}
-<div class="panel panel-default">
-    <div class="panel-heading">
-        <h3 class="panel-title">Remediation History <a role="button" data-toggle="collapse" data-target="#collapse_remediation_history" aria-expanded="true" aria-controls="collapse_remediation_history">(hide/show)</a></h3>
-    </div>
-    <div class="panel-body collapse" id="collapse_remediation_history">
+    <div class="panel-body collapse" id="collapse_remediation_targets">
         <table class="table table-condensed">
         <tr>
-            <td><b>type</b></td>
-            <td><b>action</b></td>
-            <td><b>key</b></td>
-            <td><b>date</b></td>
-            <td><b>user</b></td>
-            <td><b>result</b></td>
+            <th></th>
+            <th width="100">Type</th>
+            <th>Target</th>
+            <th width="115">Status</th>
         </tr>
-        {% for remediation_entry in remediation_history %}
-        {% if remediation_entry is none %}
-        <tr>
-        {% elif remediation_entry.successful %}
-        <tr class="success">
-        {% elif not remediation_entry.success %}
-        <tr class="error">
-        {% endif %}
-            <td>{{remediation_entry.type}}</td>
-            <td>{{remediation_entry.action}}</td>
-            <td>{{remediation_entry.key}}</td>
-            <td>{{remediation_entry.insert_date}}</td>
-            <td>{{remediation_entry.user.gui_display}}</td>
-            <td>{{remediation_entry.result}}</td>
+        {% for target in alert.remediation_targets %}
+        <tr class="{{target.css_class}}">
+            <td>
+                <button onclick="toggle('target_history_{{target.id}}'); toggle_chevron('target_history_button_{{target.id}}')" type="button" class="btn btn-default btn-xs"><span id="target_history_button_{{target.id}}" class="glyphicon glyphicon-chevron-down"></span></button>
+            </td>
+            <td>{{target.type}}</td>
+            <td>{{target.value}}</td>
+            <td>{{target.state}}</td>
+        </tr>
+        <tr id='target_history_{{target.id}}' style="display:none;">
+            <td colspan="4">
+                {% if target.history | length == 0 %}
+                    No remedation actions have been taken for this target.
+                {% else %}
+                    <table class="table table-condensed">
+                        <tr>
+                            <th width="150">Date</th>
+                            <th width="150">User</th>
+                            <th width="100">Action</th>
+                            <th width="150">Status</th>
+                            <th>Details</th>
+                        </tr>
+                        {% for event in target.history %}
+                        <tr>
+                            <td>{{event.insert_date}}</td>
+                            <td>{{event.user.gui_display}}</td>
+                            <td>{{event.action}}</td>
+                            <td>{{event.status}}</td>
+                            <td>
+                                <table class="table table-condensed">
+                                    {% for k, v in event.results.items() %}
+                                    <tr>
+                                        <td width="130">{{k[11:]}}</td>
+                                        <td width="100">{{v['status']}}</td>
+                                        <td>{{v['message']}}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </table>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
         </table>

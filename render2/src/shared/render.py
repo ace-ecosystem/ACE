@@ -2,11 +2,14 @@
 
 import pathlib
 import tempfile
+import time
 from typing import Dict, Type
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.proxy import Proxy
+from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.remote.command import Command
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.common.exceptions import TimeoutException
 
@@ -19,6 +22,8 @@ from shared_logging import get_logger, prep_for_logging
 # Constants, environment variables, etc.
 # -----------------------------------------------------------------------
 logger = get_logger(__name__)
+SELENIUM_RETRY_INTERVAL = .5
+SELENIUM_TIMEOUT = 20
 
 # -----------------------------------------------------------------------
 # Storage classes
@@ -120,8 +125,35 @@ def convert_int(string_int: str) -> int:
         logger.error(message)
         raise TypeError(message)
 
+def wait_for_driver_ready(driver: WebDriver) -> bool:
+    """Check to see if selenium webdriver is ready"""
+    try:
+        driver.execute(Command.STATUS)
+        return True
+    except Exception as e:
+        return False
 
-def render_site(driver: webdriver.remote.webdriver.WebDriver, content_type: ContentTypeEnum, content: str) -> None:
+def setup_driver(capabilities: dict, co: Options) -> WebDriver:
+    driver = None
+
+    co.add_argument('--ignore-certificate-errors')
+    co.add_argument('--headless')
+    # If you don't add '--disable-web-security', then HTML files will not render css, js, etc. properly.
+    # This stops the browser-enforcement of CORS, etc.
+    co.add_argument('--disable-web-security')
+
+    try:
+        driver = webdriver.Remote(
+            command_executor='http://127.0.0.1:4444/wd/hub',
+            desired_capabilities=capabilities,
+            options=co,
+        )
+        return driver
+    except Exception as e:
+        logger.error(f'unable to initialize driver: {e}')
+        return None
+
+def render_site(driver: WebDriver, content_type: ContentTypeEnum, content: str) -> None:
     """Render URL or HTML"""
     try:
         if content_type == ContentTypeEnum.url:
@@ -146,7 +178,7 @@ def render_site(driver: webdriver.remote.webdriver.WebDriver, content_type: Cont
         logger.info(f'received {content_type} content from selenium')
 
 
-def load_screenshot(driver: webdriver.remote.webdriver.WebDriver, storage: Storage, **kwargs) -> str:
+def load_screenshot(driver: WebDriver, storage: Storage, **kwargs) -> str:
     """Return screenshot from the webdriver."""
     # Return Base64 output
     if storage.output_format == DriverOutputEnum.base64:
@@ -192,6 +224,7 @@ def get_proxy(host: str, port: str, username: str=None, password: str=None, **kw
 # -----------------------------------------------------------------------
 
 def render(
+    driver: WebDriver,
     content: str = None,
     content_type: ContentTypeEnum = None,
     width: int = None,
@@ -205,23 +238,7 @@ def render(
     _load_screenshot = kwargs.get('load_screenshot') or load_screenshot
     _env = kwargs.get('env') or Env
 
-    capabilities: dict = kwargs.get('capabilities') or DesiredCapabilities.CHROME
-
-    co = kwargs.get('options') or Options()
-    co.add_argument('--ignore-certificate-errors')
-    co.add_argument('--headless')
-    # If you don't add '--disable-web-security', then HTML files will not render css, js, etc. properly.
-    # This stops the browser-enforcement of CORS, etc.
-    co.add_argument('--disable-web-security')
-
-    driver = None
-
     try:
-        driver = kwargs.get('webdriver') or webdriver.Remote(
-            command_executor='http://127.0.0.1:4444/wd/hub',
-            desired_capabilities=capabilities,
-            options=co,
-        )
         driver.set_window_size(width, height)
         # Timeout if page can't be loaded in 20 seconds
         driver.set_page_load_timeout(20)
@@ -253,6 +270,26 @@ def run(sleep: int=None, job: CachedJob=None, job_queue: JobQueue=None, **kwargs
     _sleep = sleep or int(Env.SLEEP)
     _render = kwargs.get('render') or render
     queue = job_queue or JobQueue()
+    driver = kwargs.get('driver') or setup_driver(capabilities=DesiredCapabilities.CHROME, co=Options())
+    
+    # ensure the webdriver is ready to accept requests before pulling a job
+    # if the WebDriver is not ready by SELENIUM_TIMEOUT, the rendering will fail
+    # and the queue will remain untouched
+    driver_ready = wait_for_driver_ready(driver=driver)
+    retries = 0
+    while not driver_ready:
+        elapsed_time = retries * SELENIUM_RETRY_INTERVAL
+        if elapsed_time >= SELENIUM_TIMEOUT:
+            logger.error(f'selenium did not start after {SELENIUM_TIMEOUT}s')
+            return
+        driver_ready = wait_for_driver_ready(driver=driver)
+        # limit logging of retries (one log every quarter of the max)
+        if (elapsed_time > 0) and (elapsed_time % (SELENIUM_TIMEOUT / 4) == 0):
+            logger.info(f'waiting for selenium {retries * SELENIUM_RETRY_INTERVAL}s')
+        # wait to retry
+        retries += 1
+        time.sleep(SELENIUM_RETRY_INTERVAL)
+
     cached_job = job or CachedJob(queue=queue)
 
     logger.info(f'starting renderer with sleep={_sleep}')
@@ -270,7 +307,7 @@ def run(sleep: int=None, job: CachedJob=None, job_queue: JobQueue=None, **kwargs
     try:
         # Try to render the HTML or URL
         logger.info(f'begin rendering')
-        screenshot = _render(**job_details, storage=storage)
+        screenshot = _render(driver=driver, **job_details, storage=storage)
         logger.info(f'done rendering')
 
     except Exception as error:

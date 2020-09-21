@@ -18,8 +18,9 @@ import smtplib
 import socket
 import tempfile
 import traceback
-import uuid
+import uuid as uuidlib
 import zipfile
+import time
 
 from collections import defaultdict
 from datetime import timedelta
@@ -47,7 +48,7 @@ from pymongo import MongoClient
 import saq
 import saq.analysis
 import saq.intel
-import saq.remediation
+from saq.remediation import RemediationTarget
 import virustotal
 
 from saq import SAQ_HOME
@@ -68,10 +69,10 @@ from saq.error import report_exception
 from saq.gui import GUIAlert
 from saq.performance import record_execution_time
 from saq.proxy import proxies
-from saq.util import abs_path
-from saq.remediation.constants import REMEDIATION_TYPE_EMAIL
-from saq.remediation import request_remediation, request_restoration, execute_remediation, execute_restoration
+from saq.tip import tip_factory
+from saq.util import abs_path, find_all_url_domains, create_histogram_string
 from saq.file_upload import *
+from saq.observables import create_observable
 
 import ace_api
 
@@ -102,7 +103,7 @@ DEFAULT_PRUNE = True
 @analysis.context_processor
 def generic_functions():
     def generate_unique_reference():
-        return str(uuid.uuid4())
+        return str(uuidlib.uuid4())
 
     return { 'generate_unique_reference': generate_unique_reference }
 
@@ -383,7 +384,7 @@ def email_file():
                     zf.writestr(os.path.basename(full_path), msg)
                 finally:
                     zf.close()
-            except Exceptoin as e:
+            except Exception as e:
                 logging.error("Could not compress " + full_path + ': ' + str(e))
                 report_exception()
                 flash("internal error compressing " + full_path)
@@ -541,7 +542,7 @@ def download_file():
         return response
     elif mode == 'zip':
         try:
-            dest_file = '{}.zip'.format(os.path.join(saq.TEMP_DIR, str(uuid.uuid4())))
+            dest_file = '{}.zip'.format(os.path.join(saq.TEMP_DIR, str(uuidlib.uuid4())))
             logging.debug("creating encrypted zip file {} for {}".format(dest_file, full_path))
             p = Popen(['zip', '-e', '--junk-paths', '-P', 'infected', dest_file, full_path])
             p.wait()
@@ -949,66 +950,6 @@ def assign_ownership():
 
     return redirect(url_for('analysis.manage'))
 
-@analysis.route('/remediate', methods=['POST'])
-@login_required
-def remediate():
-    # load all the alerts from the database we're going to process
-    alerts = []
-    alert_uuids = request.values['alert_uuids'].split(',')
-    session['checked'] = alert_uuids
-    for uuid in alert_uuids:
-        alerts.append(db.session.query(GUIAlert).filter_by(uuid=uuid.strip()).one())
-
-    # process them all at once
-    from saq.remediation import remediate_phish
-
-    messages = []
-
-    try:
-        messages = remediate_phish(alerts)
-    except Exception as e:
-        flash("unable to remediate phish: {}".format(str(e)))
-        report_exception()
-
-    # set the remediation time
-    for alert in alerts:
-        alert.removal_time = datetime.datetime.now()
-        alert.removal_user_id = current_user.id
-        db.session.add(alert)
-
-    db.session.commit()
-
-    for message in messages:
-        flash(message)
-
-    return redirect(url_for('analysis.manage'))
-
-@analysis.route('/unremediate', methods=['POST'])
-@login_required
-def unremediate():
-    # load all the alerts from the database we're going to process
-    alerts = []
-    alert_uuids = request.values['alert_uuids'].split(',')
-    session['checked'] = alert_uuids
-    for uuid in alert_uuids:
-        alerts.append(db.session.query(GUIAlert).filter_by(uuid=uuid.strip()).one())
-
-    # process them all at once
-    from saq.remediation import unremediate_phish
-
-    messages = []
-
-    try:
-        messages = unremediate_phish(alerts)
-    except Exception as e:
-        flash("unable to restore email: {}".format(str(e)))
-        report_exception()
-
-    for message in messages:
-        flash(message)
-
-    return redirect(url_for('analysis.manage'))
-
 @analysis.route('/new_alert', methods=['POST'])
 @login_required
 @use_db
@@ -1138,13 +1079,6 @@ def new_alert(db, c):
             except:
                 logging.error(f"unable to close file descriptor for {file_name}")
 
-@analysis.route('/new_malware_option', methods=['POST', 'GET'])
-@login_required
-def new_malware_option():
-    index = request.args['index']
-    malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
-    return render_template('analysis/new_malware_option.html', malware=malware, index=index)
-
 @analysis.route('/new_alert_observable', methods=['POST', 'GET'])
 @login_required
 def new_alert_observable():
@@ -1157,19 +1091,10 @@ def add_to_event():
     analysis_page = False
     event_id = request.form.get('event', None)
     event_name = request.form.get('event_name', None).strip()
-    event_type = request.form.get('event_type', None)
-    event_vector = request.form.get('event_vector', None)
-    event_risk_level = request.form.get('event_risk_level', None)
-    event_prevention = request.form.get('event_prevention', None)
     event_comment = request.form.get('event_comment', None)
-    event_status = request.form.get('event_status', None)
-    event_remediation = request.form.get('event_remediation', None)
     event_disposition = request.form.get('event_disposition', None)
-    campaign_id = request.form.get('campaign_id', None)
-    new_campaign = request.form.get('new_campaign', None)
-    company_ids = request.form.getlist('company', None)
-    event_time = request.form.get('event_time', None)
     alert_time = request.form.get('alert_time', None)
+    event_time = request.form.get('event_time', None)
     ownership_time = request.form.get('ownership_time', None)
     disposition_time = request.form.get('disposition_time', None)
     contain_time = request.form.get('contain_time', None)
@@ -1180,6 +1105,13 @@ def add_to_event():
     disposition_time = None if disposition_time in ['', 'None', None] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
     contain_time = None if contain_time in ['', 'None', None] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
     remediation_time = None if remediation_time in ['', 'None', None] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
+    event_status = EVENT_STATUS_DEFAULT
+    event_remediation = EVENT_REMEDIATION_DEFAULT
+    campaign_id = EVENT_CAMPAIGN_ID_DEFAULT
+    event_type = EVENT_TYPE_DEFAULT
+    event_vector = EVENT_VECTOR_DEFAULT
+    event_risk_level = EVENT_RISK_LEVEL_DEFAULT
+    event_prevention = EVENT_PREVENTION_DEFAULT
 
     # Enforce logical chronoglogy
     dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if d is not None]
@@ -1194,32 +1126,23 @@ def add_to_event():
             return redirect(url_for('analysis.manage'))
 
     alert_uuids = []
-    if ("alert_uuids" in request.form):
+    if "alert_uuids" in request.form:
         alert_uuids = request.form['alert_uuids'].split(',')
-    new_event = False
+    if event_id == "NEW":
+        new_event = True
+    else:
+        new_event = False
 
     with get_db_connection() as dbm:
         c = dbm.cursor()
 
-        if event_id == "NEW":
-            new_event = True
-            if (campaign_id == "NEW"):
-                c.execute("""SELECT id FROM campaign WHERE name = %s""", (new_campaign))
-                if c.rowcount > 0:
-                    result = c.fetchone()
-                    campaign_id = result[0]
-                else:
-                    c.execute("""INSERT INTO campaign (name) VALUES (%s)""", (new_campaign))
-                    dbm.commit()
-                    c.execute("""SELECT LAST_INSERT_ID()""")
-                    result = c.fetchone()
-                    campaign_id = result[0]
+        if new_event:
 
             creation_date = datetime.datetime.now().strftime("%Y-%m-%d")
-            if (len(alert_uuids) > 0):
-                sql='SELECT insert_date FROM alerts WHERE uuid IN (%s) order by insert_date' 
-                in_p=', '.join(list(map(lambda x: '%s', alert_uuids)))
-                sql = sql % in_p
+            if len(alert_uuids) > 0:
+                sql = 'SELECT insert_date FROM alerts WHERE uuid IN (%s) order by insert_date'
+                in_p = ', '.join(list(map(lambda x: '%s', alert_uuids)))
+                sql %= in_p
                 c.execute(sql, alert_uuids)
                 result = c.fetchone()
                 creation_date = result[0].strftime("%Y-%m-%d")
@@ -1229,51 +1152,28 @@ def add_to_event():
                 result = c.fetchone()
                 event_id = result[0]
             else:
-                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, risk_level, 
+                c.execute("""INSERT INTO events (uuid, creation_date, name, status, remediation, campaign_id, type, vector, risk_level, 
                 prevention_tool, comment, event_time, alert_time, ownership_time, disposition_time, 
-                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_risk_level,
-                         event_prevention, event_comment, event_time, alert_time, ownership_time,
-                         disposition_time, contain_time, remediation_time))
+                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (str(uuidlib.uuid4()), creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_risk_level,
+                 event_prevention, event_comment, event_time, alert_time, ownership_time, disposition_time, contain_time,
+                 remediation_time))
+
                 dbm.commit()
                 c.execute("""SELECT LAST_INSERT_ID()""")
                 result = c.fetchone()
                 event_id = result[0]
 
-            mal_assigned = False
-            for key in request.form.keys():
-                if key.startswith("malware_selection_"):
-                    mal_assigned = True
-                    index = key[18:]
-                    mal_id = request.form.get("malware_selection_{}".format(index))
+                c.execute("""SELECT uuid FROM events WHERE id=%s""", event_id)
+                result = c.fetchone()
+                event_uuid = result[0]
 
-                    if mal_id == "NEW":
-                        mal_name = request.form.get("mal_name_{}".format(index))
-                        c.execute("""SELECT id FROM malware WHERE name = %s""", (mal_name))
-                        if c.rowcount > 0:
-                            result = c.fetchone()
-                            mal_id = result[0]
-                        else:
-                            c.execute("""INSERT INTO malware (name) VALUES (%s)""", (mal_name))
-                            dbm.commit()
-                            c.execute("""SELECT LAST_INSERT_ID()""")
-                            result = c.fetchone()
-                            mal_id = result[0]
-
-                        threats = request.form.getlist("threats_{}".format(index), None)
-                        for threat in threats:
-                            c.execute("""INSERT IGNORE INTO malware_threat_mapping (malware_id,type) VALUES (%s,%s)""", (mal_id, threat))
-                        dbm.commit()
-
-                    c.execute("""INSERT IGNORE INTO malware_mapping (event_id, malware_id) VALUES (%s, %s)""", (event_id, mal_id))
-                    dbm.commit()
-
-            if not mal_assigned:
-                c.execute("""INSERT IGNORE INTO malware_mapping (event_id, malware_id) VALUES (%s, %s)""", (event_id, 5))
-                dbm.commit()
+                # Create the event in the TIP
+                tip = tip_factory()
+                tip.create_event_in_tip(event_name, event_uuid, url_for('events.index', direct=event_id, _external=True))
 
         for uuid in alert_uuids:
-            c.execute("""SELECT id, company_id FROM alerts WHERE uuid = %s""", (uuid))
+            c.execute("""SELECT id, company_id FROM alerts WHERE uuid = %s""", uuid)
             result = c.fetchone()
             alert_id = result[0]
             company_id = result[1]
@@ -1282,11 +1182,12 @@ def add_to_event():
         dbm.commit()
 
         # generate wiki
-        c.execute("""SELECT creation_date, name FROM events WHERE id = %s""", (event_id))
+        c.execute("""SELECT creation_date, name FROM events WHERE id = %s""", event_id)
         result = c.fetchone()
         creation_date = result[0]
         event_name = result[1]
-        c.execute("""SELECT uuid, storage_dir FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE event_mapping.event_id = %s""", (event_id))
+        c.execute("""SELECT uuid, storage_dir FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE 
+        event_mapping.event_id = %s""", event_id)
         rows = c.fetchall()
 
         alert_uuids = []
@@ -1296,9 +1197,13 @@ def add_to_event():
             alert_paths.append(row[1])
 
         if not new_event: 
-            c.execute("""SELECT disposition FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE event_mapping.event_id = %s ORDER BY disposition DESC""", (event_id))
+            c.execute("""SELECT disposition FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE 
+            event_mapping.event_id = %s ORDER BY disposition DESC""", event_id)
             result = c.fetchone()
             event_disposition = result[0]
+
+            if not event_disposition:
+                event_disposition = saq.constants.DISPOSITION_DELIVERY
 
         if len(alert_uuids) > 0:
             try:
@@ -1309,7 +1214,7 @@ def add_to_event():
                 report_exception()
 
         wiki_name = "{} {}".format(creation_date.strftime("%Y%m%d"), event_name)
-        data = { "name": wiki_name, "alerts": alert_paths, "id": event_id }
+        data = {"name": wiki_name, "alerts": alert_paths, "id": event_id }
 
     if analysis_page:
         return redirect(url_for('analysis.index'))
@@ -1816,6 +1721,7 @@ def hasFilter(name):
 def getFilters():
     return {
         'Alert Date': DateRangeFilter(GUIAlert.insert_date),
+        'Alert Type': SelectFilter(GUIAlert.alert_type),
         'Description': TextFilter(GUIAlert.description),
         'Disposition': MultiSelectFilter(GUIAlert.disposition, nullable=True, options=VALID_ALERT_DISPOSITIONS),
         'Disposition By': SelectFilter(DispositionBy.display_name, nullable=True),
@@ -1918,19 +1824,6 @@ def manage():
                 alert_tags[alert_uuid] = []
             alert_tags[alert_uuid].append(tag)
 
-    # load alert remediations
-    # NOTE: We should have the alert class do this automatically
-    _alert_remediations = db.session.query(GUIAlert.uuid, Remediation.result, Remediation.key).\
-        join(Observable, Remediation.key == func.replace(Observable.value, '|', ':')).filter(Observable.type == 'email_delivery').\
-        join(ObservableMapping, ObservableMapping.observable_id == Observable.id).\
-        join(GUIAlert, GUIAlert.id == ObservableMapping.alert_id).\
-        filter(GUIAlert.id.in_([a.id for a in alerts if len(alerts) > 0])).order_by(Remediation.id.desc()).all()
-    alert_remediations = {k[0]: [] for k in _alert_remediations}
-    for k in _alert_remediations:
-        alert_remediations[k[0]].extend([{'result': k[1] if k[1] in ['removed', 'restored'] else 'Remediation failed: not cleaned',
-                                          'css_class': 'label-success' if k[1] in ['removed', 'restored'] else 'label-danger'}])
-
-
     # alert display timezone
     if current_user.timezone and pytz.timezone(current_user.timezone) != pytz.utc:
         for alert in alerts:
@@ -1949,7 +1842,6 @@ def manage():
         alerts=alerts,
         comments=comments,
         alert_tags=alert_tags,
-        alert_remediations=alert_remediations,
         display_disposition=not ('Disposition' in session['filters'] and len(session['filters']['Disposition']) == 1 and session['filters']['Disposition'][0] is None),
         total_alerts=total_alerts,
 
@@ -2696,323 +2588,6 @@ def metrics():
         metric_actions=metric_actions,
         daterange=daterange)
 
-
-@analysis.route('/events', methods=['GET', 'POST'])
-@login_required
-def events():
-
-    if not saq.CONFIG['gui'].getboolean('display_events'):
-        # redirect to index
-        return redirect(url_for('analysis.index'))
-
-    filters = {
-        'filter_event_open': SearchFilter('filter_event_open', FILTER_TYPE_CHECKBOX, True),
-        'event_daterange': SearchFilter('event_daterange', FILTER_TYPE_TEXT, ''),
-        'filter_event_type': SearchFilter('filter_event_type', FILTER_TYPE_SELECT, 'ANY'),
-        'filter_event_vector': SearchFilter('filter_event_vector', FILTER_TYPE_SELECT, 'ANY'),
-        'filter_event_prevention_tool': SearchFilter('filter_event_prevention_tool', FILTER_TYPE_SELECT, 'ANY'),
-        'filter_event_risk_level': SearchFilter('filter_event_risk_level', FILTER_TYPE_SELECT, 'ANY')
-    }
-
-    malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
-    for mal in malware:
-        key = 'malz_{}'.format(mal.id)
-        filters[key] = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-
-    companies = db.session.query(Company).order_by(Company.name.asc()).all()
-    for company in companies:
-        key = 'company_{}'.format(company.id)
-        filters[key] = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-
-    campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all()
-    for campaign in campaigns:
-        key = 'campaign_{}'.format(campaign.id)
-        filters[key] = SearchFilter(key, FILTER_TYPE_CHECKBOX, False)
-
-    reset_filter = ('reset-filters' in request.form) or ('reset-filters' in request.args)
-    if reset_filter:
-        for filter_item in filters.values():
-            filter_item.reset()
-
-    filter_state = {filters[f].name: filters[f].state for f in filters}
-
-    for filter_name in filters.keys():
-        form_value = filters[filter_name].form_value
-        if form_value is not None:
-            session[filter_name] = form_value
-        elif filter_name in session:
-            del session[filter_name]
-
-    query = db.session.query(Event)
-    if filters['filter_event_open'].value:
-        query = query.filter(Event.status == 'OPEN')
-    if filters['event_daterange'].value != '':
-        try:
-            daterange_start, daterange_end = filters['event_daterange'].value.split(' - ')
-            daterange_start = datetime.datetime.strptime(daterange_start, '%m-%d-%Y %H:%M')
-            daterange_end = datetime.datetime.strptime(daterange_end, '%m-%d-%Y %H:%M')
-        except Exception as error:
-            flash("error parsing date range, using default 7 days: {0}".format(str(error)))
-            daterange_end = datetime.datetime.now()
-            daterange_start = daterange_end - datetime.timedelta(days=7)
-        query = query.filter(and_(Event.creation_date >= daterange_start, Event.creation_date <= daterange_end))
-    if filters['filter_event_type'].value != 'ANY':
-        query = query.filter(Event.type == filters['filter_event_type'].value)
-    if filters['filter_event_vector'].value != 'ANY':
-        query = query.filter(Event.vector == filters['filter_event_vector'].value)
-    if filters['filter_event_prevention_tool'].value != 'ANY':
-        query = query.filter(Event.prevention_tool == filters['filter_event_prevention_tool'].value)
-    if filters['filter_event_risk_level'].value != 'ANY':
-        query = query.filter(Event.risk_level == filters['filter_event_risk_level'].value)
-
-    mal_filters = []
-    for filter_name in filters.keys():
-        if filter_name.startswith('malz_') and filters[filter_name].value:
-            mal_id = int(filter_name[len('malz_'):])
-            mal_filters.append(MalwareMapping.malware_id == mal_id)
-    if len(mal_filters) > 0:
-        query = query.filter(Event.malware.any(or_(*mal_filters)))
-
-    company_filters = []
-    for filter_name in filters.keys():
-        if filter_name.startswith('company_') and filters[filter_name].value:
-            company_id = int(filter_name[len('company_'):])
-            company_filters.append(CompanyMapping.company_id == company_id)
-    if len(company_filters) > 0:
-        query = query.filter(Event.companies.any(or_(*company_filters)))
-
-    campaign_filters = []
-    for filter_name in filters.keys():
-        if filter_name.startswith('campaign_') and filters[filter_name].value:
-            campaign_id = int(filter_name[len('campaign_'):])
-            campaign_filters.append(Event.campaign_id == campaign_id)
-    if len(campaign_filters) > 0:
-        query = query.filter(or_(*campaign_filters))
-
-    if 'event_sort_by' not in session:
-        session['event_sort_by'] = 'date'
-        session['event_sort_dir'] = True
-
-    sort_field = request.form.get('sort_field', None)
-    if sort_field is not None:
-        if session['event_sort_by'] == sort_field:
-            session['event_sort_dir'] = not session['event_sort_dir']
-        else:
-            session['event_sort_by'] = sort_field
-            session['event_sort_dir'] = True
-
-    if session['event_sort_by'] == 'date':
-        if session['event_sort_dir']:
-            query = query.order_by(Event.creation_date.desc())
-        else:
-            query = query.order_by(Event.creation_date.asc())
-    elif session['event_sort_by'] == 'event':
-        if session['event_sort_dir']:
-            query = query.order_by(Event.type.desc(), Event.vector.desc(), Event.name.desc())
-        else:
-            query = query.order_by(Event.type.asc(), Event.vector.asc(), Event.name.asc())
-    elif session['event_sort_by'] == 'campaign':
-        if session['event_sort_dir']:
-            query = query.order_by(Event.campaign.desc())
-        else:
-            query = query.order_by(Event.campaign.asc())
-    elif session['event_sort_by'] == 'prevention':
-        if session['event_sort_dir']:
-            query = query.order_by(Event.prevention_tool.desc())
-        else:
-            query = query.order_by(Event.prevention_tool.asc())
-    elif session['event_sort_by'] == 'remediation':
-        if session['event_sort_dir']:
-            query = query.order_by(Event.remediation.desc())
-        else:
-            query = query.order_by(Event.remediation.asc())
-    elif session['event_sort_by'] == 'status':
-        if session['event_sort_dir']:
-            query = query.order_by(Event.status.desc())
-        else:
-            query = query.order_by(Event.status.asc())
-    elif session['event_sort_by'] == 'risk_level':
-        if session['event_sort_dir']:
-            query = query.order_by(Event.risk_level.desc())
-        else:
-            query = query.order_by(Event.risk_level.asc())
-
-    events = query.all()
-
-    if session['event_sort_by'] == 'disposition':
-        events = sorted(events, key=lambda event: event.disposition_rank, reverse=session['event_sort_dir'])
-
-    event_tags = {} 
-    # we don't show "special" or "hidden" tags in the display
-    special_tag_names = [tag for tag in saq.CONFIG['tags'].keys() if saq.CONFIG['tags'][tag] in ['special', 'hidden' ]]
-    for event in events:
-        event_tags[event.id] = []
-        for tag in event.sorted_tags:
-            if tag.name not in special_tag_names:
-                event_tags[event.id].append(tag)
-
-    return render_template('analysis/events.html', events=events, event_tags=event_tags, filter_state=filter_state, malware=malware, companies=companies, campaigns=campaigns, sort_by=session['event_sort_by'], sort_dir=session['event_sort_dir'])
-
-@analysis.route('/event_alerts', methods=['GET'])
-@login_required
-def event_alerts():
-    event_id = request.args['event_id']
-    events = db.session.query(Event).filter(Event.id == event_id).all()
-    event = events[0]
-    event_mappings = db.session.query(EventMapping).filter(EventMapping.event_id == event_id).all()
-
-    alert_tags = {}
-    special_tag_names = [tag for tag in saq.CONFIG['tags'].keys() if saq.CONFIG['tags'][tag] in ['special', 'hidden' ]]
-    for event_mapping in event_mappings:
-        alert_tags[event_mapping.alert.uuid] = []
-        for tag in event_mapping.alert.sorted_tags:
-            if tag.name not in special_tag_names:
-                alert_tags[event_mapping.alert.uuid].append(tag)
-
-    return render_template('analysis/event_alerts.html', alert_tags=alert_tags, event_mappings=event_mappings, event=event)
-
-@analysis.route('/remove_alerts', methods=['POST'])
-@login_required
-def remove_alerts():
-    # get list of event mappings to delete
-    mappings = request.form['event_mappings'].split(',')
-
-    # connect to db
-    with get_db_connection() as db:
-        c = db.cursor()
-
-        # delete all mappings
-        for mapping in mappings:
-            event_id, alert_id = mapping.split("_")
-            c.execute("""DELETE FROM event_mapping WHERE event_id=%s AND alert_id=%s""", (event_id, alert_id))
-
-        # commit changes to databse
-        db.commit()
-
-    # return to events page
-    return redirect(url_for('analysis.events'))
-
-@analysis.route('/edit_event_modal', methods=['GET'])
-@login_required
-def edit_event_modal():
-    event_id = request.args['event_id']
-    events = db.session.query(Event).filter(Event.id == event_id).all()
-    event = events[0]
-    malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
-    campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all()
-    return render_template('analysis/event_edit.html', event=event, malware=malware, campaigns=campaigns)
-
-@analysis.route('/edit_event', methods=['POST'])
-@login_required
-def edit_event():
-    event_id = request.form.get('event_id', None)
-    event_type = request.form.get('event_type', None)
-    event_vector = request.form.get('event_vector', None)
-    event_risk_level = request.form.get('event_risk_level', None)
-    event_prevention = request.form.get('event_prevention', None)
-    event_comment = request.form.get('event_comment', None)
-    event_status = request.form.get('event_status', None)
-    event_remediation = request.form.get('event_remediation', None)
-    event_disposition = request.form.get('event_disposition', None)
-    threats = request.form.getlist('threats', None)
-    campaign_id = request.form.get('campaign_id', None)
-    new_campaign = request.form.get('new_campaign', None)
-
-    with get_db_connection() as db:
-        c = db.cursor()
-
-        if (campaign_id == "NEW"):
-            c.execute("""SELECT id FROM campaign WHERE name = %s""", (new_campaign))
-            if c.rowcount > 0:
-                result = c.fetchone()
-                campaign_id = result[0]
-            else:
-                c.execute("""INSERT INTO campaign (name) VALUES (%s)""", (new_campaign))
-                c.execute("""SELECT LAST_INSERT_ID()""")
-                result = c.fetchone()
-                campaign_id = result[0]
-
-        c.execute("""SELECT status FROM events WHERE id = %s""", (event_id))
-        old_event_status = c.fetchone()[0]
-        if old_event_status == 'OPEN':
-            event_time = request.form.get('event_time', None)
-            alert_time = request.form.get('alert_time', None)
-            ownership_time = request.form.get('ownership_time', None)
-            disposition_time = request.form.get('disposition_time', None)
-            contain_time = request.form.get('contain_time', None)
-            remediation_time = request.form.get('remediation_time', None)
-            event_time = None if event_time in ['', 'None', None] else datetime.datetime.strptime(event_time, '%Y-%m-%d %H:%M:%S')
-            alert_time = None if alert_time in ['', 'None', None] else datetime.datetime.strptime(alert_time, '%Y-%m-%d %H:%M:%S')
-            ownership_time = None if ownership_time in ['', 'None', None] else datetime.datetime.strptime(ownership_time, '%Y-%m-%d %H:%M:%S')
-            disposition_time = None if disposition_time in ['', 'None', None] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
-            contain_time = None if contain_time in ['', 'None', None] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
-            remediation_time = None if remediation_time in ['', 'None', None] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
-
-            # Enforce logical chronoglogy
-            dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if
-                     d is not None]
-            sorted_dates = sorted(dates)
-            if not dates == sorted_dates:
-                flash("One or more of your dates has been entered out of valid order. "
-                      "Please ensure entered dates follow the scheme: "
-                      "Event Time < Alert Time <= Ownership Time < Disposition Time <= Contain Time <= Remediation Time")
-                return redirect(url_for('analysis.events'))
-
-            c.execute(
-                    """UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, risk_level=%s, prevention_tool=%s, comment=%s, campaign_id=%s, event_time=%s, alert_time=%s, ownership_time=%s, disposition_time=%s, contain_time=%s, remediation_time=%s WHERE id=%s""",
-                    (event_status, event_remediation, event_type, event_vector, event_risk_level, event_prevention, event_comment, campaign_id,
-                     event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time, event_id))
-
-        else:
-            c.execute(
-                    """UPDATE events SET status=%s, remediation=%s, type=%s, vector=%s, risk_level=%s, prevention_tool=%s, comment=%s, campaign_id=%s WHERE id=%s""",
-                    (event_status, event_remediation, event_type, event_vector, event_risk_level, event_prevention, event_comment, campaign_id,
-                     event_id))
-
-        c.execute("""DELETE FROM malware_mapping WHERE event_id=%s""", (event_id))
-
-        for key in request.form.keys():
-            if key.startswith("malware_selection_"):
-                index = key[18:]
-                mal_id = request.form.get("malware_selection_{}".format(index))
-
-                if mal_id == "NEW":
-                    mal_name = request.form.get("mal_name_{}".format(index))
-                    c.execute("""SELECT id FROM malware WHERE name = %s""", (mal_name))
-                    if c.rowcount > 0:
-                        result = c.fetchone()
-                        mal_id = result[0]
-                    else:
-                        c.execute("""INSERT INTO malware (name) VALUES (%s)""", (mal_name))
-
-                        c.execute("""SELECT LAST_INSERT_ID()""")
-                        result = c.fetchone()
-                        mal_id = result[0]
-
-                    threats = request.form.getlist("threats_{}".format(index), None)
-                    for threat in threats:
-                        c.execute("""INSERT IGNORE INTO malware_threat_mapping (malware_id,type) VALUES (%s,%s)""", (mal_id, threat))
-
-                c.execute("""INSERT IGNORE INTO malware_mapping (event_id, malware_id) VALUES (%s, %s)""", (event_id, mal_id))
-
-        c.execute("""SELECT uuid FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE event_mapping.event_id = %s""", (event_id))
-        rows = c.fetchall()
-
-        db.commit()
-
-        alert_uuids = []
-        for row in rows:
-            alert_uuids.append(row[0])
-
-        try:
-            set_dispositions(alert_uuids, event_disposition, current_user.id)
-        except Exception as e:
-            flash("unable to set disposition (review error logs)")
-            logging.error("unable to set disposition for {} alerts: {}".format(len(alert_uuids), e))
-            report_exception()
-
-    return redirect(url_for('analysis.events'))
-
 @analysis.route('/observables', methods=['GET'])
 @login_required
 def observables():
@@ -3142,37 +2717,11 @@ def index():
     special_tag_names = [tag for tag in saq.CONFIG['tags'].keys() if saq.CONFIG['tags'][tag] == 'special']
     alert_tags = [tag for tag in alert_tags if tag.name not in special_tag_names]
 
-    class DispositionHistory(collections.abc.MutableMapping):
-        def __init__(self, observable):
-            self.observable = observable
-            self.history = {} # key = disposition, value = count
-
-        def __getitem__(self, key):
-            return self.history[key]
-
-        def __setitem__(self, key, value):
-            if key == DISPOSITION_UNKNOWN:
-                return
-            self.history[key] = value
-
-        def __delitem__(self, key):
-            pass
-
-        def __iter__(self):
-            total = sum([self.history[disp] for disp in self.history.keys()])
-            dispositions = [disposition for disposition in self.history]
-            dispositions = sorted(dispositions, key=lambda disposition: (self.history[disposition] / total) * 100.0, reverse=True)
-            for disposition in dispositions:
-                yield disposition, self.history[disposition], (self.history[disposition] / total) * 100.0
-
-        def __len__(self):
-            return len(self.history)
-
     # compute the display tree
     class TreeNode(object):
         def __init__(self, obj, parent=None):
             # unique ID that can be used in the GUI to track nodes
-            self.uuid = str(uuid.uuid4())
+            self.uuid = str(uuidlib.uuid4())
             # Analysis or Observable object
             self.obj = obj
             self.parent = parent
@@ -3208,68 +2757,6 @@ def index():
 
         def __str__(self):
             return "TreeNode({}, {}, {})".format(self.obj, self.reference_node, self.visible)
-
-        @property
-        def disposition_history(self):
-            """Returns a DispositionHistory object if self.obj is an Observable, None otherwise."""
-            if hasattr(self, '_disposition_history'):
-                return self._disposition_history
-
-            self._disposition_history = None
-            if not isinstance(self.obj, saq.analysis.Observable):
-                return None
-
-            if self.obj.whitelisted:
-                return None
-
-            if self.obj.type == F_FILE:
-                from saq.modules.file_analysis import FileHashAnalysis
-                for child in self.children:
-                    if isinstance(child.obj, FileHashAnalysis):
-                        for grandchild in child.children:
-                            if isinstance(grandchild.obj, saq.analysis.Observable) and grandchild.obj.type == F_SHA256:
-                                self._disposition_history = grandchild.disposition_history
-                                return self._disposition_history
-
-                return None
-
-            self._disposition_history = DispositionHistory(self.obj)
-
-            with get_db_connection() as db:
-                c = db.cursor()
-                c.execute("""
-SELECT 
-    a.disposition, COUNT(*) 
-FROM 
-    observables o JOIN observable_mapping om ON o.id = om.observable_id
-    JOIN alerts a ON om.alert_id = a.id
-WHERE 
-    o.type = %s AND 
-    o.md5 = UNHEX(%s) AND
-    a.alert_type != 'faqueue'
-GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
-
-                for row in c:
-                    disposition, count = row
-                    self._disposition_history[disposition] = count
-
-            return self._disposition_history
-
-    def find_all_url_domains(analysis):
-        assert isinstance(analysis, saq.analysis.Analysis)
-        domains = {}
-        for observable in analysis.find_observables(lambda o: o.type == F_URL):
-            hostname = urlparse(observable.value).hostname
-            if hostname is None:
-                continue
-
-            if urlparse(observable.value).hostname not in domains:
-                domains[urlparse(observable.value).hostname] = 1
-            else:
-                domains[urlparse(observable.value).hostname] += 1
-
-        return domains
-
 
     def _recurse(current_node, node_tracker=None):
         assert isinstance(current_node, TreeNode)
@@ -3388,87 +2875,36 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
     companies = db.session.query(Company).order_by(Company.name.asc()).all()
     campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all()
 
-    # get the remediation history for any message_ids in this alert
-    email_remediations = []
-    message_ids = [o.value for o in alert.get_observables_by_type(F_MESSAGE_ID)]
-    if message_ids:
-        for source in get_email_archive_sections():
-            email_remediations.extend(search_archive(source, message_ids,
-                                      excluded_emails=saq.CONFIG['remediation']['excluded_emails'].split(',')).values())
-
-    # get the remediation history for all RemediationTarget in this alert
-    remediation_history = []
-    query_keys = []
-    for remediation_target in alert.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
-        logging.info(f"MARKER: looking up {remediation_target}")
-        query_keys.append(remediation_target.remediation_key)
-
-    if len(query_keys) > 0:
-        remediation_history = saq.db.query(Remediation).filter(Remediation.key.in_(query_keys))\
-                                                       .order_by(Remediation.key, Remediation.insert_date.desc())\
-                                                       .all()
-
     # get list of domains that appear in the alert
     domains = find_all_url_domains(analysis)
     #domain_list = list(domains)
     domain_list = sorted(domains, key=lambda k: domains[k])
 
-    def _create_histogram_string(data):
-        """A convenience function that creates a graph in the form of a string.
+    domain_summary_str = create_histogram_string(domains)
 
-        :param dict data: A dictionary, where the values are integers representing a count of the keys.
-        :return: A graph in string form, pre-formatted for raw printing.
-        """
-        assert isinstance(data, dict)
-        for key in data.keys():
-            assert isinstance(data[key], int)
-        total_results = sum([value for value in data.values()])
-        txt = ""
-        # order keys for printing in order (purly ascetics)
-        ordered_keys = sorted(data, key=lambda k: data[k])
-        results = []
-        # longest_key used to calculate how many white spaces should be printed
-        # to make the graph columns line up with each other
-        longest_key = 0
-        for key in ordered_keys:
-            value = data[key]
-            longest_key = len(key) if len(key) > longest_key else longest_key
-            # IMPOSING LIMITATION: truncating keys to 95 chars, keeping longest key 5 chars longer
-            longest_key = 100 if longest_key > 100 else longest_key
-            percent = value / total_results * 100
-            results.append((key[:95], value, percent, u"\u25A0"*(int(percent/2))))
-        # two for loops are ugly, but allowed us to count the longest_key - 
-        # so we loop through again to print the text
-        for r in results:
-            txt += "%s%s: %5s - %5s%% %s\n" % (int(longest_key - len(r[0]))*' ', r[0] , r[1],
-                                               str(r[2])[:4], u"\u25A0"*(int(r[2]/2)))
-        return txt
-
-    domain_summary_str = _create_histogram_string(domains)
-
-    return render_template('analysis/index.html',
-                           alert=alert,
-                           alert_tags=alert_tags,
-                           observable=observable,
-                           analysis=analysis,
-                           ace_config=saq.CONFIG,
-                           User=User,
-                           db=db,
-                           current_time=datetime.datetime.now(),
-                           observable_types=VALID_OBSERVABLE_TYPES,
-                           display_tree=display_tree,
-                           prune_display_tree=session['prune'],
-                           open_events=open_events,
-                           malware=malware,
-                           companies=companies,
-                           campaigns=campaigns,
-                           all_users=all_users,
-                           disposition_css_mapping=DISPOSITION_CSS_MAPPING,
-                           domains=domains,
-                           domain_list=domain_list,
-                           domain_summary_str=domain_summary_str,
-                           email_remediations=email_remediations,
-                           remediation_history=remediation_history)
+    return render_template(
+        'analysis/index.html',
+        alert=alert,
+        alert_tags=alert_tags,
+        observable=observable,
+        analysis=analysis,
+        ace_config=saq.CONFIG,
+        User=User,
+        db=db,
+        current_time=datetime.datetime.now(),
+        observable_types=VALID_OBSERVABLE_TYPES,
+        display_tree=display_tree,
+        prune_display_tree=session['prune'],
+        open_events=open_events,
+        malware=malware,
+        companies=companies,
+        campaigns=campaigns,
+        all_users=all_users,
+        disposition_css_mapping=DISPOSITION_CSS_MAPPING,
+        domains=domains,
+        domain_list=domain_list,
+        domain_summary_str=domain_summary_str,
+    )
 
 @analysis.route('/file', methods=['GET'])
 @login_required
@@ -3537,7 +2973,7 @@ def upload_file():
         alert.details = {'user': current_user.username, 'comment': comment}
 
         # XXX database.Alert does not automatically create this
-        alert.uuid = str(uuid.uuid4())
+        alert.uuid = str(uuidlib.uuid4())
 
         # we use a temporary directory while we process the file
         alert.storage_dir = os.path.join(
@@ -3751,20 +3187,22 @@ def observable_action():
                 return "File uploaded", 200
 
         elif action_id in [ACTION_URL_CRAWL, ACTION_FILE_RENDER]:
+            from saq.modules.url import CrawlphishAnalyzer
+            from saq.modules.render import RenderAnalyzer
+
             # make sure alert is locked before starting new analysis
             if alert.is_locked():
                 try:
-                    # only crawl (download HTML) if crawl action was selected
+                    # crawlphish only works for URL observables, so we want to limit these actions to the URL observable action only
                     if action_id == ACTION_URL_CRAWL:
                         observable.add_directive(DIRECTIVE_CRAWL)
+                        observable.remove_analysis_exclusion(CrawlphishAnalyzer)
                         logging.info(f"user {current_user} added directive {DIRECTIVE_CRAWL} to {observable}")
 
-                    if action_id == ACTION_FILE_RENDER:
-                        observable.remove_directive(DIRECTIVE_NO_RENDER)
-                        logging.info(f"user {current_user} removed directive {DIRECTIVE_NO_RENDER} to {observable}")
+                    # both URLs and files can be rendered, so we can do that in either case (ACTION_URL_CRAWL or ACTION_FILE_RENDER)
 
-                    observable.add_directive(DIRECTIVE_RENDER)
-                    logging.info(f"user {current_user} added directive {DIRECTIVE_RENDER} to {observable}")
+                    observable.remove_analysis_exclusion(RenderAnalyzer)
+                    logging.info(f"user {current_user} removed analysis exclusion for RenderAnalyzer for {observable}")
 
                     alert.analysis_mode = ANALYSIS_MODE_CORRELATION
                     alert.sync()
@@ -3870,289 +3308,6 @@ def image():
     response.headers['Content-Type'] = _file.mime_type
     return response
 
-@analysis.route('/query_message_id', methods=['POST'])
-@login_required
-def query_message_ids():
-    # if we passed a JSON formatted list of alert_uuids then we compute the message_ids from that
-    if 'alert_uuids' in request.values:
-        alert_uuids = json.loads(request.values['alert_uuids'])
-        message_ids = []
-
-        with get_db_connection() as db:
-            c = db.cursor()
-            c.execute("""SELECT o.value FROM observables o JOIN observable_mapping om ON o.id = om.observable_id
-                         JOIN alerts a ON om.alert_id = a.id
-                         WHERE o.type = 'message_id' AND a.uuid IN ( {} )""".format(','.join(['%s' for _ in alert_uuids])),
-                     tuple(alert_uuids))
-
-            for row in c:
-                message_id = row[0].decode(errors='ignore')
-                message_ids.append(message_id)
-    else:
-        # otherwise we expect a JSON formatted list of message_ids
-        message_ids = json.loads(request.values['message_ids'])
-
-    import html
-    message_ids = [html.unescape(_) for _ in message_ids]
-
-    result = { }
-    for source in get_email_archive_sections():
-        result[source] = search_archive(source, message_ids, 
-                                        excluded_emails=saq.CONFIG['remediation']['excluded_emails'].split(','))
-
-        for archive_id in result[source].keys():
-            result[source][archive_id] = result[source][archive_id].json
-
-    response = make_response(json.dumps(result))
-    response.mimetype = 'application/json'
-    return response
-
-class EmailRemediationTarget(object):
-    def __init__(self, archive_id=None, message_id=None, recipient=None, company_id=None):
-        self.archive_id = archive_id
-        self.message_id = message_id
-        self.recipient = recipient
-        self.company_id = company_id
-        self.result_text = None
-        self.result_success = False
-
-    @property
-    def key(self):
-        return '{}:{}'.format(self.message_id, self.recipient)
-
-    @property
-    def json(self):
-        return { 
-            'archive_id': self.archive_id,
-            'message_id': self.message_id,
-            'recipient': self.recipient,
-            'company_id': self.company_id,
-            'result_text': self.result_text,
-            'result_success': self.result_success }
-
-#
-# XXX
-# remediation is a mess
-# it's gone through a bunch of iterations starting with some custom Lotus Notes nonsense
-# to what it is today
-#
-
-# the archive_id and config sections are encoded in the name of the form element
-# XXX probably a gross security flaw
-INPUT_CHECKBOX_REGEX = re.compile(r'^cb_archive_id_([0-9]+)_source_(.+)$')
-
-@analysis.route('/remediate_emails', methods=['POST'])
-@login_required
-def remediate_emails():
-
-    alert_uuids = []
-    if 'alert_uuids' in request.values:
-        alert_uuids = json.loads(request.values['alert_uuids'])
-
-    action = request.values['action']
-
-    # if this is set to True then we issue the request now and wait for the response
-    # if this is false then the remediation request is sent to the remediation system
-    do_it_now = request.values['do_it_now'] == 'true' # string representation of javascript boolean value true
-
-    assert action in [ 'restore', 'remove' ];
-
-    # generate our list of archive_ids from the list of checkboxes that were checked
-    archive_ids = { } # key = source (email_archive_blah) which corresponds to database_email_archive_blah
-    archive_company_id = { } # key = same as above, value = company_id for that email archive source
-    for key in request.values.keys():
-        if key.startswith('cb_archive_id_'):
-            m = INPUT_CHECKBOX_REGEX.match(key)
-            if m:
-                archive_id, source = m.groups()
-                section_key = f'database_{source}'
-                if section_key not in saq.CONFIG:
-                    logging.error(f"missing config section {section_key}")
-                    continue
-
-                if source not in archive_ids:
-                    archive_ids[source] = []
-                    # look up what company_id this email archive source is
-                    archive_company_id[source] = saq.CONFIG[section_key].getint('company_id', fallback=saq.COMPANY_ID)
-                    logging.debug(f"got company_id {archive_company_id[source]} for {source}")
-
-                archive_ids[source].append(m.group(1))
-
-    if not archive_ids:
-        logging.error("forgot to select one?")
-        return "missing selection", 500
-
-    targets = { } # key = archive_id
-
-    for db_name in archive_ids.keys():
-        with get_db_connection(db_name) as db:
-            c = db.cursor()
-            c.execute("""SELECT archive_id, field, value FROM archive_search 
-                         WHERE ( field = 'message_id' OR field = 'env_to' OR field = 'body_to' ) 
-                         AND archive_id IN ( {} )""".format(','.join(['%s' for _ in archive_ids[db_name]])), 
-                         tuple(archive_ids[db_name]))
-
-            for row in c:
-                archive_id, field, value = row
-                if archive_id not in targets:
-                    targets[archive_id] = EmailRemediationTarget(archive_id=archive_id, company_id=archive_company_id[db_name])
-
-                if field == 'message_id':
-                    targets[archive_id].message_id = value.decode(errors='ignore')
-
-                if field == 'env_to':
-                    targets[archive_id].recipient = value.decode(errors='ignore')
-
-                # use body_to field as recipient if there is no env_to field
-                if field == 'body_to' and targets[archive_id].recipient is None:
-                    targets[archive_id].recipient = value.decode(errors='ignore')
-
-    # targets acquired -- perform the remediation or restoration
-    params = [ ] # of tuples of ( message-id, email_address )
-    for target in targets.values():
-        params.append((target.message_id, target.recipient))
-
-    results = []
-
-    try:
-        if action == 'remove':
-            if not do_it_now:
-                for target in targets.values():
-                    try:
-
-                        res = request_remediation(REMEDIATION_TYPE_EMAIL,
-                                                    f'{target.message_id}:{target.recipient}',
-                                                  current_user.id,
-                                                  target.company_id)
-
-                        target.result_text = f"request remediation (id {res.id})"
-                        target.result_success = True
-
-                    except Exception as e:
-                        target.result_text = str(e)
-                        target.result_success = False
-            else:
-                res = execute_remediation(REMEDIATION_TYPE_EMAIL,
-                                          f'{target.message_id}:{target.recipient}',
-                                          current_user.id,
-                                          target.company_id)
-
-                target.result_text = f"remediation {res.result}"
-                target.result_success = True
-
-        elif action == 'restore':
-            if not do_it_now:
-                for target in targets.values():
-                    try:
-                        res = request_restoration(REMEDIATION_TYPE_EMAIL,
-                                                  f'{target.message_id}:{target.recipient}',
-                                                  current_user.id,
-                                                  target.company_id )
-
-                        target.result_text = f"request remediation (id {res.id})"
-                        target.result_success = True
-
-                    except Exception as e:
-                        target.result_text = str(e)
-                        target.result_success = False
-            else:
-                res = execute_restoration(REMEDIATION_TYPE_EMAIL,
-                                          f'{target.message_id}:{target.recipient}',
-                                          current_user.id,
-                                          target.company_id)
-
-                target.result_text = f"remediation {res.result}"
-                target.result_success = True
-
-    except Exception as e:
-        logging.error("unable to perform email remediation action {}: {}".format(action, e))
-        report_exception()
-        for target in targets.values():
-            target.result_text = str(e)
-            target.result_success = False
-
-    if do_it_now:
-        for result in results:
-            message_id, recipient, result_code, result_text = result
-            for target in targets.values():
-                if target.message_id == message_id and target.recipient == recipient:
-                    target.result_text = '({}) {}'.format(result_code, result_text)
-                    target.result_success = str(result_code) == '200'
-
-    # return JSON formatted results
-    for key in targets.keys():
-        targets[key] = targets[key].json
-    
-    from saq.analysis import _JSONEncoder
-    response = make_response(json.dumps(targets, cls=_JSONEncoder))
-    response.mimetype = 'application/json'
-    return response
-
-@analysis.route('/query_remediation_targets', methods=['POST'])
-@login_required
-def query_remediation_targets():
-    """Obtains a list of all the remediation targets for the given list of alert uuids."""
-    result = {} # key = remediation_key, value = dict (see below)
-    storage_dirs = saq.db.query(Alert.storage_dir).filter(Alert.uuid.in_(json.loads(request.values['alert_uuids']))).all()
-    saq.db.close()
-
-    for (storage_dir,) in storage_dirs:
-        root = saq.analysis.RootAnalysis(storage_dir=storage_dir)
-        try:
-            root.load()
-            for observable in root.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
-                result[observable.remediation_key.lower()] = {'type': observable.type,
-                                                              'remediation_type': observable.remediation_type,
-                                                              'value': observable.value,
-                                                              'remediation_key': observable.remediation_key,
-                                                              'history': [],
-                                                              'company_id': root.company_id}
-        except Exception as e:
-            logging.error(f"unable to load remediation target {root}: {e}")
-
-    for history in saq.db.query(Remediation).filter(Remediation.key.in_([key for key, _ in result.items()]))\
-                                        .order_by(Remediation.insert_date.desc()):
-        result[history.key.lower()]['history'].append(history.json)
-
-    from saq.analysis import _JSONEncoder
-    response = make_response(json.dumps(result, cls=_JSONEncoder))
-    response.mimetype = 'application/json'
-    return response
-
-@analysis.route('/remediate_targets', methods=['POST'])
-@login_required
-def remediate_targets():
-    json_request = json.loads(request.values['json_request'])
-
-    action = json_request['action']
-    targets = json_request['targets']
-    blocking = json_request['blocking']
-
-    result = []
-    for target in targets:
-        remediation_type = target['remediation_type']
-        remediation_key_b64 = target['remediation_key_b64']
-        remediation_key = base64.b64decode(remediation_key_b64).decode('utf8', errors='replace')
-        observable_type = target['observable_type']
-        observable_value_b64 = target['observable_value_b64']
-        observable_value = base64.b64decode(observable_value_b64).decode('utf8', errors='replace')
-        company_id = target['company_id']
-
-        logging.info(f"got request from {current_user.username} to remediate action {action} type {observable_type} value {observable_value} key {remediation_key} for company_id={company_id}")
-        
-        if blocking:
-            remediation_result = saq.remediation.execute(action, remediation_type, remediation_key, current_user.id, company_id)
-        else:
-            remediation_result = saq.remediation.request(action, remediation_type, remediation_key, current_user.id, company_id)
-
-        if remediation_result is not None:
-            result.append(remediation_result.json)
-
-    from saq.analysis import _JSONEncoder
-    response = make_response(json.dumps(result, cls=_JSONEncoder))
-    response.mimetype = 'application/json'
-    return response
-
 @analysis.route('/html_details', methods=['GET'])
 @login_required
 def html_details():
@@ -4187,3 +3342,70 @@ def o365_file_download():
         "Content-Disposition": f'attachment; filename="{fname}"'
     }
     return Response(stream_with_context(r.iter_content(10*1024*1024)), headers=headers, content_type=r.headers['content-type'])
+
+def get_remediation_targets(alert_uuids):
+    # get all remediatable observables from the given alert uuids
+    query = db.session.query(Observable)
+    query = query.join(ObservableMapping, Observable.id == ObservableMapping.observable_id)
+    query = query.join(Alert, ObservableMapping.alert_id == Alert.id)
+    query = query.filter(Alert.uuid.in_(alert_uuids))
+    query = query.group_by(Observable.id)
+    observables = query.all()
+
+    # get remediation targets for each observable
+    targets = {}
+    for o in observables:
+        observable = create_observable(o.type, o.display_value)
+        for target in observable.remediation_targets:
+            targets[target.id] = target
+
+    # return sorted list of targets
+    targets = list(targets.values())
+    targets.sort(key=lambda x: f"{x.type}|{x.value}")
+    return targets
+
+@analysis.route('/remediation_targets', methods=['POST', 'PUT', 'DELETE'])
+@login_required
+def remediation_targets():
+    # get request body
+    body = request.get_json()
+
+    # return rendered target selection table
+    if request.method == 'POST':
+        return render_template('analysis/remediation_targets.html', targets=get_remediation_targets(body['alert_uuids']))
+
+    # queue targets for removal/restoration
+    action = 'remove' if request.method == 'DELETE' else 'restore'
+    logging.error(body['targets'])
+    for target in body['targets']:
+        RemediationTarget(id=target).queue(action, current_user.id)
+
+    # wait until all remediations are complete or we run out of time
+    complete = False
+    quit_time = time.time() + saq.CONFIG['service_remediation'].getint('request_wait_time', fallback=10)
+    while not complete and time.time() < quit_time:
+        complete = True
+        for target in body['targets']:
+            if RemediationTarget(id=target).processing:
+                complete = False
+                break
+        time.sleep(1)
+
+    # return rendered remediation results table
+    return render_template('analysis/remediation_results.html', targets=[RemediationTarget(id=target) for target in body['targets']])
+
+@analysis.route('/<uuid>/event_name_candidate', methods=['GET'])
+@login_required
+def get_analysis_event_name_candidate(uuid):
+    from saq.util import storage_dir_from_uuid, workload_storage_dir
+
+    storage_dir = storage_dir_from_uuid(uuid)
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
+        storage_dir = workload_storage_dir(uuid)
+
+    if not os.path.exists(storage_dir):
+        return ''
+
+    root = saq.analysis.RootAnalysis(storage_dir=storage_dir)
+    root.load()
+    return root.event_name_candidate

@@ -1,0 +1,26 @@
+{
+  "value": [
+    {
+      "id": "942CAEB0-13AE-491B-85E4-7557CDC0F25F",
+      "driveType": "documentLibrary",
+      "name": "Shared Documents",
+      "owner": {
+        "user": {
+          "id": "406B2281-18E8-4416-9857-38C531B904F1",
+          "displayName": "jdoe"
+        }
+      }
+    },
+    {
+      "id": "C1CD3ED9-0E98-4B0B-82D3-C8FB784B9DCC",
+      "driveType": "documentLibrary",
+      "name": "OneDrive",
+      "owner": {
+        "user": {
+          "id": "406B2281-18E8-4416-9857-38C531B904F1",
+          "displayName": "jdoe"
+        }
+      }
+    }
+  ]
+}

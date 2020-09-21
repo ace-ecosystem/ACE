@@ -408,7 +408,10 @@ def initialize(
                 if 'SAQ_ENC' in os.environ:
                     logging.debug("reading encryption password from environment variable")
                     ENCRYPTION_PASSWORD_PLAINTEXT = os.environ['SAQ_ENC']
-                    del os.environ['SAQ_ENC']
+                    # Leave the SAQ_ENC variable in place if we are in the dev container environment.
+                    # This fixes the ability to load encrypted passwords when the container first starts up.
+                    if saq.CONFIG['global']['instance_type'] != 'DEV':
+                        del os.environ['SAQ_ENC']
                 else:
                     logging.debug("reading encryption password from ecs")
                     ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
@@ -602,7 +605,7 @@ def initialize(
         DAEMON_MODE = args.daemon
 
     # make sure we've got the automation user set up
-    #initialize_automation_user()
+    initialize_automation_user()
 
     # initialize other systems
     #initialize_message_system()

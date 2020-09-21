@@ -133,7 +133,9 @@ class Submission(object):
         root.initialize_storage()
 
         for observable_json in self.observables:
-            root.add_observable(Observable.from_json(observable_json))
+            obs = Observable.from_json(observable_json)
+            if obs:
+                root.add_observable(obs)
 
         for tag in self.tags:
             root.add_tag(tag)

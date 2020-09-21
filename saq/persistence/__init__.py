@@ -62,16 +62,14 @@ class Persistable(object):
 
     def register_persistence_source(self, source_name):
         persistence_source = saq.db.query(PersistenceSource).filter(
-            PersistenceSource.company_id == saq.COMPANY_ID,
             PersistenceSource.name == source_name).first()
         
         if persistence_source is None:
             logging.info(f"registering persistence source {source_name}")
-            saq.db.add(PersistenceSource(company_id=saq.COMPANY_ID, name=source_name))
+            saq.db.add(PersistenceSource(name=source_name))
             saq.db.commit()
 
             persistence_source = saq.db.query(PersistenceSource).filter(
-                PersistenceSource.company_id == saq.COMPANY_ID,
                 PersistenceSource.name == source_name).first()
 
             if persistence_source is None:

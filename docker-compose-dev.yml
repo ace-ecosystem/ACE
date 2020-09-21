@@ -13,7 +13,13 @@ services:
             - ./sql:/docker-entrypoint-initdb.d
         hostname: ace-db
         container_name: ace-db-dev
-        
+    redis:
+        image: redis:latest
+        ports:
+            - 6379:6379
+        restart: always
+        hostname: ace-redis
+        container_name: ace-redis-dev
     ace:
         build:
             context: .
@@ -22,7 +28,6 @@ services:
         depends_on:
             - ace-db
         command: /bin/bash -c "/opt/ace/docker/startup/dev.sh > /opt/ace/docker_startup.log 2>&1"
-        #/bin/sh -c "while sleep 1000; do :; done"
         expose:
             - '8443'
         volumes:
@@ -34,6 +39,8 @@ services:
         ports:
             - 5000:5000
             - 8443:8443
+        cap_add:
+            - SYS_PTRACE
 volumes:
     ace-data-volume:
         name: ace-data-dev

@@ -121,3 +121,188 @@ class RootAnalysisTestCase(ACEBasicTestCase):
 
         o1 = root.add_observable(F_TEST, 'test_1')
         self.assertEquals(o1.md5_hex, '4e70ffa82fbe886e3c4ac00ac374c29b')
+
+    def test_disposition_history(self):
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.initialize_storage()
+        ob = root.add_observable(F_FQDN, 'localhost.localdomain')
+        root.save()
+
+        alert = Alert(storage_dir=root.storage_dir)
+        alert.load()
+        alert.sync()
+
+        self.assertEquals(ob.disposition_history.history, {None: 1})
+
+        root2 = create_root_analysis(uuid=str(uuid.uuid4()))
+        root2.initialize_storage()
+        ob2 = root2.add_observable(F_FQDN, 'localhost.localdomain')
+        root2.save()
+
+        alert2 = Alert(storage_dir=root2.storage_dir)
+        alert2.load()
+        alert2.disposition = DISPOSITION_DELIVERY
+        alert2.disposition_time = datetime.datetime.now()
+        alert2.sync()
+
+        self.assertEquals(ob2.disposition_history.history, {None: 1, 'DELIVERY': 1})
+
+    def test_event_name_candidate_phish_sender_domain_preference(self):
+        root = create_root_analysis(alert_type='bro - smtp')
+        root.initialize_storage()
+
+        root.add_observable(F_EMAIL_ADDRESS, 'bob@bad.com').add_tag('smtp_mail_from')
+        self.assertTrue('bad.com' in root.event_name_candidate)
+
+        root.add_observable(F_EMAIL_ADDRESS, 'bob@bad2.com')
+        self.assertFalse('bad.com' in root.event_name_candidate)
+        self.assertTrue('bad2.com' in root.event_name_candidate)
+
+    def test_event_name_candidate_smtp_mail_from_and_fqdn(self):
+        add_fp_alert()
+
+        root = create_root_analysis(alert_type='bro - smtp')
+        root.initialize_storage()
+
+        sender_observable = root.add_observable(F_EMAIL_ADDRESS, 'bob@bad.com')
+        sender_observable.add_tag('smtp_mail_from')
+
+        recipient_observable = root.add_observable(F_EMAIL_ADDRESS, 'alice@company.com')
+        recipient_observable.add_tag('smtp_rcpt_to')
+
+        root.add_observable(F_FQDN, 'microsoft.com')
+        root.add_observable(F_FQDN, 'somebadsite.com')
+
+        root.save()
+
+        alert = Alert(storage_dir=root.storage_dir)
+        alert.load()
+
+        alert.disposition = DISPOSITION_DELIVERY
+        alert.disposition_time = datetime.datetime.now()
+        alert.sync()
+
+        self.assertEquals(root.event_name_candidate, '20171111-bro-smtp-bad.com-somebadsite.com')
+
+    def test_event_name_candidate_email_from_and_fqdn(self):
+        add_fp_alert()
+
+        root = create_root_analysis(alert_type='bro - smtp')
+        root.initialize_storage()
+
+        root.add_observable(F_EMAIL_ADDRESS, 'alice@company.com')
+        root.add_observable(F_EMAIL_ADDRESS, 'bob@bad.com')
+
+        root.add_observable(F_FQDN, 'microsoft.com')
+        root.add_observable(F_FQDN, 'somebadsite.com')
+
+        root.save()
+
+        alert = Alert(storage_dir=root.storage_dir)
+        alert.load()
+
+        alert.disposition = DISPOSITION_DELIVERY
+        alert.disposition_time = datetime.datetime.now()
+        alert.sync()
+
+        self.assertEquals(root.event_name_candidate, '20171111-bro-smtp-bad.com-somebadsite.com')
+
+    def test_event_name_candidate_email_subject_and_url_domain(self):
+        add_fp_alert()
+
+        root = create_root_analysis(alert_type='bro - smtp')
+        root.initialize_storage()
+
+        root.add_observable(F_EMAIL_SUBJECT, 'bob@bad.com Sent you a file')
+        root.add_observable(F_URL, 'https://google.com')
+        root.add_observable(F_URL, 'http://someotherbadsite.com/malz')
+
+        root.save()
+
+        alert = Alert(storage_dir=root.storage_dir)
+        alert.load()
+
+        alert.disposition = DISPOSITION_DELIVERY
+        alert.disposition_time = datetime.datetime.now()
+        alert.sync()
+
+        self.assertEquals(root.event_name_candidate, '20171111-bro-smtp-bob-bad.com Sent you a file-someotherbadsite.com')
+
+    def test_event_name_candidate_filename_and_hostname(self):
+        add_fp_alert()
+
+        root = create_root_analysis(alert_type='antivirus')
+        root.initialize_storage()
+
+        root.add_observable(F_FILE_NAME, 'calc.exe')
+        root.add_observable(F_FILE_NAME, 'malz.exe')
+
+        root.add_observable(F_HOSTNAME, 'localhost')
+        root.add_observable(F_HOSTNAME, 'victimhost')
+
+        root.save()
+
+        alert = Alert(storage_dir=root.storage_dir)
+        alert.load()
+
+        alert.disposition = DISPOSITION_DELIVERY
+        alert.disposition_time = datetime.datetime.now()
+        alert.sync()
+
+        self.assertEquals(root.event_name_candidate, '20171111-antivirus-victimhost-malz.exe')
+
+    def test_event_name_candidate_description_and_uuid(self):
+        root = create_root_analysis()
+        root.initialize_storage()
+
+        root.save()
+
+        alert = Alert(storage_dir=root.storage_dir)
+        alert.load()
+
+        alert.disposition = DISPOSITION_DELIVERY
+        alert.disposition_time = datetime.datetime.now()
+        alert.sync()
+
+        self.assertEquals(root.event_name_candidate, '20171111-test-alert-This is only a test.-14ca0ff2-ff7e-4fa1-a375-160dc072ab02')
+
+    def test_event_name_candidate_no_disposition_history(self):
+        root = create_root_analysis()
+        root.initialize_storage()
+
+        root.add_observable(F_FILE_NAME, 'calc.exe')
+        root.add_observable(F_HOSTNAME, 'localhost')
+
+        self.assertEquals(root.event_name_candidate, '20171111-test-alert-localhost-calc.exe')
+
+    def test_event_name_candidate_no_trailing_hyphens(self):
+        root = create_root_analysis()
+        root.initialize_storage()
+
+        root.add_observable(F_EMAIL_ADDRESS, 'bob@bad.com')
+        root.add_observable(F_EMAIL_SUBJECT, 'Is this a test???')
+
+        self.assertEquals(root.event_name_candidate, '20171111-test-alert-bad.com-Is this a test')
+
+    def test_event_name_candidate_ip_address(self):
+        root = create_root_analysis()
+        root.initialize_storage()
+
+        root.add_observable(F_IPV4, '1.2.3.4')
+
+        self.assertEquals(root.event_name_candidate, '20171111-test-alert-1.2.3.4-This is only a test.')
+
+    def test_add_ioc(self):
+        root = create_root_analysis()
+        assert len(root.iocs) == 0
+
+        saq.CONFIG['tip']['enabled'] = 'no'
+        root.add_ioc(I_EMAIL_FROM_ADDRESS, 'badguy@evil.com', tags=['from_address'])
+        assert len(root.iocs) == 1
+        assert root.iocs[0].type == I_EMAIL_FROM_ADDRESS
+
+        saq.CONFIG['tip']['enabled'] = 'misp'
+        root = create_root_analysis()
+        root.add_ioc(I_EMAIL_FROM_ADDRESS, 'badguy2@evil.com', tags=['from_address'])
+        assert len(root.iocs) == 1
+        assert root.iocs[0].type == 'email-src'

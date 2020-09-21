@@ -44,9 +44,13 @@
 			{% else %}
 				{% if 'context' in yara_result %}
 				    {% for s in yara_result['context'] %}
-					{% if s | count > 0 %}
-					    <li class="list-group-item">position <b>{{s[0]}}</b> string $<b>{{s[1]}}</b> value <b>{{s[2]}}</b><pre>{{s[3]}}</pre></li>
-					{% endif %}
+                        {% if s | count > 0 %}
+                            <li class="list-group-item">position <b>{{s[0]}}</b> string $<b>{{s[1]}}</b> value <b>{{s[2]}}</b><pre>{{s[3]}}</pre>
+                        {% endif %}
+                        {% if s|length > 4 %}
+                            Disassembly<pre>{{s[4]|safe}}</pre>
+                        {% endif %}
+                        </li>
 				    {% endfor %}
 				{% else %}
 				    {% for s in yara_result['strings'] %}
