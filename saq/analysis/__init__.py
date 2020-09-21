@@ -32,6 +32,7 @@ from saq.indicators import Indicator, IndicatorList
 from saq.submission import Submission
 from saq.util import *
 
+
 STATE_KEY_WHITELISTED = 'whitelisted'
 
 def MODULE_PATH(m, instance=None):
@@ -570,7 +571,7 @@ class Analysis(TaggableObject, DetectableObject):
         self._is_modified = True # tells ACE to save the details
 
     def save(self):
-        """Saves the current results of the Analysis to disk."""
+        """Saves the current results of the Analysis."""
 
         if not self._is_modified:
             #logging.debug(f"{self} was not modified so not saving")
@@ -584,55 +585,49 @@ class Analysis(TaggableObject, DetectableObject):
             logging.debug(f"called save() on analysis {self} but nothing to save")
             return
 
-        if self.storage_dir is None:
-            raise RuntimeError("storage_dir is None for {} in {}".format(self, self.root))
+        #if self.storage_dir is None:
+            #raise RuntimeError("storage_dir is None for {} in {}".format(self, self.root))
 
         # generate a summary before we go to disk
         # this gets stored in the main json data structure
-        if not self.delayed:
-            try:
-                self._summary = self.generate_summary()
-            except Exception as e:
-                self._summary = f"Failed to generate summary for {self}: {e}"
+        #if not self.delayed:
 
-        # this is a thing now -- analysis modules are over-writing the details of the root analysis since we got rid of the "engines" 
-        # try to catch a case where we set the data but forgot to load first
-        #overwrite_warning = False
-        #if self._details is not None and not self.external_details_loaded and self.external_details_path is not None:
-            #full_path = os.path.join(saq.SAQ_RELATIVE_DIR, self.root.storage_dir, '.ace', self.external_details_path)
-            #if os.path.exists(full_path):
-                #logging.warning("saving new data over existing data without loading existing data in {} from {}".format(self, self.external_details_path))
-                #logging.warning("previous file size was {} bytes".format(os.path.getsize(full_path)))
-                #logging.warning("new details is type {} value {}".format(type(self._details), self._details))
-                #overwrite_warning = True
+        try:
+            self._summary = self.generate_summary()
+        except Exception as e:
+            self._summary = f"Failed to generate summary for {self}: {e}"
+
+        from saq.system.analysis import track_analysis_details
+        track_analysis_details(self.uuid, self._details)
 
         # have we figured out where we are saving the data to?
-        if self.external_details_path is None:
-            target_name = type(self).__name__
-            if self.instance is not None:
-                target_name += '_' + self.instance
+        #if self.external_details_path is None:
+            #target_name = type(self).__name__
+            #if self.instance is not None:
+                #target_name += '_' + self.instance
 
-            self.external_details_path = '{}_{}.json'.format(target_name, str(uuid.uuid4()))
+            #self.external_details_path = '{}_{}.json'.format(target_name, str(uuid.uuid4()))
 
         # make sure the containing directory exists
-        if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir)):
-            os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir))
+        #if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir)):
+            #os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir))
 
         # analysis details go into a hidden directory
-        if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace')):
-            os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace'))
+        #if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace')):
+            #os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace'))
         
         # save the details
-        logging.debug("SAVE: saving external details for {} to {}".format(self, self.external_details_path))
-        with open(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace', self.external_details_path), 'w') as fp:
-            json.dump(self._details, fp, cls=_JSONEncoder)
-            _track_writes()
+        #logging.debug("SAVE: saving external details for {} to {}".format(self, self.external_details_path))
+        #with open(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace', self.external_details_path), 'w') as fp:
+            #json.dump(self._details, fp, cls=_JSONEncoder)
+            #_track_writes()
 
         #if overwrite_warning:
             #full_path = os.path.join(saq.SAQ_RELATIVE_DIR, self.root.storage_dir, '.ace', self.external_details_path)
             #logging.warning("new file size is {} bytes".format(os.path.getsize(full_path)))
 
         # at this point we consider the data "loaded"
+        # TODO explain WHY
         self.external_details_loaded = True
 
     def flush(self):
@@ -715,32 +710,38 @@ class Analysis(TaggableObject, DetectableObject):
         if self._details is not None:
             logging.warning("called load_external_details when self._details was not None")
 
-        if self.external_details_path is None:
-            logging.error("external_details_path is None for {}".format(self))
-            return None
+        #if self.external_details_path is None:
+            #logging.error("external_details_path is None for {}".format(self))
+            #return None
 
         self._details = None
-        details_file_path = os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace', self.external_details_path)
+        #details_file_path = os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace', self.external_details_path)
 
-        if not os.path.exists(details_file_path):
-            logging.warning("missing file {0}".format(details_file_path))
-            return None
+        #if not os.path.exists(details_file_path):
+            #logging.warning("missing file {0}".format(details_file_path))
+            #return None
 
-        if os.path.getsize(details_file_path) > 1024 * 1024:
-            logging.debug("JSON file {0} is very large: {1} bytes".format(details_file_path, os.path.getsize(details_file_path)))
+        #if os.path.getsize(details_file_path) > 1024 * 1024:
+            #logging.debug("JSON file {0} is very large: {1} bytes".format(details_file_path, os.path.getsize(details_file_path)))
 
         try:
-            with open(details_file_path, 'r') as fp:
-                self._details = json.load(fp)
+            #with open(details_file_path, 'r') as fp:
+                #self._details = json.load(fp)
 
-            _track_reads()
+            from saq.system.analysis import get_analysis_details
+            self._details = get_analysis_details(self.uuid)
+            if self._details is None:
+                logging.warning(f"missing analysis details for {self.uuid}")
+                return None
+
+            #_track_reads()
 
             self.external_details_loaded = True
             logging.debug("LOAD: loaded external details from {0} (value type {1})".format(details_file_path, type(self._details)))
             return self._details
 
         except Exception as e:
-            logging.error("unable to load json from {0}: {1}".format(details_file_path, str(e)))
+            logging.error("unable to load analysis details {self.uuid}: {e}")
             report_exception()
 
     @property
@@ -3245,18 +3246,18 @@ class RootAnalysis(Analysis):
 
     def save(self):
         """Saves the Alert to disk. Resolves AttachmentLinks into Attachments. Note that this does not insert the Alert into the system."""
-        assert self.json_path is not None
-        assert self.json is not None
+        #assert self.json_path is not None
+        #assert self.json is not None
 
         logging.debug("SAVE: {} ({})".format(self, type(self)))
 
         # make sure the containing directory exists
-        if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir)):
-            os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir))
+        #if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir)):
+            #os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir))
 
         # analysis details go into a hidden directory
-        if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace')):
-            os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace'))
+        #if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace')):
+            #os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace'))
 
         # save all analysis
         for analysis in self.all_analysis:
@@ -3268,22 +3269,24 @@ class RootAnalysis(Analysis):
 
         # now the rest should encode as JSON with the custom JSON encoder
         # XXX hack
-        for try_count in range(3):
-            try:
+        #for try_count in range(3):
+            #try:
                 # we use a temporary file to deal with very large JSON files taking a long time to encode
                 # if we don't do this then the GUI will occasionally hit 0-byte data.json files
-                temp_path = '{}.tmp'.format(self.json_path)
-                with open(temp_path, 'w') as fp:
-                    fp.write(_JSONEncoder().encode(self))
-                    _track_writes()
-                shutil.move(temp_path, self.json_path)
-                break
-            except Exception as e:
-                logging.error("json encoding for {0} failed: {1}".format(self, str(e)))
-                report_exception()
-                if try_count == 2:
-                    return False
+                #temp_path = '{}.tmp'.format(self.json_path)
+                #with open(temp_path, 'w') as fp:
+                    #fp.write(_JSONEncoder().encode(self))
+                    #_track_writes()
+                #shutil.move(temp_path, self.json_path)
+                #break
+            #except Exception as e:
+                #logging.error("json encoding for {0} failed: {1}".format(self, str(e)))
+                #report_exception()
+                #if try_count == 2:
+                    #return False
 
+        from saq.system.analysis import track_root_analysis
+        track_root_analysis(self)
         return True
 
     def load(self):
@@ -3682,6 +3685,16 @@ class RootAnalysis(Analysis):
 
     def __str__(self):
         return "RootAnalysis({})".format(self.uuid)
+
+    def get_object(self, uuid: str) -> Union[Analysis, Observable, None]:
+        """Returns the object with the given uuid, or, None if it is not found."""
+        try:
+            return self.observable_store[uuid]
+        except KeyError:
+            try:
+                return self.analysis_map[uuid]
+            except KeyError:
+                return None
 
     @property   
     def all_analysis(self):

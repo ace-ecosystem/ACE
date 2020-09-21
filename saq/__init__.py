@@ -20,7 +20,7 @@ from getpass import getpass
 import ace_api
 from saq.configuration import load_configuration, import_encrypted_passwords
 from saq.constants import *
-from saq.messaging import initialize_message_system
+#from saq.messaging import initialize_message_system
 from saq.network_semaphore import initialize_fallback_semaphores
 from saq.sla import SLA
 from saq.util import create_directory
