@@ -22,7 +22,8 @@ import uuid
 import dateutil.parser
 import requests
 
-from typing import List, Union
+from dataclasses import dataclass, field
+from typing import List, Union, Optional
 from urllib.parse import urlsplit
 
 import saq
@@ -50,7 +51,8 @@ def MODULE_PATH(m, instance=None):
 
     # did we pass an instance of an Analysis
     if isinstance(m, Analysis):
-        instance = m.instance
+        if hasattr(m, 'instance'):
+            instance = m.instance
         m = type(m)
     elif isinstance(m, AnalysisModule):
         instance = m.instance
@@ -458,6 +460,108 @@ class TaggableObject(EventSource):
         self.add_directive(DIRECTIVE_WHITELISTED)
         self.root.whitelisted = True
 
+# XXX forward declaraction
+class Observable:
+    pass
+
+@dataclass
+class AnalysisModuleType():
+    """Represents a registration of an analysis module type."""
+    # the name of the analysis module type
+    name: str
+    # brief English description of what the module does
+    description: str
+    # list of supported observable types (empty list supports all observable)
+    observable_types: List[str] = field(default_factory=list)
+    # list of required directives (empty list means no requirement)
+    directives: List[str] = field(default_factory=list)
+    # list of other analysis module type names to wait for (empty list means no deps)
+    dependencies: List[str] = field(default_factory=list)
+    # list of required tags (empty list means no requirement)
+    tags: List[str] = field(default_factory=list)
+    # list of valid analysis modes
+    modes: List[str] = field(default_factory=list)
+    # the current version of the analysis module type
+    version: str = '1.0.0'
+    # how long this analysis module has before it times out (in seconds)
+    # by default it takes the global default specified in the configuration file
+    # you can set a very high timeout but nothing can never timeout
+    timeout: int = 30
+    # how long analysis results stay in the cache (in seconds)
+    # a value of None means it is not cached
+    cache_ttl: Optional[int] = None
+    # what additional values should be included to determine the cache key?
+    additional_cache_keys: List[str] = field(default_factory=list)
+
+    def version_matches(self, amt) -> bool:
+        """Returns True if the given amt is the same version as this amt."""
+        return ( 
+                self.name == amt.name and
+                self.version == amt.version and
+                sorted(self.additional_cache_keys) == sorted(amt.additional_cache_keys) )
+        # XXX should probably check the other fields as well
+
+    def to_dict(self):
+        return {
+            'name': self.name,
+            'description': self.name,
+            'observable_types': self.observable_types,
+            'directives': self.directives,
+            'dependencies': self.dependencies,
+            'tags': self.tags,
+            'modes': self.modes,
+            'version': self.version,
+            'timeout': self.timeout,
+            'cache_ttl': self.cache_ttl,
+            'cache_keys': self.cache_keys,
+        }
+
+    @staticmethod
+    def from_dict(value: dict):
+        return AnalysisModuleType(
+            name = value['name'],
+            description = value['description'],
+            observable_types = value['observable_types'],
+            directives = value['directives'],
+            dependencies = value['dependencies'],
+            tags = value['tags'],
+            modes = value['modes'],
+            version = value['version'],
+            timeout = value['timeout'],
+            cache_ttl = value['cache_ttl'],
+            cache_keys = value['cache_keys'],
+        )
+
+    def accepts(self, observable: Observable) -> bool:
+
+        # TODO conditions are OR vertical AND horizontal?
+
+        # OR
+        if self.modes and observable.root.analysis_mode not in self.modes:
+            return False
+
+        # OR
+        if self.observable_types:
+            if observable.type not in self.observable_types:
+                return False
+
+        # AND
+        for directive in self.directives:
+            if not observable.has_directive(directive):
+                return False
+
+        # AND
+        for tag in self.tags:
+            if not observable.has_tag(tag):
+                return False
+
+        # AND (this is correct)
+        for dep in self.dependencies:
+            if not observable.analysis_completed(dep):
+                return False
+
+        return True
+
 class Analysis(TaggableObject, DetectableObject):
     """Represents an output of analysis work."""
 
@@ -466,6 +570,7 @@ class Analysis(TaggableObject, DetectableObject):
     KEY_OBSERVABLES = 'observables'
     KEY_DETAILS = 'details' # NOTE (see the NOTE above)
     KEY_SUMMARY = 'summary'
+    KEY_TYPE = 'type'
 
     KEY_UUID = 'uuid'
     KEY_FILE_FORMAT = 'file_format'
@@ -481,10 +586,15 @@ class Analysis(TaggableObject, DetectableObject):
         super().__init__(*args, **kwargs)
 
         # unique ID
-        self.uuid = str(uuid.uuid4())
+        self.uuid: str = str(uuid.uuid4())
 
         # a reference to the RootAnalysis object this analysis belongs to 
-        self.root = None
+        self.root: Optional[RootAnalysis] = None
+
+        # the type of analysis this is
+        self.type: Optional[AnalysisModuleType] = AnalysisModuleType(
+                name=MODULE_PATH(self),
+                description=self.__doc__)
 
         # list of Observables generated by this Analysis
         self._observables = []
@@ -749,11 +859,11 @@ class Analysis(TaggableObject, DetectableObject):
         result = TaggableObject.json.fget(self)
         result.update(DetectableObject.json.fget(self))
         result.update({
+            Analysis.KEY_TYPE: self.type.to_dict() if self.type else None,
             Analysis.KEY_INSTANCE: self.instance,
             Analysis.KEY_OBSERVABLES: [o.id for o in self.observables],
             TaggableObject.KEY_TAGS: self.tags,
             Analysis.KEY_DETAILS: {
-                #KEY_FILE_FORMAT: 'json',
                 Analysis.KEY_FILE_PATH: self.external_details_path },
             Analysis.KEY_SUMMARY: self.summary,
             Analysis.KEY_COMPLETED: self.completed,
@@ -769,6 +879,10 @@ class Analysis(TaggableObject, DetectableObject):
         assert isinstance(value, dict)
         TaggableObject.json.fset(self, value)
         DetectableObject.json.fset(self, value)
+
+        if Analysis.KEY_TYPE in value:
+            if value[Analysis.KEY_TYPE]:
+                self.type = AnalysisModuleType.from_dict(value[Analysis.KEY_TYPE])
 
         if Analysis.KEY_INSTANCE in value:
             self.instance = value[Analysis.KEY_INSTANCE]
@@ -1927,7 +2041,7 @@ class Observable(TaggableObject, DetectableObject):
         else:
             return [ ObservableActionWhitelist(), ObservableActionUnWhitelist() ]
 
-    def add_analysis(self, analysis):
+    def add_analysis(self, analysis: Analysis):
         assert isinstance(analysis, Analysis)
         assert isinstance(self.root, RootAnalysis)
 
@@ -1938,19 +2052,29 @@ class Observable(TaggableObject, DetectableObject):
         # set the source of the Analysis
         analysis.observable = self
 
+        #
+        # the way we track these now changes from the "module_path" to just the "name" of the type, which should be unique
+        #
+
         # does this analysis already exist?
-        # usually this is because you copied and pasted another AnalysisModule and didn't change the generated_analysis_type function
-        if analysis.module_path in self.analysis and not (self.analysis[analysis.module_path] is analysis):
-            logging.error("replacing analysis {} with {} for {} (are you returning the correct type from generated_analysis_type()?)".format(
-                self.analysis[analysis.module_path], analysis, self))
+        if analysis.type.name in self.analysis and not (self.analysis[analysis.type.name] is analysis):
+            logging.error("replacing analysis type {} with {} for {} (are you returning the correct type from generated_analysis_type()?)".format(
+                self.analysis[analysis.type.name], analysis, self))
+
+        #if analysis.module_path in self.analysis and not (self.analysis[analysis.module_path] is analysis):
+            #logging.error("replacing analysis {} with {} for {} (are you returning the correct type from generated_analysis_type()?)".format(
+                #self.analysis[analysis.module_path], analysis, self))
         
         # newly added analysis is always set to modified so it gets saved to JSON file
         analysis.set_modified()
 
-        self.analysis[analysis.module_path] = analysis
-        logging.debug("added analysis {} key {} to observable {}".format(analysis, analysis.module_path, self))
+        #self.analysis[analysis.module_path] = analysis
+        self.analysis[analysis.type.name] = analysis
+
+        logging.debug("added analysis {} type {} to observable {}".format(analysis, analysis.type, self))
         self.fire_event(self, EVENT_ANALYSIS_ADDED, analysis)
 
+    # TODO (2.0) this isn't really needed any more
     def add_no_analysis(self, analysis, instance=None):
         """Records the fact that the analysis module that generates this Analysis did not for this Observable."""
         assert inspect.isclass(analysis) and issubclass(analysis, Analysis)

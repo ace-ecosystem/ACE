@@ -43,12 +43,14 @@ def process_analysis_request(ar: AnalysisRequest):
                         ar.analysis_module_type, 
                         ar.result)
 
-                # save the analysis results!
-                # XXX not implemented yet
-                root.set_analysis(
-                        ar.observable, 
-                        ar.analysis_module_type, 
-                        ar.result)
+                # save the analysis results
+                observable = root.get_observable(ar.observable)
+                if not observable:
+                    raise UnknownObservableError(observable)
+
+                # TODO ok how does this work now that there is only a generic Analysis type?
+                observable.add_analysis(ar.result)
+                root.save()
 
             # if this is a RootAnalysis request make sure it is tracked
             if ar.is_root_analysis_request:
