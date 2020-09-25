@@ -1,7 +1,16 @@
-interesting note
-the json of the Analysis is currently saved in the RootAnalysis object
-but the details is saved to a JSON file
-Analysis.save() <-- track_analysis
-Observable._load_analysis <-- get_analysis
-RootAnalysis.save() <-- track_root_analysis
-RootAnalysis.load() <-- get_root_analysis
+CHANGES FOR 2.0
+
+Analysis is tracked inside the Observable by the AnaysisModuleType.name
+property instead of the MODULE_PATH.  This is accomplished by adding a new
+property to the Analysis object called "type" of type AnalysisModuleType which
+represents the "type" of the Analysis (rather than using subclasses).
+
+This is going to be required since anyone can add a new analysis module "type"
+at any point so it doesn't make sense (anymore) to use different Python types.
+
+I think we're probably going to have to do a data migration from 1.0 to 2.0 so
+that everything can get converted over. I'd rather do that than try to support
+the legacy formats and data structures.
+
+So, for example, we gonna have to go through and set the type property for all
+the existing Analysis so they can all load correctly.

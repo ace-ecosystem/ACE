@@ -38,3 +38,39 @@ operational_mode = automated
 operational_mode = manual
 
 user_menu = dns->zeek->Search zeek logs in splunk for this.
+
+1.0 -> 2.0 TODO
+
+# Analysis
+- expand on the event listeners because I think we're going to use them now
+- get rid of Analysis.instance (no longer needed)
+                     .completed
+                     .delayed
+                     .alerted
+                     .question (replaced by AnaysisModuleType.description)
+                     .initialize_details
+                     .is_suspect
+                     .always_visible
+                     .upgrade
+- replace .json with to_dict()
+- replace .json setter with static from_dict()
+- how does storage_dir work now?
+- how do we display Analysis now (is it any different?)
+- should we supply an html template with the analysis module type?
+- add a .critical property to both Analysis and Observable types
+  anything that is critical shows up in the critical anaysis view
+
+# Observables
+- limited and excluded analysis needs to use amt.name
+- type inheritance without classes
+  main:sub1:sub2:sub3:...
+  ipv4
+  ipv4:src <-- still ipv4 but is also a src ipv4, everything that works with ipv4 also works with ipv4:src
+  ipv4:dst
+  email_address:smtp_from
+  email_address:return_path
+- switch to JSON for complex types
+  ipv4_conversation = { 'src': '1.2.3.4', 'dst': '1.2.3.4' }
+- big change how F_FILE works
+  file is now complex { 'md5', 'sha1', 'sha256', name, path, owner, location, last_times, perms, etc... }
+   
