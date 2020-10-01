@@ -565,6 +565,9 @@ class AnalysisModuleType():
 
         return True
 
+# sentinel for analysis details that are not loaded
+NOT_LOADED = object()
+
 class Analysis(TaggableObject, DetectableObject):
     """Represents an output of analysis work."""
 
@@ -613,11 +616,11 @@ class Analysis(TaggableObject, DetectableObject):
         # free form details of the analysis
         # this is run-time-only (never saved to disk)
         # the external_details property is what loads and saves the value of this field
-        self._details = None
+        self._details = NOT_LOADED
         # the path to the storage of the details
-        self.external_details_path = None
+        #self.external_details_path = None
         # gets set to True when the external details has been loaded from disk
-        self.external_details_loaded = False
+        #self.external_details_loaded = False
 
         self.defined_details_properties = {}
 
@@ -684,17 +687,19 @@ class Analysis(TaggableObject, DetectableObject):
     def save(self):
         """Saves the current results of the Analysis."""
 
-        if not self._is_modified:
+        # TODO implement _is_modified correctly
+
+        #if not self._is_modified:
             #logging.debug(f"{self} was not modified so not saving")
-            return
+            #return
 
         # the only thing we actually save is the self.details object
         # which much be serializable to JSON
 
         # do we not have anything to save?
-        if not self.external_details_loaded and self._details is None:
-            logging.debug(f"called save() on analysis {self} but nothing to save")
-            return
+        #if not self.external_details_loaded and self._details is None:
+            #logging.debug(f"called save() on analysis {self} but nothing to save")
+            #return
 
         #if self.storage_dir is None:
             #raise RuntimeError("storage_dir is None for {} in {}".format(self, self.root))
@@ -706,10 +711,11 @@ class Analysis(TaggableObject, DetectableObject):
         try:
             self._summary = self.generate_summary()
         except Exception as e:
-            self._summary = f"Failed to generate summary for {self}: {e}"
+            self._summary = f"failed to generate summary for {self}: {e}"
 
+        # TODO move this import
         from saq.system.analysis import track_analysis_details
-        track_analysis_details(self.uuid, self._details)
+        track_analysis_details(self.root, self.uuid, self._details)
 
         # have we figured out where we are saving the data to?
         #if self.external_details_path is None:
@@ -739,7 +745,7 @@ class Analysis(TaggableObject, DetectableObject):
 
         # at this point we consider the data "loaded"
         # TODO explain WHY
-        self.external_details_loaded = True
+        #self.external_details_loaded = True
 
     def flush(self):
         """Calls save() and then clears the details property.  It must be load()ed again."""
@@ -748,7 +754,7 @@ class Analysis(TaggableObject, DetectableObject):
         self._details = None
         self.external_details_loaded = False
 
-    @refactor
+    #@refactor
     def reset(self):
         """Deletes the current analysis output if it exists."""
         logging.debug("called reset() on {}".format(self))
@@ -775,16 +781,16 @@ class Analysis(TaggableObject, DetectableObject):
     @property
     def details(self):
         # do we already have the details loaded or set?
-        if self._details is not None:
+        if self._details is not NOT_LOADED:
             return self._details
 
         # are there any external details?
-        if self.external_details_path is None:
-            return None
+        #if self.external_details_path is None:
+            #return None
 
         # did we already load them and then set it to None?
-        if self.external_details_loaded:
-            return None
+        #if self.external_details_loaded:
+            #return None
 
         # load the external details and return those results
         self._load_details()
@@ -819,8 +825,8 @@ class Analysis(TaggableObject, DetectableObject):
         # NOTE you should never call this directly
         # this is called whenever .details is requested and it hasn't been loaded yet
 
-        if self._details is not None:
-            logging.warning("called load_external_details when self._details was not None")
+        if self._details is not NOT_LOADED:
+            logging.warning("called load_external_details when self._details was not NOT_LOADED")
 
         #if self.external_details_path is None:
             #logging.error("external_details_path is None for {}".format(self))
@@ -842,14 +848,14 @@ class Analysis(TaggableObject, DetectableObject):
 
             from saq.system.analysis import get_analysis_details
             self._details = get_analysis_details(self.uuid)
+
             if self._details is None:
                 logging.warning(f"missing analysis details for {self.uuid}")
-                return None
 
             #_track_reads()
 
-            self.external_details_loaded = True
-            logging.debug("LOAD: loaded external details from {0} (value type {1})".format(details_file_path, type(self._details)))
+            #self.external_details_loaded = True
+            #logging.debug("LOAD: loaded external details from {0} (value type {1})".format(details_file_path, type(self._details)))
             return self._details
 
         except Exception as e:
@@ -865,8 +871,8 @@ class Analysis(TaggableObject, DetectableObject):
             Analysis.KEY_INSTANCE: self.instance,
             Analysis.KEY_OBSERVABLES: [o.id for o in self.observables],
             TaggableObject.KEY_TAGS: self.tags,
-            Analysis.KEY_DETAILS: {
-                Analysis.KEY_FILE_PATH: self.external_details_path },
+            #Analysis.KEY_DETAILS: {
+                #Analysis.KEY_FILE_PATH: self.external_details_path },
             Analysis.KEY_SUMMARY: self.summary,
             Analysis.KEY_COMPLETED: self.completed,
             Analysis.KEY_ALERTED: self.alerted,
@@ -893,9 +899,11 @@ class Analysis(TaggableObject, DetectableObject):
             # and then we un-serialize them back when we load from JSON
             self.observables = value[Analysis.KEY_OBSERVABLES]
 
-        if Analysis.KEY_DETAILS in value:
-            if Analysis.KEY_FILE_PATH in value[Analysis.KEY_DETAILS]:
-                self.external_details_path = value[Analysis.KEY_DETAILS][Analysis.KEY_FILE_PATH]
+        #if Analysis.KEY_DETAILS in value:
+            #if Analysis.KEY_FILE_PATH in value[Analysis.KEY_DETAILS]:
+                #self.external_details_path = value[Analysis.KEY_DETAILS][Analysis.KEY_FILE_PATH]
+
+        self.details = NOT_LOADED
 
         if Analysis.KEY_SUMMARY in value:
             self.summary = value[Analysis.KEY_SUMMARY]
@@ -2709,6 +2717,15 @@ class RootAnalysis(Analysis):
     KEY_INSTRUCTIONS = 'instructions'
     KEY_ANALYSIS_FAILURES = 'analysis_failures'
 
+    def as_dict(self) -> dict:
+        return self.json
+
+    @staticmethod
+    def from_dict(root_dict: dict):
+        result = RootAnalysis()
+        result.json = root_dict
+        return result
+
     @property
     def json(self):
         result = Analysis.json.fget(self)
@@ -3382,8 +3399,6 @@ class RootAnalysis(Analysis):
         #assert self.json_path is not None
         #assert self.json is not None
 
-        logging.debug("SAVE: {} ({})".format(self, type(self)))
-
         # make sure the containing directory exists
         #if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir)):
             #os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir))
@@ -3391,6 +3406,9 @@ class RootAnalysis(Analysis):
         # analysis details go into a hidden directory
         #if not os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace')):
             #os.makedirs(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace'))
+
+        from saq.system.analysis import track_root_analysis
+        track_root_analysis(self)
 
         # save all analysis
         for analysis in self.all_analysis:
@@ -3418,8 +3436,6 @@ class RootAnalysis(Analysis):
                 #if try_count == 2:
                     #return False
 
-        from saq.system.analysis import track_root_analysis
-        track_root_analysis(self)
         return True
 
     def load(self):
@@ -3818,6 +3834,13 @@ class RootAnalysis(Analysis):
 
     def __str__(self):
         return "RootAnalysis({})".format(self.uuid)
+
+    def __eq__(self, other):
+        """Two RootAnalysis objects are equal if the uuid is equal."""
+        if not isinstance(other, type(self)):
+            return False
+
+        return other.uuid == self.uuid
 
     def get_object(self, uuid: str) -> Union[Analysis, Observable, None]:
         """Returns the object with the given uuid, or, None if it is not found."""

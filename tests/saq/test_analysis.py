@@ -2,8 +2,24 @@
 
 from saq.analysis import RootAnalysis, Analysis, AnalysisModuleType
 from saq.observables import IPv4Observable
+from saq.system.analysis import (
+    get_analysis_details,
+    get_root_analysis,
+)
 
 import pytest
+
+TEST_DETAILS = { 'hello': 'world' }
+
+@pytest.mark.integration
+def test_save_analysis():
+    root = RootAnalysis()
+    root.details = TEST_DETAILS
+    root.save()
+
+    assert get_root_analysis(root.uuid) == root
+    assert get_analysis_details(root.uuid) == TEST_DETAILS
+    assert get_root_analysis(root.uuid).details == TEST_DETAILS
 
 @pytest.mark.integration
 def test_add_analysis():

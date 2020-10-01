@@ -2,10 +2,22 @@ import os
 import os.path
 import shutil
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 pytest.register_assert_rewrite("tests.saq.requests")
+
+from saq.system import get_system
+import saq.system.threaded
+
+@pytest.fixture(autouse=True, scope='session')
+def initialize_ace_system():
+    saq.system.threaded.initialize()
+
+@pytest.fixture(autouse=True, scope='function')
+def reset_ace_system():
+    get_system().reset()
 
 @pytest.fixture(autouse=True, scope='session')
 def initialize_environment(pytestconfig):
