@@ -1,12 +1,14 @@
 import logging
 import json
 import saq
-from saq.analysis import Analysis, Observable
+from saq.database import Alert, Observable, ObservableMapping
+from saq.analysis import Analysis
 from saq.email import is_local_email_domain
 from saq.modules import AnalysisModule
 from saq.constants import *
 from saq.proxy import proxies
 from saq.graph_api import GraphApiAuth
+import saq.settings
 import requests
 import shutil
 
@@ -80,8 +82,11 @@ class O365FileAnalyzer(AnalysisModule):
             results = r.json()
             for member in results['value']:
                 if member['mail'] is not None:
-                    analysis.details['users'][member['mail']] = None
-                    analysis.add_observable(F_EMAIL_ADDRESS, member['mail'])
+                    recipient = member['mail'].lower()
+                    analysis.details['users'][recipient] = None
+                    analysis.add_observable(F_EMAIL_ADDRESS, recipient)
+                    if analysis.details['creator'] is not None and recipient != analysis.details['creator']:
+                        analysis.add_observable(F_O365_FILE_CONVERSATION, f'{analysis.details["creator"]}|{recipient}')
                 else:
                     # add id if we didn't find an email so they are still counted as a shared user for alerting purposes
                     analysis.details['users'][member['id']] = None
@@ -101,12 +106,12 @@ class O365FileAnalyzer(AnalysisModule):
             r.raise_for_status()
         analysis.details['info'] = r.json()
         try:
-            analysis.details['creator'] = analysis.details['info']['createdBy']['user']['email']
+            analysis.details['creator'] = analysis.details['info']['createdBy']['user']['email'].lower()
         except KeyError:
             analysis.details['error'] = 'creator not found'
         if analysis.details['creator'] is not None:
             email_address = self.add_user(analysis, analysis.details['creator'])
-            email_address.add_tag('creator')
+            email_address.add_tag('critical_analysis')
 
         # get list of users with access to this file
         r = self.session.get(f"{self.config['base_uri']}{path.value}:/permissions")
@@ -123,16 +128,49 @@ class O365FileAnalyzer(AnalysisModule):
                         email_address = self.add_user(analysis, user['user']['email'])
                         if 'owner' in permission['roles']:
                             analysis.details['owner'] = email_address.value
-                            email_address.add_tag('owner')
+                            email_address.add_tag('critical_analysis')
             if 'grantedTo' in permission:
                 if 'email' in permission['grantedTo']['user']:
                     email_address = self.add_user(analysis, permission['grantedTo']['user']['email'])
                     if 'owner' in permission['roles']:
                         analysis.details['owner'] = email_address.value
-                        email_address.add_tag('owner')
+                        email_address.add_tag('critical_analysis')
 
         # alert if shared threshold is broken
-        if len(analysis.details['users']) > self.config.getint('share_threshold', 1):
+        if len(analysis.details['users']) > saq.settings.root['MVision']['share_threshold']:
             path.add_detection_point(f"Sensitive file shared with {len(analysis.details['users']) - 1} users")
 
         return True
+
+class O365FileConversationAnalysis(Analysis):
+    def initialize_details(self):
+        self.details = {}
+
+    def generate_summary(self): 
+        return f"O365 File Conversation Analysis"
+
+class O365FileConversationAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return O365FileConversationAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_O365_FILE_CONVERSATION
+
+    def execute_analysis(self, conversation):
+        query = saq.db.query(Alert)
+        query = query.join(ObservableMapping, Alert.id == ObservableMapping.alert_id)
+        query = query.join(Observable, ObservableMapping.observable_id == Observable.id)
+        query = query.filter(Alert.disposition == DISPOSITION_APPROVED_BUSINESS)
+        query = query.filter(Observable.type == F_O365_FILE_CONVERSATION)
+        query = query.filter(Observable.value == conversation.value.encode('utf8', errors='ignore'))
+        query = query.limit(1)
+        exist = len(query.all()) > 0
+        if not exist:
+            analysis = self.create_analysis(conversation)
+            recipient = analysis.add_observable(F_EMAIL_ADDRESS, conversation.value.split('|')[1])
+            recipient.add_tag('critical_analysis')
+            conversation.add_detection_point(f'No APPROVED_BUSINESS history for sensitive conversation')
+            return True
+        return False
