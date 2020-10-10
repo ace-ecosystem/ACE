@@ -106,9 +106,8 @@ RUN git clone https://github.com/DissectMalware/XLMMacroDeobfuscator.git /tmp/XL
     && cd /tmp/XLMMacroDeobfuscator \
     && source /venv/bin/activate \
     && python setup.py install
-COPY packages/john-1.9.0-jumbo-1.tar.gz.zip /opt/misc
 RUN cd /opt/misc \
-    && unzip -P ace john-1.9.0-jumbo-1.tar.gz.zip \
+    && curl -s 'https://www.openwall.com/john/k/john-1.9.0-jumbo-1.tar.gz' -o john-1.9.0-jumbo-1.tar.gz \
     && tar zxvf john-1.9.0-jumbo-1.tar.gz \
     && cd john-1.9.0-jumbo-1/src \
     && ./configure \
