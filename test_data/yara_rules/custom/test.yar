@@ -48,3 +48,15 @@ rule test_whitelist : whitelisted
     condition:
         any of them
 }
+
+rule test_qa_modifier
+{
+    meta:
+        modifiers = "qa"
+
+    strings:
+        $ = "Target with qa modifier."
+
+    condition:
+        any of them
+}

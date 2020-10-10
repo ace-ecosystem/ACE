@@ -55,10 +55,12 @@ class BasicTestAnalyzer(AnalysisModule):
 
     @property
     def valid_observable_types(self):
-        return F_TEST
+        return [ F_TEST, F_FILE ]
 
     def execute_analysis(self, test):
-        if test.value == 'test_1':
+        if test.type == F_FILE:
+            return self.execute_file_analysis(test)
+        elif test.value == 'test_1':
             return self.execute_analysis_1(test)
         elif test.value == 'test_2':
             return self.execute_analysis_2(test)
@@ -92,6 +94,9 @@ class BasicTestAnalyzer(AnalysisModule):
             return self.execute_test_pause(test)
         else:
             return False
+
+    def execute_file_analysis(self, _file):
+        raise RuntimeError("testing failure case")
 
     def execute_analysis_1(self, test):
         analysis = self.create_analysis(test)
@@ -176,6 +181,7 @@ class BasicTestAnalyzer(AnalysisModule):
     def execute_test_memory_limit_kill(self, test):
         chunk = bytearray((saq.CONFIG['global'].getint('memory_limit_kill') * 1024 * 1024) + 1024)
         time.sleep(3)
+
     def execute_test_pause(self, test):
         analysis = self.create_analysis(test)
         time.sleep(3)

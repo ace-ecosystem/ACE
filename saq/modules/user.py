@@ -15,6 +15,7 @@ from saq.email import is_local_email_domain
 from saq.constants import *
 import saq.ldap
 import saq.util
+import saq.settings
 
 class UserTagAnalysis(Analysis):
     def initialize_details(self):
@@ -120,13 +121,6 @@ class UserAnalysis(Analysis):
             self.details['ldap']['title'] if 'title' in self.details['ldap'] else '')
 
 class UserAnalyzer(AnalysisModule):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tag_mappings = {}
-        if 'ldap_group_tags' in saq.CONFIG:
-            for tag in saq.CONFIG['ldap_group_tags']:
-                self.tag_mappings[tag] = saq.CONFIG['ldap_group_tags'][tag].split(',')
-
     @property
     def generated_analysis_type(self):
         return UserAnalysis
@@ -158,12 +152,11 @@ class UserAnalyzer(AnalysisModule):
         if 'memberOf' in analysis.details['ldap'] and analysis.details['ldap']['memberOf'] is not None:
             for group in analysis.details['ldap']['memberOf']:
                 privileged = False # now used for any highlighting
-                for tag, patterns in self.tag_mappings.items():
-                    for pattern in patterns:
-                        if pattern in group:
-                            user.add_tag(tag)
-                            privileged = True
-                            break
+                for substring in saq.settings.root['Active Directory']['Group Tags']:
+                    if substring in group:
+                        user.add_tag(saq.settings.root['Active Directory']['Group Tags'][substring])
+                        privileged = True
+                        break
                 analysis.details['ldap']['entitlements'].append({'group':group, 'privileged':privileged})
 
         # did we get an email address?

@@ -10,6 +10,8 @@ import random
 import socket
 import struct
 
+from typing import Optional, Union
+
 import Crypto.Random
 
 from Crypto.Cipher import AES
@@ -147,18 +149,27 @@ def set_encryption_password(password, old_password=None, key=None):
     #with open(os.path.join(get_encryption_store_path(), 'iterations'), 'w') as fp:
         #fp.write(str(iterations))
 
+def _get_password(password: Optional[Union[bytes, str]]=None) -> bytes:
+    if password is None:
+        return saq.ENCRYPTION_PASSWORD
+
+    if isinstance(password, str):
+        h = SHA256.new()
+        h.update(password.encode())
+        return h.digest()
+
+    if not isinstance(password, bytes) or len(password) != 32:
+        raise ValueError("password must be 32 bytes")
+
+    return password
+
 # https://eli.thegreenplace.net/2010/06/25/aes-encryption-of-files-in-python-with-pycrypto
 def encrypt(source_path, target_path, password=None):
     """Encrypts the given file at source_path with the given password and saves the results in target_path.
        If password is None then saq.ENCRYPTION_PASSWORD is used instead.
        password must be a byte string 32 bytes in length."""
 
-    if password is None:
-        password = saq.ENCRYPTION_PASSWORD
-
-    assert isinstance(password, bytes)
-    assert len(password) == 32
-
+    password = _get_password(password)
     iv = Crypto.Random.OSRNG.posix.new().read(AES.block_size)
     encryptor = AES.new(password, AES.MODE_CBC, iv)
     file_size = os.path.getsize(source_path)
@@ -182,12 +193,7 @@ def encrypt_chunk(chunk, password=None):
        If password is None then saq.ENCRYPTION_PASSWORD is used instead.
        password must be a byte string 32 bytes in length."""
 
-    if password is None:
-        password = saq.ENCRYPTION_PASSWORD
-
-    assert isinstance(password, bytes)
-    assert len(password) == 32
-
+    password = _get_password(password)
     iv = Crypto.Random.OSRNG.posix.new().read(AES.block_size)
     encryptor = AES.new(password, AES.MODE_CBC, iv)
 
@@ -205,12 +211,7 @@ def decrypt(source_path, target_path=None, password=None):
        If password is None then saq.ENCRYPTION_PASSWORD is used instead.
        password must be a byte string 32 bytes in length."""
 
-    if password is None:
-        password = saq.ENCRYPTION_PASSWORD
-
-    assert isinstance(password, bytes)
-    assert len(password) == 32
-
+    password = _get_password(password)
     with open(source_path, 'rb') as fp_in:
         original_size = struct.unpack('<Q', fp_in.read(struct.calcsize('Q')))[0]
         iv = fp_in.read(16)
@@ -231,13 +232,7 @@ def decrypt_chunk(chunk, password=None):
        If password is None then saq.ENCRYPTION_PASSWORD is used instead.
        password must be a byte string 32 bytes in length."""
 
-    if password is None:
-        password = saq.ENCRYPTION_PASSWORD
-
-    assert isinstance(password, bytes)
-    assert len(password) == 32
-
-
+    password = _get_password(password)
     _buffer = io.BytesIO(chunk)
     original_size = struct.unpack('<Q', _buffer.read(struct.calcsize('Q')))[0]
     iv = _buffer.read(16)

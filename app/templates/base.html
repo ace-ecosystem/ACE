@@ -22,6 +22,10 @@
 <script src="{{ url_for('static', filename='js/jquery-3.2.1.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/bootstrap.min.js') }}"></script>
 
+<!-- Bootstrap Table of Contents -->
+<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/bootstrap-toc.min.css') }}" />
+<script src="{{ url_for('static', filename='js/bootstrap-toc.min.js') }}"></script>
+
 <!-- json2 lib (see https://github.com/douglascrockford/JSON-js -->
 <script type="text/javascript" src="{{ url_for('static', filename='js/json2.js') }}"></script>
 
@@ -89,6 +93,7 @@
                 <li><a href="https://ace-ecosystem.github.io/ACE/"><span class="glyphicon glyphicon-question-sign"></span></a></li>
                 {% if current_user.is_authenticated %}
                     {% if config.AUTHENTICATION_ON %}
+                        <li><a href="{{ url_for('settings.manage') }}"><span class="glyphicon glyphicon-cog"></span></a></li>
                         <li class="dropdown">
                             <a class="dropdown-toggle" href="#" data-toggle="dropdown">
                                 <span></span>
@@ -177,6 +182,8 @@
                                 </table>
                                 <select class="form-control" name="event_disposition" id="event_disposition" style="display:none;">
                                         <option value="FALSE_POSITIVE">FALSE_POSITIVE</option>
+                                        <option value="APPROVED_BUSINESS">APPROVED_BUSINESS</option>
+                                        <option value="APPROVED_PERSONAL">APPROVED_PERSONAL</option>
                                         <option value="IGNORE">IGNORE</option>
                                         <option value="UNKNOWN">UNKOWN</option>
                                         <option value="REVIEWED">REVIEWED</option>
@@ -232,6 +239,8 @@
                         <div class="col-md-4">
                             <div class="radio"><label><input type="radio" name="disposition" onclick="hideSaveToEventButton();" value="FALSE_POSITIVE" id="option_FALSE_POSITIVE" autocomplete="off"> FALSE_POSITIVE </label></div>
                             <div class="radio"><label><input type="radio" name="disposition" onclick="showSaveToEventButton();" value="IGNORE" id="option_IGNORE" autocomplete="off"> IGNORE </label></div>
+                            <div class="radio"><label><input type="radio" name="disposition" onclick="showSaveToEventButton();" value="APPROVED_BUSINESS" id="option_APPROVED_BUSINESS" autocomplete="off"> APPROVED_BUSINESS </label></div>
+                            <div class="radio"><label><input type="radio" name="disposition" onclick="showSaveToEventButton();" value="APPROVED_PERSONAL" id="option_APPROVED_PERSONAL" autocomplete="off"> APPROVED_PERSONAL </label></div>
                             <div class="radio"><label><input type="radio" name="disposition" onclick="showSaveToEventButton();" value="UNKNOWN" id="option_UNKNOWN" autocomplete="off"> UNKNOWN </label></div>
                             <div class="radio"><label><input type="radio" name="disposition" onclick="showSaveToEventButton();" value="REVIEWED" id="option_REVIEWED" autocomplete="off"> REVIEWED </label></div>
                             <div class="radio"><label><input type="radio" name="disposition" onclick="showSaveToEventButton();" value="GRAYWARE" id="option_GRAYWARE" autocomplete="off"> GRAYWARE </label></div>
@@ -345,10 +354,10 @@
                 <div class="row">
                     <div class="col-xs-12">
                         <select name="selected_user_id" class="form-control">
-                            {% for user in all_users %}
-			        {% if user.enabled %}
+                            {% for user in all_users | sort(attribute='gui_display') %}
+                                {% if user.enabled %}
                                     <option value="{{user.id}}">{{user.gui_display}}</option>
-				{% endif %}
+                                {% endif %}
                             {% endfor %}
                         </select>
                     </div>

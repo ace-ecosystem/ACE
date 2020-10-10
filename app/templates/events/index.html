@@ -12,8 +12,12 @@
                     <div class="col-md-12">
                         <div class="panel panel-default">
                             <div class="panel-heading">
-                                <h4 class="panel-title">
-                                    <b>{{event.name}}</b>
+                                <h1 class="panel-title">
+                                    {% if tip.name and tip.event_url(event.uuid) %}
+                                        <b><a href="{{ tip.event_url(event.uuid) }}" target="_blank" title="{{ tip.name }}">{{ event.name }}</a></b>
+                                    {% else %}
+                                        <b>{{event.name}}</b>
+                                    {% endif %}
                                     <button class="btn btn-default btn-xs" type="button" id="copy_link_action_{{ unique_reference }}" title="Copy Link to Clipboard">
                                         <span class="glyphicon glyphicon-link"></span>
                                     </button>
@@ -31,11 +35,20 @@
                                             $('#copy_action_{{unique_reference}}').effect("pulsate", {times: 3}, 500);
                                         });
                                     </script>
-                                </h4>
+                                </h1>
                             </div>
                             <div id="collapseone" class="panel-collapse collapse in">
                                 <!-- main content area for the details of the event-based object -->
                                 <div class="panel-body">
+                                    <div class="panel panel-default">
+                                        <div class="panel-heading">
+                                            <h2 class="panel-title" data-toc-text="Table of Contents">Table of Contents <a role="button" data-toggle="collapse" data-target="#collapseToc" aria-expanded="true" aria-controls="collapseToc">(hide/show)</a></h2>
+                                        </div>
+                                        <div class="panel-body collapse in" id="collapseToc" style="overflow: scroll;">
+                                            <nav id="toc" data-toggle="toc"></nav>
+                                        </div>
+                                    </div>
+
                                     <div class="panel panel-default">
                                         {% include "events/event_summary.html" %}
                                     </div>
@@ -43,6 +56,12 @@
                                     <div class="panel panel-default">
                                         {% include "events/alert_summary.html" %}
                                     </div>
+
+                                    {% if tip_indicator_summaries %}
+                                        <div class="panel panel-default">
+                                            {% include "events/indicator_summary.html" %}
+                                        </div>
+                                    {% endif %}
 
                                     {% if emails %}
                                         <div class="panel panel-default">
@@ -70,6 +89,12 @@
                                         </div>
                                     {% endif %}
 
+                                    {% if sandbox_reports %}
+                                        <div class="panel panel-default">
+                                            {% include "events/sandbox_analysis.html" %}
+                                        </div>
+                                    {% endif %}
+
                                     {% if url_histogram %}
                                         <div class="panel panel-default">
                                             {% include "events/url_domain_summary.html" %}
@@ -90,9 +115,6 @@
                                 </div>
                             </div>
                         </div>
-
-
-
                     </div>
                 </div>
             </div>

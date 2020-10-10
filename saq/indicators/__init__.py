@@ -19,7 +19,12 @@ class Indicator:
 
     @property
     def json(self) -> dict:
-        return {'type': self.type, 'value': self.value, 'status': self.status, 'tags': self.tags}
+        return {
+            'type': self.type,
+            'value': self.value,
+            'status': self.status,
+            'tags': self.tags
+        }
 
     @property
     def tags(self):
@@ -72,8 +77,7 @@ class IndicatorList(UserList):
         if isinstance(indicator, Indicator):
             existing_indicator = next((i for i in self.data if i == indicator), None)
             if existing_indicator:
-                existing_index = self.data.index(existing_indicator)
-                self.data[existing_index].tags = list(set(indicator.tags + existing_indicator.tags))
+                existing_indicator.tags = list(set(existing_indicator.tags + indicator.tags))
             else:
                 self.data.append(indicator)
 

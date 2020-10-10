@@ -346,14 +346,21 @@ analysis_module = {self.last_analysis_module}
             finally:
                 break
 
-        try:
-            # XXX Python 3.6.9 has a file desc leak here
-            fcntl.fcntl(self.process.sentinel, fcntl.F_GETFD)
-        except:
-            pass
+        if sys.version_info < (3, 9):
+            try:
+                # XXX Python 3.6.9 has a file desc leak here
+                fcntl.fcntl(self.process.sentinel, fcntl.F_GETFD)
+            except:
+                pass
+            else:
+                logging.debug("fixing pipe leak")
+                os.close(self.process.sentinel)
         else:
-            logging.debug("fixing pipe leak")
-            os.close(self.process.sentinel)
+            try:
+                self.process.close()
+            except Exception as e:
+                logging.error("unable to close process: {e}")
+                report_exception()
 
         self._clear_target_tracking()
         self.start()
@@ -3083,7 +3090,20 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                         analysis_module, work_item, self.root, e))
 
                     if not isinstance(e, AnalysisFailedException):
-                        report_exception()
+                        error_report_path = report_exception()
+
+                        # were we analyzing a file when we encountered this exception?
+                        if error_report_path \
+                        and work_item.observable is not None \
+                        and work_item.observable.type == F_FILE \
+                        and saq.CONFIG['service_engine'].getboolean('copy_file_on_error'):
+                                
+                            target_dir = f'{error_report_path}.files'
+                            try:
+                                os.makedirs(target_dir, exist_ok=True)
+                                shutil.copy(os.path.join(self.root.storage_dir, work_item.observable.value), target_dir)
+                            except Exception as copy_error:
+                                logging.error(f"unable to copy files to {target_dir}: {copy_error}")
 
                     if work_item.dependency:
                         work_item.dependency.set_status_failed('error: {}'.format(e))

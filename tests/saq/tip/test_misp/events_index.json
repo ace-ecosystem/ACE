@@ -1,8 +1,57 @@
-{
-    "id": "1",
-    "timestamp": "1598985814",
-    "sighting_timestamp": "0",
-    "published": false,
-    "uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-    "orgc_uuid": "12345678-1234-1234-1234-1234567980ab"
-}
+[
+    {
+        "id": "1",
+        "org_id": "1",
+        "date": "2020-09-23",
+        "info": "Some cool event",
+        "uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "published": false,
+        "analysis": "0",
+        "attribute_count": "125",
+        "orgc_id": "1",
+        "timestamp": "1600892335",
+        "distribution": "1",
+        "sharing_group_id": "0",
+        "proposal_email_lock": false,
+        "locked": false,
+        "threat_level_id": "4",
+        "publish_timestamp": "0",
+        "sighting_timestamp": "0",
+        "disable_correlation": false,
+        "extends_uuid": "",
+        "Org": {
+            "id": "1",
+            "name": "ORGNAME",
+            "uuid": "12345678-1234-1234-1234-1234567890ab"
+        },
+        "Orgc": {
+            "id": "1",
+            "name": "ORGNAME",
+            "uuid": "12345678-1234-1234-1234-1234567890ab"
+        },
+        "EventTag": [
+            {
+                "id": "1",
+                "event_id": "1",
+                "tag_id": "1",
+                "local": false,
+                "Tag": {
+                    "id": "1",
+                    "name": "source:Internal",
+                    "colour": "#b53f08"
+                }
+            },
+            {
+                "id": "2",
+                "event_id": "1",
+                "tag_id": "2",
+                "local": false,
+                "Tag": {
+                    "id": "2",
+                    "name": "tlp:amber",
+                    "colour": "#e7dede"
+                }
+            }
+        ]
+    }
+]

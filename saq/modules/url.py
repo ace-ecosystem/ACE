@@ -708,25 +708,18 @@ class CrawlphishAnalyzer(AnalysisModule):
     def valid_observable_types(self):
         return F_URL
 
-    @property
-    def required_directives(self):
-        if self.auto_crawl_all_alert_urls:
-            # required directive for auto_crawl_root_level URLs addressed in custom_requirement
-            return []
-        else:
-            return [DIRECTIVE_CRAWL]
-
-    def custom_requirement(self, observable):
-        if self.auto_crawl_all_alert_urls:
+    def custom_requirement(self, url):
+        # should we be crawling this url?
+        if url.has_directive(DIRECTIVE_CRAWL):
             return True
-            # if self.root.has_observable(observable) or observable.has_directive(DIRECTIVE_CRAWL):
-            #     return True
-            # else:
-            #     return False
-
-        # custom requirement does not apply if not crawling all root level URLs
-        else:
+        # if this is a manual analysis we always want to try to crawl any urls
+        elif self.root.alert_type == ANALYSIS_TYPE_MANUAL:
             return True
+        # are we crawling all urls in the alerts (this is noisy)
+        elif self.auto_crawl_all_alert_urls and self.root.analysis_mode == ANALYSIS_MODE_CORRELATION:
+            return True
+        else:
+            return False
 
     def execute_analysis(self, url):
         from saq.modules.render import RenderAnalyzer
@@ -1266,8 +1259,8 @@ class ProtectedURLAnalyzer(AnalysisModule):
         analysis = self.create_analysis(url)
         analysis.protection_type = protection_type
         analysis.extracted_url = extracted_url
-        extracted_url = analysis.add_observable(F_URL, extracted_url)
         analysis.iocs.add_url_iocs(extracted_url, tags=['protected_url'])
+        extracted_url = analysis.add_observable(F_URL, extracted_url)
 
         # don't analyze the extracted url with this module again
         extracted_url.exclude_analysis(self)

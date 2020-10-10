@@ -280,6 +280,7 @@ def initialize_test_environment():
     if 'SAQ_HOME' in os.environ:
         saq_home = os.environ['SAQ_HOME']
 
+
     # initialize saq
     import saq
     saq.initialize(
@@ -288,6 +289,10 @@ def initialize_test_environment():
             logging_config_path=os.path.join(saq_home, 'etc', 'unittest_logging.ini'), 
             args=None, 
             relative_dir=None)
+
+    # set the encryption password to 'ace' for the purposes of testing
+    from saq.crypto import set_encryption_password
+    set_encryption_password('ace')
 
     if saq.CONFIG['global']['instance_type'] != INSTANCE_TYPE_UNITTEST:
         sys.stderr.write('\n\n *** CRITICAL ERROR *** \n\ninvalid instance_type setting in configuration\n')

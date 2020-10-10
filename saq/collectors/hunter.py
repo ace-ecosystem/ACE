@@ -78,6 +78,12 @@ class Hunt(object):
         self.cron_schedule = None
         self.queue = QUEUE_DEFAULT
 
+        # a datetime.timedelta that represents how long to suppress until this hunt starts to fire again
+        self.suppression = None
+        # datetime.datetime of when the suppression currently applied to this hunt ends
+        # if this value is None then no suppression is currently being applied
+        self.suppression_end = None
+
         # the last time the hunt was executed
         # see the last_executed_time property
         #self.last_executed_time = None # datetime.datetime
@@ -234,6 +240,11 @@ class Hunt(object):
         if ':' in section_rule['frequency']:
             self.frequency = create_timedelta(section_rule['frequency'])
 
+        # suppression must be either empty for a time range
+        self.suppression = None
+        if 'suppression' in section_rule and section_rule['suppression']:
+            self.suppression = create_timedelta(section_rule['suppression'])
+
         self.cron_schedule = None
         if self.frequency is None:
             self.cron_schedule = section_rule.get('cron_schedule', fallback=section_rule['frequency'])
@@ -270,6 +281,14 @@ class Hunt(object):
         if self.running:
             return False
 
+        # is this hunt currently suppressed?
+        if self.suppression_end:
+            if datetime.datetime.now() < self.suppression_end:
+                return False
+
+            self.suppression_end = None
+            logging.info(f"hunt {self} has exited suppression")
+
         # if we haven't executed it yet then it's ready to go
         if self.last_executed_time is None:
             return True
@@ -294,6 +313,13 @@ class Hunt(object):
                 return local_time()
 
             return self.last_executed_time + self.frequency
+
+    def apply_suppression(self):
+        """Apply suppression to this hunt if it is configured to do so.
+           This is called by the manager when the hunt generates Submissions."""
+        if self.suppression:
+            self.suppression_end = datetime.datetime.now() + self.suppression
+            logging.info(f"hunt {self} is suppressed until {self.suppression_end}")
 
     def record_execution_time(self, time_delta):
         """Record the amount of time it took to execute this hunt."""
@@ -602,6 +628,8 @@ CREATE UNIQUE INDEX idx_name ON hunt(hunt_name)""")
     def execute_threaded_hunt(self, hunt):
         try:
             submissions = hunt.execute_with_lock()
+            if submissions:
+                hunt.apply_suppression()
         except Exception as e:
             logging.error(f"uncaught exception: {e}")
             report_exception()

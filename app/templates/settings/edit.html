@@ -1,0 +1,57 @@
+{% macro setting_input(prefix, key, setting) %}
+    <tr>
+        <th>{{key}}</th>
+        {% if setting.options is not none %}
+        <td>
+            <select
+                title="{{setting.type}} - {{setting.tooltip}}"
+                class="form-control"
+                name="setting_{{prefix}}{{key}}"
+            >
+                {% for option in setting.options %}
+                <option value='{{option}}' {% if setting.value == option %}SELECTED{% endif %}>{{option}}</option>
+                {% endfor %}
+            </select>
+        </td>
+        {% else %}
+        <td>
+            <input
+                title="{{setting.type}} - {{setting.tooltip}}"
+                type="text"
+                class='form-control'
+                name="setting_{{prefix}}{{key}}"
+                value="{{setting.value}}"
+                required
+                {% if setting.pattern is not none %}
+                pattern="{{setting.pattern}}"
+                {% endif %}
+            />
+        </td>
+        {% endif %}
+    </tr>
+{% endmacro %}
+
+<table class='table-condensed' width='100%'>
+    <tr>
+        <th>name</th>
+        <td>
+            <input
+                type="text"
+                class="form-control"
+                name="setting_key"
+                value="{{setting.key}}"
+                title='{{setting.parent.tooltip}}'
+                required
+                {% if not setting.parent.appendable %}
+                readonly
+                {% endif %}
+            />
+        </td>
+    </tr>
+    {% if setting.editable %}
+        {{ setting_input('', 'value', setting) }}
+    {% endif %}
+    {% for key in setting.children %}
+        {{ setting_input('child_', key, setting.children[key]) }}
+    {% endfor %}
+</table>

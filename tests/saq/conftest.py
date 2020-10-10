@@ -1,9 +1,14 @@
+import fakeredis
 import os
 import os.path
 import shutil
 
 from pathlib import Path
 from urllib.parse import urljoin
+
+from saq.constants import *
+from saq.tip import MISP
+
 
 import pytest
 pytest.register_assert_rewrite("tests.saq.requests")
@@ -75,6 +80,9 @@ def reset_database(request, pytestconfig):
             c.execute("DELETE FROM `config`")
             c.execute("DELETE FROM incoming_workload")
             c.execute("DELETE FROM work_distribution")
+            c.execute("DELETE FROM settings")
+
+            c.execute("INSERT INTO settings (`key`, `type`) VALUES (%s, %s)", ('root', 'Dictionary'))
 
             from app.models import User
             u = User()
@@ -95,3 +103,20 @@ def reset_database(request, pytestconfig):
     if request.node.get_closest_marker('integration') is not None:
         import saq
         saq.db.remove()
+
+
+@pytest.fixture(scope='function')
+def tip_misp(monkeypatch):
+    def mock_tip_factory():
+        return tip
+
+    tip = MISP()
+    tip.misp_url = 'https://misp'
+
+    redis_server = fakeredis.FakeServer()
+    monkeypatch.setattr(tip, '_redis_connection_a', fakeredis.FakeStrictRedis(server=redis_server, db=REDIS_DB_TIP_A))
+    monkeypatch.setattr(tip, '_redis_connection_b', fakeredis.FakeStrictRedis(server=redis_server, db=REDIS_DB_TIP_B))
+
+    monkeypatch.setattr('saq.tip.tip_factory', mock_tip_factory)
+
+    return tip

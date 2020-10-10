@@ -20,7 +20,7 @@ from saq.error import report_exception
 from saq.util import abs_path, local_time, create_timedelta, workload_storage_dir, storage_dir_from_uuid
 
 import yara
-import plyara
+import plyara, plyara.utils
 from yara_scanner import YaraScanner
 
 class Submission(object):
@@ -314,7 +314,7 @@ class SubmissionFilter(object):
 
                             logging.debug(f"adding rule {parsed_rule['rule_name']} to {tuning_rules[target][1]}")
                             os.write(tuning_rules[target][0], 
-                                     yara_parser.rebuild_yara_rule(parsed_rule).encode('utf8'))
+                                     plyara.utils.rebuild_yara_rule(parsed_rule).encode('utf8'))
                             os.write(tuning_rules[target][0], b'\n')
 
         for target in VALID_TUNING_TARGETS:

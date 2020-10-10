@@ -111,19 +111,30 @@ def index():
 
     iocs = event.all_iocs
 
+    tip = tip_factory()
+
+    tip_indicator_summaries = []
+    for alert in alerts:
+        for tip_indicator_summary in alert.all_ioc_tip_summaries:
+            if tip_indicator_summary not in tip_indicator_summaries:
+                tip_indicator_summaries.append(tip_indicator_summary)
+
     return render_template(
         'events/index.html',
         event=event,
         alerts=alerts,
         alert_tags=alert_tags,
+        tip_indicator_summaries=sorted(tip_indicator_summaries, key=lambda x: (x['type'], x['value'])),
         emails=emails,
         phish_headers=phish_headers,
         phish_body=phish_body,
         screenshots=screenshots,
         user_analysis=event.all_user_analysis,
+        sandbox_reports=event.all_sandbox_reports,
         url_histogram=create_histogram_string(event.all_url_domain_counts),
         urls='\n'.join(sorted(list(event.all_urls))),
-        iocs=iocs
+        iocs=iocs,
+        tip=tip
     )
 
 
@@ -136,7 +147,7 @@ def manage():
 
     filters = {
         'filter_event_open': SearchFilter('filter_event_open', FILTER_TYPE_CHECKBOX, True),
-        'filter_event_completed': SearchFilter('filter_event_completed', FILTER_TYPE_CHECKBOX, True),
+        'filter_event_internal_collection': SearchFilter('filter_event_internal_collection', FILTER_TYPE_CHECKBOX, True),
         'event_daterange': SearchFilter('event_daterange', FILTER_TYPE_TEXT, ''),
         'filter_event_type': SearchFilter('filter_event_type', FILTER_TYPE_SELECT, 'ANY'),
         'filter_event_vector': SearchFilter('filter_event_vector', FILTER_TYPE_SELECT, 'ANY'),
@@ -174,13 +185,13 @@ def manage():
             del session[filter_name]
 
     query = db.session.query(Event)
-    if filters['filter_event_open'].value and filters['filter_event_completed']:
-        query = query.filter(or_(Event.status == 'OPEN', Event.status == 'COMPLETED'))
+    if filters['filter_event_open'].value and filters['filter_event_internal_collection'].value:
+        query = query.filter(or_(Event.status == 'OPEN', Event.status == 'INTERNAL COLLECTION'))
     else:
         if filters['filter_event_open'].value:
             query = query.filter(Event.status == 'OPEN')
-        if filters['filter_event_completed'].value:
-            query = query.filter(Event.status == 'COMPLETED')
+        if filters['filter_event_internal_collection'].value:
+            query = query.filter(Event.status == 'INTERNAL COLLECTION')
     if filters['event_daterange'].value != '':
         try:
             daterange_start, daterange_end = filters['event_daterange'].value.split(' - ')
@@ -277,9 +288,11 @@ def manage():
     if session['event_sort_by'] == 'disposition':
         events = sorted(events, key=lambda event: event.disposition_rank, reverse=session['event_sort_dir'])
 
+    tip = tip_factory()
+
     return render_template('events/manage.html', events=events, filter_state=filter_state, malware=malware,
                            companies=companies, campaigns=campaigns, sort_by=session['event_sort_by'],
-                           sort_dir=session['event_sort_dir'])
+                           sort_dir=session['event_sort_dir'], tip=tip)
 
 
 @events.route('/manage_event_summary', methods=['GET'])

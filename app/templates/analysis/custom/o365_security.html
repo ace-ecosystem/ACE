@@ -1,0 +1,7 @@
+{% extends "analysis/alert.html" %}
+{% block alert_details %}
+<h5>
+    <b><a href="{{ analysis.details['sourceMaterials'][0] }}">View in O365 Security Portal</a></b>
+</h5>
+<pre>{{ analysis.details | pprint }}</pre>
+{% endblock %}

@@ -476,6 +476,9 @@ class VirusTotalIPAnalyzer(AnalysisModule):
             self.ignored_vendors = set()
 
     def execute_analysis(self, ip): 
+        if ip.is_managed():
+            logging.info(f"VT analysis skipping managed IP: {ip.value}")
+            return False
         try:
             r = requests.get(f'{self.base_uri}/ip-address/report', params={
                 'ip': ip.value,

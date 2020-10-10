@@ -48,6 +48,81 @@ class TestCase(ACEModuleTestCase):
     def tearDown(self):
         ACEModuleTestCase.tearDown(self)
 
+    def test_url_download_conditions(self):
+        from saq.modules.url import CrawlphishAnalysisV2
+
+        root = create_root_analysis()
+        root.initialize_storage()
+        url = root.add_observable(F_URL, 'http://localhost:{}/test_data/crawlphish.000'.format(LOCAL_PORT))
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine()
+        engine.enable_module('analysis_module_crawlphish', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+        
+        root.load()
+        url = root.get_observable(url.id)
+        analysis = url.get_analysis(CrawlphishAnalysisV2)
+        self.assertFalse(analysis)
+
+        root = create_root_analysis()
+        root.initialize_storage()
+        url = root.add_observable(F_URL, 'http://localhost:{}/test_data/crawlphish.000'.format(LOCAL_PORT))
+        url.add_directive(DIRECTIVE_CRAWL)
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine()
+        engine.enable_module('analysis_module_crawlphish', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+        
+        root.load()
+        url = root.get_observable(url.id)
+        analysis = url.get_analysis(CrawlphishAnalysisV2)
+        self.assertTrue(isinstance(analysis, CrawlphishAnalysisV2))
+
+        root = create_root_analysis()
+        root.alert_type = ANALYSIS_TYPE_MANUAL
+        root.initialize_storage()
+        url = root.add_observable(F_URL, 'http://localhost:{}/test_data/crawlphish.000'.format(LOCAL_PORT))
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine()
+        engine.enable_module('analysis_module_crawlphish', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+        
+        root.load()
+        url = root.get_observable(url.id)
+        analysis = url.get_analysis(CrawlphishAnalysisV2)
+        self.assertTrue(isinstance(analysis, CrawlphishAnalysisV2))
+
+        saq.CONFIG['analysis_module_crawlphish']['auto_crawl_all_alert_urls'] = 'yes'
+        root = create_root_analysis()
+        root.analysis_mode = ANALYSIS_MODE_CORRELATION
+        root.initialize_storage()
+        url = root.add_observable(F_URL, 'http://localhost:{}/test_data/crawlphish.000'.format(LOCAL_PORT))
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine(local_analysis_modes=[ANALYSIS_MODE_CORRELATION])
+        engine.enable_module('analysis_module_crawlphish', 'correlation')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+        
+        root.load()
+        url = root.get_observable(url.id)
+        analysis = url.get_analysis(CrawlphishAnalysisV2)
+        self.assertTrue(isinstance(analysis, CrawlphishAnalysisV2))
+
     def test_basic_download(self):
         from saq.modules.url import CrawlphishAnalysisV2
 

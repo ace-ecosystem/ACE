@@ -3,6 +3,8 @@ from tests.saq.test_ldap import mock_ldap
 from saq.modules.user import EmailAddressAnalyzer, UserAnalyzer
 from saq.analysis import RootAnalysis
 from saq.constants import *
+import saq.settings
+from saq.settings.settings import *
 
 @pytest.mark.parametrize('email_address, query_filename_map, expected_user_observable', [
     ('"Doe, John" <john.doe@company.com>', {'(mail=john.doe@*)':'jdoe.json'}, 'jdoe'),
@@ -34,6 +36,23 @@ def test_email_address_analyzer(monkeypatch, datadir, email_address, query_filen
 def test_user_analyzer(monkeypatch, datadir, user, query_filename_map, expected_attributes, expected_tags):
     # mock ldap connection
     mock_ldap(monkeypatch, datadir, query_filename_map)
+
+    # add settings
+    saq.settings.load()
+    saq.settings.root.children['Active Directory'] = DictionarySetting(
+        key = 'Active Directory',
+        children = {
+            'Group Tags': DictionarySetting(
+                key = 'Group Tags',
+                children = {
+                    'hello': Setting(key='hello', _value='admin'),
+                    'world': Setting(key='world', _value='admin'),
+                    'bar': Setting(key='bar', _value='foo'),
+                },
+            ),
+        },
+    )
+    saq.db.commit()
 
     # run user analyzer on user
     observable = RootAnalysis().add_observable(F_USER, user)

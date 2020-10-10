@@ -35,6 +35,7 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.persistence import Persistable
 from saq.service import ACEService
+import saq.settings
 from saq.submission import Submission, SubmissionFilter
 from saq.util import create_directory, abs_path
 
@@ -255,6 +256,9 @@ class RemoteNodeGroup(object):
 
         # the directory that contains any files that to be transfered along with submissions
         self.incoming_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['incoming_dir'])
+        
+        # sync lock for assigning work to the threads
+        self.work_sync_lock = threading.RLock()
 
     def start(self):
         self.shutdown_event.clear()
@@ -479,7 +483,8 @@ WHERE
             params.append(self.batch_size)
 
             #logging.info(f"MARKER: {sql} {params}")
-            execute_with_retry(db, c, sql, tuple(params), commit=True)
+            with self.work_sync_lock:
+                execute_with_retry(db, c, sql, tuple(params), commit=True)
 
         # now we get the next things to submit from the database that have an analysis mode that is currently
         # available to be submitted to
@@ -1127,12 +1132,16 @@ LIMIT 100""", (self.workload_type_id,))
                 return
 
             try:
+                # refresh settings
+                saq.settings.load()
+
                 # delete expired persistent data every so often
                 if time.time() - self.persistent_clear_time > self.service_config.getint("persistence_clear_seconds", 60):
                     expiration_timedelta = timedelta(seconds=self.service_config.getint("persistence_expiration_seconds", 24*60*60))
                     unmodified_expiration_timedelta = timedelta(seconds=self.service_config.getint("persistence_unmodified_expiration_seconds", 4*60*60))
                     self.delete_expired_persistent_keys(expiration_timedelta, unmodified_expiration_timedelta)
                     self.persistent_clear_time = time.time()
+
                 wait_seconds = target()
                 if wait_seconds is None:
                     wait_seconds = 1
@@ -1172,46 +1181,3 @@ def parse_schedule(schedule):
         return { "interval": True, "value": int(schedule[2:]) }
     else:
         return { "interval": False, "value": int(schedule) }
-
-class ScheduledCollector(Collector):
-    def __init__(self, schedule_string="* * * * *", *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.schedule = [parse_schedule(p) for p in schedule_string.split(" ")]
-        self.last_executed_at = None
-
-    def should_execute(self):
-        # get current date and time
-        now = datetime.now()
-
-        # return false if same minute as last time
-        if self.last_executed_at is not None  and (now - self.last_executed_at).total_seconds() < 60 and now.minute == self.last_executed_at.minute:
-            return False
-
-        # create a handy structure
-        crontime = [now.minute, now.hour, now.day, now.month, now.weekday()]
-
-        # check if we should execute
-        for i in range(5):
-            if self.schedule[i]['interval']:
-                if crontime[i] % self.schedule[i]['value'] != 0:
-                    return False
-            elif crontime[i] != self.schedule[i]['value']:
-                return False
-        return True
-
-    def execute_in_loop(self, target):
-        while True:
-            if self.is_service_shutdown:
-                return
-
-            try:
-                if self.should_execute():
-                    target()
-                    self.last_executed_at = datetime.now()
-            except NotImplementedError:
-                return
-            except Exception as e:
-                logging.error(f"unable to execute {target}: {e}")
-                report_exception()
-
-            self.service_shutdown_event.wait(1)

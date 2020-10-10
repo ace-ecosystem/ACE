@@ -178,15 +178,4 @@ class TestGraphAPI(unittest.TestCase):
         response, message = get_mime_content_by_o365_id(self.graph_api, 'test@test.local', '<nothing@nothing.local>', request_func=request_func)
         self.assertEqual('expected', response)
         self.assertEqual(RESULT_MESSAGE_FOUND, message)
-    
-    @unittest.skip("invalid test - FIXME")
-    def test_get_security_alerts_success(self):
-        class Stub:
-            def __init__(self, url, **kwargs):
-                self.url = url
-                self.status_code = 200
-                self.text = 'expected'
-        def request_func(url, **kwargs):
-            return Stub(url)
-        response = get_security_alerts(self.graph_api, request_func=request_func)
-        self.assertEqual('expected', response)
+

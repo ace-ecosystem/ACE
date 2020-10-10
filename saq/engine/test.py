@@ -1685,6 +1685,56 @@ class TestCase(ACEEngineTestCase):
         shutil.rmtree(dir_path)
         os.remove(file_path)
 
+    def test_file_error_reporting(self):
+        saq.CONFIG['service_engine']['copy_file_on_error'] = 'yes'
+
+        # remember what was already in the error reporting directory
+        def _enum_error_reporting():
+            return set(os.listdir(os.path.join(saq.DATA_DIR, 'error_reports')))
+
+        self.assertTrue(len(_enum_error_reporting()) == 0)
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()), analysis_mode='test_groups')
+        root.initialize_storage()
+        target_path = os.path.join(root.storage_dir, 'test.txt')
+        with open(target_path, 'w') as fp:
+            fp.write('Hello, world!')
+
+        observable = root.add_observable(F_FILE, 'test.txt')
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_basic_test')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # we should have a single error report and a single storage directory in the error reporting directory
+        error_reports = _enum_error_reporting()
+        self.assertEquals(len(error_reports), 2)
+
+        # one should be a file and the other a directory
+        file_path = None
+        dir_path = None
+        for _file in error_reports:
+            path = os.path.join(os.path.join(saq.DATA_DIR, 'error_reports', _file))
+            if os.path.isfile(path):
+                file_path = path
+            if os.path.isdir(path):
+                dir_path = path
+
+        self.assertIsNotNone(file_path)
+        self.assertIsNotNone(dir_path)
+
+        # check that everything we expect to exist in the dir exists
+        with open(os.path.join(dir_path, 'test.txt'), 'r') as fp:
+            self.assertTrue(fp.read() == 'Hello, world!')
+
+        # go ahead and remove these since we check for them after running tests to review actual error reports
+        shutil.rmtree(dir_path)
+        os.remove(file_path)
+
     def test_stats(self):
         # clear engine statistics
         if os.path.exists(os.path.join(saq.MODULE_STATS_DIR, 'ace')):

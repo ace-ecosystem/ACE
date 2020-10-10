@@ -32,6 +32,9 @@
                         <th></th>
                         <th><span id='sort_by_date' style="cursor:pointer">Date{% if sort_by == "date" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
                         <th><span id='sort_by_event' style="cursor:pointer">Event{% if sort_by == "event" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
+                        {% if tip.name %}
+                            <th><span id="tip_name" style="cursor:pointer">TIP</span></th>
+                        {% endif %}
                         <th><span>Threat Type</span></th>
                         <th><span>Threat Name</span></th>
                         <th><span id='sort_by_risk_level' style="cursor:pointer">Risk Level{% if sort_by == "risk_level" %}{% if sort_dir %}&darr;{% else %}&uarr;{% endif %}{% endif %}</span></th>
@@ -49,6 +52,9 @@
                         <td class="event-cell"><button onclick="edit_event('{{event.id}}')" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-pencil"></span></button></td>
                         <td class="event-cell">{{event.creation_date}}</td>
                         <td class="event-cell">{{event.type}} - {{event.vector}} - <a target="_blank" href="{{url_for('events.index', direct=event.id)}}">{{event.name}}</a>{% if event.wiki %} | <a href="{{ event.wiki }}" target="_blank">Wiki</a>{% endif %}</td>
+                        {% if tip.name and tip.event_url(event.uuid) %}
+                            <td><a href="{{ tip.event_url(event.uuid) }}" target="_blank">{{ tip.name }}</a></td>
+                        {% endif %}
                         <td>
                             {% for t in event.threats %}
                             <span class="label label-default">{{t}}</span>
@@ -86,7 +92,7 @@
             <div class="modal-body">
                 <div class="row">
                     <div class="col-xs-12"><input type="checkbox" name="filter_event_open" {{filter_state['filter_event_open']}}> Open Events</div>
-                    <div class="col-xs-12"><input type="checkbox" name="filter_event_completed" {{filter_state['filter_event_completed']}}> Completed Events</div>
+                    <div class="col-xs-12"><input type="checkbox" name="filter_event_internal_collection" {{filter_state['filter_event_internal_collection']}}> Internal Collection Events</div>
                 </div>
                 <table style="width:100%;table-layout:auto;">
                     <tr>

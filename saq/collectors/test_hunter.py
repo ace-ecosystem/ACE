@@ -7,6 +7,7 @@ import tempfile
 import threading
 
 import saq
+from saq.submission import Submission
 from saq.collectors.hunter import HunterCollector, HuntManager, Hunt, open_hunt_db
 from saq.collectors.test import CollectorBaseTestCase
 from saq.constants import *
@@ -22,6 +23,12 @@ class TestHunt(Hunt):
     def execute(self):
         logging.info(f"unit test execute marker: {self}")
         self.executed = True
+        return [ Submission(
+            description='test',
+            analysis_mode=ANALYSIS_MODE_CORRELATION,
+            tool='test_tool',
+            tool_instance='test_tool_instance',
+            type='test_type') ]
 
     def cancel(self):
         pass
@@ -388,3 +395,56 @@ tags = tag1, tag2""")
         hunter.load_hunts_from_config()
         self.assertEquals(len(hunter.hunts), 0)
         self.assertEquals(len(hunter.failed_ini_files), 1)
+
+    def test_hunt_suppression(self):
+        self.clear_temp_rules_dir()
+        with open(os.path.join(self.temp_rules_dir, 'test_1.ini'), 'a') as fp:
+            fp.write("""
+[rule]
+enabled = yes
+name = unit_test_1
+description = Unit Test Description 1
+type = test
+alert_type = test - alert
+frequency = 00:00:01
+suppression = 00:01:00
+tags = tag1, tag2""")
+
+        hunter = HuntManager(**self.manager_kwargs())
+        hunter.load_hunts_from_config()
+        self.assertEquals(len(hunter.hunts), 1)
+        self.assertTrue(isinstance(hunter.hunts[0], TestHunt))
+        self.assertIsNotNone(hunter.hunts[0].suppression)
+
+        hunter.execute()
+        hunter.manager_control_event.set()
+        hunter.wait_control_event.set()
+        hunter.wait()
+        self.assertTrue(hunter.hunts[0].executed)
+        # should have set suppression
+        self.assertIsNotNone(hunter.hunts[0].suppression_end)
+
+        # clear the flags that say this executed
+        hunter.hunts[0].executed = False
+        hunter.hunts[0]._last_executed_time = None
+        hunter.manager_control_event.clear()
+        hunter.wait_control_event.clear()
+        hunter.execute()
+        hunter.manager_control_event.set()
+        hunter.wait_control_event.set()
+        hunter.wait()
+        # it should not have executed again because it is suppressed
+        self.assertFalse(hunter.hunts[0].executed)
+
+        # set the suppression end time to now and clear the flags again
+        hunter.hunts[0].suppression_end = datetime.datetime.now()
+        hunter.hunts[0]._last_executed_time = None
+        hunter.manager_control_event.clear()
+        hunter.wait_control_event.clear()
+        hunter.execute()
+        hunter.manager_control_event.set()
+        hunter.wait_control_event.set()
+        hunter.wait()
+        # now it should have executed again, and be suppressed again
+        self.assertTrue(hunter.hunts[0].executed)
+        self.assertIsNotNone(hunter.hunts[0].suppression_end)

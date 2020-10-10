@@ -26,7 +26,10 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.performance import track_execution_time
 from saq.util import abs_path, validate_uuid, create_timedelta, find_all_url_domains
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, class_mapper
+from sqlalchemy.orm.collections import attribute_mapped_collection
+from sqlalchemy.schema import UniqueConstraint
+
 
 import pytz
 import businesstime
@@ -395,7 +398,8 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
 DatabaseSession = None
-Base = declarative_base()
+from .meta import Base
+from saq.settings.settings import *
 
 # if target is an executable, then *args is to session.execute function
 # if target is a callable, then *args is to the callable function (whatever that is)
@@ -494,6 +498,7 @@ class Config(Base):
     key = Column(String(512), primary_key=True)
     value = Column(Text, nullable=False)
 
+
 class User(UserMixin, Base):
 
     __tablename__ = 'users'
@@ -553,7 +558,7 @@ class Event(Base):
     uuid = Column(String(36), unique=True, nullable=False, default=generate_uuid)
     creation_date = Column(DATE, nullable=False)
     name = Column(String(128), nullable=False)
-    status = Column(Enum('OPEN','CLOSED','IGNORE','COMPLETED'), nullable=False)
+    status = Column(Enum('OPEN','CLOSED','IGNORE','INTERNAL COLLECTION'), nullable=False)
     remediation = Column(Enum('not remediated','cleaned with antivirus','cleaned manually','reimaged','credentials reset','removed from mailbox','network block','NA'), nullable=False)
     comment = Column(Text)
     vector = Column(Enum('corporate email','webmail','usb','website','unknown'), nullable=False)
@@ -685,6 +690,42 @@ class Event(Base):
     @property
     def alert_with_email_and_screenshot(self) -> 'saq.database.Alert':
         return next((a for a in self.alert_objects if a.has_email_analysis and a.has_renderer_screenshot), None)
+
+    @property
+    def all_sandbox_reports(self) -> List[dict]:
+        from saq.modules.falcon_sandbox import FalconSandboxAnalysis
+        from saq.modules.sandbox import merge_sandbox_reports
+        from saq.modules.wildfire import WildfireAnalysis
+
+        # Build a dict of the sandbox reports with the sample's MD5 as the key:
+        # {'sample_md5': [{sandbox1_report}, {sandbox2_report}...]}
+        sandbox_reports = {}
+
+        for alert in self.alert_objects:
+            alert_sandbox_analyses = set()
+
+            falcon_observables = alert.find_observables(lambda o: o.get_analysis(FalconSandboxAnalysis))
+            alert_sandbox_analyses |= {o.get_analysis(FalconSandboxAnalysis) for o in falcon_observables}
+
+            wildfire_observables = alert.find_observables(lambda o: o.get_analysis(WildfireAnalysis))
+            alert_sandbox_analyses |= {o.get_analysis(WildfireAnalysis) for o in wildfire_observables}
+
+            for analysis in alert_sandbox_analyses:
+                if hasattr(analysis, 'report') and analysis.report:
+                    if analysis.report['md5']:
+                        if analysis.report['md5'] not in sandbox_reports:
+                            sandbox_reports[analysis.report['md5']] = []
+
+                        if analysis.report not in sandbox_reports[analysis.report['md5']]:
+                            sandbox_reports[analysis.report['md5']].append(analysis.report)
+
+        # Now merge all of the sandbox reports in each MD5's list:
+        # [{merged_sandbox_report}, {merged2_sandbox_report}...]
+        merged_sandbox_reports = []
+        for sample_md5 in sandbox_reports:
+            merged_sandbox_reports.append(merge_sandbox_reports(sandbox_reports[sample_md5]))
+
+        return merged_sandbox_reports
 
     @property
     def all_emails(self) -> Set['saq.modules.email.EmailAnalysis']:
@@ -1245,7 +1286,10 @@ class Alert(RootAnalysis, Base):
             saq.constants.DISPOSITION_EXFIL,
             saq.constants.DISPOSITION_DAMAGE,
             saq.constants.DISPOSITION_INSIDER_DATA_CONTROL,
-            saq.constants.DISPOSITION_INSIDER_DATA_EXFIL),
+            saq.constants.DISPOSITION_INSIDER_DATA_EXFIL,
+            saq.constants.DISPOSITION_APPROVED_BUSINESS,
+            saq.constants.DISPOSITION_APPROVED_PERSONAL,
+        ),
         nullable=True)
 
     queue = Column(

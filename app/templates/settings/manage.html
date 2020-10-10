@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}
+
+{% block control_panel %}
+<div class="container-fluid" style="margin-bottom:7px;">
+    <div class="row">
+        <div class="col-md-12">
+            <button type="button" class="btn btn-default btn-sm" onclick="window.open('{{url_for('settings.export')}}')"><span class="glyphicon glyphicon-export"></span> Export</button>
+            {% if import_enabled %}
+            <button type="button" class="btn btn-default btn-sm" onclick="import_settings()"><span class="glyphicon glyphicon-import"></span> Import</button>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% macro display_setting(setting, tab) %}
+    <table class='table table-hover table-condensed' style='padding:0px;margin:0px;'>
+        <tr onclick='toggle("{{setting.id}}")'>
+            <td width='{{tab}}'></td>
+            <td width='25' height='25'>
+                {% if setting.collapsible %}
+                    <span id='setting_chevron_{{setting.id}}' class="glyphicon glyphicon-chevron-right"></span>
+                {% endif %}
+            </td>
+            <td width='{{400 - tab}}' style="word-wrap: break-word">
+                {{setting.key|e}}
+            </td>
+            <td style="word-wrap: break-word">
+                {% if setting.editable %}
+                    <form id='setting_value_form_{{setting.id}}' onsubmit="save_setting_value(this, {{setting.id}}, '{{setting.key}}', '#setting_value_{{setting.id}}'); return false;">
+                    {% if setting.options is not none %}
+                        <select
+                            title="{{setting.type}} - {{setting.tooltip}}"
+                            class="form-control input-sm"
+                            id='setting_value_{{setting.id}}'
+                            onchange="check('#setting_value_form_{{setting.id}}')"
+                        >
+                            {% for option in setting.options %}
+                            <option value='{{option}}' {% if setting.value == option %}SELECTED{% endif %}>{{option}}</option>
+                            {% endfor %}
+                        </select>
+                    {% else %}
+                        <input
+                            title="{{setting.type}} - {{setting.tooltip}}"
+                            type="text"
+                            class='form-control input-sm'
+                            value="{{setting.value}}"
+                            id='setting_value_{{setting.id}}'
+                            onchange="check('#setting_value_form_{{setting.id}}')"
+                            required
+                            {% if setting.pattern is not none %}
+                            pattern="{{setting.pattern}}"
+                            {% endif %}
+                        />
+                    {% endif %}
+                    <button type="submit" style='display: none;'></button>
+                    </form>
+                {% endif %}
+            </td>
+            <td width='40' align='right'>
+                {% if setting.parent.appendable %}
+                    <button type='button' class='btn btn-default btn-xs' onclick="remove_setting(event, {{setting.id}}, '{{setting.key}}')">
+                        <span class="glyphicon glyphicon-trash"></span>
+                    </button>
+                {% endif %}
+                {% if setting.appendable %}
+                    <button type="button" class="btn btn-default btn-xs" onclick="add_setting(event, {{setting.id}})">
+                        <span class="glyphicon glyphicon-plus"></span>
+                    </button>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+    <div width='100%' id='setting_children_{{setting.id}}' style='display: none;'>
+        {% for key in setting.children %}
+            {{ display_setting(setting.children[key], tab + 30) }}
+        {% endfor %}
+    </div>
+{% endmacro %}
+
+{% block page_content %}
+<div class="container-fluid">
+    {% for key in root_setting.children %}
+        {{ display_setting(root_setting.children[key], 1) }}
+    {% endfor %}
+</div>
+
+<div class="modal fade" id="setting_modal" tabindex="-1" role="dialog" aria-hidden="true">
+    <form onsubmit="save_setting(); return false;">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="word-break: break-word">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                <h4 class="modal-title">Setting</h4>
+            </div>
+            <div class="modal-body" style="word-wrap: break-word" id='setting_modal_body'>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+    </form>
+</div>
+{% endblock %}

@@ -30,7 +30,7 @@
       <td>
         <select class="form-control" name="event_status" id="event_status">
           <option value="OPEN" {% if event.status == "OPEN" %}SELECTED{% endif %}>OPEN</option>
-          <option value="COMPLETED" {% if event.status == "COMPLETED" %}SELECTED{% endif %}>COMPLETED</option>
+          <option value="INTERNAL COLLECTION" {% if event.status == "INTERNAL COLLECTION" %}SELECTED{% endif %}>INTERNAL COLLECTION</option>
           <option value="CLOSED" {% if event.status == "CLOSED" %}SELECTED{% endif %}>CLOSED</option>
           <option value="IGNORE" {% if event.status == "IGNORE" %}SELECTED{% endif %}>IGNORE</option>
         </select>

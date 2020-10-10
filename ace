@@ -2775,6 +2775,16 @@ update_sip_cache_parser = subparsers.add_parser('update-sip-cache',
     help="Updates the local SIP cache used by the analysis modules.")
 update_sip_cache_parser.set_defaults(func=update_sip_cache)
 
+def update_tip_cache(args):
+    from saq.tip import tip_factory
+    tip = tip_factory()
+    tip._build_cache()
+    sys.exit(0)
+
+update_tip_cache_parser = subparsers.add_parser('update-tip-cache',
+    help="Updates the local TIP cache used by the analysis modules.")
+update_tip_cache_parser.set_defaults(func=update_tip_cache)
+
 def export_sip_yara_rules(args):
 
     import yara
@@ -3536,36 +3546,47 @@ test_encryption_password_parser.set_defaults(func=test_encryption_password)
 
 def encrypt_file(args):
     from saq.crypto import encrypt
-    encrypt(args.source_path, args.target_path)
-    sys.exit(0)
 
-encrypt_file_parser = subparsers.add_parser('encrypt-file',
-    help="Encrypts the given file with the password set with set-encryption-password.")
-encrypt_file_parser.add_argument('source_path', help="The file to encrypt from.")
-encrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
-encrypt_file_parser.set_defaults(func=encrypt_file)
+    password = None
+    if args.password:
+        password = args.password
+    elif args.prompt:
+        password = getpass.getpass("enter encryption password: ")
+        verify = getpass.getpass("verify encryption password: ")
+        if password != verify:
+            print("passwords do not match")
+            sys.exit(1)
+
+    encrypt(args.source_path, args.target_path, password=password)
+    sys.exit(0)
 
 encrypt_file_parser = encryption_sp.add_parser('encrypt',
     help="Encrypts the given file with the password set with set-encryption-password.")
 encrypt_file_parser.add_argument('source_path', help="The file to encrypt from.")
 encrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
+encrypt_file_parser.add_argument('--password', help="Use the given password to encrypt the file.")
+encrypt_file_parser.add_argument('--prompt', action='store_true', default=False, 
+    help="Prompt for the password to use to encrypt the file.")
 encrypt_file_parser.set_defaults(func=encrypt_file)
 
 def decrypt_file(args):
     from saq.crypto import decrypt
-    decrypt(args.source_path, args.target_path)
-    sys.exit(0)
 
-decrypt_file_parser = subparsers.add_parser('decrypt-file',
-    help="Decrypts the given file with the password set with set-decryption-password.")
-decrypt_file_parser.add_argument('source_path', help="The file to decrypt from.")
-decrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
-decrypt_file_parser.set_defaults(func=decrypt_file)
+    password = None
+    if args.password:
+        password = args.password
+    elif args.prompt:
+        password = getpass.getpass("enter decryption password: ")
+
+    decrypt(args.source_path, args.target_path, password=password)
+    sys.exit(0)
 
 decrypt_file_parser = encryption_sp.add_parser('decrypt',
     help="Decrypts the given file with the password set with set-decryption-password.")
 decrypt_file_parser.add_argument('source_path', help="The file to decrypt from.")
 decrypt_file_parser.add_argument('target_path', help="The file to saved the decrypted data to.")
+decrypt_file_parser.add_argument('--password', help="Use the given password to decrypt the file.")
+decrypt_file_parser.add_argument('--prompt', help="Prompt for the password to use to decrypt the file.")
 decrypt_file_parser.set_defaults(func=decrypt_file)
 
 config_encryption_parser = encryption_sp.add_parser('config',
