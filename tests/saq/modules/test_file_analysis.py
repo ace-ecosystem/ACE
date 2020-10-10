@@ -1,3 +1,4 @@
+import os, os.path
 import time
 
 import pytest
@@ -82,6 +83,9 @@ class TestUrlExtraction:
     @pytest.mark.parametrize('test_file', ['sample_plain', 'sample_html', 'sample_xml', 'sample_dat', 'sample_rfc822', 'sample_rfc822_plaintext_body'])
     @pytest.mark.unit
     def test_execute_analysis(self, monkeypatch, datadir, test_file, tip_misp):
+        if not os.path.exists(datadir / test_file):
+            pytest.skip(f"{datadir / test_file} does not exist -- skipping")
+
         url_extraction_analysis = MockAnalysis()
 
         def mock_analysis_module(*args, **kwargs):
