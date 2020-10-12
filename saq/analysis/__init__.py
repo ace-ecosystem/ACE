@@ -3284,8 +3284,9 @@ class RootAnalysis(Analysis):
 
         try:
             with open(self.json_path, 'r') as fp:
-                self.json = json.load(fp)
+                json_str = fp.read()
 
+            self.json = json.loads(json_str)
             _track_reads()
 
             # translate the json into runtime objects
