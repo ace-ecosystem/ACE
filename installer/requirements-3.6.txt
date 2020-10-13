@@ -30,6 +30,7 @@ msoffice_decrypt
 olefile
 oletools
 openpyxl
+pandas==1.1.1
 pcodedmp
 pip
 plyara
@@ -71,6 +72,7 @@ fastapi
 selenium
 docker
 redis
+tabulate
 fakeredis
 distorm3
 requests-mock
