@@ -11,8 +11,9 @@ import csv
 from datetime import datetime
 
 import saq
+import saq.ldap
 from saq.analysis import Analysis, Observable
-from saq.modules import AnalysisModule, LDAPAnalysisModule, CarbonBlackAnalysisModule
+from saq.modules import AnalysisModule, CarbonBlackAnalysisModule
 from saq.constants import *
 
 import iptools
@@ -550,7 +551,7 @@ class ActiveDirectoryAnalysis(Analysis):
 
         return result
 
-class ActiveDirectoryAnalyzer(LDAPAnalysisModule):
+class ActiveDirectoryAnalyzer(AnalysisModule):
     
     @property
     def generated_analysis_type(self):
@@ -561,8 +562,7 @@ class ActiveDirectoryAnalyzer(LDAPAnalysisModule):
         return F_HOSTNAME
 
     def execute_analysis(self, hostname):
-
-        details = self.ldap_query_hostname(hostname.value)
+        details = saq.ldap.lookup_hostname(hostname.value)
         if details is None:
             logging.debug("no result received from ldap query for {}".format(hostname.value))
             return False
@@ -581,9 +581,6 @@ class ActiveDirectoryAnalyzer(LDAPAnalysisModule):
                 analysis.add_observable(F_USER, user)
 
         return True
-
-    def ldap_query_hostname(self, hostname):
-        return self.ldap_query("cn={}".format(hostname))
 
 class CarbonBlackAssetIdentAnalysis(Analysis):
     """What hosts have this IP address according to Carbon Black?"""

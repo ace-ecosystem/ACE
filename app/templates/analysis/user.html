@@ -24,6 +24,12 @@
             <td class="col-md-10">{{analysis.jinja_details['ldap']['department']}}</td>
         </tr>
         {% endif %}
+        {% if 'division' in analysis.jinja_details['ldap'] %}
+        <tr>
+            <td class="col-md-2">Division</td>
+            <td class="col-md-10">{{analysis.jinja_details['ldap']['division']}}</td>
+        </tr>
+        {% endif %}
         {% if 'wWWHomePage' in analysis.jinja_details['ldap'] %}
         <tr>
             <td class="col-md-2">Group</td>

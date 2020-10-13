@@ -1,0 +1,65 @@
+{
+    "body": {
+        "incidents": [
+            {
+                "activityNames": [
+                    "Modified"
+                ],
+                "actorId": "jdoe@company.com",
+                "actorIdType": "USER",
+                "incidentGroup": "Alert.Policy.Dlp",
+                "incidentGroupId": null,
+                "incidentId": "DLP-59882",
+                "incidentRiskScore": 10.0,
+                "incidentRiskSeverity": "high",
+                "information": {
+                    "collaborationSharedLink": false,
+                    "contentItemCreatedOn": "2020-05-15T16:00:30.000Z",
+                    "contentItemHierarchy": "/personal/jdoe_company_com/Documents",
+                    "contentItemId": "/personal/jdoe_company_com:/personal/jdoe_company_com/Documents/test.xlsx:94a7d7aa-5728-4f0d-8510-f899570df7c7:4",
+                    "contentItemName": "test.xlsx",
+                    "contentItemParent": "Documents",
+                    "contentItemSize": 133187,
+                    "contentItemType": "FILE",
+                    "device": {
+                        "ip": "0.0.0.0"
+                    },
+                    "eventId": "31188",
+                    "externalCollaborators": [],
+                    "externalCollaboratorsCount": 0,
+                    "matchLocations": [
+                        "test.xlsx"
+                    ],
+                    "policyId": 373100,
+                    "policyName": "OneDrive Detection - Targeted Account Numbers",
+                    "source": "API",
+                    "totalMatchCount": 1497,
+                    "userAttributes": {}
+                },
+                "instanceId": 12892,
+                "instanceName": "CompanyProd ODO",
+                "responses": [
+                    "Allowed"
+                ],
+                "serviceNames": [
+                    "OneDrive"
+                ],
+                "significantlyUpdatedAt": "2020-08-15T16:03:17.919Z",
+                "status": "new",
+                "timeCreated": "2020-08-15T16:02:57.359Z",
+                "timeModified": "2020-08-15T16:03:17.919Z"
+            }
+        ],
+        "responseInfo": {
+            "actualLimit": 100,
+            "apiElapsedMillis": 3776,
+            "error": null,
+            "nextOffset": null,
+            "nextStartTime": "2020-08-17T03:55:43.494Z",
+            "source": "company.com"
+        }
+    },
+    "headers": {},
+    "statusCode": "OK",
+    "statusCodeValue": 200
+}

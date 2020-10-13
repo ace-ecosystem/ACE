@@ -9,7 +9,7 @@ import logging
 import os, os.path
 
 import saq
-from saq.splunk import SplunkQueryObject
+from saq.splunk import extract_event_timestamp, SplunkQueryObject
 from saq.collectors.query_hunter import QueryHunt
 from saq.util import *
 
@@ -38,23 +38,7 @@ class SplunkHunt(QueryHunt):
         self.namespace_app = '-'
 
     def extract_event_timestamp(self, event):
-        if '_time' not in event:
-            logging.warning(f"splunk event missing _time field for {self}")
-            return local_time()
-
-        m = re.match(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})\.[0-9]{3}[-+][0-9]{2}:[0-9]{2}$', event['_time'])
-        if not m:
-            logging.error(f"_time field does not match expected format: {event['_time']} for {self}")
-            return local_time()
-        else:
-            # reformat this time for ACE
-            return datetime.datetime.strptime('{0}-{1}-{2} {3}:{4}:{5}'.format(
-                m.group(1),
-                m.group(2),
-                m.group(3),
-                m.group(4),
-                m.group(5),
-                m.group(6)), '%Y-%m-%d %H:%M:%S')
+        return extract_event_timestamp(self, event)
 
     def formatted_query(self):
         return self.query.replace('{time_spec}', self.time_spec)

@@ -86,7 +86,7 @@ def test_post_job_already_exists(client):
     response2 = client.post(ENDPOINT, json=VALID_POST)
     
     # Verify
-    assert response2.status_code == status.HTTP_409_CONFLICT
+    assert response2.status_code == status.HTTP_200_OK
 
 @pytest.mark.unit
 def test_post_job_valid(client):
@@ -119,28 +119,6 @@ def test_get_job(client):
     
     # Verify
     assert response2.status_code == status.HTTP_202_ACCEPTED
-
-# DELETE
-@pytest.mark.unit
-def test_delete_job_doesnt_exist(client):
-    
-    # Execute
-    response = client.delete(ENDPOINT + INVALID_UUID)
-    
-    # Verify
-    assert response.status_code == status.HTTP_200_OK
-
-@pytest.mark.unit
-def test_delete_job(client):
-    # Setup
-    response1 = client.post(ENDPOINT, json=VALID_POST)
-    job_id = response1.json()["id"]
-
-    # Execute
-    response2 = client.delete(ENDPOINT + job_id)
-    
-    # Verify
-    assert response2.status_code == status.HTTP_200_OK
 
 @pytest.mark.integration
 def test_controller_redis_integration(redis_server, redis_client, controller_container, printer):

@@ -549,31 +549,30 @@ ORDER BY
                     logging.info("{} got submission result {} for {}".format(self, submission_result, submission))
                     submission_success = True
                 except Exception as e:
-                    log_function = logging.warning
+                    log_function = logging.error
                     if not self.full_delivery:
                         log_function = logging.warning
                     else:
                         if not isinstance(e, urllib3.exceptions.MaxRetryError) \
-                        and not isinstance(e, urllib3.exceptions.NewConnectionError) \
-                        and not isinstance(e, requests.exceptions.ConnectionError):
+                                and not isinstance(e, urllib3.exceptions.NewConnectionError) \
+                                and not isinstance(e, requests.exceptions.ConnectionError):
                             # if it's not a connection issue then report it
-                            #report_exception()
-                            pass
+                            report_exception()
 
                     log_function("unable to submit work item {} to {} via group {}: {}".format(
-                                 submission, target, self, e))
+                            submission, target, self, e))
 
                     # if we are in full delivery mode then we need to try this one again later
                     if self.full_delivery and (isinstance(e, urllib3.exceptions.MaxRetryError) \
-                                          or isinstance(e, urllib3.exceptions.NewConnectionError) \
-                                          or isinstance(e, requests.exceptions.ConnectionError)):
+                                               or isinstance(e, urllib3.exceptions.NewConnectionError) \
+                                               or isinstance(e, requests.exceptions.ConnectionError)):
                         continue
 
                     # otherwise we consider it a failure
                     submission_failed = True
                     execute_with_retry(db, c, """UPDATE work_distribution SET status = 'ERROR' 
                                                  WHERE group_id = %s AND work_id = %s""",
-                                      (self.group_id, work_id), commit=True)
+                                       (self.group_id, work_id), commit=True)
             
             # if we skipped it or we sent it, then we're done with it
             if not submission_failed:

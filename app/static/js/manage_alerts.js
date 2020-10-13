@@ -72,6 +72,33 @@ $(document).ready(function() {
         }
     });
 
+    $("#btn-save-to-event").click(function(e) {
+        let all_alert_uuids = get_all_checked_alerts();
+        if (all_alert_uuids.length > 0) {
+            $("#event-form").append('<input type="hidden" name="alert_uuids" value="' + all_alert_uuids.join(",") + '" />');
+            $("#event_disposition").val($("input[name='disposition']:checked").val());
+        }
+
+        let comment_value = $("textarea[name='comment']").val()
+
+        if(comment_value !== "") {
+            $.ajax({
+                dataType: "html",
+                type: "post",
+                url: 'add_comment',
+                traditional: true,
+                data: {
+                    uuids: all_alert_uuids.join(","),
+                    comment: comment_value,
+                    redirect: ''
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    alert(jqXHR.responseText);
+                }
+            });
+        }
+    });
+
     $("#btn-realHours").click(function(e) {
         $("#frm-sla_hours").append('<input type="hidden" name="SLA_real-hours" value="1">').submit();
     });
@@ -182,35 +209,6 @@ $(document).ready(function() {
 
         // add a hidden field to the form and then submit
         $("#assign-ownership-form").append('<input type="hidden" name="alert_uuids" value="' + all_alert_uuids.join(",") + '" />').submit();
-    });
-
-    $("#btn-remediate-alerts").click(function(e) {
-        var all_alert_uuids = get_all_checked_alerts();
-        var message_ids = null;
-
-        if (all_alert_uuids.length == 0 ) {
-            // just prompt for the message_id
-            var message_id = prompt("Enter a message_id to remediate.");
-            if (message_id.length == 0) 
-                return;
-
-            message_ids = [message_id];
-            all_alert_uuids = null;
-        }
-
-        remediate_emails(all_alert_uuids, message_ids);
-    });
-
-    $('#btn-mass-remediation').click(function(e) {
-        var all_alert_uuids = get_all_checked_alerts();
-        var message_ids = null;
-
-        if (all_alert_uuids.length == 0 ) {
-            alert("You need to select some alerts first. And THEN click this button. lol.")
-            return;
-        } else {
-            remediation_selection(all_alert_uuids, null);
-        }
     });
 
     $('#btn-limit').click(function(e) {

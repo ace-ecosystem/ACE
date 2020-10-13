@@ -1,5 +1,3 @@
-# vim: sw=4:ts=4:et:cc=120
-
 import base64
 import hashlib
 import io
@@ -9,9 +7,11 @@ import os.path
 import pickle
 import re
 import unicodedata
+import html
 
 from subprocess import Popen, PIPE
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+from urlfinderlib import is_url
 
 import saq
 from saq.analysis import Observable, DetectionPoint
@@ -22,8 +22,8 @@ from saq.gui import *
 from saq.integration import integration_enabled
 from saq.intel import query_sip_indicator
 from saq.remediation import RemediationTarget
-from saq.remediation.constants import *
-from saq.remediation.mail import create_email_remediation_key
+from saq.database import Remediation, get_db_connection
+
 from saq.util import is_subdomain
 
 import iptools
@@ -220,11 +220,9 @@ class URLObservable(Observable):
                                              'drive.google.com', '.sharepoint.com']):
             self.sanitize_protected_urls()
 
-        try:
-            # sometimes URL extraction pulls out invalid URLs
-            self.value.encode('ascii') # valid URLs are ASCII
-        except UnicodeEncodeError as e:
-            raise ObservableValueError("invalid URL {}: {}".format(self.value.encode('unicode_escape'), e))
+        # Use urlfinderlib to make sure this is a valid URL before creating the observable
+        if not is_url(self.value):
+            raise ObservableValueError("invalid URL {}".format(self.value))
 
     @property
     def sha256(self):
@@ -704,7 +702,7 @@ class EmailAddressObservable(CaselessObservable):
         result.extend(super().jinja_available_actions)
         return result
 
-class EmailDeliveryObservable(CaselessObservable, RemediationTarget):
+class EmailDeliveryObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_DELIVERY, *args, **kwargs)
         self.value = self.value.strip()
@@ -713,22 +711,21 @@ class EmailDeliveryObservable(CaselessObservable, RemediationTarget):
         self.value = create_email_delivery(self.message_id, self.email_address)
 
     @property
-    def jinja_available_actions(self):
-        result = [ ObservableActionRemediate(), ObservableActionRestore(), ObservableActionSeparator() ]
-        result.extend(super().jinja_available_actions)
-        return result
-
-    @property
     def jinja_template_path(self):
         return "analysis/email_delivery_observable.html"
 
     @property
-    def remediation_type(self):
-        return REMEDIATION_TYPE_EMAIL
+    def remediation_targets(self):
+        return [RemediationTarget('email', self.value)]
+
+class EmailSubjectObservable(Observable):
+    def __init__(self, *args, **kwargs):
+        super().__init__(F_EMAIL_SUBJECT, *args, **kwargs)
+        self.value = self.value.strip()
 
     @property
-    def remediation_key(self):
-        return create_email_remediation_key(self.message_id, self.email_address)
+    def jinja_available_actions(self):
+        return []
 
 class YaraRuleObservable(Observable):
     def __init__(self, *args, **kwargs):
@@ -850,6 +847,14 @@ class SnortSignatureObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SNORT_SIGNATURE, *args, **kwargs)
         self.value = self.value.strip()
+        self.signature_id = None
+        self.rev = None
+
+        _ = self.value.split(':')
+        if len(_) == 3:
+            _, self.signature_id, self.rev = _
+        else:
+            logging.warning(f"unexpected snort/suricata signature format: {self.value}")
 
 class MessageIDObservable(Observable):
     def __init__(self, *args, **kwargs):
@@ -858,10 +863,34 @@ class MessageIDObservable(Observable):
         self.value = normalize_message_id(self.value)
 
     @property
-    def jinja_available_actions(self):
-        result = [ ObservableActionRemediateEmail(), ObservableActionSeparator() ]
-        result.extend(super().jinja_available_actions)
-        return result
+    def remediation_targets(self):
+        message_id = html.unescape(self.value)
+
+        # create targets from recipients of message_id in email archive
+        targets = {}
+        with get_db_connection("email_archive") as db:
+            c = db.cursor()
+            sql = (
+                "SELECT as1.value FROM archive_search as1 "
+                "JOIN archive_search as2 ON as1.archive_id = as2.archive_id "
+                "WHERE as2.field = 'message_id' AND as2.value = %s AND as1.field IN ('env_to', 'body_to')"
+            )
+            c.execute(sql, (message_id,))
+            for row in c:
+                target = create_email_delivery(message_id, row[0].decode('utf-8'))
+                if target not in targets:
+                    targets[target] = RemediationTarget('email', target)
+
+        # also get targets from remediation history
+        query = saq.db.query(Remediation)
+        query = query.filter(Remediation.type == 'email')
+        query = query.filter(Remediation.key.like(f"{message_id}%"))
+        history = query.all()
+        for h in history:
+            if h.key not in targets:
+                targets[h.key] = RemediationTarget('email', h.key)
+
+        return list(targets.values())
 
 class ProcessGUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
@@ -918,6 +947,10 @@ class O365FileObservable(Observable):
         result.extend(super().jinja_available_actions)
         return result
 
+    @property
+    def remediation_targets(self):
+        return [RemediationTarget('o365_file', self.value)]
+
 class FireEyeUUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_FIREEYE_UUID, *args, **kwargs)
@@ -968,6 +1001,7 @@ _OBSERVABLE_TYPE_MAPPING = {
     F_EMAIL_ADDRESS: EmailAddressObservable,
     F_EMAIL_CONVERSATION: EmailConversationObservable,
     F_EMAIL_DELIVERY: EmailDeliveryObservable,
+    F_EMAIL_SUBJECT: EmailSubjectObservable,
     F_EXABEAM_SESSION: ExabeamSessionObservable,
     F_EXTERNAL_UID: ExternalUIDObservable,
     F_FILE: FileObservable,

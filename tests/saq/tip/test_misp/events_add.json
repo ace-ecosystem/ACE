@@ -1,0 +1,86 @@
+{
+   "Event":{
+      "id":"1",
+      "orgc_id":"1",
+      "org_id":"1",
+      "date":"2020-09-13",
+      "threat_level_id":"4",
+      "info":"Some cool event",
+      "published":false,
+      "uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "attribute_count":"1",
+      "analysis":"0",
+      "timestamp":"1600036585",
+      "distribution":"1",
+      "proposal_email_lock":false,
+      "locked":false,
+      "publish_timestamp":"0",
+      "sharing_group_id":"0",
+      "disable_correlation":false,
+      "extends_uuid":"",
+      "event_creator_email":"admin@admin.test",
+      "Org":{
+         "id":"1",
+         "name":"ORGNAME",
+         "uuid":"12345678-1234-1234-1234-1234567890ab",
+         "local":true
+      },
+      "Orgc":{
+         "id":"1",
+         "name":"ORGNAME",
+         "uuid":"12345678-1234-1234-1234-1234567890ab",
+         "local":true
+      },
+      "Attribute":[
+         {
+            "id":"1",
+            "type":"link",
+            "category":"Internal reference",
+            "to_ids":false,
+            "uuid":"f3842d95-88af-439b-a953-9fe3298815e0",
+            "event_id":"46",
+            "distribution":"5",
+            "timestamp":"1600036585",
+            "comment":"ACE Event",
+            "sharing_group_id":"0",
+            "deleted":false,
+            "disable_correlation":true,
+            "object_id":"0",
+            "object_relation":"None",
+            "first_seen":"None",
+            "last_seen":"None",
+            "value":"http://domain.com",
+            "Galaxy":[
+
+            ],
+            "ShadowAttribute":[
+
+            ]
+         }
+      ],
+      "ShadowAttribute":[
+
+      ],
+      "RelatedEvent":[
+
+      ],
+      "Galaxy":[
+
+      ],
+      "Object":[
+
+      ],
+      "Tag":[
+         {
+            "id":"1",
+            "name":"tlp:amber",
+            "colour":"#e7dede",
+            "exportable":true,
+            "user_id":"0",
+            "hide_tag":false,
+            "numerical_value":"None",
+            "local":0
+         }
+      ]
+   }
+}

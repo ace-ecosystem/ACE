@@ -1,10 +1,13 @@
+import logging
+import re
+
 from flask import render_template, redirect, request, url_for, flash, session
-from flask_login import login_user, logout_user, login_required
+from flask_login import login_user, logout_user, login_required, current_user
+
 from . import auth
-from .forms import LoginForm
+from .forms import LoginForm, ChangePasswordForm, PASS_SPECIAL_CHARS, PASS_MIN_LENGTH
 from ..models import User
 from .. import db
-import logging
 import saq
 
 @auth.route('/login', methods=['GET', 'POST'])
@@ -40,6 +43,10 @@ def login():
             return render_template('auth/login.html', form=form)
 
         if user is not None and user.verify_password(form.password.data):
+            if not user.enabled:
+                flash('User is disabled.')
+                return render_template('auth/login.html', form=form)
+
             login_user(user, form.remember_me.data)
             
             if 'current_storage_dir' in session:
@@ -55,6 +62,7 @@ def login():
 
     return render_template('auth/login.html', form=form)
 
+
 @auth.route('/logout')
 @login_required
 def logout():
@@ -63,3 +71,53 @@ def logout():
         del session['cid']
     flash('You have been logged out.')
     return redirect(url_for('main.index'))
+
+
+@auth.route('/login/change', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Allow a user to change their own password.
+
+    Although validations appear to be missing from this function, most validations
+    are being handled by the form validators in forms.py:
+        - New pass and confirm pass fields matching
+        - Length requirements
+        - Character complexity requirements
+    """
+
+    form = ChangePasswordForm()
+
+    template_kwargs = {
+        'form': form,
+        'special': PASS_SPECIAL_CHARS,
+        'min_length': PASS_MIN_LENGTH,
+    }
+
+    if form.validate_on_submit():
+        user = db.session.query(User).filter_by(username=current_user.username).first()
+
+        if not user.verify_password(form.current_password.data):
+            logging.warning(
+                f"user failed to provide correct existing password during password reset: {current_user.username}"
+            )
+            flash(f"Current password is incorrect", 'error')
+            return render_template('auth/change-password.html', **template_kwargs)
+
+        # user.password has a property setter decorator that handles hashing of the password upon
+        # setting the password value
+        user.password = form.new_password.data
+
+        try:
+            db.session.add(user)
+            db.session.commit()
+        except Exception as e:
+            logging.error(f"error when updating user password in database: {e.__class__} - {e}")
+            flash("Error when updating password. Please contact the administrator.", 'error')
+            return render_template('auth/change-password.html', **template_kwargs)
+        else:
+            logging.info(f"user {current_user.username} successfully changed password")
+            flash('Password changed successfully. Please login with new password.', 'success')
+            # Invalidate session from old password and force a login
+            return redirect(url_for('auth.logout'))
+
+    return render_template('auth/change-password.html', **template_kwargs)

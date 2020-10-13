@@ -103,13 +103,11 @@ class RenderAnalyzer(AnalysisModule):
         return F_URL, F_FILE
 
     def custom_requirement(self, observable):
-        if observable.type == F_URL and observable.has_directive(DIRECTIVE_RENDER):
+        # automatically render if a root-level URL OR has manually been given render directive
+        if observable.type == F_URL:
             return True
 
         if observable.type == F_FILE:
-            if observable.has_directive(DIRECTIVE_NO_RENDER):
-                return False
-
             file_type_analysis = self.wait_for_analysis(observable, FileTypeAnalysis)
             if not file_type_analysis:
                 logging.debug(f"Renderer analysis of {observable.value} requires unavailable FileTypeAnalysis")

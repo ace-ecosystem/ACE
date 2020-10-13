@@ -41,6 +41,7 @@ F_DLP_INCIDENT = 'dlp_incident'
 F_EMAIL_ADDRESS = 'email_address'
 F_EMAIL_CONVERSATION = 'email_conversation'
 F_EMAIL_DELIVERY = 'email_delivery'
+F_EMAIL_SUBJECT = 'email_subject'
 F_EXABEAM_SESSION = 'exabeam_session'
 F_EXTERNAL_UID = 'external_uid'
 F_FILE = 'file'
@@ -79,6 +80,7 @@ OBSERVABLE_DESCRIPTIONS = {
     F_EMAIL_ADDRESS: 'email address',
     F_EMAIL_CONVERSATION: 'a conversation between a source email address (MAIL FROM) and a destination email address (RCPT TO)',
     F_EMAIL_DELIVERY: 'a delivery of a an email to a target mailbox',
+    F_EMAIL_SUBJECT: 'the subject of an email',
     F_EXABEAM_SESSION: 'id of an exabeam session',
     F_EXTERNAL_UID: 'unique identifier for something that is stored in an external tool. Format: tool_name:uid',
     F_FILE: 'path to an attached file',
@@ -118,6 +120,7 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_EMAIL_ADDRESS,
     F_EMAIL_CONVERSATION,
     F_EMAIL_DELIVERY,
+    F_EMAIL_SUBJECT,
     F_EXABEAM_SESSION,
     F_EXTERNAL_UID,
     F_FILE,
@@ -315,6 +318,7 @@ DISPOSITION_RANK = {
 DIRECTIVE_ARCHIVE = 'archive'
 DIRECTIVE_COLLECT_FILE = 'collect_file'
 DIRECTIVE_CRAWL = 'crawl'
+DIRECTIVE_CRAWL_EXTRACTED_URLS = 'crawl_extracted_urls'
 DIRECTIVE_DELAY = 'delay'
 DIRECTIVE_EXCLUDE_ALL = 'exclude_all'
 DIRECTIVE_EXTRACT_EMAIL = 'extract_email'
@@ -323,13 +327,11 @@ DIRECTIVE_EXTRACT_URLS = 'extract_urls'
 DIRECTIVE_FORCE_DOWNLOAD = 'force_download'
 DIRECTIVE_IGNORE_AUTOMATION_LIMITS = 'ignore_automation_limits'
 DIRECTIVE_NO_SCAN = 'no_scan'
-DIRECTIVE_NO_RENDER = 'no_render'
 DIRECTIVE_ORIGINAL_EMAIL = 'original_email'
 DIRECTIVE_ORIGINAL_SMTP = 'original_smtp'
 DIRECTIVE_PREVIEW = 'preview'
 DIRECTIVE_REMEDIATE = 'remediate'
 DIRECTIVE_RENAME_ANALYSIS = 'rename_analysis'
-DIRECTIVE_RENDER = 'render'
 DIRECTIVE_RESOLVE_ASSET = 'resolve_asset'
 DIRECTIVE_SANDBOX = 'sandbox'
 DIRECTIVE_TRACKED = 'tracked'
@@ -339,6 +341,7 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'archive the file',
     DIRECTIVE_COLLECT_FILE: 'collect the file from the remote endpoint',
     DIRECTIVE_CRAWL: 'crawl the URL',
+    DIRECTIVE_CRAWL_EXTRACTED_URLS: 'crawl all extracted URLs',
     DIRECTIVE_DELAY: 'instructs various analysis modules to delay the analysis',
     DIRECTIVE_EXCLUDE_ALL: 'instructs ACE to NOT analyze this observable at all',
     DIRECTIVE_EXTRACT_EMAIL: 'extract email from exchange or o365',
@@ -347,23 +350,23 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_FORCE_DOWNLOAD: 'download the content of the URL no matter what',
     DIRECTIVE_IGNORE_AUTOMATION_LIMITS: 'ignores any automation limits when analyzing this observable',
     DIRECTIVE_NO_SCAN: 'do not scan this file with yara',
-    DIRECTIVE_NO_RENDER: 'do not attempt to render this observable',
     DIRECTIVE_ORIGINAL_EMAIL: 'treat this file as the original email file',
     DIRECTIVE_ORIGINAL_SMTP: 'treat this file as the original smtp stream',
     DIRECTIVE_PREVIEW: 'show this content inline if possible',
     DIRECTIVE_REMEDIATE: 'remediate the target',
     DIRECTIVE_RENAME_ANALYSIS: 'indicates that the description of the root analysis object should be updated with analysis results',
-    DIRECTIVE_RENDER: 'render URL or HTML and download screenshot',
     DIRECTIVE_RESOLVE_ASSET: 'indicates that ACE should treat this IP address as an asset and try to figure out the details',
     DIRECTIVE_SANDBOX: 'run the observable through a sandbox',
     DIRECTIVE_TRACKED: 'indicates this observable should be tracked across different analysis requests',
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
 }
 
+# NOTE this really isn't used any more
 VALID_DIRECTIVES = [
     DIRECTIVE_ARCHIVE,
     DIRECTIVE_COLLECT_FILE,
     DIRECTIVE_CRAWL,
+    DIRECTIVE_CRAWL_EXTRACTED_URLS,
     DIRECTIVE_DELAY,
     DIRECTIVE_EXCLUDE_ALL,
     DIRECTIVE_EXTRACT_EMAIL,
@@ -372,13 +375,11 @@ VALID_DIRECTIVES = [
     DIRECTIVE_FORCE_DOWNLOAD,
     DIRECTIVE_IGNORE_AUTOMATION_LIMITS,
     DIRECTIVE_NO_SCAN,
-    DIRECTIVE_NO_RENDER,
     DIRECTIVE_ORIGINAL_EMAIL,
     DIRECTIVE_ORIGINAL_SMTP,
     DIRECTIVE_PREVIEW,
     DIRECTIVE_REMEDIATE,
     DIRECTIVE_RENAME_ANALYSIS,
-    DIRECTIVE_RENDER,
     DIRECTIVE_SANDBOX,
     DIRECTIVE_TRACKED,
     DIRECTIVE_WHITELISTED,
@@ -530,6 +531,7 @@ ANALYSIS_TYPE_FALCON = 'falcon'
 ANALYSIS_TYPE_FIREEYE = 'fireeye'
 ANALYSIS_TYPE_QRADAR_OFFENSE = 'qradar_offense'
 ANALYSIS_TYPE_BRICATA = 'bricata'
+ANALYSIS_TYPE_O365 = 'o365'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'
@@ -537,3 +539,41 @@ INTEL_DB_CRITS = 'crits'
 
 # alert queues
 QUEUE_DEFAULT = 'default'
+
+# redis databases
+REDIS_DB_SNORT = 1
+
+EVENT_TYPE_DEFAULT = 'phish'
+EVENT_VECTOR_DEFAULT = 'corporate email'
+EVENT_RISK_LEVEL_DEFAULT = '1'
+EVENT_PREVENTION_DEFAULT = 'response team'
+EVENT_STATUS_DEFAULT = 'OPEN'
+EVENT_REMEDIATION_DEFAULT = 'not remediated'
+EVENT_CAMPAIGN_ID_DEFAULT = '1'
+
+# --- Indicators
+I_DOMAIN = 'domain'
+I_EMAIL_ATTACHMENT_NAME = 'email_attachment_name'
+I_EMAIL_CC_ADDRESS = 'email_cc_address'
+I_EMAIL_FROM_ADDRESS = 'email_from_address'
+I_EMAIL_FROM_ADDRESS_DOMAIN = 'email_from_address_domain'
+I_EMAIL_MESSAGE_ID = 'email_message_id'
+I_EMAIL_SUBJECT = 'email_subject'
+I_EMAIL_TO_ADDRESS = 'email_to_address'
+I_EMAIL_X_AUTH_ID = 'email_x_auth_id'
+I_EMAIL_X_MAILER = 'email_x_mailer'
+I_EMAIL_X_ORIGINAL_SENDER = 'email_x_original_sender'
+I_EMAIL_X_ORIGINATING_IP = 'email_x_originating_ip'
+I_EMAIL_REPLY_TO = 'email_reply_to_address'
+I_EMAIL_RETURN_PATH = 'email_return_path_address'
+I_EMAIL_X_SENDER = 'email_x_sender_address'
+I_EMAIL_X_SENDER_ID = 'email_x_sender_id_address'
+I_EMAIL_X_SENDER_IP = 'email_x_sender_ip'
+I_FILE_NAME = 'filename'
+I_IP_DEST = 'ip_dest'
+I_IP_SOURCE = 'ip_src'
+I_MD5 = 'md5'
+I_SHA1 = 'sha1'
+I_SHA256 = 'sha256'
+I_URI_PATH = 'uri_path'
+I_URL = 'url'

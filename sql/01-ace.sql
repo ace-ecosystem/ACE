@@ -270,6 +270,7 @@ DROP TABLE IF EXISTS `events`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `events` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
+  `uuid` varchar(36) CHARACTER SET ascii NOT NULL,
   `creation_date` date NOT NULL,
   `name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
   `type` enum('phish','recon','host compromise','credential compromise','web browsing') NOT NULL,
@@ -277,7 +278,7 @@ CREATE TABLE `events` (
   `risk_level` enum('1','2','3') NOT NULL,
   `prevention_tool` enum('response team','ips','fw','proxy','antivirus','email filter','application whitelisting','user') NOT NULL,
   `remediation` enum('not remediated','cleaned with antivirus','cleaned manually','reimaged','credentials reset','removed from mailbox','network block','NA') NOT NULL,
-  `status` enum('OPEN','CLOSED','IGNORE') NOT NULL,
+  `status` enum('OPEN','CLOSED','IGNORE','COMPLETED') NOT NULL,
   `comment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci,
   `campaign_id` int(11) NOT NULL,
   `event_time` datetime DEFAULT NULL,
@@ -287,6 +288,7 @@ CREATE TABLE `events` (
   `contain_time` datetime DEFAULT NULL,
   `remediation_time` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uuid` (`uuid`),
   UNIQUE KEY `creation_date` (`creation_date`,`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -564,7 +566,7 @@ CREATE TABLE `persistence` (
   `value` blob COMMENT 'The value of this piece of persistence data. This is pickled python data.',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'The time this information was created.',
   `last_update` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'The last time this information was updated.',
-  PRIMARY KEY (`id`,`source_id`),
+  PRIMARY KEY (`id`),
   UNIQUE KEY `idx_p_lookup` (`source_id`,`uuid`),
   KEY `idx_p_cleanup` (`permanent`,`last_update`),
   CONSTRAINT `fk_p_source` FOREIGN KEY (`source_id`) REFERENCES `persistence_source` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
@@ -580,12 +582,9 @@ DROP TABLE IF EXISTS `persistence_source`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `persistence_source` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `company_id` int(11) NOT NULL,
   `name` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'The name of the persistence source. For example, the name of the ace collector.',
-  PRIMARY KEY (`id`,`company_id`),
-  KEY `idx_ps_company_name` (`name`),
-  KEY `fk_ps_company` (`company_id`),
-  CONSTRAINT `fk_ps_company` FOREIGN KEY (`company_id`) REFERENCES `company` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  PRIMARY KEY (`id`),
+  KEY `idx_ps_company_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -598,18 +597,19 @@ DROP TABLE IF EXISTS `remediation`;
 /*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `remediation` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `type` enum('email','test') NOT NULL,
+  `type` varchar(24) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL DEFAULT 'email',
   `action` enum('remove','restore') NOT NULL DEFAULT 'remove' COMMENT 'The action that was taken, either the time was removed or it was restored.',
   `insert_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'The time the action occured.',
+  `update_time` timestamp NULL DEFAULT NULL COMMENT 'Time the action was last attempted',
   `user_id` int(11) NOT NULL COMMENT 'The user who performed the action.',
-  `key` varchar(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'The key to look up the item.  In the case of emails this is the message_id and the recipient email address.',
+  `key` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL COMMENT 'The key to look up the item.  In the case of emails this is the message_id and the recipient email address.',
+  `restore_key` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NULL DEFAULT NULL COMMENT 'optional location used to restore the file from',
   `result` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci COMMENT 'The result of the action.  This is free form data for the analyst to see, usually includes error codes and messages.',
   `comment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci COMMENT 'Optional comment, additional free form data.',
   `successful` tinyint(4) DEFAULT NULL COMMENT '1 - remediation worked, 0 - remediation didn’t work',
-  `company_id` int(11) DEFAULT NULL COMMENT 'The company that this remediation belongs to.',
   `lock` varchar(36) DEFAULT NULL COMMENT 'Set to a UUID when an engine processes it. Defaults to NULL to indicate nothing is working on it.',
   `lock_time` datetime DEFAULT NULL,
-  `status` enum('NEW','IN_PROGRESS','COMPLETED') NOT NULL DEFAULT 'NEW' COMMENT 'The current status of the remediation.\\\\n\\\\nNEW - needs to be processed\\\\nIN_PROGRESS - entry is locked and currently being processed\\\\nCOMPLETED - entry completed (success or failure)',
+  `status` enum('NEW','IN_PROGRESS','COMPLETED') NOT NULL DEFAULT 'NEW' COMMENT 'The current status of the remediation.\\\\n\\\\nNEW - needs to be processed\\\\nIN_PROGRESS - entry is currently being processed\\\\nCOMPLETED - entry completed successfully',
   PRIMARY KEY (`id`),
   KEY `i_key` (`key`),
   KEY `fk_user_id_idx` (`user_id`),
@@ -665,6 +665,7 @@ CREATE TABLE `users` (
   `timezone` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci DEFAULT NULL COMMENT 'The timezone this user is in. Dates and times will appear in this timezone in the GUI.',
   `display_name` varchar(45) DEFAULT NULL COMMENT 'The display name of the user. This may be different than the username. This is used in the GUI.',
   `queue` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL DEFAULT 'default',
+  `enabled` BOOLEAN NOT NULL DEFAULT True AFTER `queue`,
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`,`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;

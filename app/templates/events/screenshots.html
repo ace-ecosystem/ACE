@@ -1,0 +1,8 @@
+<div class="panel-heading">
+    <h3 class="panel-title">Screenshots</h3>
+</div>
+<div class="panel-body">
+    {% for screenshot in screenshots %}
+    <img width="{{screenshot['scaled_width']}}" height="{{screenshot['scaled_height']}}" src="{{ url_for('analysis.image', alert_uuid=screenshot['alert_id'], observable_uuid=screenshot['observable_id']) }}" class="img-thumbnail" />
+    {% endfor %}
+</div>

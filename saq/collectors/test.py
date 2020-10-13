@@ -1166,5 +1166,4 @@ rule test_filter {
 
         # a persistence source should have been created for this collector service
         from saq.database import PersistenceSource
-        self.assertIsNotNone(saq.db.query(PersistenceSource).filter(PersistenceSource.company_id == saq.COMPANY_ID, 
-                                                                    PersistenceSource.name == collector.service_name))
+        self.assertIsNotNone(saq.db.query(PersistenceSource).filter(PersistenceSource.name == collector.service_name))
