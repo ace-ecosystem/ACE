@@ -26,6 +26,7 @@ from multiprocessing import Process, Queue, Semaphore, Event, Pipe, cpu_count, a
 from operator import attrgetter
 from queue import PriorityQueue, Empty, Full
 from subprocess import Popen, PIPE
+from typing import Optional
 
 import saq
 import saq.analysis
@@ -59,17 +60,19 @@ CURRENT_ENGINE = None
 STATE_PRE_ANALYSIS_EXECUTED = 'pre_analysis_executed'
 STATE_POST_ANALYSIS_EXECUTED = 'post_analysis_executed'
 
-def translate_node(node: str) -> str:
+def translate_node(node: str, node_translations: Optional[dict[str, str]] = None) -> str:
     """Return the correct node taking node transaction into account."""
-    for key in saq.CONFIG['node_translation'].keys():
-        src, target = saq.CONFIG['node_translation'][key].split(',')
+    if not node_translations:
+        node_translations = saq.CONFIG['node_translation']
+
+    for key in node_translations.keys():
+        src, target = node_translations[key].split(',')
         if node == src:
             logging.debug("translating node {} to {}".format(node, target))
             return target
 
     logging.debug(f"no translation for {node}")
     return node
-
 
 class AnalysisTimeoutError(RuntimeError):
     pass
