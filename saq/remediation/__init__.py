@@ -153,6 +153,13 @@ class RemediationTarget():
         saq.db.add(remediation)
         saq.db.commit()
 
+    def stop_remediation(self):
+        for h in self.history:
+            if h.status != 'COMPLETED':
+                h.status = 'COMPLETED'
+                h.successful = False
+        saq.db.commit()
+
 class RemediationService(ACEService):
     def __init__(self, *args, **kwargs):
         super().__init__(service_config=saq.CONFIG['service_remediation'], *args, **kwargs)

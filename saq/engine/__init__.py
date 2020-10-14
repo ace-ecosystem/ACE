@@ -256,7 +256,8 @@ class Worker(object):
         # clean up zombies
         if self.process:
             self.process.join(0)
-            logging.debug(f"process {self.process.pid} exitcode = {self.process.exitcode}")
+            if self.process.exitcode:
+                logging.debug(f"process {self.process.pid} exitcode = {self.process.exitcode}")
 
         # is the process running?
         while self.process is not None and self.process.is_alive():
@@ -359,8 +360,12 @@ analysis_module = {self.last_analysis_module}
             try:
                 self.process.close()
             except Exception as e:
-                logging.error("unable to close process: {e}")
+                logging.error(f"unable to close process: {e}")
                 report_exception()
+                try:
+                    os.close(self.process.sentinel)
+                except:
+                    pass
 
         self._clear_target_tracking()
         self.start()
@@ -2125,8 +2130,9 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
 
         # if self.root is not set at this point then something went wrong
         if self.root is None:
-            logging.warning(f"unless to process work item {work_item} (self.root was None)")
+            logging.warning(f"unable to process work item {work_item} (self.root was None)")
             self.stop_root_lock_manager()
+            self.clear_work_target(work_item)
             return 
 
         logging.debug("analyzing {} in analysis_mode {}".format(self.root, self.root.analysis_mode))
@@ -3032,7 +3038,7 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                                 # if we did not generate any analysis then the dependency has failed 
                                 # (which might be OK) -- move on to analyze source target again
                                 if not output_analysis:
-                                    logging.info("analysis module {} did not generate analysis to resolve dep {}".format(
+                                    logging.debug("analysis module {} did not generate analysis to resolve dep {}".format(
                                                   analysis_module, work_item.dependency))
 
                                     work_item.dependency.set_status_failed('analysis not generated')

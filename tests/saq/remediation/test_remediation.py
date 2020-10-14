@@ -162,6 +162,27 @@ def test_remediation_target_queue():
     assert targets[0].lock == service.uuid
     assert targets[0].lock_time is not None
 
+@pytest.mark.integration
+def test_remediation_target_stop_remediation():
+    # queue a target for removal
+    target = RemediationTarget('email', '<test>|jdoe@site.com')
+    target.queue(REMEDIATION_ACTION_REMOVE, saq.AUTOMATION_USER_ID)
+    
+    # reload target
+    target = RemediationTarget('email', '<test>|jdoe@site.com')
+    
+    # make sure the target was queued
+    assert len(target.history) == 1
+    assert target.history[0].status == 'NEW'
+    
+    # stop all remediations for the target
+    target.stop_remediation()
+    
+    # reload target
+    target = RemediationTarget('email', '<test>|jdoe@site.com')
+    assert target.history[0].status == 'COMPLETED'
+    assert target.history[0].successful == False
+
 class MockRemediator(Remediator):
     def __init__(self, config_section, result):        
         self.name = config_section

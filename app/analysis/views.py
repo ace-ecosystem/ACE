@@ -3365,7 +3365,7 @@ def get_remediation_targets(alert_uuids):
     targets.sort(key=lambda x: f"{x.type}|{x.value}")
     return targets
 
-@analysis.route('/remediation_targets', methods=['POST', 'PUT', 'DELETE'])
+@analysis.route('/remediation_targets', methods=['POST', 'PUT', 'DELETE', 'PATCH'])
 @login_required
 def remediation_targets():
     # get request body
@@ -3375,9 +3375,13 @@ def remediation_targets():
     if request.method == 'POST':
         return render_template('analysis/remediation_targets.html', targets=get_remediation_targets(body['alert_uuids']))
 
+    if request.method == 'PATCH':
+        for target in body['targets']:
+            RemediationTarget(id=target).stop_remediation()
+        return 'remediation stopped', 200
+
     # queue targets for removal/restoration
     action = 'remove' if request.method == 'DELETE' else 'restore'
-    logging.error(body['targets'])
     for target in body['targets']:
         RemediationTarget(id=target).queue(action, current_user.id)
 
