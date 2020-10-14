@@ -2289,7 +2289,6 @@ class Remediation(Base):
             'result': self.result,
             'comment': self.comment,
             'successful': self.successful,
-            'company_id': self.company_id,
             'status': self.status,
         }
 

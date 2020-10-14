@@ -1112,6 +1112,7 @@ remediation_sp = remediation_parser.add_subparsers(dest='remediation_cmd')
 def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None):
     from saq.database import Remediation, User
     from sqlalchemy import or_
+    from tabulate import tabulate
 
     query = saq.db.query(Remediation).join(User)
 
@@ -1134,11 +1135,8 @@ def print_remediation_status(id=None, type=None, status=None, key=None, user_id=
         query = query.filter(or_(User.username.ilike(f'%{user}%'), 
                                  User.display_name.ilike(f'%{user}%')))
 
-    for r in query.order_by(Remediation.insert_date.desc()):
-        print(f"insert_date: {r.insert_date} id:{r.id} type:{r.type} action:{r.action} "
-              f'user_id: {r.user_id} key: "{r.key}" result: "{r.result}" comment: "{r.comment}" '
-              f'successful: {r.successful} company_id: {r.company_id} lock: {r.lock} lock_time: {r.lock_time} '
-              f'status: {r.status}')
+    remediation_data = [r.json for r in query.order_by(Remediation.insert_date.desc())]
+    print(tabulate(remediation_data, headers="keys"))
 
 def remediation_status(args):
     print_remediation_status(status=args.status,
