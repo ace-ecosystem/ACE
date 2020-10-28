@@ -248,15 +248,6 @@ def reset_pools():
     _global_db_pools.clear()
 
 @contextmanager
-def get_db_session():
-    if saq.db is None:
-        return None
-    try:
-        yield saq.db
-    finally:
-        saq.db.remove()
-
-@contextmanager
 def get_db_connection(name='ace'):
     if name is None:
         name = 'ace'

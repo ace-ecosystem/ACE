@@ -5,7 +5,7 @@ import importlib
 import json
 import logging
 import saq
-from saq.database import Remediation, get_db_session
+from saq.database import Remediation
 from saq.error import report_exception
 from saq.service import ACEService
 from sqlalchemy import and_, or_
@@ -104,14 +104,11 @@ class RemediationTarget():
             self.type, self.key = b64decode(id.encode('ascii')).decode('utf-8').split('|', 1)
 
         # get remediation history for this target
-        # don't store a session so we don't have to fight thread-local variables
-        self.history = []
-        with get_db_session() as session:
-            query = session.query(Remediation)
-            query = query.filter(Remediation.type == self.type)
-            query = query.filter(Remediation.key == self.key)
-            query = query.order_by(Remediation.id.desc())
-            self.history = query.all()
+        query = saq.db.query(Remediation)
+        query = query.filter(Remediation.type == self.type)
+        query = query.filter(Remediation.key == self.key)
+        query = query.order_by(Remediation.id.desc())
+        self.history = query.all()
 
         if restore_key is None:
             self.restore_key = self.last_restore_key
@@ -182,19 +179,21 @@ class RemediationTarget():
         saq.db.commit()
         logging.info(f"Queued {remediation}")
 
-    def refresh(self, db=saq.db):
+    def refresh(self):
         """Refresh the remediation history."""
-        with get_db_session() as session:
-            query = session.query(Remediation)
-            query = query.filter(Remediation.type == self.type)
-            query = query.filter(Remediation.key == self.key)
-            query = query.order_by(Remediation.id.desc())
-            self.history = query.all()
+        # Rollback to discard changes in the transaction buffer and avoide lazy loads.
+        # NOTE idk why expiring/refreshing the objects doesn't work here.
+        saq.db.rollback()
+        query = saq.db.query(Remediation)
+        query = query.filter(Remediation.type == self.type)
+        query = query.filter(Remediation.key == self.key)
+        query = query.order_by(Remediation.id.desc())
+        self.history = query.all()
         return self
 
     @property
     def last_remediation(self):
-        """Get the last remediation or return None.
+        """Get the last known remediation or return None.
 
         NOTE that this does NOT refresh the remediation history.
         """
