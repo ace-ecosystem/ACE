@@ -14,8 +14,9 @@ class EmailRemediator(Remediator):
         self.graph.auth = saq.graph_api.GraphApiAuth(
             self.config['client_id'],
             self.config['tenant_id'],
-            self.config['thumbprint'],
-            self.config['private_key'],
+            thumbprint = self.config['thumbprint'],
+            private_key_path = self.config['private_key'],
+            client_credential = self.config.get("client_credential", None)
         )
         self.base_uri = self.config.get('base_uri') or 'https://graph.microsoft.com/v1.0'
 
@@ -85,8 +86,9 @@ class FileRemediator(Remediator):
         self.graph.auth = saq.graph_api.GraphApiAuth(
             self.config['client_id'],
             self.config['tenant_id'],
-            self.config['thumbprint'],
-            self.config['private_key'],
+            thumbprint = self.config['thumbprint'],
+            private_key_path = self.config['private_key'],
+            client_credential = section.get("client_credential", None)
         )
         self.base_uri = self.config.get('base_uri', fallback='https://graph.microsoft.com/v1.0')
 
