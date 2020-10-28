@@ -248,6 +248,15 @@ def reset_pools():
     _global_db_pools.clear()
 
 @contextmanager
+def get_db_session():
+    if saq.db is None:
+        return None
+    try:
+        yield saq.db
+    finally:
+        saq.db.remove()
+
+@contextmanager
 def get_db_connection(name='ace'):
     if name is None:
         name = 'ace'
@@ -2293,7 +2302,7 @@ class Remediation(Base):
         }
 
     def __str__(self):
-        return f"Remediation: {self.action} - {self.type} - {self.status} - {self.key} - {self.result}"
+        return f"Remediation #{self.id}: {self.action} - {self.type} - {self.status} - {self.key}"
 
 
 class Message(Base):
@@ -2697,7 +2706,6 @@ def initialize_database():
         close_all_sessions()
 
 def initialize_automation_user():
-    # get the id of the ace automation account
     try:
         #import pymysql
         #pymysql.connections.DEBUG = True

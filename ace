@@ -1139,7 +1139,8 @@ def print_remediation_status(id=None, type=None, status=None, key=None, user_id=
     print(tabulate(remediation_data, headers="keys"))
 
 def remediation_status(args):
-    print_remediation_status(status=args.status,
+    print_remediation_status(id=args.id,
+                             status=args.status,
                              type=args.type,
                              key=args.key,
                              user=args.user,
@@ -1158,52 +1159,81 @@ remediation_status_parser.add_argument('-u', '--user',
     help="Return results matching the given username or display name.")
 remediation_status_parser.add_argument('--user-id', type=int,
     help="Return results matching the given user_id.")
+remediation_status_parser.add_argument('-i', '--id', type=int,
+    help="Return results matching the given remediation id.")
 remediation_status_parser.set_defaults(func=remediation_status)
 
 def execute_remediation(args):
     import saq
-    import saq.remediation
-    import saq.remediation.constants
+    from saq.remediation import RemediationTarget, remediate_target
 
-    target_function = saq.remediation.execute
-    if args.background:
-        target_function = saq.remediation.request
+    # load all remediators
+    remediators = []
+    for section in saq.CONFIG:
+        if section.startswith('remediator_'):
+            logging.info(f"Loading {section}")
+            module = importlib.import_module(saq.CONFIG[section]['module'])
+            remediator = getattr(module, saq.CONFIG[section]['class'])
+            remediators.append(remediator(section))
 
-    if args.remediation_action == 'remove':
-        action = saq.remediation.constants.REMEDIATION_ACTION_REMOVE
-    elif args.remediation_action == 'restore':
-        action = saq.remediation.constants.REMEDIATION_ACTION_RESTORE
-    else:
-        raise RuntimeError("invalid args.remediation_action ?? programming error dude")
-
+    # if no targets were passed, make space
     if not hasattr(args, 'targets'):
         args.targets = []
 
-    # are we reading a list of targets from a file?
+    # targets from a file
     if args.from_file:
         with open(args.from_file, 'r') as fp:
             for line in fp:
                 line = line.strip()
                 args.targets.append(line)
 
-    # are we reading a list of targets from stdin?
+    # targets from stdin
     if args.from_stdin:
         for line in sys.stdin:
             line = line.strip()
             args.targets.append(line)
 
-    for target in args.targets:
-        result = target_function(action,
-                                 args.type,
-                                 target,
-                                 saq.AUTOMATION_USER_ID,
-                                 saq.COMPANY_ID,
-                                 args.comment)
+    # load all targets
+    targets = [
+                 RemediationTarget(args.type,
+                                   _t,
+                                   action=args.remediation_action,
+                                   comment=args.comment)
+                 for _t in args.targets
+                ]
+
+    results = {}
+    for target in targets:
+        if len(target.history) > 0:
+            print(f" + Target '{target.key}' has {len(target.history)} historical remediations.")
 
         if args.background:
-            print(f"requested remediation (id {result.id})")
+            # Queue for the Remediation Service
+            target.queue()
+            continue
+
+        # record it, but do it now
+        remediate_target(remediators, target)
+
+
+    if args.wait:
+        request_wait_time = saq.CONFIG['service_remediation'].getint('request_wait_time', fallback=10)
+        quit_time = time.time() + request_wait_time
+        print(f" + waiting up to {request_wait_time} seconds for {len(targets)} targets to reach a completed state.")
+
+        for target in targets:
+            # refresh the remediation history
+            target.refresh()
+            while target.processing and time.time() < quit_time:
+                time.sleep(1)
+                target.refresh()
+
+    for target in targets:
+        target.refresh()
+        if args.background:
+            print(f" + Requested {target.last_remediation}")
         else:
-            print_remediation_status(id=result.id)
+            print(f" + Executed {target.last_remediation}")
 
     sys.exit(0)
 
@@ -1217,7 +1247,9 @@ def execute_email_remediation(args):
 def _add_remediation_common_arguments(_parser):
     _parser.add_argument('-b', '--background', action='store_true', default=False,
         help="Executes the action in the background.")
-    _parser.add_argument('-c', '--comment', default="command line manual request",
+    _parser.add_argument('-w', '--wait', action='store_true', default=False,
+        help="Wait until the remediaiton reaches a completed state OR a timeout occurs.")
+    _parser.add_argument('-c', '--comment', default="command line request",
         help="Adds the given comment to the remediation as useful note.")
     _parser.add_argument('--from-file', required=False, default=None,
         help="Read the list of targets, one per line, from the given file.")
@@ -1227,7 +1259,7 @@ def _add_remediation_common_arguments(_parser):
 def _add_remediation_type_value_arguments(_parser):
     _parser.add_argument('type',
         help="The type of thing you want to target.")
-    _parser.add_argument('target', nargs='*',
+    _parser.add_argument('targets', nargs='*',
         help="The thing or things you want to target.")
 
 remediation_remove_parser = remediation_sp.add_parser('remove',
