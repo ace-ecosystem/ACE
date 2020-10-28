@@ -1165,16 +1165,10 @@ remediation_status_parser.set_defaults(func=remediation_status)
 
 def execute_remediation(args):
     import saq
-    from saq.remediation import RemediationTarget, remediate_target
+    from saq.remediation import RemediationTarget, load_all_remediators, remediate_target
 
     # load all remediators
-    remediators = []
-    for section in saq.CONFIG:
-        if section.startswith('remediator_'):
-            logging.info(f"Loading {section}")
-            module = importlib.import_module(saq.CONFIG[section]['module'])
-            remediator = getattr(module, saq.CONFIG[section]['class'])
-            remediators.append(remediator(section))
+    remediators = load_all_remediators()
 
     # if no targets were passed, make space
     if not hasattr(args, 'targets'):
