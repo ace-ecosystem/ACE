@@ -1596,6 +1596,15 @@ def reset_pagination():
     if 'page_size' not in session:
         session['page_size'] = 50
 
+def apply_sla_filters():
+    # display all open alerts
+    if 'Owner' in session['filters']:
+        del session['filters']['Owner']
+    # put the oldest alert at the top
+    session['sort_filter_desc'] = False
+    # record that SLA has been applied to the session
+    session['sla'] = True
+
 @analysis.route('/set_sort_filter', methods=['GET', 'POST'])
 @login_required
 def set_sort_filter():
@@ -1622,6 +1631,10 @@ def reset_filters():
     reset_pagination()
     reset_sort_filter()
     reset_checked_alerts()
+
+    if 'sla' in session:
+        # sla will trigger again, if needed
+        del session['sla']
 
     # return empy page
     return ('', 204)
@@ -1782,9 +1795,27 @@ def manage():
     if hasFilter('Observable'):
         query = query.join(ObservableMapping, GUIAlert.id == ObservableMapping.alert_id).join(Observable, ObservableMapping.observable_id == Observable.id)
 
+    # we want to display alerts that are either approaching or exceeding SLA
+    sla_ids = [] # list of alert IDs that need to be displayed
+    if saq.GLOBAL_SLA_SETTINGS.enabled or any([s.enabled for s in saq.OTHER_SLA_SETTINGS]):
+        _query = db.session.query(GUIAlert).filter(GUIAlert.disposition == None)
+        for alert_type in saq.EXCLUDED_SLA_ALERT_TYPES:
+            _query = _query.filter(GUIAlert.alert_type != alert_type)
+        for alert in _query:
+            if alert.is_over_sla or alert.is_approaching_sla:
+                sla_ids.append(alert.id)
+
+    if sla_ids:
+        logging.info(f"{len(sla_ids)} alerts over or approaching SLA.")
+        if 'sla' not in session:
+            apply_sla_filters()
+    elif 'sla' in session:
+        # remove sla mode
+        del session['sla']
+
     # apply filters
     filters = getFilters()
-    for name in session['filters']:
+    for name in session['filters']: 
         if session['filters'][name] and len(session['filters'][name]) > 0:
             query = filters[name].apply(query, session['filters'][name])
 
@@ -1860,6 +1891,8 @@ def manage():
         # filter
         filters=filters,
         
+        sla=len(sla_ids) > 0,
+
         # alert data
         alerts=alerts,
         comments=comments,
