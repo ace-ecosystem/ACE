@@ -1589,7 +1589,8 @@ def reset_checked_alerts():
 
 def reset_sort_filter():
     session['sort_filter'] = 'Alert Date'
-    session['sort_filter_desc'] = True
+    if 'sla' not in session:
+        session['sort_filter_desc'] = True
 
 def reset_pagination():
     session['page_offset'] = 0
@@ -1890,8 +1891,6 @@ def manage():
 
         # filter
         filters=filters,
-        
-        sla=len(sla_ids) > 0,
 
         # alert data
         alerts=alerts,

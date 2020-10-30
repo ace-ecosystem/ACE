@@ -105,7 +105,12 @@
                             <span style="cursor:pointer" onmousedown='add_filter("Disposition", ["{{alert.disposition}}"])'>{{alert.disposition}}</span>
                         </td>
                         {% endif %}
-                        <td id="alert_status_{{ alert.uuid }}" style="white-space: nowrap;">{{alert.status}}</td>
+                        <td id="alert_status_{{ alert.uuid }}" style="white-space: nowrap;">
+                            {% if alert.is_over_sla %}Danger: {{alert.business_time_str}}
+                            {% elif alert.is_approaching_sla %}Warning: {{alert.business_time_str}}
+                            {% else %}{{alert.status}}
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
