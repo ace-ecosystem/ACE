@@ -3202,6 +3202,9 @@ def get_remediation_targets(alert_uuids):
     targets = {}
     for o in observables:
         observable = create_observable(o.type, o.display_value)
+        if observable is None:
+            logging.info(f"invalid value {o.display_value} for observable type {o.type}")
+            continue
         for target in observable.remediation_targets:
             targets[target.id] = target
 
