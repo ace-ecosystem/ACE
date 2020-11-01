@@ -3913,6 +3913,10 @@ class RootAnalysis(Analysis):
         if saq.CONFIG['mediawiki'].getboolean('enabled'):
             # remove the date and alert_type from the recommendation
             result = f'{possible_tags[0]}-{possible_tags[1]}'
+            _name_depth = saq.CONFIG['mediawiki'].getint('name_recomendation_depth', 2)
+            if _name_depth > 2 and len(possible_tags) > _name_depth:
+                for tag in possible_tags[2:_name_depth]:
+                    result += f'-{tag}'
         else:
             result = f'{yyyymmdd}-{self.alert_type.replace(" ", "")}-{possible_tags[0]}-{possible_tags[1]}'
 
