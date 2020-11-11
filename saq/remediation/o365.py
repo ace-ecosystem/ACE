@@ -36,7 +36,7 @@ class EmailRemediator(Remediator):
         params = { '$select': 'id', '$filter': f"internetMessageId eq '{message_id}'" }
         r = self.graph.get(f"{self.base_uri}/users/{recipient}/messages", params=params)
         if r.status_code == requests.codes.not_found:
-            return RemediationSuccess('mailbox does not exist')
+            return RemediationIgnore('mailbox does not exist')
         r.raise_for_status()
         r = r.json()
         if len(r['value']) == 0:
