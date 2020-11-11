@@ -3799,6 +3799,7 @@ class RootAnalysis(Analysis):
                 if not ob.disposition_history:
                     lowest_fp_observable = ob
                     lowest_fp_percent = 0
+                    continue
 
                 for history in ob.disposition_history:
                     # disposition_history example: ('FALSE_POSITIVE', 1, 50.0)
