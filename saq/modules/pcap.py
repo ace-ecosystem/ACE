@@ -43,6 +43,11 @@ class PcapConversationExtraction(ExternalProcessAnalysisModule):
         return self.config['relative_duration']
 
     @property
+    def timezone(self):
+        """Return the timezone the remote sensors expect or None"""
+        return self.config.get('timezone', None)
+
+    @property
     def executable_path(self):
         path = self.config['executable_path']
         if os.path.isabs(path):
@@ -146,6 +151,8 @@ class PcapConversationExtraction(ExternalProcessAnalysisModule):
 
         src, dst = parse_ipv4_conversation(conversation)
 
+        if self.timezone:
+            event_time = event_time.astimezone(pytz.timezone(self.timezone))
         event_time = event_time.strftime('%Y-%m-%d %H:%M:%S %z')
 
         bpf = '(host {} and host {})'.format(src, dst)
