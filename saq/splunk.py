@@ -1,6 +1,7 @@
 # vim: sw=4:ts=4:et
 
 import datetime
+import dateutil.parser
 import json
 import logging
 import re
@@ -37,6 +38,13 @@ def extract_event_timestamp(obj, event):
         logging.warning(f"splunk event missing _time field for {obj}")
         return local_time()
 
+    try:
+        event_time = dateutil.parser.parse(event['_time'])
+        return event_time
+    except Exception as e:
+        logging.error(f"failed to parse {event['_time']}: {e}")
+
+    # fallback to traditional method, which results in a naive datetime.
     m = re.match(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})\.[0-9]{3}[-+][0-9]{2}:[0-9]{2}$', event['_time'])
     if not m:
         logging.error(f"_time field does not match expected format: {event['_time']} for {obj}")
