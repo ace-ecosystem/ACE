@@ -1109,10 +1109,10 @@ correlate_parser.set_defaults(func=correlate)
 remediation_parser = subparsers.add_parser('remediation')
 remediation_sp = remediation_parser.add_subparsers(dest='remediation_cmd')
 
-def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None):
+def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None, print_json=False):
+    import json
     from saq.database import Remediation, User
     from sqlalchemy import or_
-    from tabulate import tabulate
 
     query = saq.db.query(Remediation).join(User)
 
@@ -1135,8 +1135,22 @@ def print_remediation_status(id=None, type=None, status=None, key=None, user_id=
         query = query.filter(or_(User.username.ilike(f'%{user}%'), 
                                  User.display_name.ilike(f'%{user}%')))
 
-    remediation_data = [r.json for r in query.order_by(Remediation.insert_date.desc())]
-    print(tabulate(remediation_data, headers="keys"))
+    remediation_data = query.order_by(Remediation.insert_date.desc())
+    if not remediation_data.first():
+        print("No remediation data found.")
+        return None
+
+    if print_json:
+        print(json.dumps([r.json for r in remediation_data], default=str))
+        return True
+
+    _keys = remediation_data[0].json.keys()
+    for r in remediation_data:
+        _r_text = " -> "
+        _r_data = r.json
+        for k in _keys:
+            _r_text += f"{k}:{_r_data[k]} | "
+        print(_r_text)
 
 def remediation_status(args):
     print_remediation_status(id=args.id,
@@ -1144,7 +1158,8 @@ def remediation_status(args):
                              type=args.type,
                              key=args.key,
                              user=args.user,
-                             user_id=args.user_id)
+                             user_id=args.user_id,
+                             print_json=args.json)
     sys.exit(0)
 
 remediation_status_parser = remediation_sp.add_parser('status',
@@ -1161,6 +1176,8 @@ remediation_status_parser.add_argument('--user-id', type=int,
     help="Return results matching the given user_id.")
 remediation_status_parser.add_argument('-i', '--id', type=int,
     help="Return results matching the given remediation id.")
+remediation_status_parser.add_argument('--json', default=False, action='store_true',
+    help="Return results as json.")
 remediation_status_parser.set_defaults(func=remediation_status)
 
 def execute_remediation(args):
