@@ -1,0 +1,35 @@
+{% if analysis.details %}
+<table class="table table-bordered table-condensed">
+    <tr>
+        <td colspan="6">Question <b>{{analysis.details['question']}}</b></td>
+    </tr>
+    <tr>
+        <td colspan="6">Summary <b>{{analysis.details['query_summary']}}</b></td>
+    </tr>
+    {% if analysis.details['query_error'] %}
+    <tr>
+        <td colspan="6">Error <b>{{analysis.details['query_error']}}</b></td>
+    </tr>
+    {% endif %}
+</table>
+{% if 'tables' in analysis.details %}
+    {% for table_name, data_table in analysis.details['tables'].items() %}
+        <br>
+        <b>{{table_name}}:</b>
+        <pre>{{data_table}}</pre>
+    <br>
+    <hr>
+    {% endfor %}
+{% endif %}
+
+<b>Query:</b>
+<pre>
+    {{analysis.details['query']}}
+</pre>
+<br>
+<b>Query Results:</b>
+<pre>
+    {{ analysis.details['query_results'] | pprint }}
+</pre>
+
+{% endif %}
