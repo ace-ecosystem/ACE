@@ -1,13 +1,28 @@
-<div class="panel panel-default">
-    <div class="panel-heading">Total Results: <b>{{analysis.details['total_results']}}</b></div>
-    <div class="panel-body">
-	<div class="row">
-            <div class="col-md-12">
-                {% block alert_process_facet %} <pre>{{ analysis.print_facet_histogram(analysis.details['process_name_facet']) }}</pre> {% endblock %}
+{% if analysis.details and 'queries' in analysis.details %}
+    {% for key,query_string in analysis.details['queries'].items() %}
+    <b>Total Process Results: {{analysis.details['total_process_results']}}</b>
+    <div class="panel panel-default">
+        <div class="panel-heading">Total Query Results ({{key}}): {{analysis.details['total_query_results'][key]}}</b></div>
+        <div class="panel-body">
+
+        <b>Query</b>:
+        <pre>{{query_string}}</pre><br>
+
+        <b>Histogram</b>:
+        <pre>{{analysis.print_facet_histogram(analysis.details['process_name_facet'][key])}}</pre>
+
+          <div class="panel panel-default">
+            <div class="panel-heading">The <i>most recent</i> <b>{{analysis.details['process_samples'][key]|length}}</b> processes:</div>
+              <div class="panel-body">
+              {% for sample in analysis.details['process_samples'][key] %}
+                <b>Process GUID = {{sample['fields']['id']}}:</b>
+                <div class="well"><a href="{{sample['fields']['webui_link']}}" target="_blank">{{sample['fields']['start']}} UTC <b>{{sample['fields']['username']}}@{{sample['fields']['hostname']}}</b> <span style="color: #0000FF">{{sample['fields']['path']}}</span> <span style="color: #FF0000">{{sample['fields']['cmdline']}}</span> <span style="color: #008000">{{sample['fields']['process_md5']}}</span> - {{sample['fields']['id']}}</a></div>
+                <pre>{{sample['info']}}</pre>
+                <hr>
+              {% endfor %}
+              </div>
             </div>
         </div>
-        {% for result in analysis.details['results'] %}
-	<div class="well"><a href="{{result['webui_link']}}" target="_blank">{{result['start']}} UTC <b>{{result['username']}}@{{result['hostname']}}</b> <span style="color: #0000FF">{{result['path']}}</span> <span style="color: #FF0000">{{result['cmdline']}}</span> <span style="color: #008000">{{result['process_md5']}}</span> - {{result['id']}}</a></div>
-        {% endfor %}
     </div>
-</div>
+    {% endfor %}
+{% endif %}

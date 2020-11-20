@@ -14,12 +14,15 @@ from cbapi.response import *
 
 import requests
 
-KEY_TOTAL_RESULTS = 'total_results'
-
-class CarbonBlackProcessAnalysis_v1(Analysis):
+class CarbonBlackProcessAnalysis_v2(Analysis):
     """How many times have we seen this anywhere in our environment?"""
     def initialize_details(self):
         self.details = {
+            'queries': {}, # query_key -> query string
+            'total_query_results': {}, # query_key -> result count
+            'process_samples': {}, # query_key -> list of first X process samples
+            'total_process_results': 0, # A total result accross all queries
+            'process_name_facet': {} # query_key -> str histogram strings
         }
 
     @property
@@ -35,17 +38,24 @@ class CarbonBlackProcessAnalysis_v1(Analysis):
                   u"\u25A0"*(int(entry['percent']/2)))
         return return_string
 
+    @property
+    def process_sample_size(self):
+        _total_samples = 0
+        for _k in self.details['process_samples'].keys():
+            _total_samples += len(self.details['process_samples'][_k])
+        return _total_samples
+
     def generate_summary(self):
         if self.details is None:
             return None
 
-        if KEY_TOTAL_RESULTS not in self.details:
+        if self.details['total_process_results'] == 0:
             return None
 
-        return 'Carbon Black Process Analysis ({} process matches - Sample of {} processes)'.format(self.details[KEY_TOTAL_RESULTS],
-                                                                                                    len(self.details['results']))
+        return 'Carbon Black Process Analysis ({} process matches - Sample of {} processes)'.format(self.details['total_process_results'],
+                                                                                                    self.process_sample_size)
 
-class CarbonBlackProcessAnalyzer_v1(AnalysisModule):
+class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
     def verify_environment(self):
 
         if not 'carbon_black' in saq.CONFIG:
@@ -65,11 +75,18 @@ class CarbonBlackProcessAnalyzer_v1(AnalysisModule):
 
     @property
     def generated_analysis_type(self):
-        return CarbonBlackProcessAnalysis_v1
+        return CarbonBlackProcessAnalysis_v2
 
     @property
     def valid_observable_types(self):
-        return ( F_IPV4, F_FQDN, F_FILE_PATH, F_FILE_NAME, F_MD5, F_SHA1, F_SHA256 )
+        return ( F_IPV4, F_FQDN, F_FILE_PATH, F_FILE_NAME, F_MD5, F_SHA256, F_URL )
+
+    def custom_requirement(self, observable):
+        # only look for root level URLs on the CbR command line.
+        if observable.type == F_URL and not self.root.has_observable(observable):
+            logging.info(f"skipping {self} because {observable} is not a root observable.")
+            return False
+        return True
 
     def execute_analysis(self, observable):
 
@@ -77,60 +94,72 @@ class CarbonBlackProcessAnalyzer_v1(AnalysisModule):
         if observable not in self.root.observables and not observable.is_suspect:
             return False
 
+        # allow for performing multiple queries (file_names)
+        queries = {}
         # generate the query based on the indicator type
-        query = None
         if observable.type == F_IPV4:
             # we don't analyze our own IP address space
             if observable.is_managed():
                 logging.debug("skipping analysis for managed ipv4 {}".format(observable))
                 return False
 
-            query = 'ipaddr:{}/32'.format(observable.value)
+            queries['ipaddr'] = f"ipaddr:{observable.value}/32"
         elif observable.type == F_FQDN:
-            query = 'domain:{}'.format(observable.value)
-        elif observable.type == F_FILE_PATH or observable.type == F_FILE_NAME:
-            query = '"{}"'.format(observable.value.replace('"', '\\"'))
+            queries['domain'] = f"domain:{observable.value}"
+        elif observable.type == F_FILE_PATH:
+            _value = observable.value.replace('"', '\\"')
+            queries['verbose_file_path'] = f'"{_value}"'
+        elif observable.type == F_FILE_NAME:
+            queries['cmdline'] = f'cmdline:"{observable.value}"'
+            queries['filemod'] = f'filemod:"{observable.value}"'
         elif observable.type == F_MD5:
-            query = 'md5:"{}"'.format(observable.value)
-        elif observable.type == F_SHA1:
-            query = observable.value
+            queries['md5'] = f"md5:{observable.value}"
         elif observable.type == F_SHA256:
-            query = observable.value
+            queries['sha256'] = f"sha256:{observable.value}"
+        elif observable.type == F_URL:
+            # See the custom requirement - only work on root level URLs
+            queries['cmdline'] = f'cmdline:"{observable.value}"'
         else:
             # this should not happen
             logging.error("invalid observable type {}".format(observable.type))
             return False
 
-        analysis = self.create_analysis(observable)
-
-        # the default is to use the 'default' profile
         cb = CbResponseAPI(credential_file=self.credentials)
 
         # when love makes a sound babe
         # a heart needs a second chance
-        attempt = 0
-        while True:
+        processes = {}
+        any_results = False
+        for _k, query in queries.items():
             try:
-                processes = cb.select(Process).where(query).group_by('id')
-                break
+                processes[_k] = cb.select(Process).where(query).group_by('id')
+                if processes[_k]:
+                    any_results = True
             except Exception as e:
-                if attempt > 2:
-                    raise e
-                attempt += 1
-                logging.warning("{} - retrying attempt #{}".format(e, attempt))
-                # XXX use delayed analysis instead
-                self.sleep(5) # wait a few seconds and try again
-                if self.shutdown or self.cancel_analysis_flag:
-                    return False
+                logging.error(f"problem querying carbonblack for {observable} with '{query}' : {e}")
 
-        analysis.details['results'] = []
-        analysis.details['total_results'] = len(processes)
-        # generate some facet data
-        analysis.details['process_name_facet'] = processes.facets('process_name')['process_name']
-        for process in processes:
-            if len(analysis.details['results']) >= self.max_results:
-                break
-            analysis.details['results'].append({'id': process.id,
+        if not any_results:
+            return False
+
+        analysis = self.create_analysis(observable)
+        analysis.details['queries'] = queries
+
+        # complete the data
+        for _k in queries.keys():
+            # make process histograms
+            analysis.details['process_name_facet'][_k] = processes[_k].facets('process_name')['process_name']
+            # count the results
+            analysis.details['total_query_results'][_k] = len(processes[_k])
+            analysis.details['total_process_results'] += analysis.details['total_query_results'][_k]
+            # take samples
+            analysis.details['process_samples'][_k] = []
+            for process in processes[_k]:
+                if len(analysis.details['process_samples'][_k]) >= self.max_results:
+                    break
+                sample = {}
+                sample['info'] = str(process)
+                # grab the best summary fields
+                sample['fields'] = {'id': process.id,
                     'start': process.start,
                     'username': process.username,
                     'hostname': process.hostname,
@@ -138,33 +167,22 @@ class CarbonBlackProcessAnalyzer_v1(AnalysisModule):
                     'process_md5': process.process_md5,
                     'path': process.path,
                     'webui_link': process.webui_link
-                    })
-            #analysis.add_observable(F_PROCESS_GUID, process.id)
-
-
-        # look for people using skype
-        for result in analysis.details['results']:
-            if 'process_name' in result and result['process_name'] == 'skype.exe':
-                observable.add_tag('p2p:skype')
-            if 'process_name' in result and result['process_name'] == 'thunder.exe':
-                observable.add_tag('p2p:thunder')
-            #if 'process_name' in result and 'sogou' in result['process_name']:
-                #observable.add_tag('p2p:sogou')
+                    }
+                analysis.details['process_samples'][_k].append(sample)
             
+            if len(processes[_k]) == 1:
+                # just one process, add it
+                process = processes[_k][0]
+                if len(process.get_segments()) < 5:
+                    analysis.add_observable(F_PROCESS_GUID, process.id)
+                else:
+                    logging.info(f"not adding process_guid={process.id} observable because it has {process._segments} segments (it's big)")
 
-        # I'm going to refactor to allow users to do this manually we needed
-        #for result in analysis.details['results']:
-            #if 'hostname' in result and result['hostname'] != '':
-                #analysis.add_observable(F_HOSTNAME, result['hostname'])
-            #if 'path' in result and result['path'] != '':
-                #analysis.add_observable(F_FILE_PATH, result['path'])
-            #if 'process_md5' in result and result['process_md5'] != '':
-                #analysis.add_observable(F_MD5, result['process_md5'])
-            #if 'username' in result and result['username'] != '':
-                #if '\\' in result['username']:
-                    #analysis.add_observable(F_USER, result['username'].split('\\')[1])
-                #else:
-                    #analysis.add_observable(F_USER, result['username'])
+            elif len(processes[_k]) < 4:
+                # if there was only a few process results, look at adding small ones
+                for process in processes[_k]:
+                     if len(process.get_segments()) < 3:
+                         analysis.add_observable(F_PROCESS_GUID, process.id)
 
         return True
 
