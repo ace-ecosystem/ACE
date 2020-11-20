@@ -176,7 +176,7 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
                 if len(process.get_segments()) < 5:
                     analysis.add_observable(F_PROCESS_GUID, process.id)
                 else:
-                    logging.info(f"not adding process_guid={process.id} observable because it has {process._segments} segments (it's big)")
+                    logging.info(f"not adding process_guid={process.id} observable because it has {len(process._segments)} segments (it's big)")
 
             elif len(processes[_k]) < 4:
                 # if there was only a few process results, look at adding small ones
