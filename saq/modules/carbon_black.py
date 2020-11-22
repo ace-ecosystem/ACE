@@ -307,7 +307,7 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
 
     @property
     def valid_observable_types(self):
-        return F_IPV4_FULL_CONVERSATION, F_IPV4_PORT_DESTINATION
+        return F_IPV4_FULL_CONVERSATION
 
     def execute_analysis(self, observable):
         
@@ -316,15 +316,9 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
         start_time = target_time.astimezone(pytz.timezone('UTC')) - datetime.timedelta(hours=self.relative_hours_before)
         end_time = target_time.astimezone(pytz.timezone('UTC')) + datetime.timedelta(hours=self.relative_hours_after)
 
-        query = ""
-        src = src_port = dst = dst_port = None
-        if observable.type == F_IPV4_PORT_DESTINATION:
-            dst, dst_port = parse_ipv4_port_destination(observable.value)
-            query = f"ipaddr:{dst} ipport:{dst_port}"
-        else:
-            src, src_port, dst, dst_port = parse_ipv4_full_conversation(observable.value)
-            # will require further validation
-            query = f"ipaddr:{dst} ipport:{dst_port}"
+        src, src_port, dst, dst_port = parse_ipv4_full_conversation(observable.value)
+        # CbR fields are limited so we will work with the destination and refine
+        query = f"ipaddr:{dst} ipport:{dst_port}"
 
         logging.debug(f"attempting to identify source of {observable.value} with CbR query: '{query}' between '{start_time}' and '{end_time}'")
         cb = CbResponseAPI(credential_file=self.credentials)
@@ -367,10 +361,9 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
         analysis.details['query'] = query
         analysis.details['query_start_time'] = start_time
         analysis.details['query_end_time'] = end_time
-        # q=ipaddr%3A92.242.140.21+ipport%3A3389+-process_id%3A000078ab-0000-53a0-01d6-bebfd503afee <- broke
-        # q=ipaddr%3A92.242.140.21%20ipport%3A3389%20-process_id%3A0000732f-0000-3db8-01d6-bf754aaf7636
+        # q=ipaddr%3A2.242.14.21+ipport%3A3389+-process_id%3A000078ab-0000-53a0-01d6-bebfd503afee <- broken
+        # q=ipaddr%3A2.242.14.21%20ipport%3A3389%20-process_id%3A0000732f-0000-3db8-01d6-bf754aaf7636
         analysis.details['query_webui_link'] = processes.webui_link.replace('+', '%20')
-
 
         confident_in_the_process = False
         if observable.type == F_IPV4_FULL_CONVERSATION and src is not None:
@@ -396,7 +389,6 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
 
         if confident_in_the_process and len(processes) == 1:
             return True
-
         # else, what do the other processes look like?
 
         # record some histogram data
@@ -426,7 +418,7 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
 
         for process in processes:
             if 'id' in analysis.details['the_process'] and process.id == analysis.details['the_process']['id']:
-                # this is not a sample, this is "the" process
+                # don't sample "the" process
                 continue
             if len(analysis.details['process_samples']) >= self.max_samples:
                 break

@@ -56,7 +56,6 @@ F_INDICATOR = 'indicator'
 F_IPV4 = 'ipv4'
 F_IPV4_CONVERSATION = 'ipv4_conversation'
 F_IPV4_FULL_CONVERSATION = 'ipv4_full_conversation'
-F_IPV4_PORT_DESTINATION = 'ipv4_port_destination'
 F_MAC_ADDRESS = 'mac_address'
 F_MD5 = 'md5'
 F_MESSAGE_ID = 'message_id'
@@ -96,7 +95,6 @@ OBSERVABLE_DESCRIPTIONS = {
     F_IPV4: 'IP address (version 4)',
     F_IPV4_CONVERSATION: 'two F_IPV4 that were communicating formatted as aaa.bbb.ccc.ddd_aaa.bbb.ccc.ddd',
     F_IPV4_FULL_CONVERSATION: 'two F_IPV4 that were communicating formatted as src_ipv4:src_port:dest_ipv4:dest_port',
-    F_IPV4_PORT_DESTINATION: 'the F_IPV4 and port of a destination connection formatted as dest_ipv4:dest_port',
     F_MAC_ADDRESS: 'network card mac address',
     F_MD5: 'MD5 hash',
     F_MESSAGE_ID: 'email Message-ID',
@@ -137,7 +135,6 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_IPV4,
     F_IPV4_CONVERSATION,
     F_IPV4_FULL_CONVERSATION,
-    F_IPV4_PORT_DESTINATION,
     F_MAC_ADDRESS,
     F_MD5,
     F_MESSAGE_ID,
@@ -162,13 +159,6 @@ DEPRECATED_OBSERVABLES = sorted([
     F_SUSPECT_FILE,
     F_YARA
 ])
-
-# utility functions to work with F_IPV4_PORT_DESTINATION types
-def parse_ipv4_port_destination(f_ipv4_port_dest):
-    return f_ipv4_port_dest.split(':', 1)
-
-def create_ipv4_port_destination(dst, dst_port):
-    return f'{dst}:{dst_port}'
 
 # utility functions to work with F_IPV4_FULL_CONVERSATION types
 def parse_ipv4_full_conversation(f_ipv4_fc):
