@@ -189,6 +189,12 @@ class IPIAnalyzer(AnalysisModule):
         self.verify_config_exists('use_proxy')
         self.verify_config_exists('tag_list')
 
+    def custom_requirement(self, observable):
+        if observable.type == F_IPV4 and observable.is_managed():
+            logging.debug(f"{self} skipping analysis for managed ipv4 {observable}")
+            return False
+        return True
+
     def execute_analysis(self, observable):
         logging.debug("Inspecting {}".format(observable.value))
         try:
