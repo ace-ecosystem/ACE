@@ -1,4 +1,6 @@
+
 {% if analysis.details and 'queries' in analysis.details %}
+    {# multi-query analysis #}
     {% for key,query_string in analysis.details['queries'].items() %}
     <b>Total Process Results: {{analysis.details['total_process_results']}}</b>
     <div class="panel panel-default">
@@ -25,4 +27,53 @@
         </div>
     </div>
     {% endfor %}
+{% elif analysis.details and 'query' in analysis.details %}
+    {# single-query analysis #}
+    <b>This Analysis is based on the following CarbonBlack Response query</b>:
+    <pre>{{analysis.details['query']}}</pre>
+    <i>Results were constrained between {{analysis.details['query_start_time']}} and {{analysis.details['query_end_time']}}</i>
+    <p>You can load this query in the CarbonBlack GUI by clicking <a href="{{analysis.details['query_webui_link']}}" target="_blank">here</a> <i>(you may need to click Search in their portal).</p>
+    <br><br>
+    {% if analysis.details['the_process'] %}
+        <b>The network connection was successfully correlated:</b>
+        <pre>{{analysis.details['the_netconn']|pprint}}</pre>
+        <br>
+        <b>The network connection was made by the following process:</b>
+        <pre>{{analysis.details['the_process']['full_info_string']}}</pre>
+        <br>
+    {% endif %}
+    <div class="panel panel-default">
+      <div class="panel-heading">Result summaries</div>
+        <div class="panel-body">
+        {% if analysis.details['correlated_domain_names'] %}
+        <b>Correlated Domain Name result breakdown</b>:
+        <pre>{{analysis.print_domain_summary_histogram()}}</pre>
+        <hr>
+        {% endif %}
+        {% if analysis.details['histogram_data'] %}
+        <b>Process Histograms</b>:
+        {% for title, facets in analysis.details['histogram_data'].items() %}
+            <pre>{{analysis.print_facet_histogram(title, facets)}}</pre>
+        {% endfor %}
+        <hr>
+        {% endif %}
+        {% if analysis.details['process_samples'] %}
+          <h3>Summaries of the <i>most recent</i> <b>{{analysis.details['process_samples']|length}}</b> processes:</h3>
+          {% for guid, process in analysis.details['process_samples'].items() %}
+          <div class="panel panel-default">
+            <div class="panel-heading"><a href="{{process['webui_link']}}" target="_blank">{{process['id']}} - {{process['username']}}@{{process['hostname']}}</b> <span style="color: #0000FF">{{process['path']}}</span> <span style="color: #FF0000">{{process['cmdline']}}</span></a></div>
+              <div class="panel-body">
+              <b>Process Info:</b>
+              <pre>{{process['full_info_string']}}</pre>
+              <b>Process NetConns:</b>
+              <pre>{{analysis.print_netconns(analysis.details['netconn_summary'][guid])}}</pre>
+            </div>
+          </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+
+{% elif analysis.details %}
+    <pre>{{analysis.details|pprint}}</pre>
 {% endif %}

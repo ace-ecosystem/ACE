@@ -1,6 +1,8 @@
 # vim: sw=4:ts=4:et
 
+import datetime
 import logging
+import pytz
 
 import saq
 
@@ -8,11 +10,41 @@ from saq.analysis import Analysis, Observable
 from saq.constants import *
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule
-from saq.util import parse_event_time
+from saq.util import parse_event_time, create_histogram_string
 
 from cbapi.response import *
 
 import requests
+
+# helpers
+def process_metadata_to_json(process: models.Process):
+    return {'id': process.id,
+            'start': process.start,
+            'username': process.username,
+            'hostname': process.hostname,
+            'cmdline': process.cmdline,
+            'process_md5': process.process_md5,
+            'path': process.path,
+            'webui_link': process.webui_link,
+            'full_info_string': str(process)}
+
+def netconn_to_json(nc: models.CbNetConnEvent):
+    return {'timestamp': str((nc.timestamp)), 'domain': nc.domain,
+            'remote_ip': nc.remote_ip, 'remote_port': nc.remote_port,
+            'proto': nc.proto, 'direction': nc.direction, 'local_ip': nc.local_ip,
+            'local_port': nc.local_port, 'proxy_ip': nc.proxy_ip,
+            'proxy_port': nc.proxy_port}
+
+def create_facet_histogram_string(title: str, facets: list):
+    logging.info(f"MARKER: wft is {type(facets)}")
+    total_results = sum([entry['value'] for entry in facets])
+    return_string = f"\n\t\t\t{title}\n"
+    return_string += "\t\t\t-------------------------------\n"
+    for entry in facets:
+        return_string += "%50s: %5s %5s%% %s\n" % (entry["name"][:45], entry['value'], entry["ratio"],
+                u"\u25A0"*(int(entry['percent']/2)))
+    return_string += f"\t\t\tTotal Results: {total_results}\n"
+    return return_string
 
 class CarbonBlackProcessAnalysis_v2(Analysis):
     """How many times have we seen this anywhere in our environment?"""
@@ -30,13 +62,7 @@ class CarbonBlackProcessAnalysis_v2(Analysis):
         return "analysis/carbon_black.html"
 
     def print_facet_histogram(self, facets):
-        total_results = sum([entry['value'] for entry in facets])
-        return_string = "\n\t\t\tTotal Process Segments: {}\n".format(total_results)
-        return_string += "\t\t\t--------------------------\n"
-        for entry in facets:
-            return_string += "%50s: %5s %5s%% %s\n" % (entry["name"][:45], entry['value'], entry["ratio"],
-                  u"\u25A0"*(int(entry['percent']/2)))
-        return return_string
+        return create_facet_histogram_string("Results by process_name:", facets)
 
     @property
     def process_sample_size(self):
@@ -89,6 +115,8 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
         return True
 
     def execute_analysis(self, observable):
+
+        # XXX Add time here to narrow query and save resources
 
         # we only analyze observables that came with the alert and ones with detection points
         if observable not in self.root.observables and not observable.is_suspect:
@@ -187,19 +215,58 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
         return True
 
 class CarbonBlackNetconnSourceAnalysis(Analysis):
-
     def initialize_details(self):
-        self.details = []
+        self.details = {
+            'the_process': {},
+            'the_netconn': {},
+            'process_samples': {},
+            'netconn_summary': {},
+            'correlated_domain_names': {},
+            'histogram_data': {}
+        }
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/carbon_black.html"
+
+    def print_domain_summary_histogram(self):
+        return create_histogram_string(self.details['correlated_domain_names'])
+
+    def print_facet_histogram(self, title, facets):
+        return create_facet_histogram_string(title, facets)
+
+    def print_netconns(self, netconns):
+        txt = ""
+        for nc in netconns:
+            txt += f"{nc['timestamp']} (UTC): ({nc['direction']}) local_ip:port={nc['local_ip']}:{nc['local_port']} "
+            txt += f"proxy_ip:port={nc['proxy_ip']}:{nc['proxy_port']} remote_ip:port={nc['remote_ip']}:{nc['remote_port']} "
+            txt += f"domain={nc['domain']}\n"
+        return txt
 
     def generate_summary(self):
-        if not self.details:
+        if not self.details['the_process'] and not self.details['process_samples']:
             return None
 
-        process_paths = [p['process_path'] for p in self.details if 'process_path' in p]
+        summary = "Carbonblack Netconn Source Analysis: "
+        if self.details['the_process']:
+            summary += f"process={self.details['the_process']['id']} - "
+            summary += f"{self.details['the_process']['path']}"
+            if self.details['the_netconn'] and self.details['the_netconn']['domain']:
+                summary += f" - {self.details['the_netconn']['domain']}"
+            return summary
+
+        process_paths = [p['path'] for p in self.details['process_samples'].values()]
         if len(process_paths) == 1:
-            return f"Carbonblack Netconn Source Analysis: {process_paths[0]}"
+            summary += f"{process_paths[0]}"
         else:
-            return f"Carbonblack Netconn Source Analysis: {len(process_paths)} processes"
+            summary += f"{len(self.details['process_samples'])} processes"
+
+        if len(self.details['correlated_domain_names'].keys()) == 1:
+            _domain = list(self.details['correlated_domain_names'].keys())[0]
+            return f"{summary} - {_domain}"
+        elif self.details['correlated_domain_names']:
+            return f"{summary} - {len(self.details['correlated_domain_names'])} domains"
+
 
 class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
 
@@ -212,36 +279,176 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
         return CarbonBlackNetconnSourceAnalysis
 
     @property
+    def max_samples(self):
+        return self.config.getint('max_samples')
+
+    @property
+    def max_process_guids(self):
+        return self.config.getint('max_process_guids')
+
+    @property
+    def max_process_segments(self):
+        return self.config.getint('max_process_segments')
+
+    @property
+    def segment_limit(self):
+        return saq.CONFIG['carbon_black'].getint('segment_limit')
+
+    @property
+    def relative_hours_before(self):
+        return self.config.getint('relative_hours_before')
+
+    @property
+    def relative_hours_after(self):
+        return self.config.getint('relative_hours_after')
+
+    @property
+    def credentials(self):
+        return saq.CONFIG['carbon_black']['credential_file']
+
+    @property
     def valid_observable_types(self):
-        return F_IPV4_FULL_CONVERSATION
+        return F_IPV4_FULL_CONVERSATION, F_IPV4_PORT_DESTINATION
 
-    def execute_analysis(self, ipv4_fc):
+    def execute_analysis(self, observable):
         
-        target_time = ipv4_fc.time if ipv4_fc.time else self.root.event_time
+        target_time = observable.time if observable.time else self.root.event_time
+        # CbR default timezone is GMT/UTC
+        start_time = target_time.astimezone(pytz.timezone('UTC')) - datetime.timedelta(hours=self.relative_hours_before)
+        end_time = target_time.astimezone(pytz.timezone('UTC')) + datetime.timedelta(hours=self.relative_hours_after)
 
-        # source -> dest (dest_port)
-        source_dest_json = None
-        self.splunk_query(f"""index=carbonblack event_type=netconn local_ip={ipv4_fc.source} remote_ip={ipv4_fc.dest} remote_port={ipv4_fc.dest_port} | fields *""", target_time)
-        if self.search_results is not None:
-            source_dest_json = self.json()
+        query = ""
+        src = src_port = dst = dst_port = None
+        if observable.type == F_IPV4_PORT_DESTINATION:
+            dst, dst_port = parse_ipv4_port_destination(observable.value)
+            query = f"ipaddr:{dst} ipport:{dst_port}"
+        else:
+            src, src_port, dst, dst_port = parse_ipv4_full_conversation(observable.value)
+            # will require further validation
+            query = f"ipaddr:{dst} ipport:{dst_port}"
 
-        # dest -> source (src_port)
-        dest_source_json = None
-        self.splunk_query(f"""index=carbonblack event_type=netconn local_ip={ipv4_fc.dest} remote_ip={ipv4_fc.source} remote_port={ipv4_fc.source_port} | fields *""", target_time)
-        if self.search_results is not None:
-            dest_source_json = self.json()
+        logging.debug(f"attempting to identify source of {observable.value} with CbR query: '{query}' between '{start_time}' and '{end_time}'")
+        cb = CbResponseAPI(credential_file=self.credentials)
 
-        if source_dest_json is None and dest_source_json is None:
+        processes = None
+        try:
+            processes = cb.select(Process).where(query).group_by('id').min_last_update(start_time).max_last_update(end_time)
+        except Exception as e:
+            logging.error(f"problem querying carbonblack for {observable} with '{query}' : {e}")
+
+        if not processes:
             return False
+        logging.info(f"got {len(processes)} process results for '{query}' between '{start_time}' and '{end_time}'")
 
-        analysis = self.create_analysis(ipv4_fc)
-        if source_dest_json is not None:
-            analysis.details.extend(source_dest_json)
-        if dest_source_json is not None:
-            analysis.details.extend(dest_source_json)
+        # Protect the analyst from rabbit holes by throwing out processes that
+        # don't really match the remote ip:port connection. This happens when a
+        # process makes a connection to the ip and the port but not in the same connection.
+        rabbit_processes = []
+        for p in processes:
+            for nc in p.netconns:
+                if nc.remote_ip == dst and nc.remote_port == int(dst_port):
+                    break
+            else:
+                rabbit_processes.append(p.id)
 
-        procs = [(p['process_guid'], parse_event_time(p['_time'])) for p in analysis.details if 'process_guid' in p]
-        for process_guid, event_time  in procs[:self.process_guid_limit]:
-            process_guid = analysis.add_observable(F_PROCESS_GUID, process_guid, event_time)
+        if len(rabbit_processes) > 0:
+            logging.info(f"filtering out {len(rabbit_processes)} process...")
+            for guid in rabbit_processes:
+                query += f" -process_id:{guid}"
+            try:
+                processes = cb.select(Process).where(query).group_by('id').min_last_update(start_time).max_last_update(end_time)
+            except Exception as e:
+                logging.error(f"problem querying carbonblack for {observable} with '{query}' : {e}")
+
+            if not processes:
+                return False
+            logging.info(f"got {len(processes)} process results for '{query}' between '{start_time}' and '{end_time}'")
+
+        analysis = self.create_analysis(observable)
+        analysis.details['query'] = query
+        analysis.details['query_start_time'] = start_time
+        analysis.details['query_end_time'] = end_time
+        # q=ipaddr%3A92.242.140.21+ipport%3A3389+-process_id%3A000078ab-0000-53a0-01d6-bebfd503afee <- broke
+        # q=ipaddr%3A92.242.140.21%20ipport%3A3389%20-process_id%3A0000732f-0000-3db8-01d6-bf754aaf7636
+        analysis.details['query_webui_link'] = processes.webui_link.replace('+', '%20')
+
+
+        confident_in_the_process = False
+        if observable.type == F_IPV4_FULL_CONVERSATION and src is not None:
+            logging.debug("analyzing all segments looking for THE netconn.")
+            for process in processes:
+                if confident_in_the_process:
+                    break
+                for nc in process.netconns:
+                    if confident_in_the_process:
+                        break
+                    if ( (src == nc.local_ip or src == nc.proxy_ip)
+                       and (int(src_port) == nc.local_port or int(src_port) == nc.proxy_port)
+                       and ( dst == nc.remote_ip and int(dst_port) == nc.remote_port) ):
+                        confident_in_the_process = True
+                        logging.info(f"correlated {observable} to process guid: {process.id}")
+                        analysis.add_observable(F_PROCESS_GUID, process.id)
+                        analysis.details['the_process'] = process_metadata_to_json(process)
+                        analysis.details['the_netconn'] = netconn_to_json(nc)
+                        _domain = analysis.details['the_netconn']['domain']
+                        if _domain:
+                            analysis.details['correlated_domain_names'][_domain] = 1
+                            analysis.add_observable(F_FQDN, _domain)
+
+        if confident_in_the_process and len(processes) == 1:
+            return True
+
+        # else, what do the other processes look like?
+
+        # record some histogram data
+        analysis.details['histogram_data']['Results by hostname:'] = processes.facets('hostname')['hostname']
+        analysis.details['histogram_data']['Results by process name:'] = processes.facets('process_name')['process_name']
+        analysis.details['histogram_data']['Results by child process:'] = processes.facets('childproc_name')['childproc_name']
+        analysis.details['histogram_data']['Results by parent process:'] = processes.facets('parent_name')['parent_name']
+
+        if not confident_in_the_process:
+            # look at adding some GUIDs
+            if len(processes) == 1:
+                # NOTE, the process guid analyzer is going to stop processing at the configured 'segment_limit'
+                # however, I see no reason to add process_guids for large processes like explore.exe.
+                # Large processes are rarely malicious and can be contextual noise to analysts.
+                process = processes[0]
+                if len(process.get_segments()) < self.segment_limit:
+                    analysis.add_observable(F_PROCESS_GUID, process.id)
+                else:
+                    logging.info(f"{self} not creating process_guid={process.id} observable. Segment limit={self.max_process_segments} & process segments={len(process._segments)}")
+
+            elif len(processes) <= self.max_process_guids:
+                for process in processes:
+                    if len(process.get_segments()) < self.max_process_segments:
+                        analysis.add_observable(F_PROCESS_GUID, process.id)
+                    else:
+                        logging.info(f"{self} not creating process_guid={process.id} observable. Segment limit={self.max_process_segments} & process segments={len(process._segments)}")
+
+        for process in processes:
+            if 'id' in analysis.details['the_process'] and process.id == analysis.details['the_process']['id']:
+                # this is not a sample, this is "the" process
+                continue
+            if len(analysis.details['process_samples']) >= self.max_samples:
+                break
+            analysis.details['process_samples'][process.id] = process_metadata_to_json(process)
+            netconn_summary = []
+            for nc in process.netconns:
+                netconn_summary.append(netconn_to_json(nc))
+            analysis.details['netconn_summary'][process.id] = netconn_summary
+
+        # look through the netconn summaries for domains associated with the dst_ip:dest_port
+        for nc_summary in analysis.details['netconn_summary'].values():
+            for nc in nc_summary:
+                if nc['remote_ip'] == dst and nc['remote_port'] == int(dst_port):
+                    if nc['domain'] not in analysis.details['correlated_domain_names']:
+                        logging.info(f"correlated {observable} to fqdn: {nc['domain']}")
+                        analysis.details['correlated_domain_names'][nc['domain']] = 1
+                    else:
+                        analysis.details['correlated_domain_names'][nc['domain']] += 1
+
+        if len(analysis.details['correlated_domain_names']) == 1:
+            _domain = list(analysis.details['correlated_domain_names'].keys())[0]
+            analysis.add_observable(F_FQDN, _domain)
 
         return True
