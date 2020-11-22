@@ -32,13 +32,14 @@
     <b>This Analysis is based on the following CarbonBlack Response query</b>:
     <pre>{{analysis.details['query']}}</pre>
     <i>Results were constrained between {{analysis.details['query_start_time']}} and {{analysis.details['query_end_time']}}</i>
-    <p>You can load this query in the CarbonBlack GUI by clicking <a href="{{analysis.details['query_webui_link']}}" target="_blank">here</a> <i>(you may need to click Search in their portal).</p>
-    <br><br>
+    <p>You can load this query in the CarbonBlack GUI by clicking <a href="{{analysis.details['query_webui_link']}}" target="_blank">here</a><i>(you may need to click Search in their portal).</i></p>
+    <br>
     {% if analysis.details['the_process'] %}
-        <b>The network connection was successfully correlated:</b>
+        <b><span style="color: #008000">The network connection was successfully correlated:</span></b>
         <pre>{{analysis.details['the_netconn']|pprint}}</pre>
         <br>
-        <b>The network connection was made by the following process:</b>
+        <b>The network connection was made by the following process:</b><br>
+        <a href="{{analysis.details['the_process']['webui_link']}}" target="_blank">{{analysis.details['the_process']['id']}} - {{analysis.details['the_process']['username']}}@{{analysis.details['the_process']['hostname']}}</b> <span style="color: #0000FF">{{analysis.details['the_process']['path']}}</span> <span style="color: #FF0000">{{analysis.details['the_process']['cmdline']}}</span></a>
         <pre>{{analysis.details['the_process']['full_info_string']}}</pre>
         <br>
     {% endif %}

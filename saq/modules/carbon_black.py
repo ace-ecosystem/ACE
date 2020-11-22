@@ -36,7 +36,6 @@ def netconn_to_json(nc: models.CbNetConnEvent):
             'proxy_port': nc.proxy_port}
 
 def create_facet_histogram_string(title: str, facets: list):
-    logging.info(f"MARKER: wft is {type(facets)}")
     total_results = sum([entry['value'] for entry in facets])
     return_string = f"\n\t\t\t{title}\n"
     return_string += "\t\t\t-------------------------------\n"
