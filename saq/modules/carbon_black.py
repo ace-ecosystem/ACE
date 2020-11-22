@@ -50,18 +50,21 @@ class CarbonBlackProcessAnalysis_v2(Analysis):
     def initialize_details(self):
         self.details = {
             'queries': {}, # query_key -> query string
+            'query_weblinks': {}, # query_key -> link to load query in CbR
+            'start_time': None,
+            'end_time': None,
             'total_query_results': {}, # query_key -> result count
             'process_samples': {}, # query_key -> list of first X process samples
             'total_process_results': 0, # A total result accross all queries
-            'process_name_facet': {} # query_key -> str histogram strings
+            'histogram_data': {} # query_key -> {title, histogram data}
         }
 
     @property
     def jinja_template_path(self):
         return "analysis/carbon_black.html"
 
-    def print_facet_histogram(self, facets):
-        return create_facet_histogram_string("Results by process_name:", facets)
+    def print_facet_histogram(self, title, facets):
+        return create_facet_histogram_string(title, facets)
 
     @property
     def process_sample_size(self):
@@ -91,8 +94,28 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
                 raise ValueError("missing config item {} in section carbon_black".format(key))
 
     @property
-    def max_results(self):
-        return self.config.getint('max_results')
+    def max_samples(self):
+        return self.config.getint('max_samples')
+
+    @property
+    def max_process_guids(self):
+        return self.config.getint('max_process_guids')
+
+    @property
+    def max_process_segments(self):
+        return self.config.getint('max_process_segments')
+
+    @property
+    def segment_limit(self):
+        return saq.CONFIG['carbon_black'].getint('segment_limit')
+
+    @property
+    def relative_hours_before(self):
+        return self.config.getint('relative_hours_before')
+
+    @property
+    def relative_hours_after(self):
+        return self.config.getint('relative_hours_after')
 
     @property
     def credentials(self):
@@ -107,29 +130,26 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
         return ( F_IPV4, F_FQDN, F_FILE_PATH, F_FILE_NAME, F_MD5, F_SHA256, F_URL )
 
     def custom_requirement(self, observable):
-        # only look for root level URLs on the CbR command line.
-        if observable.type == F_URL and not self.root.has_observable(observable):
-            logging.info(f"skipping {self} because {observable} is not a root observable.")
+        if observable not in self.root.observables and not observable.is_suspect:
+            # we only analyze observables that came with the alert and ones with detection points
+            logging.debug(f"{self} skipping {observable}.")
+            return False
+        if observable.type == F_IPV4 and observable.is_managed():
+            # we don't analyze our own IP address space
+            logging.debug(f"{self} skipping analysis for managed ipv4 {observable}")
             return False
         return True
 
     def execute_analysis(self, observable):
 
-        # XXX Add time here to narrow query and save resources
+        target_time = observable.time if observable.time else self.root.event_time
+        # CbR default timezone is GMT/UTC
+        start_time = target_time.astimezone(pytz.timezone('UTC')) - datetime.timedelta(hours=self.relative_hours_before)
+        end_time = target_time.astimezone(pytz.timezone('UTC')) + datetime.timedelta(hours=self.relative_hours_after)
 
-        # we only analyze observables that came with the alert and ones with detection points
-        if observable not in self.root.observables and not observable.is_suspect:
-            return False
-
-        # allow for performing multiple queries (file_names)
         queries = {}
         # generate the query based on the indicator type
         if observable.type == F_IPV4:
-            # we don't analyze our own IP address space
-            if observable.is_managed():
-                logging.debug("skipping analysis for managed ipv4 {}".format(observable))
-                return False
-
             queries['ipaddr'] = f"ipaddr:{observable.value}/32"
         elif observable.type == F_FQDN:
             queries['domain'] = f"domain:{observable.value}"
@@ -144,11 +164,9 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
         elif observable.type == F_SHA256:
             queries['sha256'] = f"sha256:{observable.value}"
         elif observable.type == F_URL:
-            # See the custom requirement - only work on root level URLs
             queries['cmdline'] = f'cmdline:"{observable.value}"'
         else:
-            # this should not happen
-            logging.error("invalid observable type {}".format(observable.type))
+            logging.error("invalid observable type {observable.type}")
             return False
 
         cb = CbResponseAPI(credential_file=self.credentials)
@@ -158,8 +176,9 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
         processes = {}
         any_results = False
         for _k, query in queries.items():
+            logging.debug(f"{self} attempting correlation of {observable.value} with query: '{query}' between '{start_time}' and '{end_time}'")
             try:
-                processes[_k] = cb.select(Process).where(query).group_by('id')
+                processes[_k] = cb.select(Process).where(query).group_by('id').min_last_update(start_time).max_last_update(end_time)
                 if processes[_k]:
                     any_results = True
             except Exception as e:
@@ -170,45 +189,42 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
 
         analysis = self.create_analysis(observable)
         analysis.details['queries'] = queries
+        analysis.details['start_time'] = start_time
+        analysis.details['end_time'] = end_time
 
         # complete the data
         for _k in queries.keys():
-            # make process histograms
-            analysis.details['process_name_facet'][_k] = processes[_k].facets('process_name')['process_name']
+            # save weblinks
+            analysis.details['query_weblinks'][_k] = processes[_k].webui_link.replace('+', '%20')
+            # get histogram data
+            if _k not in analysis.details['histogram_data']:
+                analysis.details['histogram_data'][_k] = {}
+            analysis.details['histogram_data'][_k]['Results by hostname:'] = processes[_k].facets('hostname')['hostname']
+            analysis.details['histogram_data'][_k]['Results by process name:'] = processes[_k].facets('process_name')['process_name']
+            analysis.details['histogram_data'][_k]['Results by child process:'] = processes[_k].facets('childproc_name')['childproc_name']
+            analysis.details['histogram_data'][_k]['Results by parent process:'] = processes[_k].facets('parent_name')['parent_name']
             # count the results
             analysis.details['total_query_results'][_k] = len(processes[_k])
             analysis.details['total_process_results'] += analysis.details['total_query_results'][_k]
             # take samples
             analysis.details['process_samples'][_k] = []
             for process in processes[_k]:
-                if len(analysis.details['process_samples'][_k]) >= self.max_results:
+                if len(analysis.details['process_samples'][_k]) >= self.max_samples:
                     break
-                sample = {}
-                sample['info'] = str(process)
-                # grab the best summary fields
-                sample['fields'] = {'id': process.id,
-                    'start': process.start,
-                    'username': process.username,
-                    'hostname': process.hostname,
-                    'cmdline': process.cmdline,
-                    'process_md5': process.process_md5,
-                    'path': process.path,
-                    'webui_link': process.webui_link
-                    }
-                analysis.details['process_samples'][_k].append(sample)
-            
+                analysis.details['process_samples'][_k].append(process_metadata_to_json(process))
+
             if len(processes[_k]) == 1:
-                # just one process, add it
+                # add it if it's not bigger than the global segment limit
                 process = processes[_k][0]
-                if len(process.get_segments()) < 5:
+                if len(process.get_segments()) < self.segment_limit:
                     analysis.add_observable(F_PROCESS_GUID, process.id)
                 else:
-                    logging.info(f"not adding process_guid={process.id} observable because it has {len(process._segments)} segments (it's big)")
+                    logging.info(f"{self} not creating process_guid={process.id} observable (segment limit): {len(process._segments)} > {self.max_process_segments}")
 
-            elif len(processes[_k]) < 4:
+            elif len(processes[_k]) < self.max_process_guids:
                 # if there was only a few process results, look at adding small ones
                 for process in processes[_k]:
-                     if len(process.get_segments()) < 3:
+                     if len(process.get_segments()) < self.max_process_segments:
                          analysis.add_observable(F_PROCESS_GUID, process.id)
 
         return True
@@ -407,14 +423,14 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
                 if len(process.get_segments()) < self.segment_limit:
                     analysis.add_observable(F_PROCESS_GUID, process.id)
                 else:
-                    logging.info(f"{self} not creating process_guid={process.id} observable. Segment limit={self.max_process_segments} & process segments={len(process._segments)}")
+                    logging.debug(f"{self} not creating process_guid={process.id} observable. Segment limit={self.max_process_segments} & process segments={len(process._segments)}")
 
             elif len(processes) <= self.max_process_guids:
                 for process in processes:
                     if len(process.get_segments()) < self.max_process_segments:
                         analysis.add_observable(F_PROCESS_GUID, process.id)
                     else:
-                        logging.info(f"{self} not creating process_guid={process.id} observable. Segment limit={self.max_process_segments} & process segments={len(process._segments)}")
+                        logging.debug(f"{self} not creating process_guid={process.id} observable. Segment limit={self.max_process_segments} & process segments={len(process._segments)}")
 
         for process in processes:
             if 'id' in analysis.details['the_process'] and process.id == analysis.details['the_process']['id']:

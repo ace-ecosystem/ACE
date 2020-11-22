@@ -7,23 +7,30 @@
         <div class="panel-heading">Total Query Results ({{key}}): {{analysis.details['total_query_results'][key]}}</b></div>
         <div class="panel-body">
 
-        <b>Query</b>:
-        <pre>{{query_string}}</pre><br>
-
-        <b>Histogram</b>:
-        <pre>{{analysis.print_facet_histogram(analysis.details['process_name_facet'][key])}}</pre>
+        <b>This Analysis is based on the following CarbonBlack Response query</b>:
+        <pre>{{query_string}}</pre>
+        <i>Results were constrained between {{analysis.details['start_time']}} and {{analysis.details['end_time']}}</i>
+        <p>You can load this query in the CarbonBlack GUI by clicking <a href="{{analysis.details['query_weblinks'][key]}}" target="_blank">here</a> <i>(you may need to click Search in their portal).</i></p>
+        <br>
+        {% if analysis.details['histogram_data'] %}
+        <b>Process Histograms</b>:
+        {% for title, facets in analysis.details['histogram_data'][key].items() %}
+            <pre>{{analysis.print_facet_histogram(title, facets)}}</pre>
+        {% endfor %}
+        <hr>
+        {% endif %}
 
           <div class="panel panel-default">
             <div class="panel-heading">The <i>most recent</i> <b>{{analysis.details['process_samples'][key]|length}}</b> processes:</div>
-              <div class="panel-body">
+            <div class="panel-body">
               {% for sample in analysis.details['process_samples'][key] %}
-                <b>Process GUID = {{sample['fields']['id']}}:</b>
-                <div class="well"><a href="{{sample['fields']['webui_link']}}" target="_blank">{{sample['fields']['start']}} UTC <b>{{sample['fields']['username']}}@{{sample['fields']['hostname']}}</b> <span style="color: #0000FF">{{sample['fields']['path']}}</span> <span style="color: #FF0000">{{sample['fields']['cmdline']}}</span> <span style="color: #008000">{{sample['fields']['process_md5']}}</span> - {{sample['fields']['id']}}</a></div>
-                <pre>{{sample['info']}}</pre>
+                <b>Process GUID = {{sample['id']}}:</b>
+                <div class="well"><a href="{{sample['webui_link']}}" target="_blank">{{sample['start']}} UTC <b>{{sample['username']}}@{{sample['hostname']}}</b> <span style="color: #0000FF">{{sample['path']}}</span> <span style="color: #FF0000">{{sample['cmdline']}}</span> <span style="color: #008000">{{sample['process_md5']}}</span> - {{sample['id']}}</a></div>
+                <pre>{{sample['full_info_string']}}</pre>
                 <hr>
               {% endfor %}
-              </div>
             </div>
+          </div>
         </div>
     </div>
     {% endfor %}
