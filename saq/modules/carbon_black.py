@@ -237,7 +237,8 @@ class CarbonBlackNetconnSourceAnalysis(Analysis):
             'process_samples': {},
             'netconn_summary': {},
             'correlated_domain_names': {},
-            'histogram_data': {}
+            'histogram_data': {},
+            'total_results': 0
         }
 
     @property
@@ -274,13 +275,14 @@ class CarbonBlackNetconnSourceAnalysis(Analysis):
         if len(process_paths) == 1:
             summary += f"{process_paths[0]}"
         else:
-            summary += f"{len(self.details['process_samples'])} processes"
+            summary += f"{self.details['total_results']} processes - "
+            summary += f"{len(self.details['process_samples'])} samples"
 
         if len(self.details['correlated_domain_names'].keys()) == 1:
             _domain = list(self.details['correlated_domain_names'].keys())[0]
             return f"{summary} - {_domain}"
         elif self.details['correlated_domain_names']:
-            return f"{summary} - {len(self.details['correlated_domain_names'])} domains"
+            return f"{summary} - {len(self.details['correlated_domain_names'])} domains found"
 
 
 class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
@@ -377,6 +379,7 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
         analysis.details['query'] = query
         analysis.details['query_start_time'] = start_time
         analysis.details['query_end_time'] = end_time
+        analysis.details['total_results'] = len(processes)
         # q=ipaddr%3A2.242.14.21+ipport%3A3389+-process_id%3A000078ab-0000-53a0-01d6-bebfd503afee <- broken
         # q=ipaddr%3A2.242.14.21%20ipport%3A3389%20-process_id%3A0000732f-0000-3db8-01d6-bf754aaf7636
         analysis.details['query_webui_link'] = processes.webui_link.replace('+', '%20')
@@ -448,7 +451,7 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
         for nc_summary in analysis.details['netconn_summary'].values():
             for nc in nc_summary:
                 if nc['remote_ip'] == dst and nc['remote_port'] == int(dst_port):
-                    if nc['domain'] not in analysis.details['correlated_domain_names']:
+                    if nc['domain'] and nc['domain'] not in analysis.details['correlated_domain_names']:
                         logging.info(f"correlated {observable} to fqdn: {nc['domain']}")
                         analysis.details['correlated_domain_names'][nc['domain']] = 1
                     else:
