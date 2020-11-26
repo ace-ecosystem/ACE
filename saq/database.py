@@ -922,31 +922,18 @@ class Alert(RootAnalysis, Base):
 
         return result
 
+    #
+    # column definitions
+    #
+
     __tablename__ = 'alerts'
 
     id = Column(
         Integer, 
         primary_key=True)
 
-    company_id = Column(
-        Integer,
-        ForeignKey('company.id'),
-        nullable=True)
-
-    company = relationship('saq.database.Company', foreign_keys=[company_id])
-
     uuid = Column(
         String(36), 
-        unique=True, 
-        nullable=False)
-
-    location = Column(
-        String(253),
-        unique=False,
-        nullable=False)
-
-    storage_dir = Column(
-        String(512), 
         unique=True, 
         nullable=False)
 
@@ -955,9 +942,124 @@ class Alert(RootAnalysis, Base):
         nullable=False, 
         server_default=text('CURRENT_TIMESTAMP'))
 
+    storage_dir = Column(
+        String(512), 
+        unique=True, 
+        nullable=False)
+
+    tool = Column(
+        String(256),
+        nullable=False)
+
+    tool_instance = Column(
+        String(1024),
+        nullable=False)
+
+    alert_type = Column(
+        String(64),
+        nullable=False)
+
+    description = Column(
+        String(1024),
+        nullable=False)
+
+    priority = Column(
+        Integer,
+        nullable=False,
+        default=0)
+
+    disposition = Column(
+        Enum(
+            saq.constants.DISPOSITION_FALSE_POSITIVE,
+            saq.constants.DISPOSITION_IGNORE,
+            saq.constants.DISPOSITION_UNKNOWN,
+            saq.constants.DISPOSITION_REVIEWED,
+            saq.constants.DISPOSITION_GRAYWARE,
+            saq.constants.DISPOSITION_POLICY_VIOLATION,
+            saq.constants.DISPOSITION_RECONNAISSANCE,
+            saq.constants.DISPOSITION_WEAPONIZATION,
+            saq.constants.DISPOSITION_DELIVERY,
+            saq.constants.DISPOSITION_EXPLOITATION,
+            saq.constants.DISPOSITION_INSTALLATION,
+            saq.constants.DISPOSITION_COMMAND_AND_CONTROL,
+            saq.constants.DISPOSITION_EXFIL,
+            saq.constants.DISPOSITION_DAMAGE,
+            saq.constants.DISPOSITION_INSIDER_DATA_CONTROL,
+            saq.constants.DISPOSITION_INSIDER_DATA_EXFIL),
+        nullable=True)
+
+    disposition_user_id = Column(
+        Integer,
+        ForeignKey('users.id'),
+        nullable=True)
+
+    disposition_time = Column(
+        TIMESTAMP, 
+        nullable=True)
+
+    owner_id = Column(
+        Integer,
+        ForeignKey('users.id'),
+        nullable=True)
+
+    owner_time = Column(
+        TIMESTAMP,
+        nullable=True)
+
+    archived = Column(
+        BOOLEAN, 
+        nullable=False,
+        default=False)
+
+    removal_user_id = Column(
+        Integer,
+        ForeignKey('users.id'),
+        nullable=True)
+
+    removal_time = Column(
+        TIMESTAMP,
+        nullable=True)
+
+    #lock_owner = Column(
+        #String(256), 
+        #nullable=True)
+
+    #lock_id = Column(
+        #String(36),
+        #nullable=True)
+
+    #lock_transaction_id = Column(
+        #String(36),
+        #nullable=True)
+
+    #lock_time = Column(
+        #TIMESTAMP, 
+        #nullable=True)
+
+    company_id = Column(
+        Integer,
+        ForeignKey('company.id'),
+        nullable=True)
+
+    company = relationship('saq.database.Company', foreign_keys=[company_id])
+
+    location = Column(
+        String(253),
+        unique=False,
+        nullable=False)
+
+    detection_count = Column(
+        Integer,
+        default=0)
+
     event_time = Column(
         TIMESTAMP,
         nullable=True)
+
+    queue = Column(
+        String(64),
+        nullable=False,
+        default=saq.constants.QUEUE_DEFAULT)
 
     def get_observables(self):
         query = saq.db.query(Observable)
@@ -1171,22 +1273,6 @@ class Alert(RootAnalysis, Base):
         setattr(self, '_is_over_sla', result)
         return result
 
-    tool = Column(
-        String(256),
-        nullable=False)
-
-    tool_instance = Column(
-        String(1024),
-        nullable=False)
-
-    alert_type = Column(
-        String(64),
-        nullable=False)
-
-    description = Column(
-        String(1024),
-        nullable=False)
-
     @property
     def icon(self):
         """Returns appropriate icon name by attempting to match on self.description or self.tool."""
@@ -1215,59 +1301,6 @@ class Alert(RootAnalysis, Base):
             return value[:max_length]
         return value
 
-    priority = Column(
-        Integer,
-        nullable=False,
-        default=0)
-
-    disposition = Column(
-        Enum(
-            saq.constants.DISPOSITION_FALSE_POSITIVE,
-            saq.constants.DISPOSITION_IGNORE,
-            saq.constants.DISPOSITION_UNKNOWN,
-            saq.constants.DISPOSITION_REVIEWED,
-            saq.constants.DISPOSITION_GRAYWARE,
-            saq.constants.DISPOSITION_POLICY_VIOLATION,
-            saq.constants.DISPOSITION_RECONNAISSANCE,
-            saq.constants.DISPOSITION_WEAPONIZATION,
-            saq.constants.DISPOSITION_DELIVERY,
-            saq.constants.DISPOSITION_EXPLOITATION,
-            saq.constants.DISPOSITION_INSTALLATION,
-            saq.constants.DISPOSITION_COMMAND_AND_CONTROL,
-            saq.constants.DISPOSITION_EXFIL,
-            saq.constants.DISPOSITION_DAMAGE,
-            saq.constants.DISPOSITION_INSIDER_DATA_CONTROL,
-            saq.constants.DISPOSITION_INSIDER_DATA_EXFIL),
-        nullable=True)
-
-    queue = Column(
-        String(64),
-        nullable=False,
-        default=saq.constants.QUEUE_DEFAULT)
-
-    disposition_user_id = Column(
-        Integer,
-        ForeignKey('users.id'),
-        nullable=True)
-
-    disposition_time = Column(
-        TIMESTAMP, 
-        nullable=True)
-
-    owner_id = Column(
-        Integer,
-        ForeignKey('users.id'),
-        nullable=True)
-
-    owner_time = Column(
-        TIMESTAMP,
-        nullable=True)
-
-    archived = Column(
-        BOOLEAN, 
-        nullable=False,
-        default=False)
-
     def archive(self, *args, **kwargs):
         if self.archived:
             logging.warning(f"called archive() on {self} but already archived")
@@ -1276,35 +1309,6 @@ class Alert(RootAnalysis, Base):
         result = super().archive(*args, **kwargs)
         self.archived = True
         return result
-
-    removal_user_id = Column(
-        Integer,
-        ForeignKey('users.id'),
-        nullable=True)
-
-    removal_time = Column(
-        TIMESTAMP,
-        nullable=True)
-
-    #lock_owner = Column(
-        #String(256), 
-        #nullable=True)
-
-    #lock_id = Column(
-        #String(36),
-        #nullable=True)
-
-    #lock_transaction_id = Column(
-        #String(36),
-        #nullable=True)
-
-    #lock_time = Column(
-        #TIMESTAMP, 
-        #nullable=True)
-
-    detection_count = Column(
-        Integer,
-        default=0)
 
     @property
     def status(self):
