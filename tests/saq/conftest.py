@@ -41,7 +41,7 @@ def initialize_environment(pytestconfig):
             args=None, 
             relative_dir=None)
 
-    saq.database.initialize_automation_user()
+    #saq.database.initialize_automation_user()
 
     # load the configuration first
     if saq.CONFIG['global']['instance_type'] != saq.constants.INSTANCE_TYPE_UNITTEST:
@@ -60,7 +60,7 @@ def initialize_environment(pytestconfig):
 
     yield
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=False)
 def reset_database(request, pytestconfig):
     if request.node.get_closest_marker('integration') is not None:
         import saq.database
