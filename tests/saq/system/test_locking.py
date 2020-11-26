@@ -9,6 +9,7 @@ from saq.system.locking import (
         acquire, 
         default_owner_id,
         get_lock_owner, 
+        is_locked,
         lock,
         release, 
         )
@@ -21,6 +22,13 @@ OWNER_1 = 'owner_1'
 def test_lock():
     with lock(LOCK_1):
         pass
+
+@pytest.mark.integration
+def test_is_locked():
+    with lock(LOCK_1):
+        assert is_locked(LOCK_1)
+
+    assert not is_locked(LOCK_1)
 
 @pytest.mark.integration
 def test_lockable():

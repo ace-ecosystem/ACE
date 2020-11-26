@@ -3,6 +3,7 @@
 # global system components
 
 class ACESystemInterface:
+    """The base class that all system interfaces inherit from."""
     pass
 
 class ACESystem:

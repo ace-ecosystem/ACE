@@ -31,6 +31,7 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.indicators import Indicator, IndicatorList
 from saq.submission import Submission
+from saq.system.locking import Lockable
 from saq.util import *
 
 
@@ -467,6 +468,7 @@ class Observable:
 @dataclass
 class AnalysisModuleType():
     """Represents a registration of an analysis module type."""
+
     # the name of the analysis module type
     name: str
     # brief English description of what the module does
@@ -516,7 +518,7 @@ class AnalysisModuleType():
             'version': self.version,
             'timeout': self.timeout,
             'cache_ttl': self.cache_ttl,
-            'cache_keys': self.cache_keys,
+            'additional_cache_keys': self.additional_cache_keys,
         }
 
     @staticmethod
@@ -532,7 +534,7 @@ class AnalysisModuleType():
             version = value['version'],
             timeout = value['timeout'],
             cache_ttl = value['cache_ttl'],
-            cache_keys = value['cache_keys'],
+            additional_cache_keys = value['additional_cache_keys'],
         )
 
     def accepts(self, observable: Observable) -> bool:
@@ -568,7 +570,7 @@ class AnalysisModuleType():
 # sentinel for analysis details that are not loaded
 NOT_LOADED = object()
 
-class Analysis(TaggableObject, DetectableObject):
+class Analysis(TaggableObject, DetectableObject, Lockable):
     """Represents an output of analysis work."""
 
     # dictionary keys used by the Analysis class
@@ -3056,7 +3058,7 @@ class RootAnalysis(Analysis):
 
     @location.setter
     def location(self, value):
-        assert isinstance(value, str)
+        assert value is None or isinstance(value, str)
         self._location = value
         self.set_modified()
 
@@ -3825,7 +3827,7 @@ class RootAnalysis(Analysis):
     def delete(self):
         """Deletes everything contained in the storage_dir and marks this RootAnalysis as deleted."""
         try:
-            if os.path.exists(self.storage_dir):
+            if self.storage_dir and os.path.exists(self.storage_dir):
                 shutil.rmtree(self.storage_dir)
                 logging.debug("deleted {}".format(self.storage_dir))
         except Exception as e:
@@ -4111,6 +4113,23 @@ class RootAnalysis(Analysis):
 
         # Event name in the database can only be 128 characters long
         return result.rstrip('-')[:128]
+
+    def create_analysis_request(self):
+        """Creates and returns a new saq.system.analysis_request.AnalysisRequest object from this RootAnalysis."""
+        from saq.system.analysis_request import AnalysisRequest
+        return AnalysisRequest(self)
+
+    def analysis_completed(self, observable: Observable, amt: AnalysisModuleType) -> bool:
+        # TODO implement
+        return False
+
+    def analysis_tracked(self, observable: Observable, amt: AnalysisModuleType) -> bool:
+        # TODO implement
+        return False
+
+    def track_analysis(self, observable: Observable, amt: AnalysisModuleType, ar: 'AnalysisRequest'):
+        # TODO implement
+        return
 
 def recurse_down(target, callback):
     """Calls callback starting at target back to the RootAnalysis."""

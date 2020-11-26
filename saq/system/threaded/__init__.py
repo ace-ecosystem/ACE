@@ -5,7 +5,7 @@
 #
 
 from saq.system import ACESystem, set_system
-from saq.system.threaded.analysis import ThreadedAnalysisTrackingInterface
+from saq.system.threaded.analysis_tracking import ThreadedAnalysisTrackingInterface
 from saq.system.threaded.analysis_module import ThreadedAnalysisModuleTrackingInterface
 from saq.system.threaded.analysis_request import ThreadedAnalysisRequestTrackingInterface
 from saq.system.threaded.caching import ThreadedCachingInterface

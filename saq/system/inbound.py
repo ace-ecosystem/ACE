@@ -2,14 +2,24 @@
 #
 
 from saq.system import ACESystemInterface, get_system
+from saq.system.analysis_tracking import (
+    get_root_analysis,
+    track_root_analysis,
+)
 from saq.system.analysis_request import (
         AnalysisRequest, 
         delete_analysis_request,
         find_analysis_request, 
+        get_analysis_request,
 )
 from saq.system.analysis_module import get_all_analysis_module_types
 from saq.system.caching import cache_analysis, get_cached_analysis
-from saq.system.exceptions import *
+from saq.system.exceptions import (
+    UnknownAnalysisRequest,
+    ExpiredAnalysisRequest,
+    UnknownObservableError,
+    UnknownRootAnalysisError,
+)
 
 def process_analysis_request(ar: AnalysisRequest):
     # need to lock this at the beginning so that nothing else modifies it
@@ -22,7 +32,7 @@ def process_analysis_request(ar: AnalysisRequest):
             if ar.is_observable_analysis_result:
                 existing_ar = get_analysis_request(ar.id)
                 
-                # is this analysis reqeust gone?
+                # is this analysis request gone?
                 if not existing_ar:
                     raise UnknownAnalysisRequest(ar)
 
@@ -35,7 +45,7 @@ def process_analysis_request(ar: AnalysisRequest):
                     root = get_root_analysis(root)
                     # is it gone?
                     if not root:
-                        raise RootAnalysisMissing(ar)
+                        raise UnknownRootAnalysisError(ar)
 
                 # should we cache these results?
                 if ar.is_cachable:
@@ -61,7 +71,7 @@ def process_analysis_request(ar: AnalysisRequest):
             for observable in ar.observables:
                 for amt in get_all_analysis_module_types():
                     # does this analysis module accept this observable?
-                    if not amt.accepts(observable, root):
+                    if not amt.accepts(observable):
                         continue
 
                     # is this analysis request already completed?
@@ -114,9 +124,9 @@ def process_analysis_request(ar: AnalysisRequest):
 
                     # otherwise we need to request it
                     new_ar = AnalysisRequest(
+                        root,
                         observable,
-                        amt,
-                        root)
+                        amt)
 
                     # fill out any requested dependency data
                     for dep in amt.dependencies:
@@ -128,9 +138,9 @@ def process_analysis_request(ar: AnalysisRequest):
                     root.track_analysis(observable, amt, new_ar)
                     new_ar.submit()
                     continue
-        finally:
-            # at this point this AnalysisRequest is no longer needed
-            ar.delete()
+    finally:
+        # at this point this AnalysisRequest is no longer needed
+        ar.delete()
 
     # if there were any other RootAnalysis objects waiting for this one, go ahead and process those now
     for other_root in ar.additional_roots:

@@ -6,7 +6,6 @@ from typing import List, Union, Optional
 
 from saq.analysis import Observable, RootAnalysis, AnalysisModuleType
 from saq.system import ACESystemInterface, get_system
-from saq.system.constants import *
 
 class AnalysisModuleTypeVersionError(Exception):
     """Raised when a request for a analysis with an out-of-date version is made."""

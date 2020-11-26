@@ -94,6 +94,7 @@ class ThreadedLockingInterface(LockingInterface):
     lock_ownership = {} # key = lock_id, value = str (owner_id)
     owner_wait_targets = {} # key = owner_id, value = str (lock_id)
     lock_timeouts = {} # key = lock_id, value = datetime.datetime when lock expires
+    current_locks = set() # key = lock_id
 
     def get_lock_owner(self, lock_id: str) -> Union[str, None]:
         return self.lock_ownership.get(lock_id)
@@ -129,6 +130,10 @@ class ThreadedLockingInterface(LockingInterface):
             arg_timeout = timeout
 
         success = lock.acquire(arg_blocking, arg_timeout, lock_timeout)
+        if success:
+            # if we were able to lock it keep track of that so we can implement is_locked()
+            self.current_locks.add(lock_id)
+
         return success
 
     def release(self, lock_id: str, owner_id: str) -> bool:
@@ -139,7 +144,14 @@ class ThreadedLockingInterface(LockingInterface):
         if self.get_lock_owner(lock_id) != owner_id:
             return False
 
-        return lock.release()
+        result = lock.release()
+        if result:
+            self.current_locks.remove(lock_id)
+
+        return result
+
+    def is_locked(self, lock_id: str) -> bool:
+        return lock_id in self.current_locks
 
     def reset(self):
         self.locks = {} # key = lock_id, value = threading.RLock

@@ -7,7 +7,7 @@ import pytest
 from saq.analysis import RootAnalysis, Observable, Analysis
 from saq.test import F_TEST
 from saq.system import get_system
-from saq.system.analysis import (
+from saq.system.analysis_tracking import (
         get_analysis_details,
         track_root_analysis,
         get_root_analysis,
@@ -16,7 +16,8 @@ from saq.system.analysis import (
         get_analysis_details,
         delete_analysis_details,
 )
-from saq.system.exceptions import *
+
+from saq.system.exceptions import UnknownRootAnalysisError
 
 TEST_DETAILS = { 'hello': 'world' }
 OBSERVABLE_VALUE = 'observable value'

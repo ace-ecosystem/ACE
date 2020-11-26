@@ -22,6 +22,9 @@ class ThreadedWorkQueue(WorkQueue):
         except queue.Empty:
             return None
 
+    def size(self) -> int:
+        return self.queue.qsize()
+
 class ThreadedWorkQueueManagerInterface(WorkQueueManagerInterface):
 
     work_queues = {} # key = amt.name, value = ThreadedWorkQueue

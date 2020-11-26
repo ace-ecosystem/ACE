@@ -46,14 +46,19 @@ class Content:
     # the meta data for this content
     meta: ContentMetadata
 
+#
+# how things are actually stored is abstracted away by this interface
+# content is referenced by the sha256 of the data in hex string format
+#
+
 class StorageInterface(ACESystemInterface):
-    def store_content(self, content: bytes, meta: Optional[ContentMetadata] = None) -> str:
+    def store_content(self, content: Union[bytes, str, io.IOBase], meta: ContentMetadata) -> str:
         raise NotImplementedError()
 
     def get_content(self, sha256: str) -> Union[Content, None]:
         raise NotImplementedError()
 
-def store_content(content: Union[bytes, str, io.IOBase], meta: Optional[ContentMetadata] = None) -> str:
+def store_content(content: Union[bytes, str, io.IOBase], meta: ContentMetadata) -> str:
     return get_system().storage.store_content(content, meta)
 
 def get_content(sha256: str) -> Union[Content, None]:

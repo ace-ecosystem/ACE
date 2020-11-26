@@ -335,16 +335,20 @@ class URLObservable(Observable):
         if extracted_url:
             self.value = extracted_url
 
-
 class FileObservable(Observable):
 
     KEY_MD5_HASH = 'md5_hash'
     KEY_SHA1_HASH = 'sha1_hash'
     KEY_SHA256_HASH = 'sha256_hash'
     KEY_MIME_TYPE = 'mime_type'
+    KEY_PATH = 'path'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, path=None, *args, **kwargs):
         super().__init__(F_FILE, *args, **kwargs)
+
+        # the path to the file locally (relative to self.root.storage_dir)
+        # if this is None then the file has not been downloaded from the storage system
+        self.path = path
 
         # do not allow empty file names
         if self.value == '':
@@ -366,6 +370,7 @@ class FileObservable(Observable):
     # in ACE the value of the F_FILE observable is the relative path to the content (inside the storage directory)
     # so when we want to look up the tag mapping we really want to look up the content
     # so we use the F_SHA256 value for this purpose instead
+    #
         
     @property
     def tag_mapping_type(self):

@@ -2,7 +2,7 @@
 
 from saq.analysis import RootAnalysis, Analysis, AnalysisModuleType
 from saq.observables import IPv4Observable
-from saq.system.analysis import (
+from saq.system.analysis_tracking import (
     get_analysis_details,
     get_root_analysis,
 )

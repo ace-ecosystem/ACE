@@ -6,10 +6,14 @@ from typing import Union, List, Optional
 
 from saq.analysis import RootAnalysis, Observable
 from saq.system import ACESystemInterface, get_system
-from saq.system.analysis import get_root_analysis
+from saq.system.analysis_tracking import get_root_analysis
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.caching import generate_cache_key
-from saq.system.constants import *
+from saq.system.constants import (
+    TRACKING_STATUS_NEW,
+    TRACKING_STATUS_QUEUED,
+    SYSTEM_LOCK_EXPIRED_ANALYSIS_REQUESTS,
+)
 from saq.system.exceptions import InvalidWorkQueueError
 from saq.system.locking import Lockable, acquire, release
 
@@ -67,10 +71,10 @@ class AnalysisRequest(Lockable):
 
         return self.cache_key
 
-    def to_json(self) -> str:
+    def to_dict(self) -> str:
         return json.dumps({
-            'observable': self.observable.to_json(),
-            'analysis_module_type': self.analysis_module_type.to_json(),
+            'observable': self.observable.to_dict(),
+            'analysis_module_type': self.analysis_module_type.to_dict(),
             'root': self.root,
             'additional_roots': self.additional_roots,
             'dependency_analysis': self.dependency_analysis,
@@ -80,12 +84,12 @@ class AnalysisRequest(Lockable):
         })
 
     @staticmethod
-    def from_json(json_data: str):
+    def from_dict(json_data: str):
         ar = AnalysisRequest()
         result = json.loads(json_data)
 
         ar.observable = Observable.from_json(result['observable'])
-        ar.analysis_module_type = AnalysisModuleType.from_json(result['analysis_module_type'])
+        ar.analysis_module_type = AnalysisModuleType.from_dict(result['analysis_module_type'])
         ar.root = result['root']
         ar.additional_roots = result['additional_roots']
         ar.dependency_analysis = result['dependency_analysis']

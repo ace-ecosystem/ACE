@@ -14,6 +14,9 @@ class WorkQueue():
     def get(self, timeout: int) -> Union[AnalysisRequest, None]:
         raise NotImplementedError()
 
+    def size(self) -> int:
+        raise NotImplementedError()
+
 class WorkQueueManagerInterface(ACESystemInterface):
     def invalidate_work_queue(self, name: str) -> bool:
         raise NotImplementedError()

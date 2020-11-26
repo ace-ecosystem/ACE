@@ -67,6 +67,11 @@ class Lockable():
     def release(self) -> bool:
         return release(self.lock_id, self.lock_owner_id)
 
+    def is_locked(self) -> bool:
+        """Returns True if this object is currently locked, False otherwise."""
+        return is_locked(self.lock_id)
+
+
 # P1 -> L1
 # P2 -> L2
 # P1 *> L2
@@ -125,6 +130,9 @@ class LockingInterface(ACESystemInterface):
     def release(self, lock_id: str, owner_id: str) -> bool:
         raise NotImplementedError()
 
+    def is_locked(self, lock_id: str) -> bool:
+        raise NotImplementedError()
+
 def get_lock_owner(lock_id: str) -> Union[str, None]:
     return get_system().locking.get_lock_owner(lock_id)
 
@@ -139,6 +147,9 @@ def clear_wait_target(owner_id: str):
 
 def track_lock_acquire(lock_id: str, owner_id: str, lock_timeout: Optional[int]=None):
     get_system().locking.track_lock_acquire(lock_id, owner_id, lock_timeout)
+
+def is_locked(lock_id: str) -> bool:
+    return get_system().locking.is_locked(lock_id)
 
 def default_owner_id():
     import socket, os, threading

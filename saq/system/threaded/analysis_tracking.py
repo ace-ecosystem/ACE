@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Union, List, Optional, Any
 
 from saq.analysis import RootAnalysis, Observable, Analysis
-from saq.system.analysis import AnalysisTrackingInterface, get_root_analysis
+from saq.system.analysis_tracking import AnalysisTrackingInterface, get_root_analysis
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.exceptions import *
 

@@ -23,8 +23,9 @@ class ThreadedStorageInterface(ACESystemInterface):
 
     content = {} # key = sha256 hash, value = ThreadedContent
 
-    def store_content(self, content: Union[bytes, str, io.IOBase], meta: Optional[ContentMetadata] = None) -> str:
-        meta = meta or ContentMetadata()
+    def store_content(self, content: Union[bytes, str, io.IOBase], meta: ContentMetadata) -> str:
+        #meta = ContentMetadata()
+        #meta.custom = custom
         # the content is also stored on the file system in the location specified
         file_fp = None
         if meta.location:
@@ -36,6 +37,7 @@ class ThreadedStorageInterface(ACESystemInterface):
             if file_fp:
                 file_fp.write(data)
         elif isinstance(content, io.IOBase):
+            # TODO calculate sha2 as we go
             stream = content
             data = io.BytesIO()
             while True:
@@ -48,10 +50,12 @@ class ThreadedStorageInterface(ACESystemInterface):
                     file_fp.write(_buffer)
 
             data = data.getvalue()
-        else:
+        elif isinstance(content, bytes):
             data = content
             if file_fp:
                 file_fp.write(data)
+        else:
+            raise TypeError(f"unsupported content type {type(content)}")
 
         if file_fp:
             file_fp.close()
