@@ -504,24 +504,26 @@ def initialize(
     ace_api.set_default_ssl_ca_path(CA_CHAIN_PATH)
 
     # initialize the database connection
+    # XXX issue for unit testing
     initialize_database()
 
+    # XXX move this into another module that is dedicated to "multiple customers"
     # Store validated list of companies this node can work with
     # Assume configued defaults are already valid
-    NODE_COMPANIES.append({'name': COMPANY_NAME, 'id': COMPANY_ID})
-    _secondary_company_ids = CONFIG['global'].get('secondary_company_ids', None)
-    if _secondary_company_ids is not None:
-        _secondary_company_ids = [int(_) for _ in _secondary_company_ids.split(',')]
-        from saq.database import get_db_connection
-        try:
-            with get_db_connection() as db:
-                c = db.cursor()
-                c.execute("SELECT name,id FROM company")
-                for row in c:
-                    if row[1] in _secondary_company_ids:
-                        NODE_COMPANIES.append({'name': row[0], 'id': row[1]})
-        except Exception as e:
-            logging.error(f"problem querying database {e}")
+    #NODE_COMPANIES.append({'name': COMPANY_NAME, 'id': COMPANY_ID})
+    #_secondary_company_ids = CONFIG['global'].get('secondary_company_ids', None)
+    #if _secondary_company_ids is not None:
+        #_secondary_company_ids = [int(_) for _ in _secondary_company_ids.split(',')]
+        #from saq.database import get_db_connection
+        #try:
+            #with get_db_connection() as db:
+                #c = db.cursor()
+                #c.execute("SELECT name,id FROM company")
+                #for row in c:
+                    #if row[1] in _secondary_company_ids:
+                        #NODE_COMPANIES.append({'name': row[0], 'id': row[1]})
+        #except Exception as e:
+            #logging.error(f"problem querying database {e}")
 
     # initialize fallback semaphores
     initialize_fallback_semaphores()
