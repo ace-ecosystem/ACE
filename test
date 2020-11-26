@@ -51,7 +51,7 @@ then
         saq.collectors.test_qradar_hunter \
         saq.collectors.test_query_hunter \
         saq.collectors.test_splunk_hunter \
-        saq.database.test \
+        saq.test_database \
         saq.error.test \
         saq.extractors.ews.test \
         saq.extractors.graph.test \
