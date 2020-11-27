@@ -4,6 +4,40 @@
 import saq
 from saq.util import abs_path
 
+def get_sqlalchemy_database_uri(db_name: str) -> str:
+    """Returns the correct uri for the given database based on configuration settings."""
+    if saq.CONFIG[f'database_{db_name}']['driver'] == 'mysql':
+        if saq.CONFIG[f'database_{db_name}'].get('unix_socket', fallback=None):
+            return 'mysql+pymysql://{username}:{password}@localhost/{database}?unix_socket={unix_socket}&charset=utf8mb4'.format(
+                username=saq.CONFIG.get(f'database_{db_name}', 'username'),
+                password=saq.CONFIG.get(f'database_{db_name}', 'password'),
+                unix_socket=saq.CONFIG.get(f'database_{db_name}', 'unix_socket'),
+                database=saq.CONFIG.get(f'database_{db_name}', 'database'))
+        else:
+            SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{username}:{password}@{hostname}/{database}?charset=utf8mb4'.format(
+                username=saq.CONFIG.get(f'database_{db_name}', 'username'),
+                password=saq.CONFIG.get(f'database_{db_name}', 'password'),
+                hostname=saq.CONFIG.get(f'database_{db_name}', 'hostname'),
+                database=saq.CONFIG.get(f'database_{db_name}', 'database'))
+
+    elif saq.CONFIG[f'database_{db_name}']['driver'] == 'sqlite':
+        return 'sqlite://'
+    else:
+        raise ValueError("invalid driver specified for database_{}: {}".format(
+            db_name, saq.CONFIG[f'database_{db_name}']['driver']))
+
+def get_sqlalchemy_database_options(db_name: str) -> dict:
+    """Returns dict of the kwargs to submit to create_engine()"""
+    if saq.CONFIG[f'database_{db_name}']['driver'] == 'mysql':
+        return { 
+            'isolation_level': 'READ COMMITTED',
+            'pool_recycle': 60,
+            'pool_size': 5,
+            'connect_args': { 'init_command': 'SET NAMES utf8mb4' }
+        }
+    else:
+        return {}
+
 class Config(object):
     SECRET_KEY = saq.CONFIG['gui']['secret_key']
     SQLALCHEMY_TRACK_MODIFICATIONS = False

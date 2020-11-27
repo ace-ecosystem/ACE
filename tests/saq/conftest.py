@@ -41,7 +41,12 @@ def initialize_environment(pytestconfig):
             args=None, 
             relative_dir=None)
 
-    #saq.database.initialize_automation_user()
+    # create the database in memory
+    from saq.database import Base, engine
+    Base.metadata.bind = engine
+    Base.metadata.create_all()
+
+    saq.database.initialize_automation_user()
 
     # load the configuration first
     if saq.CONFIG['global']['instance_type'] != saq.constants.INSTANCE_TYPE_UNITTEST:
@@ -57,6 +62,21 @@ def initialize_environment(pytestconfig):
         shutil.rmtree(test_dir)
 
     os.makedirs(test_dir)
+
+    yield
+
+@pytest.fixture(autouse=True, scope='function')
+def initialize_database(request, pytestconfig):
+    import saq.database
+    if request.node.get_closest_marker('integration') is not None:
+        saq.database.initialize_database()
+        # TODO initialize data
+
+        from saq.database import Base, engine
+        Base.metadata.bind = engine
+        Base.metadata.create_all()
+
+        saq.database.initialize_automation_user()
 
     yield
 

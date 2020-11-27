@@ -398,6 +398,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 DatabaseSession = None
 Base = declarative_base()
+engine = None
 
 # if target is an executable, then *args is to session.execute function
 # if target is a callable, then *args is to the callable function (whatever that is)
@@ -1249,7 +1250,7 @@ class Malware(Base):
         unique=True, 
         index=True)
 
-    threats = relationship("saq.database.Threat", passive_deletes=True, passive_updates=True)
+    threats = relationship("saq.database.MalwareThreatMapping", passive_deletes=True, passive_updates=True)
 
 class MalwareMapping(Base):
 
@@ -3355,42 +3356,43 @@ class EncryptedPasswords(Base):
 def initialize_database():
     """Initializes database connections by creating the SQLAlchemy engine and session objects."""
 
-    global DatabaseSession
-    from config import config
+    global DatabaseSession, engine
+    from config import config, get_sqlalchemy_database_uri, get_sqlalchemy_database_options
 
     # see https://github.com/PyMySQL/PyMySQL/issues/644
     # /usr/local/lib/python3.6/dist-packages/pymysql/cursors.py:170: Warning: (1300, "Invalid utf8mb4 character string: '800363'")
     warnings.filterwarnings(action='ignore', message='.*Invalid utf8mb4 character string.*')
 
     import saq
-    if saq.db is None:
-        engine = create_engine(
-            config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
-            isolation_level='READ COMMITTED',
-            **config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
+    engine = create_engine(
+        get_sqlalchemy_database_uri('ace'),
+        **get_sqlalchemy_database_options('ace'))
+        #config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
+        #isolation_level='READ COMMITTED',
+        #**config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
 
-        @event.listens_for(engine, 'connect')
-        def connect(dbapi_connection, connection_record):
-            pid = os.getpid()
-            connection_record.info['pid'] = pid
+    @event.listens_for(engine, 'connect')
+    def connect(dbapi_connection, connection_record):
+        pid = os.getpid()
+        connection_record.info['pid'] = pid
 
-        @event.listens_for(engine, 'checkout')
-        def checkout(dbapi_connection, connection_record, connection_proxy):
-            pid = os.getpid()
-            if connection_record.info['pid'] != pid:
-                connection_record.connection = connection_proxy.connection = None
-                message = f"connection record belongs to pid {connection_record.info['pid']} attempting to check out in pid {pid}"
-                logging.debug(message)
-                raise exc.DisconnectionError(message)
+    @event.listens_for(engine, 'checkout')
+    def checkout(dbapi_connection, connection_record, connection_proxy):
+        pid = os.getpid()
+        if connection_record.info['pid'] != pid:
+            connection_record.connection = connection_proxy.connection = None
+            message = f"connection record belongs to pid {connection_record.info['pid']} attempting to check out in pid {pid}"
+            logging.debug(message)
+            raise exc.DisconnectionError(message)
 
-        DatabaseSession = sessionmaker(bind=engine)
-        saq.db = scoped_session(DatabaseSession)
+    DatabaseSession = sessionmaker(bind=engine)
+    saq.db = scoped_session(DatabaseSession)
 
-    else:
+    #else:
         # if you call this a second time it just closes all the sessions
         # this (currently) happens in unit testing
-        from sqlalchemy.orm.session import close_all_sessions
-        close_all_sessions()
+        #from sqlalchemy.orm.session import close_all_sessions
+        #close_all_sessions()
 
 def initialize_automation_user():
     # get the id of the ace automation account
