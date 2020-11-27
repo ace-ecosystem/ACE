@@ -369,16 +369,22 @@ from sqlalchemy import (
         DateTime,
         Enum,
         ForeignKey,
+        Index,
         Integer,
+        LargeBinary,
         String,
         TIMESTAMP,
         Text,
+        UniqueConstraint,
         create_engine,
         event,
         exc,
         func,
         text,)
+
+# XXX get rid of these
 from sqlalchemy.dialects.mysql import BOOLEAN, VARBINARY, BLOB
+
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import sessionmaker, relationship, reconstructor, backref, validates, scoped_session
 from sqlalchemy.orm.exc import NoResultFound, DetachedInstanceError
@@ -484,27 +490,65 @@ def retry(func, *args, **kwargs):
     return wrapper
 
 class Config(Base):
+    """Holds generic key=value configuration settings."""
 
     __tablename__ = 'config'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    key = Column(String(512), primary_key=True)
-    value = Column(Text, nullable=False)
+    key = Column(
+        String(512), 
+        primary_key=True,
+        nullable=False)
+
+    value = Column(
+        Text, 
+        nullable=False)
 
 class User(UserMixin, Base):
 
     __tablename__ = 'users'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    id = Column(Integer, primary_key=True)
-    username = Column(String(64), unique=True, index=True)
-    email = Column(String(64), unique=True, index=True)
+    id = Column(
+        Integer, 
+        primary_key=True,
+        autoincrement=True)
+
+    username = Column(
+        String(64), 
+        unique=True, 
+        index=True)
+
     password_hash = Column(String(128))
-    omniscience = Column(Integer, nullable=False, default=0)
-    timezone = Column(String(512))
-    display_name = Column(String(1024))
+
+    email = Column(
+        String(64), 
+        unique=True, 
+        index=True)
+
+    omniscience = Column(
+        BOOLEAN, 
+        nullable=False, 
+        default=False)
+
+    timezone = Column(
+        String(512),
+        comment='The timezone this user is in. Dates and times will appear in this timezone in the GUI.')
+
+    display_name = Column(
+        String(1024),
+        comment='The display name of the user. This may be different than the username. This is used in the GUI.')
+
     queue = Column(
         String(64),
         nullable=False,
-        default=saq.constants.QUEUE_DEFAULT)
+        default='default')
 
     def __str__(self):
         return self.username
@@ -531,41 +575,242 @@ class User(UserMixin, Base):
     def verify_password(self, value):
         return check_password_hash(self.password_hash, value)
 
+Index('ix_users_username_email', User.username, User.email, unique=True)
+
 Owner = aliased(User)
 DispositionBy = aliased(User)
 RemediatedBy = aliased(User)
 
 class Campaign(Base):
+
     __tablename__ = 'campaign'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
     id = Column(Integer, nullable=False, primary_key=True)
-    name = Column(String(128), nullable=False)
+    name = Column(String(128), nullable=False, index=True)
+
+class CloudphishAnalysisResults(Base):
+
+    __tablename__ = 'cloudphish_analysis_results'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    sha256_url = Column(
+        VARBINARY(32),
+        primary_key=True,
+        nullable=False,
+        comment='The binary SHA2 hash of the URL.')
+
+    http_result_code = Column(
+        Integer,
+        nullable=True,
+        comment='The HTTP result code give by the server when it was fetched (200, 404, 500, etc…)')
+
+    http_message = Column(
+        String(256),
+        nullable=True,
+        comment='The message text that came along with the http_result_code.')
+
+    sha256_content = Column(
+        VARBINARY(32),
+        nullable=True,
+        index=True,
+        comment='The binary SHA2 hash of the content that was downloaded for the URL.')
+
+    result = Column(
+        Enum('UNKNOWN','ERROR','CLEAR','ALERT','PASS'),
+        nullable=False,
+        default='UNKNOWN',
+        comment='The analysis result of the URL. This is updated by the cloudphish_request_analyzer module.')
+
+    insert_date = Column(
+        TIMESTAMP,
+        nullable=False,
+        index=True,
+        server_default=text('CURRENT_TIMESTAMP'),
+        comment='When this entry was created.')
+
+    uuid = Column(
+        String(36),
+        nullable=False,
+        comment='The UUID of the analysis. This would also become the UUID of the alert if it ends up becoming one.')
+
+    status = Column(
+        Enum('NEW','ANALYZING','ANALYZED'),
+        nullable=False,
+        default='NEW')
+
+class CloudphishContentMetadata(Base):
+
+    __tablename__ = 'cloudphish_content_metadata'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    sha256_content = Column(
+        VARBINARY(32),
+        ForeignKey('cloudphish_analysis_results.sha256_content', 
+            ondelete='CASCADE',
+            onupdate='CASCADE'),
+        primary_key=True,
+        nullable=False,
+        comment='The binary SHA2 hash of the content that was downloaded from the URL.')
+
+    node = Column(
+        String(1024),
+        nullable=True,
+        comment='The name of the node which stores this binary data. This would match the name columns of the nodes table, however, there is not a database relationship because the nodes can change.')
+
+    name = Column(
+        VARBINARY(4096),
+        nullable=False,
+        comment='The name of the file as it was seen either by content disposition of extrapolated from the URL.\nThis is stored in python’s “unicode_internal” format.')
+
+class CloudphishUrlLookup(Base):
+
+    __tablename__ = 'cloudphish_url_lookup'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    sha256_url = Column(
+        VARBINARY(32),
+        ForeignKey('cloudphish_analysis_results.sha256_content', 
+            ondelete='CASCADE',
+            onupdate='CASCADE'),
+        primary_key=True,
+        nullable=False,
+        comment='The SHA256 value of the URL.')
+
+    last_lookup = Column(
+        TIMESTAMP,
+        nullable=False,
+        index=True,
+        server_default=text('CURRENT_TIMESTAMP'),
+        comment='The last time this URL was looked up. This is updated every time a query is made to cloudphish for this url. URLs that are not looked up after a period of time are cleared out.')
+
+    url = Column( 
+        Text,
+        nullable=False,
+        comment='The value of the URL.')
 
 class Event(Base):
 
     __tablename__ = 'events'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    id = Column(Integer, nullable=False, primary_key=True)
-    creation_date = Column(DATE, nullable=False)
-    name = Column(String(128), nullable=False)
-    status = Column(Enum('OPEN','CLOSED','IGNORE'), nullable=False)
-    remediation = Column(Enum('not remediated','cleaned with antivirus','cleaned manually','reimaged','credentials reset','removed from mailbox','network block','NA'), nullable=False)
+    id = Column(
+        Integer, 
+        primary_key=True,
+        nullable=False,
+        autoincrement=True)
+
+    creation_date = Column(
+        DATE, 
+        nullable=False)
+
+    name = Column(
+        String(128), 
+        nullable=False)
+
+    type = Column(
+        Enum(
+            'phish',
+            'recon',
+            'host compromise',
+            'credential compromise',
+            'web browsing'), 
+        nullable=False)
+
+    vector = Column(
+        Enum(
+            'corporate email',
+            'webmail',
+            'usb',
+            'website',
+            'unknown'), 
+        nullable=False)
+
+    risk_level = Column(
+        Enum(
+            '1',
+            '2',
+            '3'), 
+        nullable=False)
+
+    prevention_tool = Column(
+        Enum(
+            'response team',
+            'ips',
+            'fw',
+            'proxy',
+            'antivirus',
+            'email filter',
+            'application whitelisting',
+            'user'), 
+        nullable=False)
+
+    remediation = Column(
+        Enum(
+            'not remediated',
+            'cleaned with antivirus',
+            'cleaned manually',
+            'reimaged',
+            'credentials reset',
+            'removed from mailbox',
+            'network block',
+            'NA'), 
+        nullable=False)
+
+    status = Column(
+        Enum('OPEN','CLOSED','IGNORE'), 
+        nullable=False)
+
     comment = Column(Text)
-    vector = Column(Enum('corporate email','webmail','usb','website','unknown'), nullable=False)
-    risk_level = Column(Enum('1','2','3'), nullable=False)
-    prevention_tool = Column(Enum('response team','ips','fw','proxy','antivirus','email filter','application whitelisting','user'), nullable=False)
-    campaign_id = Column(Integer, ForeignKey('campaign.id'), nullable=False)
-    campaign = relationship('saq.database.Campaign', foreign_keys=[campaign_id])
-    type = Column(Enum('phish','recon','host compromise','credential compromise','web browsing'), nullable=False)
+
+    campaign_id = Column(
+        Integer, 
+        ForeignKey('campaign.id', ondelete='CASCADE', onupdate='CASCADE'), 
+        nullable=False)
+
+    event_time = Column(
+        DATETIME, 
+        nullable=True)
+
+    alert_time = Column(
+        DATETIME, 
+        nullable=True)
+
+    ownership_time = Column(
+        DATETIME, 
+        nullable=True)
+
+    disposition_time = Column(
+        DATETIME, 
+        nullable=True)
+
+    contain_time = Column(
+        DATETIME, 
+        nullable=True)
+
+    remediation_time = Column(
+        DATETIME, 
+        nullable=True)
+
+
     malware = relationship("saq.database.MalwareMapping", passive_deletes=True, passive_updates=True)
     alert_mappings = relationship("saq.database.EventMapping", passive_deletes=True, passive_updates=True)
     companies = relationship("saq.database.CompanyMapping", passive_deletes=True, passive_updates=True)
-    event_time = Column(DATETIME, nullable=True)
-    alert_time = Column(DATETIME, nullable=True)
-    ownership_time = Column(DATETIME, nullable=True)
-    disposition_time = Column(DATETIME, nullable=True)
-    contain_time = Column(DATETIME, nullable=True)
-    remediation_time = Column(DATETIME, nullable=True)
-
 
     @property
     def json(self):
@@ -762,13 +1007,75 @@ class Event(Base):
 
         return results
 
+Index('ix_events_creation_date_name', Event.creation_date, Event.name, unique=True)
+
+class IncomingWorkloadType(Base):
+
+    __tablename__ = 'incoming_workload_type'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True)
+
+    name = Column(
+        String(512),
+        nullable=False,
+        unique=True,
+        comment='The name of the work (http, email, etc…)')
+
+class IncomingWorkload(Base):
+
+    __tablename__ = 'incoming_workload'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    id = Column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True)
+
+    type_id = Column(
+        Integer,
+        ForeignKey('incoming_workload_type.id', ondelete='CASCADE', onupdate='CASCADE'),
+        index=True,
+        nullable=False,
+        comment='Each added work item has a work type, which collectors use to know which workload items belong to them.')
+
+    mode = Column(
+        String(256),
+        nullable=False,
+        comment='The analysis mode the work will be submit with. This determines what nodes are selected for receiving the work.')
+
+    work = Column(
+        LargeBinary,
+        nullable=False,
+        comment='A python pickle of the **kwargs for ace_api.submit (see source code)')
 
 class EventMapping(Base):
 
     __tablename__ = 'event_mapping'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    event_id = Column(Integer, ForeignKey('events.id'), primary_key=True)
-    alert_id = Column(Integer, ForeignKey('alerts.id'), primary_key=True)
+    event_id = Column(
+        Integer, 
+        ForeignKey('events.id', ondelete='CASCADE', onupdate='CASCADE'), 
+        primary_key=True)
+
+    alert_id = Column(
+        Integer, 
+        ForeignKey('alerts.id', ondelete='CASCADE', onupdate='CASCADE'), 
+        primary_key=True,
+        index=True)
 
     alert = relationship('saq.database.Alert', backref='event_mapping')
     event = relationship('saq.database.Event', backref='event_mapping')
@@ -776,17 +1083,123 @@ class EventMapping(Base):
 class Nodes(Base):
 
     __tablename__ = 'nodes'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(1024), nullable=False)
-    location = Column(String(1024), nullable=False)
+    id = Column(
+        Integer, 
+        primary_key=True,
+        autoincrement=True)
+
+    name = Column(
+        String(1024), 
+        nullable=False,
+        index=True,
+        unique=True,
+        comment='The value of SAQ_NODE in the [global] section of the configuration file.')
+
+    location = Column(
+        String(1024), 
+        nullable=False,
+        comment='Also called the API_PREFIX, this is the hostname:port portion of the URL for the api for the node.')
+
+    company_id = Column(
+        Integer,
+        ForeignKey('company.id', ondelete='CASCADE', onupdate='CASCADE'),
+        nullable=False,
+        index=True,
+        comment='The company this node belongs to (see [global] company_id in config file)')
+
+    last_update = Column(
+        DateTime,
+        nullable=False,
+        comment='The last time this node updated it’s status.')
+
+    is_primary = Column(
+        BOOLEAN,
+        nullable=False,
+        default=False,
+        comment="""
+        0 - node is not the primary node
+        1 - node is the primary node
+        The primary node is responsible for doing some basic database cleanup procedures.""")
+
+    any_mode = Column(
+        BOOLEAN,
+        nullable=False,
+        default=False,
+        comment='If this is true then the node_modes table is ignored for this mode as it supports any analysis mode.')
+
+    is_local= Column(
+        BOOLEAN,
+        nullable=False,
+        default=False,
+        comment='If a node is “local” then it is not considered for use by other non-“local” nodes. Typically this is used by the correlate command line utility to run the ace engine by itself.')
+
+
+
+class NodeModes(Base):
+
+    __tablename__ = 'node_modes'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    node_id = Column(
+        Integer,
+        ForeignKey('nodes.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        nullable=False)
+
+    analysis_mode = Column(
+        String(256),
+        primary_key=True,
+        nullable=False,
+        comment='The analysis_mode that this node will support processing.')
+
+class NodeModesExcluded(Base):
+
+    __tablename__ = 'node_modes_excluded'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    node_id = Column(
+        Integer,
+        ForeignKey('nodes.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        nullable=False)
+
+    analysis_mode = Column(
+        String(256),
+        primary_key=True,
+        nullable=False,
+        comment='The analysis_mode that this node will NOT support processing.')
+
 
 class Company(Base):
 
     __tablename__ = 'company'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(128), unique=True, index=True)
+    id = Column(
+        Integer, 
+        primary_key=True,
+        nullable=False,
+        autoincrement=True)
+
+    name = Column(
+        String(128), 
+        nullable=False,
+        unique=True,
+        index=True)
 
     @property
     def json(self):
@@ -794,12 +1207,25 @@ class Company(Base):
             'id': self.id,
             'name': self.name }
 
+# TODO this should be called CompanyEventMapping
 class CompanyMapping(Base):
 
     __tablename__ = 'company_mapping'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    event_id = Column(Integer, ForeignKey('events.id'), primary_key=True)
-    company_id = Column(Integer, ForeignKey('company.id'), primary_key=True)
+    event_id = Column(
+        Integer, 
+        ForeignKey('events.id', ondelete='CASCADE', onupdate='CASCADE'), 
+        primary_key=True)
+
+    company_id = Column(
+        Integer, 
+        ForeignKey('company.id', ondelete='CASCADE', onupdate='CASCADE'), 
+        primary_key=True)
+
     company = relationship("saq.database.Company")
 
     @property
@@ -809,17 +1235,41 @@ class CompanyMapping(Base):
 class Malware(Base):
 
     __tablename__ = 'malware'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(128), unique=True, index=True)
+    id = Column(
+        Integer, 
+        primary_key=True)
+
+    name = Column(
+        String(128), 
+        unique=True, 
+        index=True)
+
     threats = relationship("saq.database.Threat", passive_deletes=True, passive_updates=True)
 
 class MalwareMapping(Base):
 
     __tablename__ = 'malware_mapping'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    event_id = Column(Integer, ForeignKey('events.id'), primary_key=True)
-    malware_id = Column(Integer, ForeignKey('malware.id'), primary_key=True)
+    event_id = Column(
+        Integer, 
+        ForeignKey('events.id', ondelete='CASCADE', onupdate='CASCADE'), 
+        primary_key=True)
+
+    malware_id = Column(
+        Integer, 
+        ForeignKey('malware.id', ondelete='CASCADE', onupdate='CASCADE'), 
+        primary_key=True,
+        index=True)
+
     malware = relationship("saq.database.Malware")
 
     @property
@@ -830,15 +1280,33 @@ class MalwareMapping(Base):
     def name(self):
         return self.malware.name
 
-class Threat(Base):
+class MalwareThreatMapping(Base):
 
     __tablename__ = 'malware_threat_mapping'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
-    malware_id = Column(Integer, ForeignKey('malware.id'), primary_key=True)
-    type = Column(Enum('UNKNOWN','KEYLOGGER','INFOSTEALER','DOWNLOADER','BOTNET','RAT','RANSOMWARE','ROOTKIT','FRAUD','CUSTOMER_THREAT'), primary_key=True, nullable=False)
+    malware_id = Column(
+        Integer,
+        ForeignKey('malware.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True)
 
-    def __str__(self):
-        return self.type
+    type = Column(
+        Enum(
+            'UNKNOWN',
+            'KEYLOGGER',
+            'INFOSTEALER',
+            'DOWNLOADER',
+            'BOTNET',
+            'RAT',
+            'RANSOMWARE',
+            'ROOTKIT',
+            'FRAUD',
+            'CUSTOMER_THREAT'),
+        nullable=False,
+        primary_key=True)
 
 class SiteHolidays(Holidays):
     rules = [
@@ -927,6 +1395,10 @@ class Alert(RootAnalysis, Base):
     #
 
     __tablename__ = 'alerts'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
         Integer, 
@@ -940,6 +1412,7 @@ class Alert(RootAnalysis, Base):
     insert_date = Column(
         TIMESTAMP, 
         nullable=False, 
+        index=True,
         server_default=text('CURRENT_TIMESTAMP'))
 
     storage_dir = Column(
@@ -957,7 +1430,8 @@ class Alert(RootAnalysis, Base):
 
     alert_type = Column(
         String(64),
-        nullable=False)
+        nullable=False,
+        index=True)
 
     description = Column(
         String(1024),
@@ -986,12 +1460,14 @@ class Alert(RootAnalysis, Base):
             saq.constants.DISPOSITION_DAMAGE,
             saq.constants.DISPOSITION_INSIDER_DATA_CONTROL,
             saq.constants.DISPOSITION_INSIDER_DATA_EXFIL),
-        nullable=True)
+        nullable=True,
+        index=True)
 
     disposition_user_id = Column(
         Integer,
-        ForeignKey('users.id'),
-        nullable=True)
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True)
 
     disposition_time = Column(
         TIMESTAMP, 
@@ -999,8 +1475,9 @@ class Alert(RootAnalysis, Base):
 
     owner_id = Column(
         Integer,
-        ForeignKey('users.id'),
-        nullable=True)
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True)
 
     owner_time = Column(
         TIMESTAMP,
@@ -1013,40 +1490,43 @@ class Alert(RootAnalysis, Base):
 
     removal_user_id = Column(
         Integer,
-        ForeignKey('users.id'),
-        nullable=True)
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True)
 
     removal_time = Column(
         TIMESTAMP,
         nullable=True)
 
-    #lock_owner = Column(
-        #String(256), 
-        #nullable=True)
+    lock_owner = Column(
+        String(256), 
+        nullable=True)
 
-    #lock_id = Column(
-        #String(36),
-        #nullable=True)
+    lock_id = Column(
+        String(36),
+        nullable=True)
 
-    #lock_transaction_id = Column(
-        #String(36),
-        #nullable=True)
+    lock_transaction_id = Column(
+        String(36),
+        nullable=True)
 
-    #lock_time = Column(
-        #TIMESTAMP, 
-        #nullable=True)
+    lock_time = Column(
+        TIMESTAMP, 
+        nullable=True)
 
     company_id = Column(
         Integer,
-        ForeignKey('company.id'),
-        nullable=True)
+        ForeignKey('company.id', ondelete='CASCADE', onupdate='CASCADE'),
+        nullable=True,
+        index=True)
 
     company = relationship('saq.database.Company', foreign_keys=[company_id])
 
     location = Column(
-        String(253),
+        String(1024),
         unique=False,
-        nullable=False)
+        nullable=False,
+        index=True)
 
     detection_count = Column(
         Integer,
@@ -1059,7 +1539,19 @@ class Alert(RootAnalysis, Base):
     queue = Column(
         String(64),
         nullable=False,
-        default=saq.constants.QUEUE_DEFAULT)
+        default=saq.constants.QUEUE_DEFAULT,
+        index=True)
+
+    #
+    # relationships
+    #
+
+    disposition_user = relationship('saq.database.User', foreign_keys=[disposition_user_id])
+    owner = relationship('saq.database.User', foreign_keys=[owner_id])
+    remover = relationship('saq.database.User', foreign_keys=[removal_user_id])
+    #observable_mapping = relationship('saq.database.ObservableMapping')
+    tag_mappings = relationship('saq.database.TagMapping', passive_deletes=True, passive_updates=True)
+    #delayed_analysis = relationship('saq.database.DelayedAnalysis')
 
     def get_observables(self):
         query = saq.db.query(Observable)
@@ -1326,14 +1818,6 @@ class Alert(RootAnalysis, Base):
             return 'Completed (Removed)'
 
         return 'Completed'
-
-    # relationships
-    disposition_user = relationship('saq.database.User', foreign_keys=[disposition_user_id])
-    owner = relationship('saq.database.User', foreign_keys=[owner_id])
-    remover = relationship('saq.database.User', foreign_keys=[removal_user_id])
-    #observable_mapping = relationship('saq.database.ObservableMapping')
-    tag_mappings = relationship('saq.database.TagMapping', passive_deletes=True, passive_updates=True)
-    #delayed_analysis = relationship('saq.database.DelayedAnalysis')
 
     @property
     def sorted_tags(self):
@@ -1881,10 +2365,15 @@ class UserAlertMetrics(Base):
 class Comment(Base):
 
     __tablename__ = 'comments'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     comment_id = Column(
         Integer,
-        primary_key=True)
+        primary_key=True,
+        autoincrement=True)
 
     insert_date = Column(
         TIMESTAMP, 
@@ -1895,37 +2384,48 @@ class Comment(Base):
     user_id = Column(
         Integer,
         ForeignKey('users.id'),
-        nullable=False)
+        nullable=False,
+        index=True)
 
     uuid = Column(
         String(36), 
-        ForeignKey('alerts.uuid'),
-        nullable=False)
+        ForeignKey('alerts.uuid', ondelete='CASCADE'),
+        nullable=False,
+        index=True)
 
-    comment = Column(Text)
+    comment = Column(
+        Text,
+        nullable=False)
 
     # many to one
     user = relationship('User', backref='comments')
+    # TODO add other relationships?
 
 class Observable(Base):
 
     __tablename__ = 'observables'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
-        Integer,
-        primary_key=True)
+        BigInteger,
+        primary_key=True,
+        autoincrement=True)
 
     type = Column(
         String(64),
         nullable=False)
 
-    md5 = Column(
-        VARBINARY(16),
-        nullable=False)
-
     value = Column(
         BLOB,
         nullable=False)
+
+    md5 = Column(
+        VARBINARY(16),
+        nullable=False,
+        index=True)
 
     @property
     def display_value(self):
@@ -1933,19 +2433,26 @@ class Observable(Base):
 
     tags = relationship('saq.database.ObservableTagMapping', passive_deletes=True, passive_updates=True)
 
+Index('ix_observable_type_md5', Observable.type, Observable.md5, unique=True)
+
 class ObservableMapping(Base):
 
     __tablename__ = 'observable_mapping'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     observable_id = Column(
         Integer,
-        ForeignKey('observables.id'),
+        ForeignKey('observables.id', ondelete='CASCADE', onupdate='CASCADE'),
         primary_key=True)
 
     alert_id = Column(
         Integer,
-        ForeignKey('alerts.id'),
-        primary_key=True)
+        ForeignKey('alerts.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        index=True)
 
     alert = relationship('saq.database.Alert', backref='observable_mappings')
     observable = relationship('saq.database.Observable', backref='observable_mappings')
@@ -1955,15 +2462,20 @@ class ObservableMapping(Base):
 class ObservableTagMapping(Base):
     
     __tablename__ = 'observable_tag_mapping'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     observable_id = Column(
         Integer,
-        ForeignKey('observables.id'),
-        primary_key=True)
+        ForeignKey('observables.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        index=True)
 
     tag_id = Column(
         Integer,
-        ForeignKey('tags.id'),
+        ForeignKey('tags.id', ondelete='CASCADE', onupdate='CASCADE'),
         primary_key=True)
 
     observable = relationship('saq.database.Observable', backref='observable_tag_mapping')
@@ -2041,6 +2553,10 @@ def remove_observable_tag_mapping(o_type, o_value, o_md5, tag):
 class PersistenceSource(Base):
 
     __tablename__ = 'persistence_source'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
     
     id = Column(
         Integer,
@@ -2049,11 +2565,17 @@ class PersistenceSource(Base):
 
     name = Column(
         String(256),
-        nullable=False)
+        nullable=False,
+        index=True,
+        comment='The name of the persistence source. For example, the name of the ace collector.')
 
 class Persistence(Base):
 
     __tablename__ = 'persistence'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
         BigInteger,
@@ -2062,33 +2584,43 @@ class Persistence(Base):
 
     source_id = Column(
         Integer,
-        ForeignKey('persistence_source.id'),
+        ForeignKey('persistence_source.id', ondelete='CASCADE', onupdate='CASCADE'),
+        nullable=False,
+        comment='The source that generated this persistence data.'
     )
 
     permanent = Column(
-        Integer,
+        BOOLEAN,
         nullable=False,
-        server_default=text('0'))
+        default=False,
+        comment='Set to 1 if this value should never be deleted, 0 otherwise.')
 
     uuid = Column(
         String(512),
-        nullable=False)
+        nullable=False,
+        comment='A unique identifier (key) for this piece of persistence data specific to this source.')
 
     value = Column(
-        BLOB(),
-        nullable=True)
-
-    last_update = Column(
-        TIMESTAMP, 
-        nullable=False, 
-        index=True,
-        server_default=text('CURRENT_TIMESTAMP'))
+        LargeBinary,
+        nullable=True,
+        comment='The value of this piece of persistence data. This is pickled python data.')
 
     created_at = Column(
         TIMESTAMP, 
         nullable=False, 
         index=True,
-        server_default=text('CURRENT_TIMESTAMP'))
+        server_default=text('CURRENT_TIMESTAMP'),
+        comment='The time this information was created.')
+
+    last_update = Column(
+        TIMESTAMP, 
+        nullable=False, 
+        index=True,
+        server_default=text('CURRENT_TIMESTAMP'),
+        comment='The last time this information was updated.')
+
+Index('ix_persistence_source_id_uuid', Persistence.source_id, Persistence.uuid, unique=True)
+Index('ix_persistence_permanent_last_update', Persistence.permanent, Persistence.last_update)
 
 # this is used to map what observables had what tags in what alerts
 # not to be confused with ObservableTagMapping (see above)
@@ -2099,21 +2631,27 @@ class Persistence(Base):
 class ObservableTagIndex(Base):
 
     __tablename__ = 'observable_tag_index'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     observable_id = Column(
         Integer,
-        ForeignKey('observables.id'),
+        ForeignKey('observables.id', ondelete='CASCADE', onupdate='CASCADE'),
         primary_key=True)
 
     tag_id = Column(
         Integer,
-        ForeignKey('tags.id'),
-        primary_key=True)
+        ForeignKey('tags.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        index=True)
 
     alert_id = Column(
         Integer,
-        ForeignKey('alerts.id'),
-        primary_key=True)
+        ForeignKey('alerts.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        index=True)
 
     observable = relationship('saq.database.Observable', backref='observable_tag_index')
     tag = relationship('saq.database.Tag', backref='observable_tag_index')
@@ -2122,14 +2660,21 @@ class ObservableTagIndex(Base):
 class Tag(saq.analysis.Tag, Base):
     
     __tablename__ = 'tags'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
         Integer,
-        primary_key=True)
+        primary_key=True,
+        autoincrement=True)
 
     name = Column(
         String(256),
-        nullable=False)
+        nullable=False,
+        index=True,
+        unique=True)
 
     @property
     def display(self):
@@ -2156,16 +2701,21 @@ class Tag(saq.analysis.Tag, Base):
 class TagMapping(Base):
 
     __tablename__ = 'tag_mapping'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     tag_id = Column(
         Integer,
-        ForeignKey('tags.id'),
+        ForeignKey('tags.id', ondelete='CASCADE', onupdate='CASCADE'),
         primary_key=True)
 
     alert_id = Column(
         Integer,
-        ForeignKey('alerts.id'),
-        primary_key=True)
+        ForeignKey('alerts.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        index=True)
 
     alert = relationship('saq.database.Alert', backref='tag_mapping')
     tag = relationship('saq.database.Tag', backref='tag_mapping')
@@ -2173,10 +2723,15 @@ class TagMapping(Base):
 class Remediation(Base):
 
     __tablename__ = 'remediation'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
         Integer,
-        primary_key=True)
+        primary_key=True,
+        autoincrement=True)
 
     type = Column(
         String,
@@ -2186,39 +2741,47 @@ class Remediation(Base):
     action = Column(
         Enum('remove', 'restore'),
         nullable=False,
-        default='remove')
+        default='remove',
+        comment='The action that was taken, either the time was removed or it was restored.')
 
     insert_date = Column(
         TIMESTAMP, 
         nullable=False, 
         index=True,
-        server_default=text('CURRENT_TIMESTAMP'))
+        server_default=text('CURRENT_TIMESTAMP'),
+        comment='The time the action occured.')
 
     update_time = Column(
         TIMESTAMP, 
         nullable=True, 
         index=True,
-        server_default=None)
+        server_default=None,
+        comment='Time the action was last attempted')
 
     user_id = Column(
         Integer,
         ForeignKey('users.id'),
-        nullable=False)
+        nullable=False,
+        index=True,
+        comment='The user who performed the action.')
 
     user = relationship('saq.database.User', backref='remediations')
 
     key = Column(
-        String,
-        nullable=False)
+        String(512),
+        nullable=False,
+        index=True,
+        comment='The key to look up the item.  In the case of emails this is the message_id and the recipient email address.')
 
     restore_key = Column(
-        String,
+        String(512),
         nullable=True,
-        default=None)
+        comment='optional location used to restore the file from')
 
     result = Column(
-        String,
-        nullable=True)
+        Text,
+        nullable=True,
+        comment='The result of the action.  This is free form data for the analyst to see, usually includes error codes and messages.')
 
     _results = None
 
@@ -2235,8 +2798,9 @@ class Remediation(Base):
         return self._results
 
     comment = Column(
-        String,
-        nullable=True)
+        Text,
+        nullable=True,
+        comment='Optional comment, additional free form data.')
     
     @property
     def alert_uuids(self):
@@ -2258,11 +2822,13 @@ class Remediation(Base):
     successful = Column(
         BOOLEAN,
         nullable=True,
-        default=None)
+        default=None,
+        comment='1 - remediation worked, 0 - remediation didn’t work')
 
     lock = Column(
         String(36), 
-        nullable=True)
+        nullable=True,
+        comment='Set to a UUID when an engine processes it. Defaults to NULL to indicate nothing is working on it.')
 
     lock_time = Column(
         DateTime,
@@ -2271,7 +2837,12 @@ class Remediation(Base):
     status = Column(
         Enum('NEW', 'IN_PROGRESS', 'COMPLETED'),
         nullable=False,
-        default='NEW')
+        default='NEW',
+        comment="""
+        The current status of the remediation.
+        NEW - needs to be processed
+        IN_PROGRESS - entry is currently being processed
+        COMPLETED - entry completed successfully""")
 
     @property
     def json(self):
@@ -2296,63 +2867,90 @@ class Remediation(Base):
 class Message(Base):
 
     __tablename__ = 'messages'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
         BigInteger,
-        primary_key=True)
+        primary_key=True,
+        autoincrement=True)
 
     content = Column(
         String,
-        nullable=False)
+        nullable=False,
+        comment='The actual content of the message to be delivered.')
 
 class MessageRouting(Base):
 
     __tablename__ = 'message_routing'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
         BigInteger,
-        primary_key=True)
+        primary_key=True,
+        autoincrement=True)
 
     message_id = Column(
         BigInteger,
-        ForeignKey('messages.id'),
+        ForeignKey('messages.id', ondelete='CASCADE', onupdate='CASCADE'),
         nullable=False)
 
     message = relationship('saq.database.Message', foreign_keys=[message_id], backref='routing')
 
     route = Column(
-        String,
-        nullable=False)
+        String(64),
+        nullable=False,
+        comment='The route (or system) this message is to be delivered too.')
 
     destination = Column(
-        String,
-        nullable=False)
+        String(256),
+        nullable=False,
+        comment='The destination the message should be sent to at the given route. The value of this depends on the routing system.')
 
     lock = Column(
-        String,
-        nullable=True)
+        String(36),
+        nullable=True,
+        comment='Locking UUID.')
 
     lock_time = Column(
         DateTime,
-        nullable=True)
+        nullable=True,
+        comment='When the lock was set for this delivery. Used to time out locks.')
+
+Index('ix_message_routing_message_id_route_destination', 
+    MessageRouting.message_id,
+    MessageRouting.route,
+    MessageRouting.destination)
 
 class Workload(Base):
 
     __tablename__ = 'workload'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
         Integer,
-        primary_key=True)
+        primary_key=True,
+        autoincrement=True)
 
     uuid = Column(
         String(36), 
         nullable=False,
-        unique=True)
+        index=True)
 
     node_id = Column(
         Integer,
+        ForeignKey('nodes.id', ondelete='CASCADE', onupdate='CASCADE'),
         nullable=False, 
-        index=True)
+        index=True,
+        comment='The node that contains this work item.')
 
     analysis_mode = Column(
         String(256),
@@ -2361,24 +2959,28 @@ class Workload(Base):
 
     insert_date = Column(
         TIMESTAMP, 
-        nullable=False, 
+        nullable=True, 
         index=True)
 
     company_id = Column(
         Integer,
-        ForeignKey('company.id'),
-        nullable=True)
+        ForeignKey('company.id', ondelete='CASCADE', onupdate='CASCADE'),
+        nullable=False)
 
     company = relationship('saq.database.Company', foreign_keys=[company_id])
 
     exclusive_uuid = Column(
         String(36), 
-        nullable=True)
+        nullable=True,
+        comment='A workload item with an exclusive lock will only be processed by the engine (node) that created it.')
 
     storage_dir = Column(
         String(1024), 
         unique=True, 
-        nullable=False)
+        nullable=False,
+        comment='The location of the analysis. Relative paths are relative to SAQ_HOME.')
+
+Index('ix_workload_uuid_analysis_mode', Workload.uuid, Workload.analysis_mode, unique=True)
 
 @use_db
 def add_workload(root, exclusive_uuid=None, db=None, c=None):
@@ -2429,28 +3031,97 @@ def clear_workload_by_pid(pid, db=None, c=None):
     execute_with_retry(db, c, "DELETE FROM locks WHERE lock_owner LIKE CONCAT('%%-', %s)", (pid,))
     db.commit()
 
+class WorkDistributionGroup(Base):
+
+    __tablename__ = 'work_distribution_groups'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True)
+
+    name = Column(
+        String(128),
+        nullable=False,
+        index=True,
+        unique=True,
+        comment='The name of the group (Production, QA, etc…)')
+
+class WorkloadDistribution(Base):
+
+    __tablename__ = 'workload_distribution'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    group_id = Column(
+        Integer,
+        ForeignKey('work_distribution_groups.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        nullable=False)
+
+    work_id = Column(
+        BigInteger,
+        ForeignKey('incoming_workload.id', ondelete='CASCADE', onupdate='CASCADE'),
+        primary_key=True,
+        nullable=False,
+        index=True)
+
+    status = Column(
+        Enum(
+            'READY',
+            'COMPLETED',
+            'ERROR',
+            'LOCKED'),
+        nullable=False,
+        default='READY',
+        comment="""The status of the submission. Defaults to READY until the work has been submitted.
+        On a successful submission the status changes to COMPLETED.
+        If an error is detected, the status will change to ERROR.""")
+
+    lock_time = Column(
+        TIMESTAMP,
+        nullable=True)
+
+    lock_uuid = Column(
+        String(64),
+        nullable=True)
+
+Index('ix_workload_distribution_work_id_status', WorkloadDistribution.work_id, WorkloadDistribution.status)
+
 class Lock(Base):
     
     __tablename__ = 'locks'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     uuid = Column(
         String(36),
-        primary_key=True)
+        primary_key=True,
+        nullable=False)
 
     lock_uuid = Column(
         String(36),
         nullable=False,
-        unique=False,
         index=True)
     
     lock_time = Column(
-        TIMESTAMP, 
+        DateTime, 
         nullable=False, 
         index=True)
 
     lock_owner = Column(
         String(512),
         nullable=True)
+
+Index('ix_locks_uuid_lock_uuid', Lock.uuid, Lock.lock_uuid)
 
 @use_db
 def acquire_lock(_uuid, lock_uuid=None, lock_owner=None, db=None, c=None):
@@ -2580,10 +3251,15 @@ def clear_expired_local_nodes(db, c):
 class DelayedAnalysis(Base):
 
     __tablename__ = 'delayed_analysis'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
 
     id = Column(
         Integer,
-        primary_key=True)
+        primary_key=True,
+        autoincrement=True)
 
     uuid = Column(
         String(36),
@@ -2610,17 +3286,21 @@ class DelayedAnalysis(Base):
 
     node_id = Column(
         Integer,
+        ForeignKey('nodes.id', ondelete='CASCADE', onupdate='CASCADE'),
         nullable=False, 
         index=True)
 
     exclusive_uuid = Column(
         String(36), 
-        nullable=True)
+        nullable=True,
+        comment='A workload item with an exclusive lock will only be processed by the engine (node) that created it.')
 
     storage_dir = Column(
         String(1024), 
-        unique=False, 
-        nullable=False)
+        nullable=False,
+        comment='The location of the analysis. Relative paths are relative to SAQ_HOME.')
+
+Index('ix_delayed_analysis_node_delayed_until', DelayedAnalysis.node_id, DelayedAnalysis.delayed_until)
 
 @use_db
 def add_delayed_analysis_request(root, observable, analysis_module, next_analysis, exclusive_uuid=None, db=None, c=None):
@@ -2652,6 +3332,25 @@ def add_delayed_analysis_request(root, observable, analysis_module, next_analysi
 def clear_delayed_analysis_requests(root, db, c):
     """Clears all delayed analysis requests for the given RootAnalysis object."""
     execute_with_retry(db, c, "DELETE FROM delayed_analysis WHERE uuid = %s", (root.uuid,), commit=True)
+
+class EncryptedPasswords(Base):
+
+    __tablename__ = 'encrypted_passwords'
+    __table_args__ = { 
+        'mysql_engine': 'InnoDB',
+        'mysql_charset': 'utf8mb4',
+    }
+
+    key = Column(
+        String(256),
+        primary_key=True,
+        nullable=False,
+        comment='The name (key) of the value being stored. Can either be a single name, or a section.option key.')
+
+    encrypted_value = Column(
+        Text,
+        nullable=False,
+        comment='Encrypted value, base64 encoded')
     
 def initialize_database():
     """Initializes database connections by creating the SQLAlchemy engine and session objects."""
