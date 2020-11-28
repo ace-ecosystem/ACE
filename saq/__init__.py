@@ -504,7 +504,6 @@ def initialize(
     ace_api.set_default_ssl_ca_path(CA_CHAIN_PATH)
 
     # initialize the database connection
-    # XXX issue for unit testing
     initialize_database()
 
     # XXX move this into another module that is dedicated to "multiple customers"

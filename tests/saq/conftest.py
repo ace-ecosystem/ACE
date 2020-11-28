@@ -41,13 +41,6 @@ def initialize_environment(pytestconfig):
             args=None, 
             relative_dir=None)
 
-    # create the database in memory
-    from saq.database import Base, engine
-    Base.metadata.bind = engine
-    Base.metadata.create_all()
-
-    saq.database.initialize_automation_user()
-
     # load the configuration first
     if saq.CONFIG['global']['instance_type'] != saq.constants.INSTANCE_TYPE_UNITTEST:
         raise Exception('*** CRITICAL ERROR ***: invalid instance_type setting in configuration for unit testing')

@@ -3367,9 +3367,6 @@ def initialize_database():
     engine = create_engine(
         get_sqlalchemy_database_uri('ace'),
         **get_sqlalchemy_database_options('ace'))
-        #config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_URI, 
-        #isolation_level='READ COMMITTED',
-        #**config[saq.CONFIG['global']['instance_type']].SQLALCHEMY_DATABASE_OPTIONS)
 
     @event.listens_for(engine, 'connect')
     def connect(dbapi_connection, connection_record):
@@ -3387,12 +3384,6 @@ def initialize_database():
 
     DatabaseSession = sessionmaker(bind=engine)
     saq.db = scoped_session(DatabaseSession)
-
-    #else:
-        # if you call this a second time it just closes all the sessions
-        # this (currently) happens in unit testing
-        #from sqlalchemy.orm.session import close_all_sessions
-        #close_all_sessions()
 
 def initialize_automation_user():
     # get the id of the ace automation account
