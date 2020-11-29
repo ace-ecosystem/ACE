@@ -60,6 +60,12 @@ class AnalysisRequest(Lockable):
         # the result of the analysis
         self.result = None
 
+    def __eq__(self, other):
+        if not isinstance(other, AnalysisRequest):
+            return False
+
+        return self.tracking_key == other.tracking_key
+
     #
     # Trackable interface
     #
@@ -97,13 +103,13 @@ class AnalysisRequest(Lockable):
         ar.result = result['result']
         ar.owner = result['owner']
 
-        return ar
 
     #
     # Lockable interface
     #
 
-    def get_lock_key(self):
+    @property
+    def lock_id(self):
         return self.tracking_key
 
     #
@@ -228,7 +234,7 @@ def process_expired_analysis_requests():
     """Moves all unlocked expired analysis requests back into the queue."""
 
     # if there is another process already doing this then we don't need to
-    if not acquire(SYSTEM_LOCK_EXPIRED_ANALYSIS_REQUESTS, 0):
+    if not acquire(SYSTEM_LOCK_EXPIRED_ANALYSIS_REQUESTS, timeout=0):
         return
 
     try:

@@ -1,5 +1,6 @@
 # vim: ts=4:sw=4:et:cc=120
 import hashlib
+
 from typing import Union, Optional
 
 from saq.analysis import Analysis, Observable

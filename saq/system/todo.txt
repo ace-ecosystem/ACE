@@ -1,4 +1,5 @@
 NOTES FROM REVIEWING EXISTING ENGINE
+* get rid of fetch_tags() function call
 * handle detection points (probably in root.set_analysis) and analysis mode switches
 * root.whitelisted <-- deal with whitelisting (automatic cancel in non-correlational mode)
 * keep ace correlate in mind

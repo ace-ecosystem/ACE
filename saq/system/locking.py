@@ -81,6 +81,9 @@ class Lockable():
 # get_owner_wait_target(P2) = L2 (in between acquire and clear wait target)
 
 def check_deadlock(lock_id: str, requestor_id: str, chain=None):
+    assert isinstance(lock_id, str)
+    assert isinstance(requestor_id, str)
+
     if chain is None:
         chain = []
 
@@ -134,21 +137,29 @@ class LockingInterface(ACESystemInterface):
         raise NotImplementedError()
 
 def get_lock_owner(lock_id: str) -> Union[str, None]:
+    assert isinstance(lock_id, str)
     return get_system().locking.get_lock_owner(lock_id)
 
-def get_owner_wait_target(owner_id) -> Union[str, None]:
+def get_owner_wait_target(owner_id: str) -> Union[str, None]:
+    assert isinstance(owner_id, str)
     return get_system().locking.get_owner_wait_target(owner_id)
 
-def track_wait_target(lock_id, owner_id: str):
+def track_wait_target(lock_id: Union[str, None], owner_id: str):
+    assert lock_id is None or isinstance(lock_id, str)
+    assert isinstance(owner_id, str)
     get_system().locking.track_wait_target(lock_id, owner_id)
 
 def clear_wait_target(owner_id: str):
-    track_wait_target(owner_id, None)
+    assert isinstance(owner_id, str)
+    track_wait_target(None, owner_id)
 
 def track_lock_acquire(lock_id: str, owner_id: str, lock_timeout: Optional[int]=None):
+    assert isinstance(lock_id, str)
+    assert isinstance(owner_id, str)
     get_system().locking.track_lock_acquire(lock_id, owner_id, lock_timeout)
 
 def is_locked(lock_id: str) -> bool:
+    assert isinstance(lock_id, str)
     return get_system().locking.is_locked(lock_id)
 
 def default_owner_id():
@@ -160,6 +171,11 @@ def default_owner_id():
 # timeout = None --> wait forever
 
 def acquire(lock_id: str, owner_id: Optional[str]=None, timeout:Optional[int]=None, lock_timeout:Optional[int]=None) -> bool:
+    assert isinstance(lock_id, str)
+    assert owner_id is None or isinstance(owner_id, str)
+    assert timeout is None or isinstance(timeout, int)
+    assert lock_timeout is None or isinstance(lock_timeout, int)
+
     # if we don't pass in an owner_id then we use a default which is based on hostname, process id and thread id
     if owner_id is None:
         owner_id = default_owner_id()
@@ -191,6 +207,8 @@ def acquire(lock_id: str, owner_id: Optional[str]=None, timeout:Optional[int]=No
     return True
 
 def release(lock_id: str, owner_id: Optional[str]=None) -> bool:
+    assert isinstance(lock_id, str)
+
     if owner_id is None:
         owner_id = default_owner_id()
 

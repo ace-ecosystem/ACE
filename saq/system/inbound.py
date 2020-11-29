@@ -58,9 +58,8 @@ def process_analysis_request(ar: AnalysisRequest):
                 if not observable:
                     raise UnknownObservableError(observable)
 
-                # TODO ok how does this work now that there is only a generic Analysis type?
                 observable.add_analysis(ar.result)
-                root.save()
+                root.save() # <-- why is this needed?
 
             # if this is a RootAnalysis request make sure it is tracked
             if ar.is_root_analysis_request:
@@ -75,7 +74,6 @@ def process_analysis_request(ar: AnalysisRequest):
                         continue
 
                     # is this analysis request already completed?
-                    # XXX not implemented yet
                     if root.analysis_completed(observable, amt):
                         continue
 
@@ -89,7 +87,7 @@ def process_analysis_request(ar: AnalysisRequest):
                     # NOTE if the analysis module does not support caching
                     # then find_analysis_request always returns None
                     tracked_ar = find_analysis_request(observable, amt)
-                    if tracked_ar:
+                    if tracked_ar and tracked_ar != ar:
                         try:
                             with tracked_ar.lock():
                                 if get_analysis_request(tracked_ar.tracking_key):
@@ -107,10 +105,6 @@ def process_analysis_request(ar: AnalysisRequest):
 
                         except: # TODO what can be thrown here?
                             pass
-
-                        finally:
-                            if tracked_ar:
-                                tracked_ar.unlock()
 
                     # is this analysis in the cache?
                     cached_result = get_cached_analysis(observable, amt)
