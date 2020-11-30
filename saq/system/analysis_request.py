@@ -72,10 +72,17 @@ class AnalysisRequest(Lockable):
 
     @property
     def tracking_key(self) -> str:
+        # if this is a request to analyze a RootAnalysis then we use the uuid to track the request
         if self.is_root_analysis_request:
             return self.root.uuid
 
-        return self.cache_key
+        # if this is a request to analyze an Observable then we use the cache key to track the request
+        # so we can see when this observable is currently being analyzed
+        if self.cache_key:
+            return self.cache_key
+
+        # but if the AnalysisModuleType does not support caching results then we just use the id of the request
+        return self.id
 
     def to_dict(self) -> str:
         return json.dumps({

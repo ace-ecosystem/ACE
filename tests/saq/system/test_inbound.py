@@ -42,9 +42,13 @@ def test_process_root_analysis_request():
     # and then the request should be deleted
     assert get_analysis_request(request.tracking_key) is None
 
+@pytest.mark.parametrize('cache_ttl', [
+    (None),
+    (60),
+])
 @pytest.mark.integration
-def test_process_analysis_result():
-    amt = AnalysisModuleType(ANALYSIS_TYPE_TEST, 'blah', cache_ttl=60)
+def test_process_analysis_result(cache_ttl):
+    amt = AnalysisModuleType(ANALYSIS_TYPE_TEST, 'blah', cache_ttl=cache_ttl)
     assert register_analysis_module_type(amt) == amt
 
     root = RootAnalysis()
@@ -63,8 +67,9 @@ def test_process_analysis_result():
     request.result = Analysis(root=root, analysis_module_type=amt, observable=request.observable, details={'Hello': 'World'})
     process_analysis_request(request)
 
-    # this analysis result for this observable should be cached now
-    assert get_cached_analysis(request.observable, request.analysis_module_type) is not None
+    if cache_ttl is not None:
+        # this analysis result for this observable should be cached now
+        assert get_cached_analysis(request.observable, request.analysis_module_type) is not None
 
     # get the root analysis and ensure this observable has the analysis now
     root = get_root_analysis(root.uuid)
