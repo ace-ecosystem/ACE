@@ -567,9 +567,6 @@ class AnalysisModuleType():
 
         return True
 
-# sentinel for analysis details that are not loaded
-NOT_LOADED = object()
-
 class Analysis(TaggableObject, DetectableObject, Lockable):
     """Represents an output of analysis work."""
 
@@ -618,7 +615,7 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         # free form details of the analysis
         # this is run-time-only (never saved to disk)
         # the external_details property is what loads and saves the value of this field
-        self._details = details or NOT_LOADED
+        self._details = details or None
         # the path to the storage of the details
         #self.external_details_path = None
         # gets set to True when the external details has been loaded from disk
@@ -741,7 +738,7 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     @property
     def details(self):
         # do we already have the details loaded or set?
-        if self._details is not NOT_LOADED:
+        if self._details is not None:
             return self._details
 
         # are there any external details?
@@ -786,37 +783,16 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         # NOTE you should never call this directly
         # this is called whenever .details is requested and it hasn't been loaded yet
 
-        if self._details is not NOT_LOADED:
-            logging.warning("called load_external_details when self._details was not NOT_LOADED")
-
-        #if self.external_details_path is None:
-            #logging.error("external_details_path is None for {}".format(self))
-            #return None
-
-        self._details = None
-        #details_file_path = os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, '.ace', self.external_details_path)
-
-        #if not os.path.exists(details_file_path):
-            #logging.warning("missing file {0}".format(details_file_path))
-            #return None
-
-        #if os.path.getsize(details_file_path) > 1024 * 1024:
-            #logging.debug("JSON file {0} is very large: {1} bytes".format(details_file_path, os.path.getsize(details_file_path)))
+        if self._details is not None:
+            logging.warning("called load_external_details when self._details was not None")
 
         try:
-            #with open(details_file_path, 'r') as fp:
-                #self._details = json.load(fp)
-
-            from saq.system.analysis import get_analysis_details
+            from saq.system.analysis_tracking import get_analysis_details
             self._details = get_analysis_details(self.uuid)
 
             if self._details is None:
                 logging.warning(f"missing analysis details for {self.uuid}")
 
-            #_track_reads()
-
-            #self.external_details_loaded = True
-            #logging.debug("LOAD: loaded external details from {0} (value type {1})".format(details_file_path, type(self._details)))
             return self._details
 
         except Exception as e:
@@ -864,7 +840,7 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
             #if Analysis.KEY_FILE_PATH in value[Analysis.KEY_DETAILS]:
                 #self.external_details_path = value[Analysis.KEY_DETAILS][Analysis.KEY_FILE_PATH]
 
-        self.details = NOT_LOADED
+        self.details = None
 
         if Analysis.KEY_SUMMARY in value:
             self.summary = value[Analysis.KEY_SUMMARY]
