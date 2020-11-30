@@ -5,7 +5,7 @@ from typing import Union
 from saq.system import ACESystemInterface, get_system
 from saq.system.constants import *
 from saq.system.analysis_module import AnalysisModuleType, AnalysisModuleTypeVersionError, track_analysis_module_type, get_analysis_module_type
-from saq.system.analysis_request import AnalysisRequest, process_expired_analysis_requests
+from saq.system.analysis_request import AnalysisRequest, process_expired_analysis_requests, track_analysis_request
 
 class WorkQueue():
     def put(self, analysis_request: AnalysisRequest):
@@ -53,6 +53,17 @@ def register_work_queue(amt: AnalysisModuleType) -> WorkQueue:
     return queue
 
 def get_next_analysis_request(owner_uuid: str, amt: AnalysisModuleType, timeout: int) -> Union[AnalysisRequest, None]:
+    """Returns the next AnalysisRequest for the given AnalysisModuleType, or None if nothing is available.
+    This function is called by the analysis modules to get the next work item.
+
+    Args:
+        owner_uuid: Represents the owner of the request.
+        amt: The AnalysisModuleType that the request is for.
+        timeout: How long to wait (in seconds) for a work request to come in.
+
+    Returns:
+        An AnalysisRequest to be processed, or None if no work requests are available."""
+
     # make sure expired analysis requests go back in the work queues
     process_expired_analysis_requests()
 
@@ -68,6 +79,6 @@ def get_next_analysis_request(owner_uuid: str, amt: AnalysisModuleType, timeout:
         with next_ar.lock():
             next_ar.owner = owner_uuid
             next_ar.status = TRACKING_STATUS_ANALYZING
-            next_ar.update()
+            track_analysis_request(next_ar)
     
     return next_ar

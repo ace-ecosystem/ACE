@@ -1370,6 +1370,7 @@ class Observable(TaggableObject, DetectableObject):
     KEY_EXCLUDED_ANALYSIS = 'excluded_analysis'
     KEY_RELATIONSHIPS = 'relationships'
     KEY_GROUPING_TARGET = 'grouping_target'
+    KEY_REQUEST_TRACKING = 'request_tracking'
 
     def __init__(self, type=None, value=None, time=None, json=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1381,6 +1382,7 @@ class Observable(TaggableObject, DetectableObject):
         self._excluded_analysis = []
         self._relationships = []
         self._grouping_target = False
+        self._request_tracking = {}
 
         if json is not None:
             self.json = json
@@ -1397,6 +1399,7 @@ class Observable(TaggableObject, DetectableObject):
             self._excluded_analysis = [] # [ str ]
             self._relationships = [] # [ Relationship ]
             self._grouping_target = False
+            self._request_tracking = {} # key = AnalysisModuleType.name, value = AnalysisRequest.id
 
         self.cache_id = str(uuid.uuid3(uuid.NAMESPACE_X500, f"{self.type}:{self.value}"))
 
@@ -1408,6 +1411,14 @@ class Observable(TaggableObject, DetectableObject):
 
         # state variable gets set to True when fetch_tags is called
         self._tags_fetched = False
+
+    def track_analysis_request(self, ar: 'saq.system.analysis_request.AnalysisRequest'):
+        """Tracks the request for analyze this Observable for the given type of analysis."""
+        from saq.system.analysis_request import AnalysisRequest
+        assert isinstance(ar, AnalysisRequest)
+
+        logging.debug(f"tracking analysis request {ar} for {self}")
+        self.request_tracking[ar.analysis_module_type.name] = ar.id
 
     @staticmethod
     def from_json(json_data):
@@ -1530,6 +1541,7 @@ class Observable(TaggableObject, DetectableObject):
             Observable.KEY_EXCLUDED_ANALYSIS: self._excluded_analysis,
             Observable.KEY_RELATIONSHIPS: self._relationships,
             Observable.KEY_GROUPING_TARGET: self._grouping_target,
+            Observable.KEY_REQUEST_TRACKING: self._request_tracking,
         })
         return result
 
@@ -1563,6 +1575,8 @@ class Observable(TaggableObject, DetectableObject):
             self._relationships = value[Observable.KEY_RELATIONSHIPS]
         if Observable.KEY_GROUPING_TARGET in value:
             self._grouping_target = value[Observable.KEY_GROUPING_TARGET]
+        if Observable.KEY_REQUEST_TRACKING in value:
+            self._request_tracking = value[Observable.KEY_REQUEST_TRACKING]
 
     @property
     def id(self):
@@ -1878,6 +1892,20 @@ class Observable(TaggableObject, DetectableObject):
     def grouping_target(self, value):
         assert isinstance(value, bool)
         self._grouping_target = value
+
+    #
+    # REQUEST TRACKING
+    #
+
+    @property
+    def request_tracking(self):
+        return self._request_tracking
+
+    @request_tracking.setter
+    def request_tracking(self, value) -> dict:
+        """Returns a dict that maps the AnalysisModuleType.name to the AnalysisRequest.id."""
+        assert isinstance(value, dict)
+        self._request_tracking = value
 
     def add_tag(self, *args, **kwargs):
         super().add_tag(*args, **kwargs)
@@ -4042,10 +4070,6 @@ class RootAnalysis(Analysis):
     def analysis_tracked(self, observable: Observable, amt: AnalysisModuleType) -> bool:
         # TODO implement
         return False
-
-    def track_analysis(self, observable: Observable, amt: AnalysisModuleType, ar: 'AnalysisRequest'):
-        # TODO implement
-        return
 
 def recurse_down(target, callback):
     """Calls callback starting at target back to the RootAnalysis."""

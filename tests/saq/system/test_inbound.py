@@ -6,6 +6,7 @@ from saq.system.analysis_module import register_analysis_module_type
 from saq.system.analysis_request import AnalysisRequest, get_analysis_request
 from saq.system.analysis_tracking import get_root_analysis
 from saq.system.caching import get_cached_analysis
+from saq.system.constants import TRACKING_STATUS_ANALYZING
 from saq.system.inbound import process_analysis_request
 from saq.system.work_queue import get_next_analysis_request, get_work_queue
 
@@ -38,6 +39,8 @@ def test_process_root_analysis_request():
     assert request.observable == test_observable
     assert request.analysis_module_type == amt
     assert request.root == root
+    assert request.status == TRACKING_STATUS_ANALYZING
+    assert request.owner == OWNER_UUID
 
     # and then the request should be deleted
     assert get_analysis_request(request.tracking_key) is None
@@ -63,6 +66,8 @@ def test_process_analysis_result(cache_ttl):
     assert request.observable == test_observable
     assert request.analysis_module_type == amt
     assert request.root == root
+    assert request.status == TRACKING_STATUS_ANALYZING
+    assert request.owner == OWNER_UUID
 
     request.result = Analysis(root=root, analysis_module_type=amt, observable=request.observable, details={'Hello': 'World'})
     process_analysis_request(request)

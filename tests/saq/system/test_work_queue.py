@@ -7,7 +7,12 @@ import pytest
 from saq.analysis import RootAnalysis
 from saq.test import F_TEST
 from saq.system.analysis_module import AnalysisModuleType
-from saq.system.analysis_request import AnalysisRequest, track_analysis_request, process_expired_analysis_requests
+from saq.system.analysis_request import (
+    AnalysisRequest, 
+    track_analysis_request, 
+    process_expired_analysis_requests, 
+    submit_analysis_request,
+)
 from saq.system.constants import *
 from saq.system.work_queue import (
         WorkQueue,
@@ -65,7 +70,7 @@ def test_get_next_analysis_request():
     root = RootAnalysis()
     observable = root.add_observable(F_TEST, TEST_1)
     request = AnalysisRequest(root, observable, amt_1)
-    request.submit()
+    submit_analysis_request(request)
 
     assert get_next_analysis_request(TEST_OWNER, amt_1, None) is request
     assert request.status == TRACKING_STATUS_ANALYZING
@@ -86,7 +91,7 @@ def test_get_next_analysis_request_expired():
     root = RootAnalysis()
     observable = root.add_observable(F_TEST, TEST_1)
     request = AnalysisRequest(root, observable, amt)
-    request.submit()
+    submit_analysis_request(request)
 
     assert get_next_analysis_request(TEST_OWNER, amt, 0) is request
     assert request.status == TRACKING_STATUS_ANALYZING

@@ -1,3 +1,6 @@
+I AM HERE
+* figuring out where logic for  analysis request in root should go
+
 NOTES FROM REVIEWING EXISTING ENGINE
 * get rid of fetch_tags() function call
 * handle detection points (probably in root.set_analysis) and analysis mode switches

@@ -176,12 +176,6 @@ class AnalysisRequest(Lockable):
         result.result = self.result
         return result
 
-    def submit(self):
-        submit_analysis_request(self)
-
-    def update(self):
-        track_analysis_request(self)
-
     def delete(self) -> bool:
         return delete_analysis_request(self.id)
 
@@ -205,6 +199,8 @@ class AnalysisRequestTrackingInterface(ACESystemInterface):
         raise NotImplementedError()
 
 def track_analysis_request(request: AnalysisRequest):
+    """Begins tracking the given AnalysisRequest."""
+    assert isinstance(request, AnalysisRequest)
     return get_system().request_tracking.track_analysis_request(request)
 
 def get_analysis_request(key: str) -> Union[AnalysisRequest, None]:
@@ -226,9 +222,12 @@ def clear_tracking_by_analysis_module_type(amt: AnalysisModuleType):
 
 def submit_analysis_request(ar: AnalysisRequest):
     """Submits the given AnalysisRequest to the appropriate queue for analysis."""
+    assert isinstance(ar, AnalysisRequest)
+    assert isinstance(ar.root, RootAnalysis)
+
     ar.owner = None
     ar.status = TRACKING_STATUS_QUEUED
-    ar.update()
+    track_analysis_request(ar)
 
     # NOTE that we bypass the get_work_queue call since that checks the module version
     work_queue = get_system().work_queue.get_work_queue(ar.analysis_module_type)
@@ -250,7 +249,7 @@ def process_expired_analysis_requests():
                 try:
                     # re-submit the analysis request
                     # this changes the status and thus takes it out of expiration
-                    request.submit()
+                    submit_analysis_request(request)
                 except InvalidWorkQueueError:
                     delete_analysis_request(request.id)
     finally:

@@ -11,6 +11,7 @@ from saq.system.analysis_request import (
         delete_analysis_request,
         find_analysis_request, 
         get_analysis_request,
+        submit_analysis_request,
 )
 from saq.system.analysis_module import get_all_analysis_module_types
 from saq.system.caching import cache_analysis, get_cached_analysis
@@ -127,10 +128,11 @@ def process_analysis_request(ar: AnalysisRequest):
                         # XXX not implemented yet
                         new_ar[dep] = root.get_analysis(observable, dep)
 
-                    # send it out
-                    # XXX not implemented yet
-                    root.track_analysis(observable, amt, new_ar)
-                    new_ar.submit()
+                    # we also track the request inside the RootAnalysis object
+                    observable.track_analysis_request(new_ar)
+
+                    # submit the analysis request for processing
+                    submit_analysis_request(new_ar)
                     continue
     finally:
         # at this point this AnalysisRequest is no longer needed
