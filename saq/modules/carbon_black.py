@@ -224,8 +224,11 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
             elif len(processes[_k]) < self.max_process_guids:
                 # if there was only a few process results, look at adding small ones
                 for process in processes[_k]:
-                     if len(process.get_segments()) < self.max_process_segments:
-                         analysis.add_observable(F_PROCESS_GUID, process.id)
+                    if len(process.get_segments()) < self.max_process_segments:
+                        analysis.add_observable(F_PROCESS_GUID, process.id)
+                    else:
+                        logging.info(f"{self} not creating process_guid={process.id} observable (segment limit): {len(process._segments)} > {self.max_process_segments}")
+
 
         return True
 
