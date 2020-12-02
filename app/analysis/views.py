@@ -1204,10 +1204,11 @@ def add_to_event():
         dbm.commit()
 
         # generate wiki
-        c.execute("""SELECT creation_date, name FROM events WHERE id = %s""", event_id)
+        c.execute("""SELECT creation_date, name, status FROM events WHERE id = %s""", event_id)
         result = c.fetchone()
         creation_date = result[0]
         event_name = result[1]
+        event_status = result[2]
         c.execute("""SELECT uuid, storage_dir FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE 
         event_mapping.event_id = %s""", event_id)
         rows = c.fetchall()
@@ -1218,7 +1219,13 @@ def add_to_event():
             alert_uuids.append(row[0])
             alert_paths.append(row[1])
 
-        if not new_event: 
+        if not new_event:
+            # Re-OPEN event?
+            if event_status != "OPEN":
+                ace_api.set_default_remote_host(saq.CONFIG['global']['node'])
+                ace_api.set_default_ssl_ca_path(saq.CONFIG['SSL']['ca_chain_path'])
+                ace_api.update_event_status(event_id, 'OPEN')
+
             c.execute("""SELECT disposition FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE 
             event_mapping.event_id = %s ORDER BY disposition DESC""", event_id)
             result = c.fetchone()
@@ -1868,7 +1875,7 @@ def manage():
         total_alerts=total_alerts,
 
         # event data
-        open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all(),
+        open_events = db.session.query(Event).filter(or_(Event.status == 'OPEN', Event.status == 'COMPLETED')).order_by(Event.creation_date.desc()).all(),
         campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all(),
 
         # user data
@@ -2716,7 +2723,7 @@ def index():
         db.session.rollback()
         all_users = db.session.query(User).order_by('username').all()
 
-    open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all()
+    open_events = db.session.query(Event).filter(or_(Event.status == 'OPEN', Event.status == 'COMPLETED')).order_by(Event.creation_date.desc()).all()
     malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
     companies = db.session.query(Company).order_by(Company.name.asc()).all()
     campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all()
