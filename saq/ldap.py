@@ -1,5 +1,8 @@
 import json
 import re
+import logging
+from ldap3.core import exceptions
+from ldap3.utils.conv import escape_filter_chars
 from ldap3 import Server, Connection, SIMPLE, RESTARTABLE, SUBTREE, ALL, ALL_ATTRIBUTES
 import saq
 import saq.email
@@ -24,7 +27,11 @@ def connect():
 def search(query):
     if connection is None:
         connect()
-    connection.search(saq.CONFIG['ldap']['ldap_base_dn'], query, SUBTREE, attributes=ALL_ATTRIBUTES)
+    try:
+        connection.search(saq.CONFIG['ldap']['ldap_base_dn'], query, SUBTREE, attributes=ALL_ATTRIBUTES)
+    except exceptions.LDAPInvalidFilterError as e:
+        logging.error(f"problem searching ldap with '{query}' : {e}")
+        return {}
     return json.loads(connection.response_to_json())['entries'] # XXX hack to have strings instead of lists of bytes for attributes
 
 # return list of entires that match a given email address
@@ -36,10 +43,12 @@ def lookup_email_address(email_address):
     # lookup the user for an email by name so that it will match various internal domains
     email = saq.email.normalize_email_address(email_address)
     name, domain = email.split('@', 1)
+    name = escape_filter_chars(name)
     return search(f"(mail={name}@*)")
 
 # lookup a user by cn and return the attributes including manager cn
 def lookup_user(user):
+    user = escape_filter_chars(user)
     entries = search(f"(cn={user})")
     if len(entries) == 0:
         return None

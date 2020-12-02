@@ -266,7 +266,11 @@ class Bit9FileHashAnalyzer_v1(SplunkAnalysisModule):
 #            What does the process tree look like?
 #
 
-              
+
+# XXX Refactor this to accept process_guid:process_segment accuracy
+# XXX The module should, by default, focus on the process_segment and
+# XXX then expand in both time directions capturing as much as possible
+# XXX until the segment_limit is reached.
 class ProcessGUIDAnalysis(Analysis):
     """What activity did this process perform?"""
 

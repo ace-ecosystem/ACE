@@ -272,7 +272,7 @@ class NetBIOSAnalyzer(AnalysisModule):
                 fp.seek(0)
 
                 for line in fp:
-                    if re.match(r'^137/udp\s+open\s+netbios-ns$', line.decode(saq.DEFAULT_ENCODING)):
+                    if re.match(r'^137/udp\s{1,10}open\s{1,10}netbios-ns$', line.decode(saq.DEFAULT_ENCODING)):
                         logging.debug("{} responded to a netbios query".format(asset))
                         analysis.netbios_open = True
                         continue
@@ -306,6 +306,9 @@ class NetBIOSAnalyzer(AnalysisModule):
 
             if analysis.netbios_user is not None and analysis.netbios_user != '<unknown>':
                 analysis.add_observable(F_USER, analysis.netbios_user)
+
+            if analysis.netbios_mac is not None and analysis.netbios_mac != '<unknown>':
+                analysis.add_observable(F_MAC_ADDRESS, analysis.netbios_mac)
 
         return True
 
