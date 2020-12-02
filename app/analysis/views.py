@@ -3179,7 +3179,7 @@ def o365_file_download():
     c = saq.CONFIG['analysis_module_o365_file_analyzer']
     s = requests.Session()
     s.proxies = proxies()
-    s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'])
+    s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'], c.get('client_credential'))
     r = s.get(f"{c['base_uri']}{path}:/content", stream=True)
     if r.status_code != requests.codes.ok:
         return r.text, r.status_code
