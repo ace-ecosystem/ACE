@@ -1,6 +1,8 @@
 # vim: ts=4:sw=4:et:cc=120
 #
 
+import logging
+
 from saq.system import ACESystemInterface, get_system
 from saq.system.analysis_tracking import (
     get_root_analysis,
@@ -104,17 +106,14 @@ def process_analysis_request(ar: AnalysisRequest):
                             # oh well -- it could be in the cache
 
                         except Exception as e: # TODO what can be thrown here?
-                            breakpoint()
+                            breakpoint() # XXX
                             pass
 
                     # is this analysis in the cache?
                     cached_result = get_cached_analysis(observable, amt)
                     if cached_result:
-                        # XXX not implemented yet
-                        root.set_analysis(
-                                ar.observable, 
-                                ar.analysis_module_type, 
-                                ar.result)
+                        logging.debug(f"using cached analysis for {observable} type {amt} in {root}")
+                        root.set_analysis(observable, cached_result)
                         continue
 
                     # otherwise we need to request it

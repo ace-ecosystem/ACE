@@ -1986,6 +1986,7 @@ class Observable(TaggableObject, DetectableObject):
         # we skip over lookups that return False here
         return [a for a in self._analysis.values() if isinstance(a, Analysis)]
 
+
     @property
     def children(self):
         """Returns what is considered all of the "children" of this object (in this case it is the Analysis.)"""
@@ -3811,6 +3812,17 @@ class RootAnalysis(Analysis):
                     result.append(analysis)
 
         return result
+
+    def set_analysis(self, observable: Observable, analysis: Analysis):
+        assert isinstance(observable, Observable)
+        assert isinstance(analysis, Analysis)
+        assert isinstance(analysis.type, AnalysisModuleType)
+
+        observable = self.get_observable(observable)
+        if observable is None:
+            raise UnknownObservableError(observable)
+
+        return observable.add_analysis(analysis)
 
     @property
     def all_iocs(self) -> list:

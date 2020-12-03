@@ -142,3 +142,58 @@ def test_process_analysis_result(cache_ttl):
 
     # request should be deleted
     assert get_analysis_request(request.id) is None
+
+@pytest.mark.integration
+def test_cached_analysis_result():
+    amt = AnalysisModuleType(ANALYSIS_TYPE_TEST, 'blah', cache_ttl=60)
+    assert register_analysis_module_type(amt) == amt
+
+    root = RootAnalysis()
+    test_observable = root.add_observable(F_TEST, 'test')
+    
+    root_request = root.create_analysis_request()
+    process_analysis_request(root_request)
+
+    # we should have a single work entry in the work queue
+    assert get_work_queue(amt).size() == 1
+
+    # request should be deleted
+    assert get_analysis_request(root_request.id) is None
+
+    request = get_next_analysis_request(OWNER_UUID, amt, 0)
+    request.result = Analysis(root=root, analysis_module_type=amt, observable=request.observable, details={'Hello': 'World'})
+    process_analysis_request(request)
+
+    # this analysis result for this observable should be cached now
+    assert get_cached_analysis(request.observable, request.analysis_module_type) is not None
+
+    # request should be deleted
+    assert get_analysis_request(request.id) is None
+
+    # work queue should be empty
+    assert get_work_queue(amt).size() == 0
+
+    # make another request for the same observable
+
+    root = RootAnalysis()
+    test_observable = root.add_observable(F_TEST, 'test')
+    
+    root_request = root.create_analysis_request()
+    process_analysis_request(root_request)
+
+    # request should be deleted
+    assert get_analysis_request(root_request.id) is None
+
+    # work queue should be empty since the result was pulled from cache
+    assert get_work_queue(amt).size() == 0
+
+    # get the root analysis and ensure this observable has the analysis now
+    root = get_root_analysis(root.uuid)
+    assert root is not None
+    observable = root.get_observable_by_spec(request.observable.type, request.observable.value)
+    assert observable is not None
+    analysis = observable.get_analysis(request.analysis_module_type)
+    assert analysis is not None
+    assert analysis.root == root
+    assert analysis.observable == request.observable
+    assert analysis.details == request.result.details
