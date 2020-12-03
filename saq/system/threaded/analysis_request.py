@@ -1,8 +1,10 @@
 # vim: ts=4:sw=4:et:cc=120
 
 import datetime
-from operator import itemgetter
+import logging
 import threading
+
+from operator import itemgetter
 from typing import Optional, List, Union
 
 from saq.analysis import Observable
@@ -74,16 +76,19 @@ class ThreadedAnalysisRequestTrackingInterface(AnalysisRequestTrackingInterface)
             # does it even exist?
             request = self.analysis_requests.pop(key, None)
             if request is None:
+                logging.debug(f"analysis request {key} does not exist")
                 return False
 
             # also delete from the cache lookup if it's in there
             if request.cache_key:
+                logging.debug(f"analysis request {key} deleted from cache with key {request.cache_key}")
                 self.cache_index.pop(request.cache_key, None)
 
             # and finally delete any expiration tracking if it exists
             if request.analysis_module_type:
                 self._delete_request_expiration(request)
 
+            logging.debug(f"deleted {request}")
             return True
 
     def get_expired_analysis_requests(self) -> List[AnalysisRequest]:
@@ -115,17 +120,13 @@ class ThreadedAnalysisRequestTrackingInterface(AnalysisRequestTrackingInterface)
             if amt.name in self.amt_exp_tracking:
                 del self.amt_exp_tracking[amt.name]
 
-    def get_analysis_request(self, key: str) -> Union[AnalysisRequest, None]:
+    def get_analysis_request_by_request_id(self, key: str) -> Union[AnalysisRequest, None]:
         with self.sync_lock:
             return self.analysis_requests.get(key)
 
-    def find_analysis_request(self, observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
-        cache_key = generate_cache_key(observable, amt)
-        if cache_key is None:
-            return None
-
+    def get_analysis_request_by_cache_key(self, key: str) -> Union[AnalysisRequest, None]:
         with self.sync_lock:
-            return self.cache_index.get(cache_key)
+            return self.cache_index.get(key)
 
     def reset(self):
         self.analysis_requests = {}

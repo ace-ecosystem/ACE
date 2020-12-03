@@ -20,9 +20,19 @@ from saq.system.locking import Lockable, acquire, release
 class AnalysisRequest(Lockable):
     """Represents a request to analyze a single observable, or all the observables in a RootAnalysis."""
     def __init__(self, 
-            root: Union[str, RootAnalysis]=None,
+            root: Union[str, RootAnalysis],
             observable: Optional[Observable]=None, 
             analysis_module_type: Optional[AnalysisModuleType]=None):
+
+        assert isinstance(root, RootAnalysis) or isinstance(root, str)
+        assert isinstance(observable, Observable) or observable is None
+        assert isinstance(analysis_module_type, AnalysisModuleType) or analysis_module_type is None
+
+        # load existing analysis if root is passed in as a string uuid
+        if isinstance(root, str):
+            self.root = get_root_analysis(root)
+        else:
+            self.root = root 
 
         #
         # static data
@@ -30,19 +40,15 @@ class AnalysisRequest(Lockable):
 
         # generic unique ID of the request
         self.id = str(uuid.uuid4())
-        # the observable to be analyzed
-        self.observable = observable
+        # the Observable to be analyzed
+        self.observable = root.get_observable(observable)
         # the type of analysis module to execute on this observable
         self.analysis_module_type = analysis_module_type
         # the key used to cache the analysis result
         # if this is a root analysis request or if the amt does not support caching then this is None
-        self.cache_key = generate_cache_key(observable, analysis_module_type)
+        self.cache_key = generate_cache_key(self.observable, self.analysis_module_type)
         # the RootAnalysis object this request belongs to or is entirely about
         # this can also be the UUID of the RootAnalysis
-        if isinstance(root, str):
-            self.root = get_root_analysis(root)
-        else:
-            self.root = root 
         # dict of analysis dependencies requested
         # key = analysis_module, value = Analysis
         self.dependency_analysis = {}
@@ -64,25 +70,7 @@ class AnalysisRequest(Lockable):
         if not isinstance(other, AnalysisRequest):
             return False
 
-        return self.tracking_key == other.tracking_key
-
-    #
-    # Trackable interface
-    #
-
-    @property
-    def tracking_key(self) -> str:
-        # if this is a request to analyze a RootAnalysis then we use the uuid to track the request
-        if self.is_root_analysis_request:
-            return self.root.uuid
-
-        # if this is a request to analyze an Observable then we use the cache key to track the request
-        # so we can see when this observable is currently being analyzed
-        if self.cache_key:
-            return self.cache_key
-
-        # but if the AnalysisModuleType does not support caching results then we just use the id of the request
-        return self.id
+        return self.id == other.id
 
     def to_dict(self) -> str:
         return json.dumps({
@@ -117,7 +105,8 @@ class AnalysisRequest(Lockable):
 
     @property
     def lock_id(self):
-        return self.tracking_key
+        # we always want to lock on the RootAnalysis which is required for every analysis request
+        return self.root.uuid
 
     #
     # utility functions
@@ -176,9 +165,6 @@ class AnalysisRequest(Lockable):
         result.result = self.result
         return result
 
-    def delete(self) -> bool:
-        return delete_analysis_request(self.id)
-
 class AnalysisRequestTrackingInterface(ACESystemInterface):
     def track_analysis_request(self, request: AnalysisRequest):
         raise NotImplementedError()
@@ -189,11 +175,11 @@ class AnalysisRequestTrackingInterface(ACESystemInterface):
     def get_expired_analysis_requests(self) -> List[AnalysisRequest]:
         raise NotImplementedError()
 
-    def get_analysis_request(self, key: str) -> Union[AnalysisRequest, None]:
+    def get_analysis_request_by_request_id(self, key: str) -> Union[AnalysisRequest, None]:
         raise NotImplementedError()
 
-    def find_analysis_request(self, observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
-        return self.get_analysis_request(generate_cache_key(observable, amt))
+    def get_analysis_request_by_cache_key(self, key: str) -> Union[AnalysisRequest, None]:
+        raise NotImplementedError()
 
     def clear_tracking_by_analysis_module_type(self, amt: AnalysisModuleType):
         raise NotImplementedError()
@@ -203,14 +189,24 @@ def track_analysis_request(request: AnalysisRequest):
     assert isinstance(request, AnalysisRequest)
     return get_system().request_tracking.track_analysis_request(request)
 
+def get_analysis_request_by_request_id(request_id: str) -> Union[AnalysisRequest, None]:
+    return get_system().request_tracking.get_analysis_request_by_request_id(request_id)
+
+def get_analysis_request_by_cache_key(cache_key: str) -> Union[AnalysisRequest, None]:
+    return get_system().request_tracking.get_analysis_request_by_cache_key(cache_key)
+
 def get_analysis_request(key: str) -> Union[AnalysisRequest, None]:
-    return get_system().request_tracking.get_analysis_request(key)
+    return get_analysis_request_by_request_id(key)
 
-def find_analysis_request(observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
-    return get_system().request_tracking.find_analysis_request(observable, amt)
+def get_analysis_request_by_observable(observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
+    return get_analysis_request_by_cache_key(generate_cache_key(observable, amt))
 
-def delete_analysis_request(key: str) -> bool:
-    return get_system().request_tracking.delete_analysis_request(key)
+def delete_analysis_request(target: Union[AnalysisRequest, str]) -> bool:
+    assert isinstance(target, AnalysisRequest) or isinstance(target, str)
+    if isinstance(target, AnalysisRequest):
+        target = target.id
+
+    return get_system().request_tracking.delete_analysis_request(target)
 
 def get_expired_analysis_requests() -> List[AnalysisRequest]:
     """Returns all AnalysisRequests that are in the TRACKING_STATUS_ANALYZING state and have expired."""

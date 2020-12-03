@@ -9,9 +9,10 @@ from saq.system.analysis_tracking import (
 from saq.system.analysis_request import (
         AnalysisRequest, 
         delete_analysis_request,
-        find_analysis_request, 
         get_analysis_request,
+        get_analysis_request_by_observable,
         submit_analysis_request,
+        track_analysis_request,
 )
 from saq.system.analysis_module import get_all_analysis_module_types
 from saq.system.caching import cache_analysis, get_cached_analysis
@@ -27,7 +28,7 @@ def process_analysis_request(ar: AnalysisRequest):
     # while we're processing it
     try:
         # TODO how long do we wait?
-        with ar.lock():
+        with ar.lock(): # NOTE since AnalysisRequest.lock_id returns RootAnalysis.uuid this also locks the root obj
             root = ar.root
             # did we complete a request?
             if ar.is_observable_analysis_result:
@@ -78,33 +79,32 @@ def process_analysis_request(ar: AnalysisRequest):
                     if root.analysis_completed(observable, amt):
                         continue
 
-                    # is this request for this RootAnalysis already being tracked?
-                    # XXX not implemented yet
+                    # is this analysis request for this RootAnalysis already being tracked?
                     if root.analysis_tracked(observable, amt):
                         continue
 
                     # is this observable being analyzed for another root analysis?
                     # this could be in another root analysis as well
                     # NOTE if the analysis module does not support caching
-                    # then find_analysis_request always returns None
-                    tracked_ar = find_analysis_request(observable, amt)
+                    # then get_analysis_request_by_observable always returns None
+                    tracked_ar = get_analysis_request_by_observable(observable, amt)
                     if tracked_ar and tracked_ar != ar:
                         try:
                             with tracked_ar.lock():
-                                if get_analysis_request(tracked_ar.tracking_key):
+                                if get_analysis_request(tracked_ar.id):
                                     # if we can get the AR and lock it it means it's still in a queue waiting
                                     # so we can tell that AR to update the details of this analysis as well when it's done
                                     tracked_ar.additional_roots.append(root)
-                                    tracked_ar.update()
-                                    # now this observable is tracked to the other observable
-                                    # XXX not implemented yet
-                                    root.track_analysis(observable, amt, tracked_ar)
+                                    track_analysis_request(tracked_ar)
+                                    # now this observable is tracked to the analysis request for the other observable
+                                    observable.track_analysis_request(tracked_ar)
                                     continue
 
                             # the AR was completed before we could lock it
                             # oh well -- it could be in the cache
 
-                        except: # TODO what can be thrown here?
+                        except Exception as e: # TODO what can be thrown here?
+                            breakpoint()
                             pass
 
                     # is this analysis in the cache?
@@ -136,7 +136,7 @@ def process_analysis_request(ar: AnalysisRequest):
                     continue
     finally:
         # at this point this AnalysisRequest is no longer needed
-        ar.delete()
+        delete_analysis_request(ar)
 
     # if there were any other RootAnalysis objects waiting for this one, go ahead and process those now
     for other_root in ar.additional_roots:

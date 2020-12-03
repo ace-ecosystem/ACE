@@ -42,8 +42,61 @@ def test_process_root_analysis_request():
     assert request.status == TRACKING_STATUS_ANALYZING
     assert request.owner == OWNER_UUID
 
-    # and then the request should be deleted
-    assert get_analysis_request(request.tracking_key) is None
+    # the original root analysis request should be deleted
+    assert get_analysis_request(root_request.id) is None
+
+@pytest.mark.integration
+def test_process_duplicate_root_analysis_request():
+    amt = AnalysisModuleType(name=ANALYSIS_TYPE_TEST, description='blah', cache_ttl=60)
+    assert register_analysis_module_type(amt) == amt
+
+    root = RootAnalysis()
+    test_observable = root.add_observable(F_TEST, 'test')
+    
+    root_request = root.create_analysis_request()
+    process_analysis_request(root_request)
+
+    # we should have a single work entry in the work queue
+    assert get_work_queue(amt).size() == 1
+
+    # make the exact same request again
+    root_request = root.create_analysis_request()
+    process_analysis_request(root_request)
+
+    # should still only have one request
+    assert get_work_queue(amt).size() == 1
+
+@pytest.mark.parametrize('cache_ttl', [
+    (None),
+    (60),
+])
+@pytest.mark.integration
+def test_process_duplicate_observable_analysis_request(cache_ttl):
+    amt = AnalysisModuleType(name=ANALYSIS_TYPE_TEST, description='blah', cache_ttl=cache_ttl)
+    assert register_analysis_module_type(amt) == amt
+
+    root = RootAnalysis()
+    test_observable = root.add_observable(F_TEST, 'test')
+    
+    root_request = root.create_analysis_request()
+    process_analysis_request(root_request)
+
+    # we should have a single work entry in the work queue
+    assert get_work_queue(amt).size() == 1
+
+    # make another request for the same observable but from a different root analysis
+    root = RootAnalysis()
+    test_observable = root.add_observable(F_TEST, 'test')
+    root_request = root.create_analysis_request()
+    process_analysis_request(root_request)
+
+    if cache_ttl is not None:
+        # if the analysis type can be cached then there should only be one request
+        # since there is already a request to analyze it
+        assert get_work_queue(amt).size() == 1
+    else:
+        # otherwise there should be two requests
+        assert get_work_queue(amt).size() == 2
 
 @pytest.mark.parametrize('cache_ttl', [
     (None),
@@ -88,4 +141,4 @@ def test_process_analysis_result(cache_ttl):
     assert analysis.details == request.result.details
 
     # request should be deleted
-    assert get_analysis_request(request.tracking_key) is None
+    assert get_analysis_request(request.id) is None

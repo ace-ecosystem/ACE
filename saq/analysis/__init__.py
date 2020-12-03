@@ -1907,6 +1907,14 @@ class Observable(TaggableObject, DetectableObject):
         assert isinstance(value, dict)
         self._request_tracking = value
 
+    def get_analysis_request_id(self, amt: Union[AnalysisModuleType, str]) -> Union[str, None]:
+        """Returns the AnalysisRequest.id for the given analysis module type, or None if nothing is tracked yet."""
+        assert isinstance(amt, AnalysisModuleType) or isinstance(amt, str)
+        if isinstance(amt, AnalysisModuleType):
+            amt = amt.name
+
+        return self.request_tracking.get(amt, None)
+
     def add_tag(self, *args, **kwargs):
         super().add_tag(*args, **kwargs)
         for target in self.links:
@@ -3868,13 +3876,13 @@ class RootAnalysis(Analysis):
             raise ValueError("invalid type {} passed to iterate_all_references".format(type(target)))
 
     def get_observable(self, uuid_or_observable:Union[str, Observable]):
-        """Returns the Observable object for the given uuid."""
+        """Returns the Observable object for the given uuid or None if the Observable does not exist."""
         if isinstance(uuid_or_observable, Observable):
             uuid = uuid_or_observable.id
         else:
             uuid = uuid_or_observable
 
-        return self.observable_store[uuid]
+        return self.observable_store.get(uuid, None)
 
     def get_observable_by_spec(self, o_type, o_value, o_time=None):
         """Returns the Observable object by type and value, and optionally time, or None if it cannot be found."""
@@ -4068,8 +4076,15 @@ class RootAnalysis(Analysis):
         return observable.get_analysis(amt) is not None
 
     def analysis_tracked(self, observable: Observable, amt: AnalysisModuleType) -> bool:
-        # TODO implement
-        return False
+        """Returns True if the analysis for the given Observable and type is already requested (tracked.)"""
+        assert isinstance(observable, Observable)
+        assert isinstance(amt, AnalysisModuleType)
+
+        observable = self.get_observable_by_spec(observable.type, observable.value)
+        if observable is None:
+            raise UnknownObservableError(observable)
+
+        return observable.get_analysis_request_id(amt) is not None
 
 def recurse_down(target, callback):
     """Calls callback starting at target back to the RootAnalysis."""

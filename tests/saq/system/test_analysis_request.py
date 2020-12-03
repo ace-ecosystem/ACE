@@ -9,8 +9,8 @@ from saq.observables import create_observable
 from saq.system.analysis_request import (
         AnalysisRequest, 
         delete_analysis_request,
-        find_analysis_request,
-        get_analysis_request,
+        get_analysis_request_by_observable,
+        get_analysis_request_by_request_id,
         get_expired_analysis_requests,
         process_expired_analysis_requests,
         track_analysis_request,
@@ -28,8 +28,6 @@ amt = AnalysisModuleType(
         timeout=30,
         cache_ttl=600)
 
-observable = create_observable(F_TEST, '1.2.3.4')
-
 TEST_1 = 'test_1'
 TEST_2 = 'test_2'
 
@@ -37,12 +35,16 @@ TEST_OWNER = 'test_owner'
 
 @pytest.mark.unit
 def test_is_observable_analysis_request():
-    request = AnalysisRequest(RootAnalysis(), observable, amt)
+    root = RootAnalysis()
+    observable = root.add_observable(F_TEST, '1.2.3.4')
+    request = AnalysisRequest(root, observable, amt)
     assert request.is_observable_analysis_request
 
 @pytest.mark.unit
 def test_is_observable_analysis_result():
-    request = AnalysisRequest(RootAnalysis(), observable, amt)
+    root = RootAnalysis()
+    observable = root.add_observable(F_TEST, '1.2.3.4')
+    request = AnalysisRequest(root, observable, amt)
     request.result = Analysis()
     assert request.is_observable_analysis_result
 
@@ -102,19 +104,19 @@ def test_lock_analysis_request():
 def test_track_analysis_request():
     request = AnalysisRequest(RootAnalysis())
     track_analysis_request(request)
-    assert get_analysis_request(request.id) is request
+    assert get_analysis_request_by_request_id(request.id) is request
     assert delete_analysis_request(request.id)
-    assert get_analysis_request(request.id) is None
+    assert get_analysis_request_by_request_id(request.id) is None
 
 @pytest.mark.integration
-def test_find_analysis_request():
+def test_get_analysis_request_by_observable():
     root = RootAnalysis()
     observable = root.add_observable(F_TEST, TEST_1)
     request = AnalysisRequest(root, observable, amt)
     track_analysis_request(request)
-    assert find_analysis_request(observable, amt) is request
+    assert get_analysis_request_by_observable(observable, amt) is request
     assert delete_analysis_request(request.id)
-    assert find_analysis_request(observable, amt) is None
+    assert get_analysis_request_by_observable(observable, amt) is None
 
 @pytest.mark.integration
 def test_get_expired_analysis_request():
@@ -171,10 +173,12 @@ def test_process_expired_analysis_request_invalid_work_queue():
     track_analysis_request(request)
     assert get_expired_analysis_requests() == [request]
     process_expired_analysis_requests()
-    assert get_analysis_request(request.id) is None
+    assert get_analysis_request_by_request_id(request.id) is None
     assert not get_expired_analysis_requests()
 
 @pytest.mark.integration
 def test_is_cachable():
-    assert AnalysisRequest(observable=observable, analysis_module_type=amt).is_cachable
-    assert not AnalysisRequest(root=RootAnalysis()).is_cachable
+    root = RootAnalysis()
+    observable = root.add_observable(F_TEST, TEST_1)
+    assert AnalysisRequest(root, observable, amt).is_cachable
+    assert not AnalysisRequest(root).is_cachable
