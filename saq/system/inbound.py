@@ -121,9 +121,9 @@ def process_analysis_request(ar: AnalysisRequest):
                     new_ar = AnalysisRequest(root, observable, amt)
 
                     # fill out any requested dependency data
-                    for dep in amt.dependencies:
+                    #for dep in amt.dependencies:
                         # XXX not implemented yet
-                        new_ar[dep] = root.get_analysis(observable, dep)
+                        #new_ar[dep] = root.get_analysis(observable, dep)
 
                     # we also track the request inside the RootAnalysis object
                     observable.track_analysis_request(new_ar)

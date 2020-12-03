@@ -538,6 +538,8 @@ class AnalysisModuleType():
         )
 
     def accepts(self, observable: Observable) -> bool:
+        from saq.system.analysis_module import get_analysis_module_type
+        assert isinstance(observable, Observable)
 
         # TODO conditions are OR vertical AND horizontal?
 
@@ -562,7 +564,12 @@ class AnalysisModuleType():
 
         # AND (this is correct)
         for dep in self.dependencies:
-            if not observable.analysis_completed(dep):
+            amt = get_analysis_module_type(dep)
+            if amt is None:
+                logging.debug(f"{observable} has unknown dependency {dep}")
+                return False
+
+            if not observable.analysis_completed(amt):
                 return False
 
         return True
@@ -2084,7 +2091,7 @@ class Observable(TaggableObject, DetectableObject):
         self.analysis[MODULE_PATH(analysis, instance=instance)] = False
         logging.debug("recorded no analysis of type {} instance {} for observable {}".format(analysis, instance, self))
 
-    def get_analysis(self, obj, instance=None):
+    def get_analysisOLD(self, obj, instance=None):
         """Returns the Analysis object for the given type of analysis, or None if it does not exist (yet).
            :param obj: Can be any of the following types of values.
            * (type) a literal :class:`Analysis` based type
@@ -2162,6 +2169,10 @@ class Observable(TaggableObject, DetectableObject):
         """Returns the Analysis of the given type for this Observable, or None."""
         assert isinstance(amt, AnalysisModuleType)
         return self.analysis.get(amt.name, None)
+
+    def analysis_completed(self, amt: AnalysisModuleType) -> bool:
+        """Returns True if the analysis of the given type has been completed for this Observable."""
+        return self.get_analysis(amt) is not None
 
     # XXX this does not appear to be used
     def analysis_exists(self, analysis_type):
@@ -4122,9 +4133,9 @@ class RootAnalysis(Analysis):
         assert isinstance(amt, AnalysisModuleType)
         observable = self.get_observable_by_spec(observable.type, observable.value)
         if observable is None:
-            raise UnknownObservableError(observable.uuid)
+            raise UnknownObservableError(observable)
 
-        return observable.get_analysis(amt) is not None
+        return observable.analysis_completed(amt)
 
     def analysis_tracked(self, observable: Observable, amt: AnalysisModuleType) -> bool:
         """Returns True if the analysis for the given Observable and type is already requested (tracked.)"""

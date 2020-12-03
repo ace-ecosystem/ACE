@@ -2,7 +2,7 @@ import uuid
 
 from saq.analysis import AnalysisModuleType, RootAnalysis, Analysis
 from saq.constants import *
-from saq.system.analysis_module import register_analysis_module_type
+from saq.system.analysis_module import register_analysis_module_type, UnknownAnalysisModuleTypeError, CircularDependencyError
 from saq.system.analysis_request import AnalysisRequest, get_analysis_request
 from saq.system.analysis_tracking import get_root_analysis
 from saq.system.caching import get_cached_analysis
@@ -13,6 +13,7 @@ from saq.system.work_queue import get_next_analysis_request, get_work_queue
 import pytest
 
 ANALYSIS_TYPE_TEST = 'test'
+ANALYSIS_TYPE_TEST_DEP = 'test_dep'
 OWNER_UUID = str(uuid.uuid4())
 
 @pytest.mark.integration
@@ -214,3 +215,117 @@ def test_cached_analysis_result():
     assert analysis.root == root
     assert analysis.observable == request.observable
     assert analysis.details == request.result.details
+
+@pytest.mark.integration
+def test_unknown_dependency():
+    # amt_dep depends on amt which has not registered yet
+    amt_dep = AnalysisModuleType(ANALYSIS_TYPE_TEST_DEP, 'test', dependencies=[ANALYSIS_TYPE_TEST])
+    with pytest.raises(UnknownAnalysisModuleTypeError):
+        assert register_analysis_module_type(amt_dep)
+
+@pytest.mark.integration
+def test_known_dependency():
+    amt = AnalysisModuleType(ANALYSIS_TYPE_TEST, 'test')
+    assert register_analysis_module_type(amt) == amt
+
+    # amt_dep depends on amt 
+    amt_dep = AnalysisModuleType(ANALYSIS_TYPE_TEST_DEP, 'test', dependencies=[ANALYSIS_TYPE_TEST])
+    assert register_analysis_module_type(amt_dep)
+
+    root = RootAnalysis()
+    test_observable = root.add_observable(F_TEST, 'test')
+    
+    root_request = root.create_analysis_request()
+    process_analysis_request(root_request)
+
+    # this should have one entry
+    assert get_work_queue(amt).size() == 1
+
+    # but not this one (yet) due to the dependency
+    assert get_work_queue(amt_dep).size() == 0
+
+    # process the amt request
+    request = get_next_analysis_request(OWNER_UUID, amt, 0)
+    request.result = Analysis(root=root, analysis_module_type=amt, observable=request.observable, details={'Hello': 'World'})
+    process_analysis_request(request)
+
+    # now we should have a request for the dependency
+    assert get_work_queue(amt_dep).size() == 1
+
+@pytest.mark.integration
+def test_chained_dependency():
+    amt_1 = AnalysisModuleType('test_1', '')
+    assert register_analysis_module_type(amt_1)
+
+    # amt_2 depends on amt_1
+    amt_2 = AnalysisModuleType('test_2', '', dependencies=['test_1'])
+    assert register_analysis_module_type(amt_2)
+
+    # amt_3 depends on amt_2
+    amt_3 = AnalysisModuleType('test_3', '', dependencies=['test_2'])
+    assert register_analysis_module_type(amt_3)
+
+    root = RootAnalysis()
+    test_observable = root.add_observable(F_TEST, 'test')
+    
+    root_request = root.create_analysis_request()
+    process_analysis_request(root_request)
+
+    # this should have one entry for amt_1
+    assert get_work_queue(amt_1).size() == 1
+
+    # but not this one the others
+    assert get_work_queue(amt_2).size() == 0
+    assert get_work_queue(amt_3).size() == 0
+
+    # process the amt request
+    request = get_next_analysis_request(OWNER_UUID, amt_1, 0)
+    request.result = Analysis(root=root, analysis_module_type=amt_1, observable=request.observable, details={'Hello': 'World'})
+    process_analysis_request(request)
+
+    # now amt_2 should be ready but still not amt_3
+    assert get_work_queue(amt_1).size() == 0
+    assert get_work_queue(amt_2).size() == 1
+    assert get_work_queue(amt_3).size() == 0
+
+    # process the amt request
+    request = get_next_analysis_request(OWNER_UUID, amt_2, 0)
+    request.result = Analysis(root=root, analysis_module_type=amt_2, observable=request.observable, details={'Hello': 'World'})
+    process_analysis_request(request)
+
+    # now amt_3 should be ready
+    assert get_work_queue(amt_1).size() == 0
+    assert get_work_queue(amt_2).size() == 0
+    assert get_work_queue(amt_3).size() == 1
+
+@pytest.mark.integration
+def test_circ_dependency():
+    amt_1 = AnalysisModuleType('test_1', '')
+    assert register_analysis_module_type(amt_1)
+
+    # amt_2 depends on amt_1
+    amt_2 = AnalysisModuleType('test_2', '', dependencies=['test_1'])
+    assert register_analysis_module_type(amt_2)
+
+    # and now amt_1 depends on amt_2
+    amt_1 = AnalysisModuleType('test_1', '', dependencies=['test_2'])
+    with pytest.raises(CircularDependencyError):
+        assert register_analysis_module_type(amt_1)
+
+@pytest.mark.integration
+def test_self_dependency():
+    # depending on amt when amt isn' registered yet
+    amt_1 = AnalysisModuleType('test_1', '', dependencies=['test_1'])
+    with pytest.raises(UnknownAnalysisModuleTypeError):
+        assert register_analysis_module_type(amt_1)
+
+    # define it
+    amt_1 = AnalysisModuleType('test_1', '')
+    assert register_analysis_module_type(amt_1)
+
+    # redefine to depend on yourself
+    # cannot depend on yourself! (low self esteem error)
+    amt_1 = AnalysisModuleType('test_1', '', dependencies=['test_1'])
+    with pytest.raises(CircularDependencyError):
+        assert register_analysis_module_type(amt_1)
+
