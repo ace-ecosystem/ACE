@@ -17,64 +17,6 @@ from saq.util import abs_path
 
 import redis
 
-class SnortAlertsAnalysis(Analysis):
-    """What are all the snort alerts for this ip address?"""
-
-    def initialize_details(self):
-        self.details = None # free form from results
-
-    @property
-    def jinja_template_path(self):
-        return "analysis/snort.html"
-
-    def generate_summary(self):
-        if isinstance(self.details, list) and len(self.details) > 0:
-            return "Snort Alerts ({0} alerts)".format(len(self.details))
-
-        return None
-
-class SnortAlertsAnalyzer(SplunkAnalysisModule):
-    @property
-    def generated_analysis_type(self):
-        return SnortAlertsAnalysis
-
-    @property
-    def valid_observable_types(self):
-        return F_IPV4
-
-    def execute_analysis(self, ipv4):
-
-        self.splunk_query("""
-index=snort {0}
-    | sort _time 
-    | fields 
-        _time 
-        Ack 
-        Seq 
-        category 
-        dest_ip 
-        dest_port 
-        name 
-        signature 
-        eventtype 
-        priority 
-        proto 
-        severity 
-        signature 
-        signature_rev 
-        src_ip 
-        src_port 
-        tag""".format(ipv4.value), 
-            self.root.event_time_datetime if ipv4.time_datetime is None else ipv4.time_datetime)
-
-        if self.search_results is None:
-            logging.debug("missing search results after splunk query")
-            return False
-
-        analysis = self.create_analysis(ipv4)
-        analysis.details = self.json()
-        return True
-
 KEY_SIGNATURE_ID = 'signature_id'
 KEY_SIGNATURE = 'signature'
 
