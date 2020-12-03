@@ -75,10 +75,10 @@ def test_process_duplicate_observable_analysis_request(cache_ttl):
     amt = AnalysisModuleType(name=ANALYSIS_TYPE_TEST, description='blah', cache_ttl=cache_ttl)
     assert register_analysis_module_type(amt) == amt
 
-    root = RootAnalysis()
-    test_observable = root.add_observable(F_TEST, 'test')
+    original_root = RootAnalysis()
+    test_observable = original_root.add_observable(F_TEST, 'test')
     
-    root_request = root.create_analysis_request()
+    root_request = original_root.create_analysis_request()
     process_analysis_request(root_request)
 
     # we should have a single work entry in the work queue
@@ -94,6 +94,24 @@ def test_process_duplicate_observable_analysis_request(cache_ttl):
         # if the analysis type can be cached then there should only be one request
         # since there is already a request to analyze it
         assert get_work_queue(amt).size() == 1
+
+        # now the existing analysis request should have a reference to the new root analysis
+        request = get_next_analysis_request(OWNER_UUID, amt, 0)
+        assert len(request.additional_roots) == 1
+        assert root.uuid in request.additional_roots
+
+        # process the result of the original request
+        request.result = Analysis(root=original_root, analysis_module_type=amt, observable=test_observable, details={'Hello': 'World'})
+        process_analysis_request(request)
+
+        # now the second root analysis should have it's analysis completed
+        root = get_root_analysis(root.uuid)
+        analysis = root.get_observable(test_observable).get_analysis(amt)
+        assert analysis is not None
+        assert analysis.root == root
+        assert analysis.observable == request.observable
+        assert analysis.details == request.result.details
+
     else:
         # otherwise there should be two requests
         assert get_work_queue(amt).size() == 2
@@ -174,7 +192,6 @@ def test_cached_analysis_result():
     assert get_work_queue(amt).size() == 0
 
     # make another request for the same observable
-
     root = RootAnalysis()
     test_observable = root.add_observable(F_TEST, 'test')
     

@@ -2176,6 +2176,33 @@ class Observable(TaggableObject, DetectableObject):
     def _load_analysis(self):
         assert isinstance(self.analysis, dict)
 
+        from saq.system.analysis_module import get_analysis_module_type
+
+        # see the module_path property of the Analysis object
+        for amt_type_name in self.analysis.keys():
+            # have we already translated this?
+            if isinstance(self.analysis[amt_type_name], Analysis):
+                continue
+
+            # this should be a json dict
+            assert isinstance(self.analysis[amt_type_name], dict)
+
+            analysis = Analysis(
+                root = self.root,
+                analysis_module_type = get_analysis_module_type(amt_type_name),
+                observable = self)
+
+            analysis.json = self.analysis[amt_type_name]
+
+            # set up the EVENT_GLOBAL_* events
+            analysis.add_event_listener(EVENT_OBSERVABLE_ADDED, analysis.root._fire_global_events)
+            analysis.add_event_listener(EVENT_TAG_ADDED, analysis.root._fire_global_events)
+
+            self.analysis[amt_type_name] = analysis # replace the JSON dict with the actual object
+
+    def _load_analysisOLD(self):
+        assert isinstance(self.analysis, dict)
+
         # see the module_path property of the Analysis object
         for module_path in self.analysis.keys():
             # was there Analysis generated?
@@ -3378,16 +3405,16 @@ class RootAnalysis(Analysis):
         from saq.system.analysis_tracking import track_root_analysis
         track_root_analysis(self)
 
-        # save all analysis
-        #for analysis in self.all_analysis:
-            #if analysis is not self:
-                #analysis.save()
+        # save all analysis XXX this is crazy ineffecient we should only save the ones that were modified!
+        for analysis in self.all_analysis:
+            if analysis is not self:
+                analysis.save()
 
         # save our own details
         Analysis.save(self)
         return True
 
-    def load(self):
+    def loadOLD(self):
         """Loads the Alert object from the JSON file.  Note that this does NOT load the details property."""
         assert self.json_path is not None
         logging.debug("LOAD: called load() on {}".format(self))
@@ -3543,7 +3570,7 @@ class RootAnalysis(Analysis):
             else:
                 target_analysis.add_observable(existing_observable)
 
-    def _materialize(self):
+    def load(self):
         """Utility function to replace specific dict() in json with runtime object references."""
         # in other words, load the JSON
         self._load_observable_store()
@@ -3555,7 +3582,7 @@ class RootAnalysis(Analysis):
         # load the Observable references in the Analysis objects
         for analysis in self.all_analysis:
             analysis._load_observable_references()
-            self.analysis_map[anaysis.uuid] = analysis
+            self.analysis_map[analysis.uuid] = analysis
 
         # load Tag objects for analysis
         for analysis in self.all_analysis:
@@ -3586,6 +3613,8 @@ class RootAnalysis(Analysis):
         self.dependency_tracking = _buffer
         for dep in self.dependency_tracking:
             self.link_dependencies(dep)
+
+        return self
         
     def _load_observable_store(self):
         from saq.observables import create_observable
@@ -3889,12 +3918,22 @@ class RootAnalysis(Analysis):
 
     def get_observable(self, uuid_or_observable:Union[str, Observable]):
         """Returns the Observable object for the given uuid or None if the Observable does not exist."""
-        if isinstance(uuid_or_observable, Observable):
-            uuid = uuid_or_observable.id
-        else:
-            uuid = uuid_or_observable
+        assert isinstance(uuid_or_observable, str) or isinstance(uuid_or_observable, Observable)
 
-        return self.observable_store.get(uuid, None)
+        # if we passed the id of an Observable then we return that specific Observable or None if it does not exist
+        if isinstance(uuid_or_observable, str):
+            return self.observable_store.get(uuid_or_observable, None)
+
+        observable = uuid_or_observable
+
+        try:
+            # if we passed an existing Observable (same id) then we return the reference inside the RootAnalysis
+            # with the matching id
+            return self.observable_store[uuid_or_observable.id]
+        except KeyError:
+            # otherwise we try to match based on the type, value and time
+            return self.find_observable(
+                lambda o: o.type == observable.type and o.value == observable.value and o.time == observable.time)
 
     def get_observable_by_spec(self, o_type, o_value, o_time=None):
         """Returns the Observable object by type and value, and optionally time, or None if it cannot be found."""

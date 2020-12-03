@@ -96,7 +96,7 @@ def process_analysis_request(ar: AnalysisRequest):
                                 if get_analysis_request(tracked_ar.id):
                                     # if we can get the AR and lock it it means it's still in a queue waiting
                                     # so we can tell that AR to update the details of this analysis as well when it's done
-                                    tracked_ar.additional_roots.append(root)
+                                    tracked_ar.append_root(root)
                                     track_analysis_request(tracked_ar)
                                     # now this observable is tracked to the analysis request for the other observable
                                     observable.track_analysis_request(tracked_ar)
@@ -114,13 +114,11 @@ def process_analysis_request(ar: AnalysisRequest):
                     if cached_result:
                         logging.debug(f"using cached analysis for {observable} type {amt} in {root}")
                         root.set_analysis(observable, cached_result)
+                        root.save()
                         continue
 
                     # otherwise we need to request it
-                    new_ar = AnalysisRequest(
-                        root,
-                        observable,
-                        amt)
+                    new_ar = AnalysisRequest(root, observable, amt)
 
                     # fill out any requested dependency data
                     for dep in amt.dependencies:
@@ -138,8 +136,9 @@ def process_analysis_request(ar: AnalysisRequest):
         delete_analysis_request(ar)
 
     # if there were any other RootAnalysis objects waiting for this one, go ahead and process those now
-    for other_root in ar.additional_roots:
+    for root_uuid in ar.additional_roots:
         new_ar = ar.duplicate()
-        new_ar.root = other_root
+        new_ar.root = get_root_analysis(root_uuid)
         new_ar.additional_roots = []
+        track_analysis_request(new_ar)
         process_analysis_request(new_ar)

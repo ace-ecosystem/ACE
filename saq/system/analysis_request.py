@@ -41,7 +41,7 @@ class AnalysisRequest(Lockable):
         # generic unique ID of the request
         self.id = str(uuid.uuid4())
         # the Observable to be analyzed
-        self.observable = root.get_observable(observable)
+        self.observable = root.get_observable(observable) if observable else None
         # the type of analysis module to execute on this observable
         self.analysis_module_type = analysis_module_type
         # the key used to cache the analysis result
@@ -59,7 +59,7 @@ class AnalysisRequest(Lockable):
 
         # the current status of this analysis request
         self.status = TRACKING_STATUS_NEW
-        # additional RootAnalysis objects (or UUIDs) that are waiting for this analysis
+        # additional RootAnalysis UUIDs that are waiting for this analysis
         self.additional_roots = []
         # the UUID of the analysis module that is currently processing this request
         self.owner = None
@@ -150,13 +150,14 @@ class AnalysisRequest(Lockable):
             return self.root.all_observables
 
     def append_root(self, root: RootAnalysis):
-        self.additional_roots.append(root)
+        assert isinstance(root, RootAnalysis)
+        self.additional_roots.append(root.uuid)
 
     def duplicate(self):
         result = AnalysisRequest(
+                self.root,
                 self.observable,
-                self.analysis_module_type,
-                self.root)
+                self.analysis_module_type)
 
         result.dependency_analysis = self.dependency_analysis
         result.status = self.status
