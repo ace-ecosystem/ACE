@@ -2413,15 +2413,6 @@ class RootAnalysis(Analysis):
         # set to True after load() is called
         self.is_loaded = False
 
-        # we keep track of when delayed initially starts here
-        # to allow for eventual timeouts when something is wrong
-        # key = analysis_module:observable_uuid
-        # value = datetime.datetime of when the first analysis request was made
-        self.delayed_analysis_tracking = {} 
-
-        # list of AnalysisDependency objects
-        self.dependency_tracking = []
-
         # we fire EVENT_GLOBAL_TAG_ADDED and EVENT_GLOBAL_OBSERVABLE_ADDED when we add tags and observables to anything
         # (note that we also need to add these global event listeners when we deserialize)
         self.add_event_listener(EVENT_TAG_ADDED, self._fire_global_events)
@@ -2468,8 +2459,6 @@ class RootAnalysis(Analysis):
     KEY_STATE = 'state'
     KEY_LOCATION = 'location'
     KEY_NETWORK = 'network'
-    KEY_DELAYED_ANALYSIS_TRACKING = 'delayed_analysis_tracking'
-    KEY_DEPENDECY_TRACKING = 'dependency_tracking'
     KEY_QUEUE = 'queue'
     KEY_INSTRUCTIONS = 'instructions'
 
@@ -2500,8 +2489,6 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_REMEDIATION: self.remediation,
             RootAnalysis.KEY_STATE: self.state,
             RootAnalysis.KEY_LOCATION: self.location,
-            RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING: self.delayed_analysis_tracking,
-            RootAnalysis.KEY_DEPENDECY_TRACKING: self.dependency_tracking,
             RootAnalysis.KEY_QUEUE: self.queue,
             RootAnalysis.KEY_INSTRUCTIONS: self.instructions,
         })
@@ -2542,12 +2529,6 @@ class RootAnalysis(Analysis):
             self.state = value[RootAnalysis.KEY_STATE]
         if RootAnalysis.KEY_LOCATION in value:
             self.location = value[RootAnalysis.KEY_LOCATION]
-        if RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING in value:
-            self.delayed_analysis_tracking = value[RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING]
-            for key in self.delayed_analysis_tracking.keys():
-                self.delayed_analysis_tracking[key] = dateutil.parser.parse(self.delayed_analysis_tracking[key])
-        if RootAnalysis.KEY_DEPENDECY_TRACKING in value:
-            self.dependency_tracking = value[RootAnalysis.KEY_DEPENDECY_TRACKING]
         if RootAnalysis.KEY_QUEUE in value:
             self.queue = value[RootAnalysis.KEY_QUEUE]
         if RootAnalysis.KEY_INSTRUCTIONS in value:
@@ -2846,38 +2827,6 @@ class RootAnalysis(Analysis):
 
         return self._submission
 
-    @property
-    def delayed(self):
-        """Returns True if any delayed analysis is outstanding."""
-        for observable in self.all_observables:
-            for analysis in observable.all_analysis:
-                if analysis.delayed:
-                    return True
-
-        return False
-
-    @delayed.setter
-    def delayed(self, value):
-        """This is computed so this value is thrown away."""
-        # this will (attempt to be) set when the object is loaded from JSON
-        pass
-
-    def get_delayed_analysis_start_time(self, observable, analysis_module):
-        """Returns the time of the first attempt to delay analysis for this analysis module and observable, or None otherwise."""
-        key = '{}:{}'.format(analysis_module.config_section, observable.id)
-        try:
-            return self.delayed_analysis_tracking[key]
-        except KeyError:
-            return None
-
-    def set_delayed_analysis_start_time(self, observable, analysis_module):
-        """Called by the engine when we need to start tracking delayed analysis for a given observable."""
-        # if this is the first time we've delayed analysis (for this analysis module and observable)
-        # then we want to remember when we started so we can eventually time out
-        key = '{}:{}'.format(analysis_module.config_section, observable.id)
-        if key not in self.delayed_analysis_tracking:
-            self.delayed_analysis_tracking[key] = datetime.datetime.now()
-
     def record_observable(self, observable):
         """Records the given observable into the observable_store if it does not already exist.  
            Returns the new one if recorded or the existing one if not."""
@@ -2947,33 +2896,6 @@ class RootAnalysis(Analysis):
         # save our own details
         Analysis.save(self)
         return True
-
-    def loadOLD(self):
-        """Loads the Alert object from the JSON file.  Note that this does NOT load the details property."""
-        assert self.json_path is not None
-        logging.debug("LOAD: called load() on {}".format(self))
-
-        if self.is_loaded:
-            logging.warning("alert {} already loaded".format(self))
-
-        try:
-            with open(self.json_path, 'r') as fp:
-                self.json = json.load(fp)
-
-            _track_reads()
-
-            # translate the json into runtime objects
-            self._materialize()
-            self.is_loaded = True
-            # loaded Alerts are read-only until something is modified
-            self._ready_only = True
-            return True
-        
-        except Exception as e:
-            logging.error("unable to load json from {0}: {1}".format(
-                self.json_path, str(e)))
-            report_exception()
-            raise e
 
     def flush(self):
         """Calls Analysis.flush on all Analysis objects in this RootAnalysis."""
@@ -3136,17 +3058,6 @@ class RootAnalysis(Analysis):
         # load Relationships
         for observable in self.all_observables:
             observable._load_relationships()
-
-        # load dependency tracking
-        _buffer = []
-        for dep_dict in self.dependency_tracking:
-            _buffer.append(AnalysisDependency.from_json(dep_dict))
-            for dep in _buffer:
-                dep.root = self
-
-        self.dependency_tracking = _buffer
-        for dep in self.dependency_tracking:
-            self.link_dependencies(dep)
 
         return self
         
