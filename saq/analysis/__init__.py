@@ -34,62 +34,7 @@ from saq.submission import Submission
 from saq.system.locking import Lockable
 from saq.util import *
 
-
 STATE_KEY_WHITELISTED = 'whitelisted'
-
-def MODULE_PATH(m, instance=None):
-    """Returns the Analysis "module_path" used as a key to look up Analysis in ACE."""
-    from saq.modules import AnalysisModule
-
-    assert isinstance(m, Analysis) or \
-           isinstance(m, AnalysisModule) or \
-           (inspect.isclass(m) and issubclass(m, Analysis)) or \
-           isinstance(m, str)
-
-    # is this already a module path?
-    if isinstance(m, str) and _MODULE_PATH_REGEX.match(m):
-        return m
-
-    # did we pass an instance of an Analysis
-    if isinstance(m, Analysis):
-        if hasattr(m, 'instance'):
-            instance = m.instance
-        m = type(m)
-    elif isinstance(m, AnalysisModule):
-        instance = m.instance
-        m = m.generated_analysis_type
-    # or did we pass a class?
-    elif inspect.isclass(m):
-        instance = instance # just so it's clear
-    else:
-        raise ValueError(f"invalid type {type(m)} passed to MODULE_PATH")
-
-    result = '{}:{}'.format(m.__module__, m.__name__)
-    if instance is not None:
-        result += f':{instance}'
-
-    return result
-
-_MODULE_PATH_REGEX = re.compile(r'^([^:]+):([^:]+)(?::(.+))?$')
-def SPLIT_MODULE_PATH(module_path):
-    """Given a MODULE_PATH result, return a tuple of (module, class, instance)."""
-    m = _MODULE_PATH_REGEX.match(module_path)
-    if m is None:
-        return False
-
-    return m.groups()
-
-def IS_MODULE_PATH(module_path_string):
-    """Returns True if the given string matches a MODULE_PATH result, False otherwise."""
-    assert isinstance(module_path_string, str)
-    m = _MODULE_PATH_REGEX.match(module_path_string)
-    if not m:
-        return False
-
-    return True
-
-# regex used to convert str(type(Analysis)) into a "module path"
-CLASS_STRING_REGEX = re.compile(r"^<class '([^']+)'>$")
 
 ##############################################################################
 #
@@ -1062,11 +1007,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
             self.set_modified()
 
         self._alerted = value
-
-    @property
-    def module_path(self):
-        """Returns module.path:class_name[:instance]."""
-        return MODULE_PATH(self)
 
     def search_tree(self, tags=()):
         """Searches this object and every object in it's analysis tree for the given items.  Returns the list of items that matched."""
@@ -2073,98 +2013,6 @@ class Observable(TaggableObject, DetectableObject):
         logging.debug("added analysis {} type {} to observable {}".format(analysis, analysis.type, self))
         self.fire_event(self, EVENT_ANALYSIS_ADDED, analysis)
 
-    # TODO (2.0) this isn't really needed any more
-    def add_no_analysis(self, analysis, instance=None):
-        """Records the fact that the analysis module that generates this Analysis did not for this Observable."""
-        assert inspect.isclass(analysis) and issubclass(analysis, Analysis)
-        assert instance is None or isinstance(instance, str)
-        assert isinstance(self.root, RootAnalysis)
-
-        # does this analysis already exist?
-        # usually this is because you copied and pasted another AnalysisModule and didn't change the generated_analysis_type function
-        if MODULE_PATH(analysis, instance=instance) in self.analysis:
-            logging.warning("replacing analysis {} with empty analysis - means you returned False from execute_analysis but you still added analysis".format(
-                self.analysis[MODULE_PATH(analysis, instance=instance)]))
-            return
-
-        # this is used to remember that analysis was not generated
-        self.analysis[MODULE_PATH(analysis, instance=instance)] = False
-        logging.debug("recorded no analysis of type {} instance {} for observable {}".format(analysis, instance, self))
-
-    def get_analysisOLD(self, obj, instance=None):
-        """Returns the Analysis object for the given type of analysis, or None if it does not exist (yet).
-           :param obj: Can be any of the following types of values.
-           * (type) a literal :class:`Analysis` based type
-           * (AnalysisModule) an object of type :class:`AnalysisModule`
-           * (str) a string format of the Analysis based type (example: "<class 'saq.modules.email.EmailAnalysis'>")
-           * (str) a string of the name of the Analysis class (example: EmailAnalysis)
-           * (str) a string in the MODULE_PATH format (example: saq.modules.email.EmailAnalysis:instance1)
-           :param instance: Optional instance value for instanced modules. This is ignored if analysis_type is already a type.
-    
-           :return: 
-           * The :class:`Analysis` that was added for this :class:`Observable` or
-           * False if the analysis was not performed (or was skipped) or
-           * None if the analysis is not available (was not loaded at the time of analysis.)
-        """
-        from saq.modules import AnalysisModule
-        assert isinstance(obj, str) or isinstance(obj, AnalysisModule) or (inspect.isclass(obj) and issubclass(obj, Analysis))
-        assert instance is None or isinstance(instance, str)
-
-        try:
-            # did we pass an Analysis type?
-            if inspect.isclass(obj) and issubclass(obj, Analysis):
-                return self.analysis[MODULE_PATH(obj, instance=instance)]
-            elif isinstance(obj, AnalysisModule):
-                return self.analysis[MODULE_PATH(obj)]
-        except KeyError:
-            return None
-
-        # did we pass a MODULE_PATH?
-        if IS_MODULE_PATH(obj):
-            try:
-                return self.analysis[obj]
-            except KeyError:
-                #logging.error(f"reference to missing module {obj}")
-                #import traceback
-                #traceback.print_stack()
-                #raise RuntimeError()
-                return None
-
-        # str(type(Analysis)) will end up looking like this: <class 'saq.modules.test.BasicTestAnalysis'>
-        # where the keys in self.analysis look like this: saq.modules.test:BasicTestAnalysis[:instance]
-        # (I do not remember why it's like that)
-        # so we translate the first into the second
-        #
-        # 10/28/2019 -- at this point in time I believe nothing should be using this to reference modules
-
-        m = CLASS_STRING_REGEX.match(obj)
-        if m:
-            class_path = m.group(1)
-            class_path_rw = list(class_path)
-            
-            class_path_rw[class_path.rfind('.')] = ':'
-            class_path = ''.join(class_path_rw)
-
-            if instance is not None:
-                class_path += f':{instance}'
-
-            logging.warning(f"CLASS_STRING_REGEX was used for {obj}")
-
-            try:
-                return self.analysis[class_path]
-            except KeyError:
-                #logging.error("reference to missing module {class_path} reference via {obj}")
-                return None
-
-        # otherwise we passed the name of the class
-        for analysis_key in self.analysis.keys():
-            _module, _class, _instance = SPLIT_MODULE_PATH(analysis_key)
-            if _class == obj:
-                return self.analysis[analysis_key]
-
-        #logging.debug(f"request for unknown obj {obj} instance {instance} for {self}")
-        return None
-
     def get_analysis(self, amt: AnalysisModuleType) -> Union[Analysis, None]:
         """Returns the Analysis of the given type for this Observable, or None."""
         assert isinstance(amt, AnalysisModuleType)
@@ -2210,73 +2058,6 @@ class Observable(TaggableObject, DetectableObject):
             analysis.add_event_listener(EVENT_TAG_ADDED, analysis.root._fire_global_events)
 
             self.analysis[amt_type_name] = analysis # replace the JSON dict with the actual object
-
-    def _load_analysisOLD(self):
-        assert isinstance(self.analysis, dict)
-
-        # see the module_path property of the Analysis object
-        for module_path in self.analysis.keys():
-            # was there Analysis generated?
-            if isinstance(self.analysis[module_path], bool):
-                continue
-                
-            # have we already translated this?
-            if isinstance(self.analysis[module_path], Analysis):
-                continue
-
-            assert isinstance(self.analysis[module_path], dict)
-
-            module_json = self.analysis[module_path]
-            a = None
-
-            # has this module been deprecated?
-            for deprecated_module in saq.CONFIG['deprecated_modules'].values():
-                if module_path == deprecated_module:
-                    logging.debug("{} references deprecated module {}".format(self, module_path))
-                    a = DeprecatedAnalysis()
-                    break
-
-            while a is None:
-
-                _module, _class, _instance = SPLIT_MODULE_PATH(module_path)
-
-                try:
-                    m = importlib.import_module(_module)
-                except Exception as e:
-                    logging.error("unable to import module {}: {}".format(_module, e))
-                    report_exception()
-                    a = ErrorAnalysis()
-                    break
-
-                try:
-                    c = getattr(m, _class)
-                except Exception as e:
-                    logging.error("unable to import class {} from module {}: {}".format(
-                        _class, _module, e))
-                    report_exception()
-                    a = ErrorAnalysis()
-                    break
-
-                try:
-                    a = c()
-                except Exception as e:
-                    logging.error("unable to create instance of {} from module {}: {}".format(
-                        _class, _module, e))
-                    report_exception()
-                    a = ErrorAnalysis()
-                    break
-
-                break
-
-            a.root = self.root # set the analysis root
-            a.observable = self # set the source of the analysis
-            a.json = module_json
-
-            # set up the EVENT_GLOBAL_* events
-            a.add_event_listener(EVENT_OBSERVABLE_ADDED, a.root._fire_global_events)
-            a.add_event_listener(EVENT_TAG_ADDED, a.root._fire_global_events)
-
-            self.analysis[module_path] = a # replace the JSON dict with the actual object
 
     def clear_analysis(self):
         """Deletes all analysis records for this observable."""
@@ -2542,7 +2323,6 @@ class RootAnalysis(Analysis):
                  analysis_mode=None,
                  queue=None,
                  instructions=None,
-                 analysis_failures=None,
                  *args, **kwargs):
 
         import uuid as uuidlib
@@ -2589,10 +2369,6 @@ class RootAnalysis(Analysis):
         self._instructions = None
         if instructions:
             self.instructions = instructions
-
-        self._analysis_failures = {}
-        if analysis_failures:
-            self.analysis_failures = analysis_failures
 
         self._event_time = None
         if event_time:
@@ -2696,7 +2472,6 @@ class RootAnalysis(Analysis):
     KEY_DEPENDECY_TRACKING = 'dependency_tracking'
     KEY_QUEUE = 'queue'
     KEY_INSTRUCTIONS = 'instructions'
-    KEY_ANALYSIS_FAILURES = 'analysis_failures'
 
     def as_dict(self) -> dict:
         return self.json
@@ -2729,7 +2504,6 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_DEPENDECY_TRACKING: self.dependency_tracking,
             RootAnalysis.KEY_QUEUE: self.queue,
             RootAnalysis.KEY_INSTRUCTIONS: self.instructions,
-            RootAnalysis.KEY_ANALYSIS_FAILURES: self.analysis_failures,
         })
         return result
 
@@ -2778,8 +2552,6 @@ class RootAnalysis(Analysis):
             self.queue = value[RootAnalysis.KEY_QUEUE]
         if RootAnalysis.KEY_INSTRUCTIONS in value:
             self.instructions = value[RootAnalysis.KEY_INSTRUCTIONS]
-        if RootAnalysis.KEY_ANALYSIS_FAILURES in value:
-            self.analysis_failures = value[RootAnalysis.KEY_ANALYSIS_FAILURES]
 
     @property
     def analysis_mode(self):
@@ -2867,46 +2639,6 @@ class RootAnalysis(Analysis):
     @instructions.setter
     def instructions(self, value):
         self._instructions = value
-
-    @property
-    def analysis_failures(self):
-        """Returns a dict of recorded analysis failures. 
-        key = MODULE_PATH(analysis)
-        value = {
-            key = observable.type:observable.value
-            value = error_message or None
-        }"""
-        return self._analysis_failures
-
-    @analysis_failures.setter
-    def analysis_failures(self, value):
-        assert value is None or isinstance(value, dict)
-        self._analysis_failures = value
-
-    def set_analysis_failed(self, module, observable_type, observable_value, error_message=None):
-        assert observable_type is None or isinstance(observable_type, str)
-        assert observable_value is None or isinstance(observable_value, str)
-
-        module = MODULE_PATH(module)
-
-        if module not in self.analysis_failures:
-            self.analysis_failures[module] = {}
-
-        self.analysis_failures[module][_get_failed_analysis_key(observable_type, observable_value)] = error_message
-
-    def is_analysis_failed(self, module, observable):
-        module_path = MODULE_PATH(module)
-        try:
-            return _get_failed_analysis_key(observable.type, observable.value) in self.analysis_failures[module_path]
-        except KeyError:
-            return False
-
-    def get_analysis_failed_message(self, module, observable):
-        module_path = MODULE_PATH(module)
-        try:
-            return self.analysis_failures[module_path][_get_failed_analysis_key(observable_type, observable_value)]
-        except KeyError:
-            return None
 
     @property
     def description(self):
@@ -3145,133 +2877,6 @@ class RootAnalysis(Analysis):
         key = '{}:{}'.format(analysis_module.config_section, observable.id)
         if key not in self.delayed_analysis_tracking:
             self.delayed_analysis_tracking[key] = datetime.datetime.now()
-
-    def add_dependency(self, source_observable, source_analysis, source_analysis_instance, target_observable, target_analysis, target_analysis_instance):
-        #from saq.modules import AnalysisModule
-        assert isinstance(source_observable, Observable)
-        assert inspect.isclass(source_analysis) and issubclass(source_analysis, Analysis)
-        assert source_analysis_instance is None or isinstance(source_analysis_instance, str)
-        assert isinstance(target_observable, Observable)
-        assert inspect.isclass(target_analysis) and issubclass(target_analysis, Analysis)
-        assert target_analysis_instance is None or isinstance(target_analysis_instance, str)
-
-        # does this dependency already exist?
-        for dep in self.dependency_tracking:
-            if ( dep.source_observable_id == source_observable.id and 
-                 dep.source_analysis_type == MODULE_PATH(source_analysis, instance=source_analysis_instance) and
-                 dep.target_observable_id == target_observable.id and
-                 dep.target_analysis_type == MODULE_PATH(target_analysis, instance=target_analysis_instance) ):
-                # XXX not sure why we would see this -- need to investigate
-                logging.debug("already added dependency for {} {} ({}) --> {} {} ({})".format(
-                              source_observable, source_analysis, source_analysis_instance,
-                              target_observable, target_analysis, target_analysis_instance))
-                return dep
-
-        # Am -> Bt
-        # Bm -> Ct OK
-
-        # Am -> Bt
-        # Bt -> At ERROR
-
-        # Am -> Bt
-        # Bm -> Ct
-        # Cm -> At ERROR
-
-        # english description of logic
-        # Am -> Bt 
-        # * Do we have anything depending on Am? No
-        # Bm -> Ct
-        # * Do we have anything depending on Bm? Yes: Am -> Bt
-        # * Does Ct == Am?  No
-        # Cm -> At
-        # * Do we have anything depending on Cm? Yes: Bm -> Ct
-        # * Does At == Bm? No
-        # * Does anything depend on Bm? Yes: Am -> Bt
-        # * Does At == Am? Yes: ERROR
-
-        def resolve_node(so, sa, to, ta): # <-- the node we're currently resolving
-            nonlocal target_analysis # reference original target analysis type
-            nonlocal target_analysis_instance
-
-            for dep in [dep for dep in so.dependencies if dep.target_analysis_type == sa]:
-                if MODULE_PATH(target_analysis, instance=target_analysis_instance) == dep.source_analysis_type:
-                    raise RuntimeError("CIRCULAR DEPENDENCY ERROR: {} {} {} {} -> {}".format(so, sa, to, ta, dep))
-
-                # recurse to the parent nodes
-                resolve_node(dep.source_observable, dep.source_analysis_type, 
-                             dep.target_observable, dep.target_analysis_type)
-
-        resolve_node(source_observable, 
-                     MODULE_PATH(source_analysis, instance=source_analysis_instance), 
-                     target_observable, 
-                     MODULE_PATH(target_analysis, instance=target_analysis_instance))
-
-        # no circular dependencies detected
-        dep = AnalysisDependency(target_observable.id, MODULE_PATH(target_analysis, instance=target_analysis_instance), 
-                                 source_observable.id, MODULE_PATH(source_analysis, instance=source_analysis_instance))
-
-        dep.root = self
-        logging.debug("tracking {}".format(dep))
-        self.dependency_tracking.append(dep)
-        self.link_dependencies(dep)
-
-    def remove_dependency(self, dep):
-        try:
-            logging.debug("removing {} from {}".format(dep, self.root))
-            self.dependency_tracking.remove(dep)
-        except ValueError as e:
-            logging.error("requested removal of untracked dependency {} in {}".foramt(dep, self.root))
-
-    def link_dependencies(self, target_dep):
-        """Sets the .next and .prev properties of each available AnalysisDependency."""
-        for source_dep in self.dependency_tracking:
-            if source_dep is target_dep:
-                continue
-
-            if ( source_dep.target_observable_id == target_dep.source_observable_id and 
-                 source_dep.target_analysis_type == target_dep.source_analysis_type ):
-
-                source_dep.next = target_dep
-                target_dep.prev = source_dep
-
-    @property
-    def active_dependencies(self):
-        """Returns the list of AnalysisDependency objects that have not failed, are not delayed, and not resolved.
-           The list is returned in the order they should be handled."""
-
-        # for example
-        # A -> B
-        # B -> C
-        # we need to analysis the second one first
-
-        # also need to consider this chain
-        # A -> B
-        # B -> C 
-        # C -> D but D has failed
-        # so B -> C and A -> B have also both failed
-        # same for delayed analysis
-        
-        _buffer = []
-        for dep in self.dependency_tracking:
-            if dep.failed:
-                continue
-
-            if dep.delayed:
-                continue
-
-            if dep.resolved:
-                continue
-
-            _buffer.append(dep)
-
-        # the score here is based on the number of previous deps each dep has
-        # so for A -> B and B -> C, the first has a score of 0, the second has a score of 1
-        return sorted(_buffer, key=lambda dep: dep.score, reverse=True)
-
-    @property
-    def all_dependencies(self):
-        """Returns the list of all AnalysisDependency objects."""
-        return self.dependency_tracking
 
     def record_observable(self, observable):
         """Records the given observable into the observable_store if it does not already exist.  

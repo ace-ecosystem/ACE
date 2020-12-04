@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 import saq
 
-from saq.analysis import Analysis, Observable, MODULE_PATH, SPLIT_MODULE_PATH
+from saq.analysis import Analysis, Observable
 from saq.constants import *
 from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
