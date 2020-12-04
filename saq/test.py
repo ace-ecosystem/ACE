@@ -18,7 +18,7 @@ from subprocess import Popen, PIPE
 
 import saq
 import saq.engine
-from saq.analysis import RootAnalysis, _enable_io_tracker, _disable_io_tracker
+from saq.analysis import RootAnalysis
 from saq.constants import *
 from saq.crypto import get_aes_key
 from saq.database import initialize_database, get_db_connection, use_db, Alert

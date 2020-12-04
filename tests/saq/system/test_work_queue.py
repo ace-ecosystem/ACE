@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from saq.analysis import RootAnalysis
-from saq.test import F_TEST
+from saq.constants import *
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.analysis_request import (
     AnalysisRequest, 

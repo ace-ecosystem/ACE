@@ -6,7 +6,7 @@ import pytest
 
 from saq.analysis import Analysis
 from saq.observables import create_observable
-from saq.test import F_TEST
+from saq.constants import F_TEST
 
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.caching import generate_cache_key, cache_analysis, get_cached_analysis

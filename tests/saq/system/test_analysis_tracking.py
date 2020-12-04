@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from saq.analysis import RootAnalysis, Observable, Analysis
-from saq.test import F_TEST
+from saq.constants import F_TEST
 from saq.system import get_system
 from saq.system.analysis_tracking import (
         get_analysis_details,

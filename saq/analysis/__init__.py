@@ -36,104 +36,6 @@ from saq.util import *
 
 STATE_KEY_WHITELISTED = 'whitelisted'
 
-##############################################################################
-#
-# I/O tracking
-# this is used with unit testing
-#
-
-# if this is True then bytes_written and write_count get updated
-_track_io = False
-
-_io_tracker_manager = None
-_io_tracker_sync = None
-
-# total number of write counts
-_write_count = None
-# total number fo reads
-_read_count = None
-
-def _enable_io_tracker():
-    if _track_io:
-        return
-
-    _start_io_tracker()
-
-def _disable_io_tracker():
-    if not _track_io:
-        return
-
-    _stop_io_tracker()
-
-def _start_io_tracker():
-    import multiprocessing
-
-    global _track_io
-    global _io_tracker_manager
-    global _io_tracker_sync
-    global _write_count
-    global _read_count
-
-    _io_tracker_manager = multiprocessing.Manager()
-    _io_tracker_sync = multiprocessing.RLock()
-    _write_count = _io_tracker_manager.Value('I', 0, lock=False)
-    _read_count = _io_tracker_manager.Value('I', 0, lock=False)
-    _track_io = True
-
-def _stop_io_tracker():
-    global _track_io
-    global _io_tracker_manager
-    global _io_tracker_sync
-    global _write_count
-    global _read_count
-
-    if _track_io:
-        try:
-            _io_tracker_manager.shutdown()
-        except Exception as e:
-            sys.stderr.write("\n\nunable to shut down io tracker manager: {}\n\n".format(e))
-
-        _io_tracker_manager = None
-        _io_tracker_sync = None
-        _write_count = None
-        _read_count = None
-        _track_io = False
-
-atexit.register(_stop_io_tracker)
-
-def _track_writes():
-    if not _track_io:
-        return
-
-    with _io_tracker_sync:
-        _write_count.value += 1
-
-    #sys.stderr.write('\n')
-    #sys.stderr.write('#' * 79 + '\n')
-    #import traceback
-    #traceback.print_stack()
-    #sys.stderr.write('\n')
-
-def _get_io_write_count():
-    with _io_tracker_sync:
-        return _write_count.value
-
-def _track_reads():
-    if not _track_io:
-        return
-
-    with _io_tracker_sync:
-        _read_count.value += 1
-
-def _get_io_read_count():
-    with _io_tracker_sync:
-        return _read_count.value
-
-#
-# end I/O tracking
-# 
-##############################################################################
-
 class EventSource(object):
     """Supports callbacks for events by keyword."""
 
@@ -535,7 +437,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
     KEY_COMPLETED = 'completed' # boolean to indicate that the analysis has completed
     KEY_ALERTED = 'alerted' # boolean to indicate that this analysis has been submitted as an alert
-    KEY_DELAYED = 'delayed' # boolean to indicate that the analysis has been delayed
 
     KEY_IOCS = 'iocs'
 
@@ -602,9 +503,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
         # certain observables also generate detections
         self.add_event_listener(EVENT_OBSERVABLE_ADDED, self.observable_detection)
-
-        # set to True when delayed analysis is requested
-        self._delayed = False
 
         # List of IOCs that the analysis contains
         self._iocs = IndicatorList()
@@ -765,7 +663,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
             Analysis.KEY_SUMMARY: self.summary,
             Analysis.KEY_COMPLETED: self.completed,
             Analysis.KEY_ALERTED: self.alerted,
-            Analysis.KEY_DELAYED: self.delayed,
             Analysis.KEY_IOCS: self.iocs.json,
             Analysis.KEY_UUID: self.uuid,
         })
@@ -804,9 +701,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         if Analysis.KEY_ALERTED in value:
             self.alerted = value[Analysis.KEY_ALERTED]
 
-        if Analysis.KEY_DELAYED in value:
-            self.delayed = value[Analysis.KEY_DELAYED]
-
         if Analysis.KEY_IOCS in value:
             self.iocs = value[Analysis.KEY_IOCS]
 
@@ -823,18 +717,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         self._iocs = IndicatorList()
         for i in value:
             self._iocs.append(i)
-
-    @property
-    def delayed(self):
-        return self._delayed
-
-    @delayed.setter
-    def delayed(self, value):
-        assert isinstance(value, bool)
-        if value != self._delayed:
-            self.set_modified()
-
-        self._delayed = value
 
     @property
     def storage_dir(self):
@@ -2123,176 +2005,6 @@ class Observable(TaggableObject, DetectableObject):
     def __hash__(self):
         """Returns the hash of type:value."""
         return str(self).__hash__() # XXX this isn't right, is it?
-
-class AnalysisDependency(object):
-
-    # json dictionary keys
-    KEY_TARGET_OBSERVABLE_ID = 'target_observable_id'
-    KEY_TARGET_ANALYSIS_TYPE = 'target_analysis_type'
-    KEY_SOURCE_OBSERVABLE_ID = 'source_observable_id'
-    KEY_SOURCE_ANALYSIS_TYPE = 'source_analysis_type'
-    KEY_STATUS = 'status'
-    KEY_FAILURE_REASON = 'failure_reason'
-    KEY_RESOLVED = 'resolved'
-
-    STATUS_READY = 'ready'
-    STATUS_FAILED = 'failed'
-    STATUS_COMPLETED = 'completed'
-    STATUS_RESOLVED = 'resolved'
-
-    """Represents an dependency between two Analysis objects for a given Observable."""
-    def __init__(self, target_observable_id, target_analysis_type, source_observable_id, source_analysis_type,
-                 status=STATUS_READY, failure_reason=None):
-
-        assert isinstance(target_observable_id, str)
-        assert isinstance(target_analysis_type, str)
-        assert isinstance(source_observable_id, str)
-        assert isinstance(source_analysis_type, str)
-        assert isinstance(status, str)
-        assert failure_reason is None or isinstance(failure_reason, str)
-
-        self.target_observable_id = target_observable_id
-        self.target_analysis_type = target_analysis_type
-        self.source_observable_id = source_observable_id
-        self.source_analysis_type = source_analysis_type
-        self.status = status
-        self.failure_reason = failure_reason
-
-        # a reference to the RootAnalysis object
-        self.root = None
-
-        # cached references
-        self._target_observable = None
-        self._target_analysis = None
-        self._source_observable = None
-        self._source_analysis = None
-
-        self.next = None # the next AnalysisDependency that this one depends on
-        self.prev = None 
-
-    def set_status_failed(self, reason=None):
-        self.status = AnalysisDependency.STATUS_FAILED
-        self.failure_reason = reason
-
-    def set_status_completed(self):
-        self.status = AnalysisDependency.STATUS_COMPLETED
-
-    def set_status_resolved(self):
-        self.status == AnalysisDependency.STATUS_RESOLVED
-
-    @property
-    def ready(self):
-        """Returns True if target analysis has not been completed."""
-        return self.status == AnalysisDependency.STATUS_READY
-
-    @property
-    def completed(self):
-        """Returns True if the target analysis has been completed."""
-        return self.status == AnalysisDependency.STATUS_COMPLETED
-
-    @property
-    def resolved(self):
-        """Returns True if the source analysis has been completed."""
-        return self.status == AnalysisDependency.STATUS_RESOLVED
-
-    def increment_status(self):
-        if self.status == AnalysisDependency.STATUS_READY:
-            self.status = AnalysisDependency.STATUS_COMPLETED
-        elif self.status == AnalysisDependency.STATUS_COMPLETED:
-            self.status = AnalysisDependency.STATUS_RESOLVED
-
-    @property
-    def score(self):
-        score = 0
-        node = self.next
-        while node:
-            score += 1
-            node = node.next
-
-        return score
-
-    @property
-    def failed(self):
-        """Returns True if this dependency (or any in the chain of dependencies) has failed."""
-        node = self
-        while node:
-            if node.status == AnalysisDependency.STATUS_FAILED:
-                return True
-
-            node = node.next
-
-        return False
-
-    @property
-    def delayed(self):
-        """Returns True if the target analysis (or any in the chain of dependencies) is delayed."""
-        if not self.root:
-            raise RuntimeError("delayed property of AnalysisDependency called before root property was set")
-
-        node = self
-        while node:
-            target_analysis = self.root.get_observable(node.target_observable_id).get_analysis(node.target_analysis_type)
-            if target_analysis and target_analysis.delayed:
-                return True
-
-            node = node.next
-
-        return False
-
-    @property
-    def json(self):
-        return {
-            AnalysisDependency.KEY_TARGET_OBSERVABLE_ID: self.target_observable_id,
-            AnalysisDependency.KEY_TARGET_ANALYSIS_TYPE: self.target_analysis_type,
-            AnalysisDependency.KEY_SOURCE_OBSERVABLE_ID: self.source_observable_id,
-            AnalysisDependency.KEY_SOURCE_ANALYSIS_TYPE: self.source_analysis_type,
-            AnalysisDependency.KEY_STATUS: self.status,
-            AnalysisDependency.KEY_FAILURE_REASON: self.failure_reason,
-        }
-
-    @staticmethod
-    def from_json(json_dict):
-        """Returns a new AnalysisDependency object from the given JSON dict."""
-        return AnalysisDependency(target_observable_id=json_dict[AnalysisDependency.KEY_TARGET_OBSERVABLE_ID],
-                                  target_analysis_type=json_dict[AnalysisDependency.KEY_TARGET_ANALYSIS_TYPE],
-                                  source_observable_id=json_dict[AnalysisDependency.KEY_SOURCE_OBSERVABLE_ID],
-                                  source_analysis_type=json_dict[AnalysisDependency.KEY_SOURCE_ANALYSIS_TYPE],
-                                  status=json_dict[AnalysisDependency.KEY_STATUS],
-                                  failure_reason=json_dict[AnalysisDependency.KEY_FAILURE_REASON])
-
-    def __str__(self):
-        return "Analysis Dependency {}({}) --> {}({}) ({}){}".format(
-                self.source_analysis_type, 
-                self.source_observable_id if self.root is None else self.source_observable, 
-                self.target_analysis_type, 
-                self.target_observable_id if self.root is None else self.target_observable, 
-                self.status,
-                ' failure reason: {}'.format(self.failure_reason) if self.failure_reason else '')
-
-    def __repr__(self):
-        return self.__str__()
-
-    @property
-    def target_observable(self):
-        """Returns the target Observable that needs to be analyzed."""
-        if self._target_observable:
-            return self._target_observable
-
-        self._target_observable = self.root.get_observable(self.target_observable_id)
-        return self._target_observable
-
-    @property
-    def source_observable(self):
-        """Returns the Observable that was being analyzed when the request was made."""
-        if self._source_observable:
-            return self._source_observable
-
-        self._source_observable = self.root.get_observable(self.source_observable_id)
-        return self._source_observable
-
-def _get_failed_analysis_key(observable_type, observable_value):
-    """Utility function that returns the key used to look up if analysis failed or not."""
-    return f'{observable_type}:{observable_value}'
 
 #
 # saq.database.Alert vs saq.analysis.Alert

@@ -4,7 +4,6 @@ import pytest
 
 from saq.analysis import RootAnalysis, Observable
 from saq.constants import *
-from saq.test import F_TEST
 from saq.system.analysis_module import (
         AnalysisModuleType, 
         AnalysisModuleTypeVersionError, 

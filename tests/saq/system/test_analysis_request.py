@@ -5,6 +5,7 @@ from operator import attrgetter
 import pytest
 
 from saq.analysis import RootAnalysis, Analysis
+from saq.constants import *
 from saq.observables import create_observable
 from saq.system.analysis_request import (
         AnalysisRequest, 
@@ -18,7 +19,6 @@ from saq.system.analysis_request import (
 from saq.system.analysis_module import AnalysisModuleType
 from saq.system.constants import *
 from saq.system.exceptions import InvalidWorkQueueError
-from saq.test import F_TEST
 from saq.system.work_queue import add_work_queue
 
 amt = AnalysisModuleType(
