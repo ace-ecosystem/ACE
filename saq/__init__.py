@@ -141,8 +141,6 @@ def initialize(
     global API_PREFIX
     global AUTOMATION_USER_ID
     global CA_CHAIN_PATH
-    global COMPANY_ID
-    global COMPANY_NAME
     global CONFIG
     global CONFIG_PATHS
     global DAEMON_DIR
@@ -166,7 +164,6 @@ def initialize(
     global LOG_LEVEL
     global MANAGED_NETWORKS
     global MODULE_STATS_DIR
-    global NODE_COMPANIES
     global OTHER_PROXIES 
     global OTHER_SLA_SETTINGS
     global SAQ_HOME
@@ -243,13 +240,6 @@ def initialize(
 
     # amount of time (in seconds) before a process blows up because a threaded module won't stop
     EXECUTION_THREAD_LONG_TIMEOUT = None
-
-    # the company/custom this node belongs to
-    COMPANY_NAME = None
-    COMPANY_ID = None
-
-    # A list of company names and IDs this node will work for
-    NODE_COMPANIES = []
 
     # go ahead and try to figure out what text encoding we're using
     DEFAULT_ENCODING = locale.getpreferredencoding()
@@ -340,8 +330,6 @@ def initialize(
     TEMP_DIR = os.path.join(DATA_DIR, CONFIG['global']['tmp_dir'])
     DAEMON_DIR = os.path.join(DATA_DIR, 'var', 'daemon')
     SERVICES_DIR = os.path.join(DATA_DIR, 'var', 'services')
-    COMPANY_NAME = CONFIG['global']['company_name']
-    COMPANY_ID = CONFIG['global'].getint('company_id')
     LOCAL_DOMAINS = [_.strip() for _ in CONFIG['global']['local_domains'].split(',')]
 
     minutes, seconds = map(int, CONFIG['global']['lock_timeout'].split(':'))
@@ -505,24 +493,6 @@ def initialize(
 
     # initialize the database connection
     initialize_database()
-
-    # XXX move this into another module that is dedicated to "multiple customers"
-    # Store validated list of companies this node can work with
-    # Assume configued defaults are already valid
-    #NODE_COMPANIES.append({'name': COMPANY_NAME, 'id': COMPANY_ID})
-    #_secondary_company_ids = CONFIG['global'].get('secondary_company_ids', None)
-    #if _secondary_company_ids is not None:
-        #_secondary_company_ids = [int(_) for _ in _secondary_company_ids.split(',')]
-        #from saq.database import get_db_connection
-        #try:
-            #with get_db_connection() as db:
-                #c = db.cursor()
-                #c.execute("SELECT name,id FROM company")
-                #for row in c:
-                    #if row[1] in _secondary_company_ids:
-                        #NODE_COMPANIES.append({'name': row[0], 'id': row[1]})
-        #except Exception as e:
-            #logging.error(f"problem querying database {e}")
 
     # initialize fallback semaphores
     initialize_fallback_semaphores()

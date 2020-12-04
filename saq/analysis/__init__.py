@@ -2523,7 +2523,7 @@ def _get_failed_analysis_key(observable_type, observable_value):
 #
 
 class RootAnalysis(Analysis):
-    """Root of analysis. Also see saq.database.Alert."""
+    """Root analysis object."""
 
     def __init__(self, 
                  tool=None, 
@@ -2539,8 +2539,6 @@ class RootAnalysis(Analysis):
                  uuid=None,
                  location=None,
                  storage_dir=None,
-                 company_name=None,
-                 company_id=None,
                  analysis_mode=None,
                  queue=None,
                  instructions=None,
@@ -2632,39 +2630,6 @@ class RootAnalysis(Analysis):
         if state:
             self.state = state
 
-        self._company_name = None
-        self._company_id = None
-
-        # if both company_id and company_name were passed, validate agreement
-        if company_name and company_id:
-            _name = [c['name'] for c in saq.NODE_COMPANIES if c['id'] == company_id][0]
-            if company_name != _name:
-                raise ValueError(f"Company name={company_name} and id={company_id} mismatch. Official: {saq.NODE_COMPANIES}")
-
-        if company_name:
-            self._company_name = company_name
-            self._company_id = [c['id'] for c in saq.NODE_COMPANIES if c['name'] == company_name][0]
-
-        if company_id:
-            self._company_id = company_id
-            self._company_name = [c['name'] for c in saq.NODE_COMPANIES if c['id'] == company_id][0]
-
-        if not self._company_name:
-            try:
-                # we take the default company ownership from the config file (if specified)
-                if hasattr(saq, 'CONFIG'):
-                    self._company_name = saq.CONFIG['global']['company_name']
-            except KeyError:
-                pass
-
-        if not self._company_id:
-            try:
-                # we take the default company ownership from the config file (if specified)
-                if hasattr(saq, 'CONFIG'):
-                    self._company_id = saq.CONFIG['global'].getint('company_id')
-            except KeyError:
-                pass
-
         # all of the Observables discovered during analysis go into the observable_store
         # these objects are what are serialized to and from JSON
         self._observable_store = {} # key = uuid, value = Observable object
@@ -2727,8 +2692,6 @@ class RootAnalysis(Analysis):
     KEY_STATE = 'state'
     KEY_LOCATION = 'location'
     KEY_NETWORK = 'network'
-    KEY_COMPANY_NAME = 'company_name'
-    KEY_COMPANY_ID = 'company_id'
     KEY_DELAYED_ANALYSIS_TRACKING = 'delayed_analysis_tracking'
     KEY_DEPENDECY_TRACKING = 'dependency_tracking'
     KEY_QUEUE = 'queue'
@@ -2762,8 +2725,6 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_REMEDIATION: self.remediation,
             RootAnalysis.KEY_STATE: self.state,
             RootAnalysis.KEY_LOCATION: self.location,
-            RootAnalysis.KEY_COMPANY_NAME: self.company_name,
-            RootAnalysis.KEY_COMPANY_ID: self.company_id,
             RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING: self.delayed_analysis_tracking,
             RootAnalysis.KEY_DEPENDECY_TRACKING: self.dependency_tracking,
             RootAnalysis.KEY_QUEUE: self.queue,
@@ -2807,10 +2768,6 @@ class RootAnalysis(Analysis):
             self.state = value[RootAnalysis.KEY_STATE]
         if RootAnalysis.KEY_LOCATION in value:
             self.location = value[RootAnalysis.KEY_LOCATION]
-        if RootAnalysis.KEY_COMPANY_NAME in value:
-            self.company_name = value[RootAnalysis.KEY_COMPANY_NAME]
-        if RootAnalysis.KEY_COMPANY_ID in value:
-            self.company_id = value[RootAnalysis.KEY_COMPANY_ID]
         if RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING in value:
             self.delayed_analysis_tracking = value[RootAnalysis.KEY_DELAYED_ANALYSIS_TRACKING]
             for key in self.delayed_analysis_tracking.keys():
@@ -3128,45 +3085,6 @@ class RootAnalysis(Analysis):
     def whitelisted(self, value):
         assert isinstance(value, bool)
         self.state[STATE_KEY_WHITELISTED] = value
-
-    def _get_company_id(self, name):
-        try:
-            return [c['id'] for c in saq.NODE_COMPANIES if c['name'] == name][0]
-        except:
-            logging.warning(f"no record of company for this node by name={name}")
-            return None
-
-    def _get_company_name(self, _id):
-        try:
-            return [c['name'] for c in saq.NODE_COMPANIES if c['id'] == _id][0]
-        except:
-            logging.warning(f"no record of company for this node by id={_id}")
-            return None
-
-    @property
-    def company_name(self):
-        """The organzaition this analysis belongs to."""
-        return self._company_name
-
-    @company_name.setter
-    def company_name(self, value):
-        self._company_name = value
-        self._company_id = self._get_company_id(value)
-        if not self._company_id:
-            self._company_id = saq.CONFIG['global'].getint('company_id')
-        self.set_modified()
-
-    @property
-    def company_id(self):
-        return self._company_id
-
-    @company_id.setter
-    def company_id(self, value):
-        self._company_id = value
-        self._company_name = self._get_company_name(value)
-        if not self._company_name:
-            self._company_name = saq.CONFIG['global'].get('company_name')
-        self.set_modified()
 
     @property
     def submission_json_path(self):

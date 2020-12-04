@@ -83,7 +83,7 @@ tags = {','.join(tags)}
 """.encode('utf8', errors='backslashreplace')
 
 class RemoteNode(object):
-    def __init__(self, id, name, location, any_mode, last_update, analysis_mode, workload_count, company_id=None):
+    def __init__(self, id, name, location, any_mode, last_update, analysis_mode, workload_count):
         from saq.engine import translate_node
 
         self.id = id
@@ -93,7 +93,6 @@ class RemoteNode(object):
         self.last_update = last_update
         self.analysis_mode = analysis_mode
         self.workload_count = workload_count
-        self.company_id = company_id
 
         # the directory that contains any files that to be transfered along with submissions
         self.incoming_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['collection']['incoming_dir'])
@@ -153,7 +152,6 @@ class RemoteNode(object):
                 tags=submission.tags,
                 queue=submission.queue,
                 instructions=submission.instructions,
-                company_id=self.company_id,
                 files=_files)
 
             try:
@@ -180,20 +178,17 @@ class RemoteNodeGroup(object):
             name,
             coverage,
             full_delivery,
-            company_id,
             database,
             group_id,
             workload_type_id,
             shutdown_event,
             batch_size=32,
-            target_node_as_company_id=None,
             target_nodes=[],
             thread_count=1):
 
         assert isinstance(name, str) and name
         assert isinstance(coverage, int) and coverage > 0 and coverage <= 100
         assert isinstance(full_delivery, bool)
-        assert isinstance(company_id, int)
         assert isinstance(database, str)
         assert isinstance(group_id, int)
         assert isinstance(workload_type_id, int)
@@ -211,12 +206,6 @@ class RemoteNodeGroup(object):
         # if set to False then at least one attempt is made to submit
         # setting to False is useful for QA and development type systems
         self.full_delivery = full_delivery
-
-        # the company this node group belongs to
-        self.company_id = company_id
-
-        # A company id for the primary node sharing this company data
-        self.target_node_as_company_id = target_node_as_company_id
 
         # the name of the database to query for node status
         self.database = database
@@ -364,14 +353,6 @@ ORDER BY
             where_clause = []
             where_clause_params = []
 
-            # XXX not sure what this does
-            company_id = self.company_id
-            if self.target_node_as_company_id is not None:
-                company_id = self.target_node_as_company_id
-
-            where_clause.append("nodes.company_id = %s")
-            where_clause_params.append(company_id)
-
             where_clause.append("nodes.is_local = 0")
 
             where_clause.append("TIMESTAMPDIFF(SECOND, nodes.last_update, NOW()) <= %s")
@@ -419,7 +400,7 @@ ORDER BY
         any_mode_nodes = [] # list of nodes with any_mode set to True
         
         for node_id, name, location, any_mode, last_update, analysis_mode, workload_count in node_status:
-            remote_node = RemoteNode(node_id, name, location, any_mode, last_update, analysis_mode, workload_count, company_id=self.company_id)
+            remote_node = RemoteNode(node_id, name, location, any_mode, last_update, analysis_mode, workload_count)
             if any_mode:
                 any_mode_nodes.append(remote_node)
 
@@ -612,8 +593,8 @@ ORDER BY
         db.commit()
 
     def __str__(self):
-        return "RemoteNodeGroup(name={}, coverage={}, full_delivery={}, company_id={}, database={})".format(
-                self.name, self.coverage, self.full_delivery, self.company_id, self.database)
+        return "RemoteNodeGroup(name={}, coverage={}, full_delivery={}, database={})".format(
+                self.name, self.coverage, self.full_delivery, self.database)
 
 class Collector(ACEService, Persistable):
     def __init__(self, workload_type=None, 
@@ -824,10 +805,8 @@ class Collector(ACEService, Persistable):
         name, 
         coverage, 
         full_delivery, 
-        company_id, 
         database, 
         batch_size=32,
-        target_node_as_company_id=None,
         target_nodes=[],
         thread_count=1):
 
@@ -846,13 +825,11 @@ class Collector(ACEService, Persistable):
                 name, 
                 coverage, 
                 full_delivery, 
-                company_id, 
                 database, 
                 group_id, 
                 self.workload_type_id, 
                 self.service_shutdown_event, 
                 batch_size=batch_size,
-                target_node_as_company_id=target_node_as_company_id,
                 target_nodes=target_nodes,
                 thread_count=thread_count)
             self.remote_node_groups.append(remote_node_group)
@@ -872,15 +849,10 @@ class Collector(ACEService, Persistable):
             group_name = section[len('collection_group_'):]
             coverage = saq.CONFIG[section].getint('coverage')
             full_delivery = saq.CONFIG[section].getboolean('full_delivery')
-            company_id = saq.CONFIG[section].getint('company_id')
             database = saq.CONFIG[section]['database']
             batch_size = saq.CONFIG[section].getint('batch_size', fallback=32)
             thread_count = saq.CONFIG[section].getint('thread_count', fallback=1)
             
-            target_node_as_company_id = None
-            if 'target_node_as_company_id' in saq.CONFIG[section]:
-                target_node_as_company_id = saq.CONFIG[section]['target_node_as_company_id']
-
             target_nodes = []
             if 'target_nodes' in saq.CONFIG[section]:
                 for node in saq.CONFIG[section]['target_nodes'].split(','):
@@ -892,17 +864,15 @@ class Collector(ACEService, Persistable):
 
                     target_nodes.append(node)
 
-            logging.info("loaded group {} coverage {} full_delivery {} company_id {} database {} target_node_as_company_id {} target_nodes {} thread_count {} batch_size {}".format(
-                         group_name, coverage, full_delivery, company_id, database, target_node_as_company_id, target_nodes, thread_count, batch_size))
+            logging.info("loaded group {} coverage {} full_delivery {} database {} target_nodes {} thread_count {} batch_size {}".format(
+                         group_name, coverage, full_delivery, database, target_nodes, thread_count, batch_size))
 
             self.add_group(
                     group_name,
                     coverage,
                     full_delivery,
-                    company_id,
                     database,
                     batch_size=batch_size,
-                    target_node_as_company_id=target_node_as_company_id,
                     target_nodes=target_nodes,
                     thread_count=thread_count)
 

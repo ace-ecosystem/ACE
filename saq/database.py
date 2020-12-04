@@ -811,7 +811,6 @@ class Event(Base):
 
     malware = relationship("saq.database.MalwareMapping", passive_deletes=True, passive_updates=True)
     alert_mappings = relationship("saq.database.EventMapping", passive_deletes=True, passive_updates=True)
-    companies = relationship("saq.database.CompanyMapping", passive_deletes=True, passive_updates=True)
 
     @property
     def json(self):
@@ -820,7 +819,6 @@ class Event(Base):
             'alerts': self.alerts,
             'campaign': self.campaign.name if self.campaign else None,
             'comment': self.comment,
-            'companies': self.company_names,
             'creation_date': str(self.creation_date),
             'event_time': str(self.event_time),
             'alert_time': str(self.alert_time),
@@ -860,13 +858,6 @@ class Event(Base):
         names = []
         for mal in self.malware:
             names.append(mal.name)
-        return names
-
-    @property
-    def company_names(self):
-        names = []
-        for company in self.companies:
-            names.append(company.name)
         return names
 
     @property
@@ -1106,13 +1097,6 @@ class Nodes(Base):
         nullable=False,
         comment='Also called the API_PREFIX, this is the hostname:port portion of the URL for the api for the node.')
 
-    company_id = Column(
-        Integer,
-        ForeignKey('company.id', ondelete='CASCADE', onupdate='CASCADE'),
-        nullable=False,
-        index=True,
-        comment='The company this node belongs to (see [global] company_id in config file)')
-
     last_update = Column(
         DateTime,
         nullable=False,
@@ -1180,58 +1164,6 @@ class NodeModesExcluded(Base):
         primary_key=True,
         nullable=False,
         comment='The analysis_mode that this node will NOT support processing.')
-
-
-class Company(Base):
-
-    __tablename__ = 'company'
-    __table_args__ = { 
-        'mysql_engine': 'InnoDB',
-        'mysql_charset': 'utf8mb4',
-    }
-
-    id = Column(
-        Integer, 
-        primary_key=True,
-        nullable=False,
-        autoincrement=True)
-
-    name = Column(
-        String(128), 
-        nullable=False,
-        unique=True,
-        index=True)
-
-    @property
-    def json(self):
-        return {
-            'id': self.id,
-            'name': self.name }
-
-# TODO this should be called CompanyEventMapping
-class CompanyMapping(Base):
-
-    __tablename__ = 'company_mapping'
-    __table_args__ = { 
-        'mysql_engine': 'InnoDB',
-        'mysql_charset': 'utf8mb4',
-    }
-
-    event_id = Column(
-        Integer, 
-        ForeignKey('events.id', ondelete='CASCADE', onupdate='CASCADE'), 
-        primary_key=True)
-
-    company_id = Column(
-        Integer, 
-        ForeignKey('company.id', ondelete='CASCADE', onupdate='CASCADE'), 
-        primary_key=True)
-
-    company = relationship("saq.database.Company")
-
-    @property
-    def name(self):
-        return self.company.name
 
 class Malware(Base):
 
@@ -1514,14 +1446,6 @@ class Alert(RootAnalysis, Base):
     lock_time = Column(
         TIMESTAMP, 
         nullable=True)
-
-    company_id = Column(
-        Integer,
-        ForeignKey('company.id', ondelete='CASCADE', onupdate='CASCADE'),
-        nullable=True,
-        index=True)
-
-    company = relationship('saq.database.Company', foreign_keys=[company_id])
 
     location = Column(
         String(1024),
@@ -1988,20 +1912,6 @@ class Alert(RootAnalysis, Base):
         assert self.storage_dir is not None # requires a valid storage_dir at this point
         assert isinstance(self.storage_dir, str)
 
-        # XXX is this check still required?
-        # newly generated alerts will have a company_name but no company_id
-        # we look that up here if we don't have it yet if self.company_name and not self.company_id:
-        #if self.company_name and not self.company_id:
-            #logging.info("MARKER: I was here")
-            #self.company_id = saq.db.query(Company).filter(Company.name == self.company_name).one().id
-            #with get_db_connection() as db:
-                #c = db.cursor()
-                #c.execute("SELECT `id` FROM company WHERE `name` = %s", (self.company_name))
-                #row = c.fetchone()
-                #if row:
-                    #logging.debug("found company_id {} for company_name {}".format(self.company_id, self.company_name))
-                    #self.company_id = row[0]
-
         # compute number of detection points
         self.detection_count = len(self.all_detection_points)
 
@@ -2313,13 +2223,12 @@ def set_dispositions(alert_uuids, disposition, user_id, user_comment=None):
 
         # now we need to insert each of these alert back into the workload
         sql = f"""
-INSERT IGNORE INTO workload ( uuid, node_id, analysis_mode, insert_date, company_id, exclusive_uuid, storage_dir ) 
+INSERT IGNORE INTO workload ( uuid, node_id, analysis_mode, insert_date, exclusive_uuid, storage_dir ) 
 SELECT 
     alerts.uuid, 
     nodes.id,
     %s, 
     NOW(),
-    alerts.company_id, 
     NULL, 
     alerts.storage_dir 
 FROM 
@@ -2857,7 +2766,6 @@ class Remediation(Base):
             'result': self.result,
             'comment': self.comment,
             'successful': self.successful,
-            'company_id': self.company_id,
             'status': self.status,
         }
 
@@ -2963,13 +2871,6 @@ class Workload(Base):
         nullable=True, 
         index=True)
 
-    company_id = Column(
-        Integer,
-        ForeignKey('company.id', ondelete='CASCADE', onupdate='CASCADE'),
-        nullable=False)
-
-    company = relationship('saq.database.Company', foreign_keys=[company_id])
-
     exclusive_uuid = Column(
         String(36), 
         nullable=True,
@@ -3004,15 +2905,14 @@ INSERT INTO workload (
     uuid,
     node_id,
     analysis_mode,
-    company_id,
     exclusive_uuid,
     storage_dir,
     insert_date )
 VALUES ( %s, %s, %s, %s, %s, %s, NOW() )
-ON DUPLICATE KEY UPDATE uuid=uuid""", (root.uuid, saq.SAQ_NODE_ID, root.analysis_mode, root.company_id, exclusive_uuid, root.storage_dir))
+ON DUPLICATE KEY UPDATE uuid=uuid""", (root.uuid, saq.SAQ_NODE_ID, root.analysis_mode, exclusive_uuid, root.storage_dir))
     db.commit()
-    logging.info("added {} to workload with analysis mode {} company_id {} exclusive_uuid {}".format(
-                  root.uuid, root.analysis_mode, root.company_id, exclusive_uuid))
+    logging.info("added {} to workload with analysis mode {} exclusive_uuid {}".format(
+                  root.uuid, root.analysis_mode, exclusive_uuid))
 
 @use_db
 def clear_workload_by_pid(pid, db=None, c=None):
@@ -3426,7 +3326,7 @@ def initialize_node(db, c):
         logging.debug("got existing node id {} for {}".format(saq.SAQ_NODE_ID, saq.SAQ_NODE))
 
     if saq.SAQ_NODE_ID is None:
-        execute_with_retry(db, c, """INSERT INTO nodes ( name, location, company_id, is_local, last_update ) 
+        execute_with_retry(db, c, """INSERT INTO nodes ( name, location, is_local, last_update ) 
                                      VALUES ( %s, %s, %s, %s, NOW() )""", 
                           (saq.SAQ_NODE, saq.API_PREFIX, saq.COMPANY_ID, True),
                           commit=True)
@@ -3441,8 +3341,7 @@ def initialize_node(db, c):
             logging.info("allocated node id {} for {}".format(saq.SAQ_NODE_ID, saq.SAQ_NODE))
 
 @use_db
-def get_available_nodes(company_id, target_analysis_modes, db, c):
-    assert isinstance(company_id, int)
+def get_available_nodes(target_analysis_modes, db, c):
     assert isinstance(target_analysis_modes, str) or isinstance(target_analysis_modes, list)
     if isinstance(target_analysis_modes, str):
         target_analysis_modes = [ target_analysis_modes ]
@@ -3460,8 +3359,7 @@ FROM
     nodes LEFT JOIN node_modes ON nodes.id = node_modes.node_id
     LEFT JOIN workload ON nodes.id = workload.node_id
 WHERE
-    nodes.company_id = %s
-    AND nodes.is_local = 0
+    nodes.is_local = 0
     AND ( nodes.any_mode OR node_modes.analysis_mode in ( {} ) )
 GROUP BY
     nodes.id,
@@ -3475,7 +3373,7 @@ ORDER BY
     nodes.last_update ASC
 """.format(','.join(['%s' for _ in target_analysis_modes]))
 
-    params = [ company_id ]
+    params = [ ]
     params.extend(target_analysis_modes)
     c.execute(sql, tuple(params))
     return c.fetchall()
