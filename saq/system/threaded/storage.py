@@ -5,37 +5,21 @@ import io
 import os, os.path
 
 from saq.system import ACESystemInterface
-from saq.system.storage import StorageInterface, Content, ContentMetadata
-
-class ThreadedContent(Content):
-    @property
-    def stream(self) -> Union[io.IOBase, None]:
-        if self.data is None:
-            return None
-
-        return io.BytesIO(self.data)
-
-    @stream.setter
-    def stream(self, value):
-        pass
+from saq.system.storage import StorageInterface, ContentMetadata
 
 class ThreadedStorageInterface(ACESystemInterface):
 
-    content = {} # key = sha256 hash, value = ThreadedContent
+    #
+    # simple storage interface that stores everything in memory
+    #
+
+    content = {} # key = sha256 hash, value = ContentMetadata
+    data = {} # key = sha256 hash, value = bytes
 
     def store_content(self, content: Union[bytes, str, io.IOBase], meta: ContentMetadata) -> str:
-        #meta = ContentMetadata()
-        #meta.custom = custom
-        # the content is also stored on the file system in the location specified
-        file_fp = None
-        if meta.location:
-            file_fp = open(meta.location, 'wb')
-
         # if this is a string then just convert it into utf-8
         if isinstance(content, str):
             data = content.encode()
-            if file_fp:
-                file_fp.write(data)
         elif isinstance(content, io.IOBase):
             # TODO calculate sha2 as we go
             stream = content
@@ -46,19 +30,12 @@ class ThreadedStorageInterface(ACESystemInterface):
                     break
 
                 data.write(_buffer)
-                if file_fp:
-                    file_fp.write(_buffer)
 
             data = data.getvalue()
         elif isinstance(content, bytes):
             data = content
-            if file_fp:
-                file_fp.write(data)
         else:
             raise TypeError(f"unsupported content type {type(content)}")
-
-        if file_fp:
-            file_fp.close()
 
         m = hashlib.sha256()
         m.update(data)
@@ -66,16 +43,36 @@ class ThreadedStorageInterface(ACESystemInterface):
 
         meta.size = len(data)
         meta.sha256 = sha256
-        self.content[sha256] = ThreadedContent(data=data, stream=None, meta=meta)
+        self.content[sha256] = meta
+        self.data[sha256] = data
 
         return sha256
 
-    def get_content(self, sha256: str) -> Union[Content, None]:
+    def get_content_meta(self, sha256: str) -> Union[ContentMetadata, None]:
         return self.content.get(sha256)
 
-    def reset(self):
-        for sha256, content in self.content.items():
-            if content.meta.location:
-                os.remove(content.meta.location)
+    def get_content_bytes(self, sha256: str) -> Union[bytes, None]:
+        return self.data.get(sha256)
 
+    def get_content_stream(self, sha256: str) -> Union[io.IOBase, None]:
+        data = self.data.get(sha256)
+        if data is None:
+            return None
+
+        return io.BytesIO(data)
+
+    def delete_content(self, sha256: str) -> bool:
+        content = self.content.pop(sha256, None)
+        data = self.data.pop(sha256, None)
+
+        if content:
+            return True
+
+        if data:
+            return True
+
+        return False
+
+    def reset(self):
         self.content = {}
+        self.data = {}

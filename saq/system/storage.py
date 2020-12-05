@@ -1,7 +1,11 @@
 # vim: ts=4:sw=4:et:cc=120
 
-import io
+import contextlib
 import datetime
+import io
+import os.path
+import shutil
+
 from dataclasses import dataclass, field
 from typing import Union, Optional
 
@@ -28,23 +32,6 @@ class ContentMetadata:
     # dict for storing any required custom properties of the content
     custom: dict = field(default_factory=dict)
 
-@dataclass
-class Content:
-
-    # NOTE 
-    # The idea here is that you can just grab the data out of the data property
-    # if it's small. Otherwise you read it out of the stream.  Subclasses will
-    # have to implement the logic of when to use what and what kind of stream
-    # is actually used.
-
-    # the raw data as a bytes variable
-    # if this is None then the data must be read from the stream
-    data: Union[bytes, None]
-    # a stream for reading the raw data
-    # this must always be available
-    stream: io.IOBase
-    # the meta data for this content
-    meta: ContentMetadata
 
 #
 # how things are actually stored is abstracted away by this interface
@@ -55,11 +42,59 @@ class StorageInterface(ACESystemInterface):
     def store_content(self, content: Union[bytes, str, io.IOBase], meta: ContentMetadata) -> str:
         raise NotImplementedError()
 
-    def get_content(self, sha256: str) -> Union[Content, None]:
+    def get_content_bytes(self, sha256: str) -> Union[bytes, None]:
+        raise NotImplementedError()
+
+    def get_content_stream(self, sha256: str) -> Union[io.IOBase, None]:
+        raise NotImplementedError()
+
+    def get_content_meta(self, sha256: str) -> Union[ContentMetadata, None]:
+        raise NotImplementedError()
+
+    def delete_content(self, sha256: str) -> bool:
         raise NotImplementedError()
 
 def store_content(content: Union[bytes, str, io.IOBase], meta: ContentMetadata) -> str:
     return get_system().storage.store_content(content, meta)
 
-def get_content(sha256: str) -> Union[Content, None]:
-    return get_system().storage.get_content(sha256)
+def get_content_bytes(sha256: str) -> Union[bytes, None]:
+    return get_system().storage.get_content_bytes(sha256)
+
+def get_content_stream(sha256: str) -> Union[io.IOBase, None]:
+    return get_system().storage.get_content_stream(sha256)
+
+def get_content_meta(sha256: str) -> Union[ContentMetadata, None]:
+    return get_system().storage.get_content_meta(sha256)
+
+def delete_content(sha256: str) -> bool:
+    return get_system().storage.delete_content(sha256)
+
+#
+# utility functions
+#
+
+def store_file(path: str, **kwargs) -> str:
+    """Utility function that stores the contents of the given file and returns the sha2 hash."""
+    assert isinstance(path, str)
+    meta = ContentMetadata(path, **kwargs)
+    with open(path, 'rb') as fp:
+        return store_content(fp, meta)
+
+def get_file(sha256: str, path: Optional[str]=None) -> bool:
+    """Utility function that pulls data out of storage into a local file. The
+    original path is used unless a target path is specified."""
+    assert isinstance(sha256, str)
+    assert path is None or isinstance(path, str)
+
+    meta = get_content_meta(sha256)
+    if meta is None:
+        return False
+
+    if path is None:
+        path = meta.name
+
+    with open(path, 'wb') as fp_out:
+        with contextlib.closing(get_content_stream(sha256)) as fp_in:
+            shutil.copyfileobj(fp_in, fp_out)
+
+    return True
