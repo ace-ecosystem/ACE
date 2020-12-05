@@ -343,16 +343,15 @@ class FileObservable(Observable):
     KEY_MIME_TYPE = 'mime_type'
     KEY_PATH = 'path'
 
-    def __init__(self, path=None, *args, **kwargs):
+    def __init__(self, *args, path=None, **kwargs):
         super().__init__(F_FILE, *args, **kwargs)
 
         # the path to the file locally (relative to self.root.storage_dir)
         # if this is None then the file has not been downloaded from the storage system
         self.path = path
 
-        # do not allow empty file names
-        if self.value == '':
-            raise ObservableValueError("empty file name")
+        # state flag set to True after the file has been successfully downloaded from the storage system
+        self._loaded = False
 
         self._md5_hash = None
         self._sha1_hash = None
@@ -365,6 +364,19 @@ class FileObservable(Observable):
 
         # some directives are inherited by children
         self.add_event_listener(EVENT_RELATIONSHIP_ADDED, self.handle_relationship_added)
+
+    def load(self) -> bool:
+        """Downloads the contents of the file to the local file system."""
+        from saq.system.storage import get_file
+        if self._loaded:
+            return True
+
+        # make sure a local storage directory has been created
+        self.root.initialize_storage()
+        # store the contents of the file inside this directory named after the hash
+        self.path = os.path.join(self.root.storage_dir, self.value)
+        self._loaded = get_file(self.value, path=self.path)
+        return self._loaded
 
     #
     # in ACE the value of the F_FILE observable is the relative path to the content (inside the storage directory)
@@ -503,10 +515,6 @@ class FileObservable(Observable):
         self._mime_type = stdout.decode(errors='ignore').strip()
         #logging.info("MARKER: {} mime type {}".format(self.path, self._mime_type))
         return self._mime_type
-
-    @property
-    def path(self):
-        return os.path.join(saq.SAQ_RELATIVE_DIR, self.root.storage_dir, self.value)
 
     @property
     def ext(self):

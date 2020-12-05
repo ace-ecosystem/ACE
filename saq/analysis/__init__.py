@@ -992,6 +992,12 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
         return observable
 
+    def add_file(self, path: str) -> 'FileObservable':
+        """Utility function that adds a F_FILE_OBSERVABLE to the root analysis by passing a path to the file."""
+        from saq.system.storage import store_file
+        from saq.observables import FileObservable
+        return self.add_observable(FileObservable(value=store_file(path), path=path))
+
     def add_ioc(self, type_: str, value: str, status: str = 'New', tags: List[str] = []):
         self.iocs.append(Indicator(type_, value, status=status, tags=tags))
 
@@ -2426,27 +2432,25 @@ class RootAnalysis(Analysis):
 
     @storage_dir.setter
     def storage_dir(self, value):
-        assert isinstance(value, str)
+        assert value is None or isinstance(value, str)
         self._storage_dir = value
         self.set_modified()
 
-    def initialize_storage(self):
-        assert self.storage_dir
-        try:
-            target_dir = os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir)
-            if not os.path.exists(target_dir):
-                os.makedirs(target_dir)
+    def initialize_storage(self, path: Optional[str]=None) -> bool:
+        """Initializes and creates a local storage directory if one does not
+        already exist.  If the path is specified it is used as the storage
+        directory, otherwise a temporary directory is created in saq.TEMP_DIR.
+        """
+        if self.storage_dir is None:
+            if path:
+                self.storage_dir = path
+            else:
+                self.storage_dir = tempfile.mkdtemp(dir=saq.TEMP_DIR)
 
-            target_dir = os.path.join(target_dir, '.ace')
-            if not os.path.exists(target_dir):
-                os.makedirs(target_dir)
+        if not os.path.isdir(self.storage_dir):
+            os.mkdir(self.storage_dir)
 
-            logging.debug("initialized storage directory {}".format(target_dir))
-
-        except Exception as e:
-            logging.error("unable to initialize storage: {}".format(e))
-            report_exception()
-            raise e
+        return True
 
     @property
     def location(self):
@@ -2909,18 +2913,30 @@ class RootAnalysis(Analysis):
         logging.debug("moved {} to {}".format(self.storage_dir, dest_dir))
         self.storage_dir = dest_dir
 
-    def delete(self):
-        """Deletes everything contained in the storage_dir and marks this RootAnalysis as deleted."""
-        try:
-            if self.storage_dir and os.path.exists(self.storage_dir):
-                shutil.rmtree(self.storage_dir)
-                logging.debug("deleted {}".format(self.storage_dir))
-        except Exception as e:
-            logging.error("unable to delete {}: {}".format(self, e))
-            raise e
+    def __del__(self):
+        # make sure that any remaining storage directories are wiped out
+        if self.discard():
+            logging.warning(f"discard() was not called on {self}")
+
+    def discard(self) -> bool:
+        """Discards a local RootAnalysis object. This has the effect of
+        deleting the storage directory for this analysis, which deletes any
+        files that were downloaded.
+
+        Returns True if something was deleted, False otherwise."""
+        if self.storage_dir and os.path.exists(self.storage_dir):
+            shutil.rmtree(self.storage_dir)
+            logging.debug(f"deleted {self.storage_dir}")
+            self.storage_dir = None
+            return True
+
+        return False
 
     def __str__(self):
-        return "RootAnalysis({})".format(self.uuid)
+        if self.storage_dir:
+            return f"RootAnalysis({self.uuid}) @ {self.storage_dir}"
+        else:
+            return f"RootAnalysis({self.uuid})"
 
     def __eq__(self, other):
         """Two RootAnalysis objects are equal if the uuid is equal."""
