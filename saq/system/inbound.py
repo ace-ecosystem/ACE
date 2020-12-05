@@ -122,6 +122,7 @@ def process_analysis_request(ar: AnalysisRequest):
 
                     # we also track the request inside the RootAnalysis object
                     observable.track_analysis_request(new_ar)
+                    root.save()
 
                     # submit the analysis request for processing
                     submit_analysis_request(new_ar)
