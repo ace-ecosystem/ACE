@@ -460,7 +460,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         from saq.system.analysis_tracking import track_analysis_details
         track_analysis_details(self.root, self.uuid, self._details)
 
-
     def flush(self):
         """Calls save() and then clears the details property.  It must be load()ed again."""
         self.save()
@@ -485,25 +484,10 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         self.external_details_loaded = False
 
     @property
-    def question(self):
-        """Returns the question this analysis was trying to answer.
-           By default this returns the __doc__ by default, or subclasses can override it.
-           This result is returned to the analyst when they mouse-over in the GUI."""
-        return self.__doc__
-        
-    @property
     def details(self):
         # do we already have the details loaded or set?
         if self._details is not None:
             return self._details
-
-        # are there any external details?
-        #if self.external_details_path is None:
-            #return None
-
-        # did we already load them and then set it to None?
-        #if self.external_details_loaded:
-            #return None
 
         # load the external details and return those results
         self._load_details()
