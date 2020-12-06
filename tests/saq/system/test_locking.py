@@ -173,3 +173,64 @@ def test_release_expired_reacquired_lock():
     assert not release(LOCK_1)
     step_2.set()
     t1.join()
+
+# this is not a great test because it can have pretty random results depending on what the cpu does
+@pytest.mark.parametrize('lock_count,timeout,verify_result', [
+    # with one lock and no wait we should never see a deadlock
+    (1, 0,  lambda hit, miss, dl: dl == 0),
+    # with one lock and a wait we should still never see a deadlock because there is only one lock
+    # a deadlock requires two or more locks
+    (1, 1,  lambda hit, miss, dl: dl == 0),
+    # with 10 locks and no wait we should never see a deadlock
+    (10, 0, lambda hit, miss, dl: dl == 0),
+    # finally with 10 locks we *should* see at least one deadlock (but maybe not if we're lucky)
+    (10, 1, lambda hit, miss, dl: dl >= 0),  # 10 locks with 1 second wait time
+])
+@pytest.mark.system
+def test_locking_contest(lock_count, timeout, verify_result):
+    import random, logging
+    locks = [f'lock_{n}' for n in range(lock_count)]
+
+    def _func(locks, sync, timeout, results):
+        locks = locks[:]
+        sync.wait()
+
+        hit = 0
+        miss = 0
+        deadlock_count = 0
+
+        for i in range(1000):
+            random.shuffle(locks)
+            stack = locks[:]
+            acquired_locks = []
+
+            while stack:
+                lock = stack.pop()
+                try:
+                    if acquire(lock, timeout=timeout):
+                        acquired_locks.append(lock)
+                        hit += 1
+                    else:
+                        miss += 1
+                except DeadlockException:
+                    deadlock_count += 1
+
+            for lock in acquired_locks:
+                release(lock)
+
+        results.append((hit, miss, deadlock_count))
+
+    results = []
+    sync = threading.Event()
+    t1 = threading.Thread(target=_func, args=(locks, sync, timeout, results))
+    t1.start()
+    t2 = threading.Thread(target=_func, args=(locks, sync, timeout, results))
+    t2.start()
+
+    sync.set()
+    t1.join()
+    t2.join()
+
+    for hit, miss, dl in results:
+        assert verify_result(hit, miss, dl)
+

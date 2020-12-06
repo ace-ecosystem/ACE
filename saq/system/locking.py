@@ -1,4 +1,5 @@
 # vim: ts=4:sw=4:et:cc=120
+import logging
 
 from contextlib import contextmanager
 from typing import Union, Optional

@@ -33,7 +33,7 @@ class AnalysisTrackingInterface(ACESystemInterface):
 
 def get_root_analysis(root: Union[RootAnalysis, str]) -> Union[RootAnalysis, None]:
     """Returns the loaded RootAnalysis for the given RootAnalysis or uuid, or None if it does not exist."""
-    assert isinstance(root, RootAnalysis) or isinstance(uuid, str)
+    assert isinstance(root, RootAnalysis) or isinstance(root, str)
 
     if isinstance(root, RootAnalysis):
         root = root.uuid

@@ -4,8 +4,10 @@ import datetime
 import logging
 import threading
 
+from functools import wraps
 from typing import Union, Optional
 
+from saq.system.threaded import ThreadedInterface
 from saq.system.locking import LockingInterface
 
 class TimeoutRLock():
@@ -90,7 +92,15 @@ class TimeoutRLock():
 
         return True
 
-class ThreadedLockingInterface(LockingInterface):
+def synchronized(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        with self.sync_lock:
+            return func(self, *args, **kwargs)
+
+    return wrapper
+
+class ThreadedLockingInterface(ThreadedInterface, LockingInterface):
 
     locks = {} # key = lock_id, value = threading.RLock
     lock_ownership = {} # key = lock_id, value = str (owner_id)
@@ -134,7 +144,6 @@ class ThreadedLockingInterface(LockingInterface):
         success = lock.acquire(arg_blocking, arg_timeout, lock_timeout)
         if success:
             # if we were able to lock it keep track of that so we can implement is_locked()
-            logging.debug(f"lock acquired for {lock_id} by {owner_id}")
             self.current_locks.add(lock_id)
 
         return success
@@ -147,12 +156,10 @@ class ThreadedLockingInterface(LockingInterface):
 
         if self.get_lock_owner(lock_id) != owner_id:
             logging.debug(f"attempt to release unowned lock {lock_id} by {owner_id}")
-            breakpoint()
             return False
 
         result = lock.release()
         if result:
-            logging.debug(f"lock {lock_id} released by {owner_id}")
             self.current_locks.remove(lock_id)
         else:
             logging.debug(f"failed to release {lock_id} by {owner_id}")

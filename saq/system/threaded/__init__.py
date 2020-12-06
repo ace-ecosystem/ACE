@@ -4,6 +4,13 @@
 # useful for unit testing
 #
 
+import threading
+
+class ThreadedInterface():
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sync_lock = threading.RLock()
+
 from saq.system import ACESystem, set_system
 from saq.system.threaded.analysis_tracking import ThreadedAnalysisTrackingInterface
 from saq.system.threaded.analysis_module import ThreadedAnalysisModuleTrackingInterface
