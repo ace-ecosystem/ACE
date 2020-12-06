@@ -425,14 +425,10 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
     # dictionary keys used by the Analysis class
     KEY_OBSERVABLES = 'observables'
-    KEY_DETAILS = 'details' # NOTE (see the NOTE above)
+    KEY_DETAILS = 'details'
     KEY_SUMMARY = 'summary'
     KEY_TYPE = 'type'
-
     KEY_UUID = 'uuid'
-
-    KEY_ALERTED = 'alerted' # boolean to indicate that this analysis has been submitted as an alert
-
     KEY_IOCS = 'iocs'
 
     def __init__(self, *args, root=None, analysis_module_type=None, observable=None, details=None, **kwargs):
@@ -460,12 +456,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         # this is run-time-only (never saved to disk)
         # the external_details property is what loads and saves the value of this field
         self._details = details or None
-        # the path to the storage of the details
-        #self.external_details_path = None
-        # gets set to True when the external details has been loaded from disk
-        #self.external_details_loaded = False
-
-        self.defined_details_properties = {}
 
         # the observable this Analysis is for
         self._observable = observable
@@ -475,19 +465,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         # a pretty good idea of what was discovered without needing to
         # load all the details of the alert
         self._summary = None
-
-        # this flag indicates that the analysis has been fully completed
-        # this defaults to True (this is important that it defaults to True)
-        # in most cases analysis happens once and that's it
-        # but in the case of delayed analysis this would be set to False
-        # if this is set to True when the engine will not consider it done
-        # (see lib/saq/modules/__init__.py accepts())
-        self._completed = True
-
-        # this is set to True when we submit this as an alert
-        # currently this is really only supported by the Alert class itself
-        # but eventually I would like to be able to alert from any Analysis object
-        self._alerted = False
 
         # when we add a tag we automatically add a detection if the tag's score is > 0
         self.add_event_listener(EVENT_TAG_ADDED, self.tag_detection)
@@ -619,7 +596,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
             Analysis.KEY_OBSERVABLES: [o.id for o in self.observables],
             TaggableObject.KEY_TAGS: self.tags,
             Analysis.KEY_SUMMARY: self.summary,
-            Analysis.KEY_ALERTED: self.alerted,
             Analysis.KEY_IOCS: self.iocs.json,
             Analysis.KEY_UUID: self.uuid,
         })
@@ -643,9 +619,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
         if Analysis.KEY_SUMMARY in value:
             self.summary = value[Analysis.KEY_SUMMARY]
-
-        if Analysis.KEY_ALERTED in value:
-            self.alerted = value[Analysis.KEY_ALERTED]
 
         if Analysis.KEY_IOCS in value:
             self.iocs = value[Analysis.KEY_IOCS]
@@ -797,44 +770,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     @summary.setter
     def summary(self, value):
         self._summary = value
-
-    @property
-    def completed(self):
-        return self._completed
-
-    @completed.setter
-    def completed(self, value):
-        assert isinstance(value, bool)
-
-        if self._completed != value:
-            self.set_modified()
-
-        # if this state is changing from False to True then we want to fire an event
-        # so that the engine can pick this up and continue analysis
-        # this is because most analysis triggers off of adding Analysis objects to Observables
-        # but in the case of delayed analysis the Analysis has already been added and we're just waiting for results
-        # once that delayed analysis is completed we want to allow other modules a chance to look at it
-        _trigger_event = False
-        if self._completed == False and value == True:
-            _trigger_event = True
-
-        self._completed = value
-
-        if _trigger_event:
-            logging.debug("{} has marked as completed manually (fire event)".format(self))
-            self.fire_event(self, EVENT_ANALYSIS_MARKED_COMPLETED)
-
-    @property
-    def alerted(self):
-        return self._alerted
-
-    @alerted.setter
-    def alerted(self, value):
-        assert isinstance(value, bool)
-        if self._alerted != value:
-            self.set_modified()
-
-        self._alerted = value
 
     def search_tree(self, tags=()):
         """Searches this object and every object in it's analysis tree for the given items.  Returns the list of items that matched."""
