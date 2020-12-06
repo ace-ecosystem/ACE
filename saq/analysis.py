@@ -35,34 +35,6 @@ from saq.util import *
 
 STATE_KEY_WHITELISTED = 'whitelisted'
 
-class EventSource(object):
-    """Supports callbacks for events by keyword."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.clear_event_listeners()
-
-    def clear_event_listeners(self):
-        self.event_listeners = {} # key = string, value = [] of callback functions
-
-    def add_event_listener(self, event, callback):
-        assert isinstance(event, str)
-        assert callback
-
-        if event not in self.event_listeners:
-            self.event_listeners[event] = []
-
-        if callback not in self.event_listeners[event]:
-            self.event_listeners[event].append(callback)
-
-    def fire_event(self, source, event, *args, **kwargs):
-        assert isinstance(source, Analysis) or isinstance(source, Observable)
-        assert event in VALID_EVENTS
-
-        if event in self.event_listeners:
-            for callback in self.event_listeners[event]:
-                callback(source, event, *args, **kwargs)
-
 class DetectionPoint(object):
     """Represents an observation that would result in a detection."""
 
@@ -110,7 +82,7 @@ class DetectionPoint(object):
 
         return self.description == other.description and self.details == other.details
 
-class DetectableObject(EventSource):
+class DetectableObject():
     """Mixin for objects that can have detection points."""
 
     KEY_DETECTIONS = 'detections'
@@ -160,7 +132,6 @@ class DetectableObject(EventSource):
 
         self._detections.append(detection)
         logging.debug("added detection point {} to {}".format(detection, self))
-        self.fire_event(self, EVENT_DETECTION_ADDED, detection)
 
     def clear_detection_points(self):
         self._detections.clear()
@@ -245,7 +216,7 @@ class Tag(object):
 
         return self.name == other.name
 
-class TaggableObject(EventSource):
+class TaggableObject():
     """A mixin class that adds a tags property that is a list of tags assigned to this object."""
 
     KEY_TAGS = 'tags'
@@ -286,7 +257,6 @@ class TaggableObject(EventSource):
         t = Tag(name=tag)
         self.tags.append(t)
         logging.debug("added {} to {}".format(t, self))
-        self.fire_event(self, EVENT_TAG_ADDED, t)
         return self
 
     def clear_tags(self):
@@ -466,12 +436,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         # load all the details of the alert
         self._summary = None
 
-        # when we add a tag we automatically add a detection if the tag's score is > 0
-        self.add_event_listener(EVENT_TAG_ADDED, self.tag_detection)
-
-        # certain observables also generate detections
-        self.add_event_listener(EVENT_OBSERVABLE_ADDED, self.observable_detection)
-
         # List of IOCs that the analysis contains
         self._iocs = IndicatorList()
 
@@ -558,7 +522,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     @details.setter
     def details(self, value):
         self._details = value
-        self.fire_event(self, EVENT_DETAILS_UPDATED)
 
     # XXX refactor for saq.system
     def discard_details(self):
@@ -850,7 +813,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
         if observable not in self.observables:
             self.observables.append(observable)
-            self.fire_event(self, EVENT_OBSERVABLE_ADDED, observable)
 
         return observable
 
@@ -870,7 +832,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
         if observable not in self.observables:
             self.observables.append(observable)
-            self.fire_event(self, EVENT_OBSERVABLE_ADDED, observable)
 
         return observable
 
@@ -1117,9 +1078,6 @@ class Observable(TaggableObject, DetectableObject):
 
         # reference to the RootAnalysis object
         self.root = None
-
-        # when we add a tag we automatically add a detection if the tag's score is > 0
-        self.add_event_listener(EVENT_TAG_ADDED, self.tag_detection)
 
         # state variable gets set to True when fetch_tags is called
         self._tags_fetched = False
@@ -1372,7 +1330,6 @@ class Observable(TaggableObject, DetectableObject):
         if directive not in self.directives:
             self.directives.append(directive)
             logging.debug("added directive {} to {}".format(directive, self))
-            self.fire_event(self, EVENT_DIRECTIVE_ADDED, directive)
 
         return self
 
@@ -1568,7 +1525,6 @@ class Observable(TaggableObject, DetectableObject):
 
         r = Relationship(r_type, target)
         self.relationships.append(r)
-        self.fire_event(self, EVENT_RELATIONSHIP_ADDED, target, relationship=r)
         return r
 
     def get_relationships_by_type(self, r_type):
@@ -1776,7 +1732,6 @@ class Observable(TaggableObject, DetectableObject):
         self.analysis[analysis.type.name] = analysis
 
         logging.debug("added analysis {} type {} to observable {}".format(analysis, analysis.type, self))
-        self.fire_event(self, EVENT_ANALYSIS_ADDED, analysis)
 
     def get_analysis(self, amt: AnalysisModuleType) -> Union[Analysis, None]:
         """Returns the Analysis of the given type for this Observable, or None."""
@@ -1817,10 +1772,6 @@ class Observable(TaggableObject, DetectableObject):
                 observable = self)
 
             analysis.json = self.analysis[amt_type_name]
-
-            # set up the EVENT_GLOBAL_* events
-            analysis.add_event_listener(EVENT_OBSERVABLE_ADDED, analysis.root._fire_global_events)
-            analysis.add_event_listener(EVENT_TAG_ADDED, analysis.root._fire_global_events)
 
             self.analysis[amt_type_name] = analysis # replace the JSON dict with the actual object
 
@@ -2008,30 +1959,8 @@ class RootAnalysis(Analysis):
         # set to True after load() is called
         self.is_loaded = False
 
-        # we fire EVENT_GLOBAL_TAG_ADDED and EVENT_GLOBAL_OBSERVABLE_ADDED when we add tags and observables to anything
-        # (note that we also need to add these global event listeners when we deserialize)
-        self.add_event_listener(EVENT_TAG_ADDED, self._fire_global_events)
-        self.add_event_listener(EVENT_OBSERVABLE_ADDED, self._fire_global_events)
-
         # utility map to quickly look up Analysis objects
         self.analysis_map = {}
-
-    def _fire_global_events(self, source, event_type, *args, **kwargs):
-        """Fires EVENT_GLOBAL_* events."""
-        if event_type == EVENT_TAG_ADDED:
-            self.fire_event(source, EVENT_GLOBAL_TAG_ADDED, *args, **kwargs)
-        elif event_type == EVENT_OBSERVABLE_ADDED:
-            observable = args[0]
-            observable.add_event_listener(EVENT_TAG_ADDED, self._fire_global_events)
-            observable.add_event_listener(EVENT_ANALYSIS_ADDED, self._fire_global_events)
-            self.fire_event(source, EVENT_GLOBAL_OBSERVABLE_ADDED, *args, **kwargs)
-        elif event_type == EVENT_ANALYSIS_ADDED:
-            analysis = args[0]
-            analysis.add_event_listener(EVENT_TAG_ADDED, self._fire_global_events)
-            analysis.add_event_listener(EVENT_OBSERVABLE_ADDED, self._fire_global_events)
-            self.fire_event(source, EVENT_GLOBAL_ANALYSIS_ADDED, *args, **kwargs)
-        else:
-            logging.error("unsupported global event type: {}".format(event_type))
         
     #
     # the json property is used for internal storage
@@ -2619,10 +2548,6 @@ class RootAnalysis(Analysis):
             if o:
                 o.root = self
                 o.json = value # this sets everything else
-
-                # set up the EVENT_GLOBAL_* events
-                o.add_event_listener(EVENT_ANALYSIS_ADDED, o.root._fire_global_events)
-                o.add_event_listener(EVENT_TAG_ADDED, o.root._fire_global_events)
 
                 self.observable_store[uuid] = o
             else:

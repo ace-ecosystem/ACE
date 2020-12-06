@@ -362,9 +362,6 @@ class FileObservable(Observable):
         self._scaled_width = None
         self._scaled_height = None
 
-        # some directives are inherited by children
-        self.add_event_listener(EVENT_RELATIONSHIP_ADDED, self.handle_relationship_added)
-
     def load(self) -> bool:
         """Downloads the contents of the file to the local file system."""
         from saq.system.storage import get_file
