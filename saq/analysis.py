@@ -401,7 +401,7 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     KEY_UUID = 'uuid'
     KEY_IOCS = 'iocs'
 
-    def __init__(self, *args, root=None, analysis_module_type=None, observable=None, details=None, **kwargs):
+    def __init__(self, *args, root=None, analysis_module_type=None, observable=None, details=None, summary=None, **kwargs):
         super().__init__(*args, **kwargs)
 
         # unique ID
@@ -434,7 +434,7 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         # the idea here is that the analyst can read this summary and get
         # a pretty good idea of what was discovered without needing to
         # load all the details of the alert
-        self._summary = None
+        self._summary = summary or None
 
         # List of IOCs that the analysis contains
         self._iocs = IndicatorList()
@@ -457,19 +457,9 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
     def save(self):
         """Saves the current results of the Analysis."""
-
-        try:
-            self._summary = self.generate_summary()
-        except Exception as e:
-            self._summary = f"failed to generate summary for {self}: {e}"
-
         from saq.system.analysis_tracking import track_analysis_details
         track_analysis_details(self.root, self.uuid, self._details)
 
-    def submit(self):
-        """Submits this RootAnalysis for analysis."""
-        from saq.system.analysis_request import submit_analysis_request
-        return submit_analysis_request(self.create_analysis_request())
 
     def flush(self):
         """Calls save() and then clears the details property.  It must be load()ed again."""
@@ -3043,6 +3033,11 @@ class RootAnalysis(Analysis):
         """Creates and returns a new saq.system.analysis_request.AnalysisRequest object from this RootAnalysis."""
         from saq.system.analysis_request import AnalysisRequest
         return AnalysisRequest(self)
+
+    def submit(self):
+        """Submits this RootAnalysis for analysis."""
+        from saq.system.analysis_request import submit_analysis_request
+        return submit_analysis_request(self.create_analysis_request())
 
     def analysis_completed(self, observable: Observable, amt: AnalysisModuleType) -> bool:
         """Returns True if the given analysis has been completed for the given observable."""
