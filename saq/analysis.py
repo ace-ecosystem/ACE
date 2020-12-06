@@ -431,7 +431,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
     KEY_UUID = 'uuid'
 
-    KEY_COMPLETED = 'completed' # boolean to indicate that the analysis has completed
     KEY_ALERTED = 'alerted' # boolean to indicate that this analysis has been submitted as an alert
 
     KEY_IOCS = 'iocs'
@@ -620,7 +619,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
             Analysis.KEY_OBSERVABLES: [o.id for o in self.observables],
             TaggableObject.KEY_TAGS: self.tags,
             Analysis.KEY_SUMMARY: self.summary,
-            Analysis.KEY_COMPLETED: self.completed,
             Analysis.KEY_ALERTED: self.alerted,
             Analysis.KEY_IOCS: self.iocs.json,
             Analysis.KEY_UUID: self.uuid,
@@ -645,10 +643,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
         if Analysis.KEY_SUMMARY in value:
             self.summary = value[Analysis.KEY_SUMMARY]
-
-        if Analysis.KEY_COMPLETED in value:
-            # NOTE that we use the underscore value here so as to not trigger an event
-            self._completed = value[Analysis.KEY_COMPLETED]
 
         if Analysis.KEY_ALERTED in value:
             self.alerted = value[Analysis.KEY_ALERTED]
