@@ -31,12 +31,15 @@ class AnalysisTrackingInterface(ACESystemInterface):
     def delete_analysis_details(self, uuid: str) -> bool:
         raise NotImplementedError()
 
-def get_root_analysis(uuid: str) -> Union[RootAnalysis, None]:
-    """Returns the loaded RootAnalysis for the given uuid, or None if it does not exist."""
-    assert isinstance(uuid, str)
+def get_root_analysis(root: Union[RootAnalysis, str]) -> Union[RootAnalysis, None]:
+    """Returns the loaded RootAnalysis for the given RootAnalysis or uuid, or None if it does not exist."""
+    assert isinstance(root, RootAnalysis) or isinstance(uuid, str)
 
-    logging.debug(f"getting root analysis uuid {uuid}")
-    root_dict = get_system().analysis_tracking.get_root_analysis(uuid)
+    if isinstance(root, RootAnalysis):
+        root = root.uuid
+
+    logging.debug(f"getting root analysis uuid {root}")
+    root_dict = get_system().analysis_tracking.get_root_analysis(root)
     if root_dict is None:
         return None
 

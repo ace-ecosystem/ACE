@@ -50,12 +50,13 @@ class Lockable():
     def lock(self, timeout=None, lock_timeout=None):
         lock_result = None
         try:
-            self.lock_owner_id = default_owner_id()
-            lock_result = acquire(self.lock_id, self.lock_owner_id, timeout=timeout, lock_timeout=lock_timeout)
+            owner_id = default_owner_id()
+            lock_result = acquire(self.lock_id, owner_id, timeout=timeout, lock_timeout=lock_timeout)
 
             if not lock_result:
                 raise LockAcquireFailed()
             else:
+                self.lock_owner_id = owner_id
                 yield lock_result
         finally:
             if lock_result:
@@ -81,7 +82,7 @@ class Lockable():
 # get_owner_wait_target(P2) = L2 (in between acquire and clear wait target)
 
 def check_deadlock(lock_id: str, requestor_id: str, chain=None):
-    assert isinstance(lock_id, str)
+    assert lock_id is None or isinstance(lock_id, str)
     assert isinstance(requestor_id, str)
 
     if chain is None:

@@ -219,6 +219,7 @@ def clear_tracking_by_analysis_module_type(amt: AnalysisModuleType):
 
 def submit_analysis_request(ar: AnalysisRequest):
     """Submits the given AnalysisRequest to the appropriate queue for analysis."""
+    from saq.system.inbound import process_analysis_request
     assert isinstance(ar, AnalysisRequest)
     assert isinstance(ar.root, RootAnalysis)
 
@@ -226,6 +227,11 @@ def submit_analysis_request(ar: AnalysisRequest):
     ar.status = TRACKING_STATUS_QUEUED
     track_analysis_request(ar)
 
+    # if this is a RootAnalysis request then we just process it here (there is no inbound queue for root analysis)
+    if ar.is_root_analysis_request:
+        return process_analysis_request(ar)
+
+    # otherwise we assign this request to the appropriate work queue based on the amt
     # NOTE that we bypass the get_work_queue call since that checks the module version
     work_queue = get_system().work_queue.get_work_queue(ar.analysis_module_type)
     if work_queue is None:

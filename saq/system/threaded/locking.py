@@ -142,15 +142,20 @@ class ThreadedLockingInterface(LockingInterface):
     def release(self, lock_id: str, owner_id: str) -> bool:
         lock = self.locks.get(lock_id)
         if not lock:
+            logging.debug(f"attempt to release unknown lock {lock_id} by {owner_id}")
             return False
 
         if self.get_lock_owner(lock_id) != owner_id:
+            logging.debug(f"attempt to release unowned lock {lock_id} by {owner_id}")
+            breakpoint()
             return False
 
         result = lock.release()
         if result:
             logging.debug(f"lock {lock_id} released by {owner_id}")
             self.current_locks.remove(lock_id)
+        else:
+            logging.debug(f"failed to release {lock_id} by {owner_id}")
 
         return result
 

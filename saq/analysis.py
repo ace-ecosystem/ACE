@@ -554,6 +554,11 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         from saq.system.analysis_tracking import track_analysis_details
         track_analysis_details(self.root, self.uuid, self._details)
 
+    def submit(self):
+        """Submits this RootAnalysis for analysis."""
+        from saq.system.analysis_request import submit_analysis_request
+        return submit_analysis_request(self.create_analysis_request())
+
     def flush(self):
         """Calls save() and then clears the details property.  It must be load()ed again."""
         self.save()

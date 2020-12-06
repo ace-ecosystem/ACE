@@ -3,7 +3,10 @@
 # full ACE system testing
 #
 
+import logging
+
 import uuid
+import threading
 
 from saq.analysis import AnalysisModuleType, RootAnalysis, Analysis, Observable
 from saq.constants import *
@@ -11,6 +14,7 @@ from saq.system.constants import *
 from saq.system.analysis_module import register_analysis_module_type
 from saq.system.analysis_request import AnalysisRequest, submit_analysis_request, get_analysis_request
 from saq.system.analysis_tracking import get_root_analysis
+from saq.system.locking import LockAcquireFailed
 from saq.system.inbound import process_analysis_request
 from saq.system.work_queue import get_next_analysis_request
 
@@ -190,3 +194,44 @@ def test_expected_status():
 
     # now this request should not be tracked anymore
     assert get_analysis_request(request_id) is None
+
+@pytest.mark.system
+def test_analysis_request_locking():
+    owner_uuid = str(uuid.uuid4())
+    assert register_analysis_module_type(amt := AnalysisModuleType(F_TEST, ''))
+
+    root = RootAnalysis()
+    observable = root.add_observable(F_TEST, 'test')
+    root.submit()
+
+    root = get_root_analysis(root)
+    assert root
+    observable = root.get_observable(observable)
+    assert observable
+    request_id = observable.get_analysis_request_id(amt)
+    assert request_id
+    request = get_analysis_request(request_id)
+    assert request
+
+    # a root analysis with a observable has been submitted and we've got a reference to the request
+
+    def _lock(request, event):
+        with request.lock():
+            event.wait(3)
+
+    # lock the request on another thread
+    event = threading.Event()
+    t = threading.Thread(target=_lock, args=(request, event))
+    t.start()
+
+    # try to lock the request on the main thread
+    with pytest.raises(LockAcquireFailed):
+        work_request = get_next_analysis_request(owner_uuid, amt, 0)
+
+    # release the lock
+    event.set()
+    t.join(3)
+
+    # now we should be able to get the request
+    work_request = get_next_analysis_request(owner_uuid, amt, 0)
+    assert work_request
