@@ -430,8 +430,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     KEY_TYPE = 'type'
 
     KEY_UUID = 'uuid'
-    KEY_FILE_FORMAT = 'file_format'
-    KEY_FILE_PATH = 'file_path'
 
     KEY_COMPLETED = 'completed' # boolean to indicate that the analysis has completed
     KEY_ALERTED = 'alerted' # boolean to indicate that this analysis has been submitted as an alert
@@ -621,8 +619,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
             Analysis.KEY_TYPE: self.type.to_dict() if self.type else None,
             Analysis.KEY_OBSERVABLES: [o.id for o in self.observables],
             TaggableObject.KEY_TAGS: self.tags,
-            #Analysis.KEY_DETAILS: {
-                #Analysis.KEY_FILE_PATH: self.external_details_path },
             Analysis.KEY_SUMMARY: self.summary,
             Analysis.KEY_COMPLETED: self.completed,
             Analysis.KEY_ALERTED: self.alerted,
@@ -644,10 +640,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         if Analysis.KEY_OBSERVABLES in value:
             # and then we un-serialize them back when we load from JSON
             self.observables = value[Analysis.KEY_OBSERVABLES]
-
-        #if Analysis.KEY_DETAILS in value:
-            #if Analysis.KEY_FILE_PATH in value[Analysis.KEY_DETAILS]:
-                #self.external_details_path = value[Analysis.KEY_DETAILS][Analysis.KEY_FILE_PATH]
 
         self.details = None
 
