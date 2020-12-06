@@ -1888,6 +1888,9 @@ def get_valid_alert_queues():
 @analysis.route('/metrics', methods=['GET', 'POST'])
 @login_required
 def metrics():
+    import numpy as np
+    import pandas_bokeh
+
     if not saq.CONFIG['gui'].getboolean('display_metrics'):
         # redirect to index
         return redirect(url_for('analysis.index'))
@@ -1930,6 +1933,7 @@ def metrics():
     alert_type_count_breakdown = False
     selected_companies_map = {}
     tables = []
+    html_plots = []
 
     # default business hours
     # Use the SLA config section, for now.
@@ -1999,6 +2003,37 @@ def metrics():
                 for stat in metric_alert_stats:
                     alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
                     tables.append(alert_stat_map[stat])
+                    p = alert_stat_map[stat].plot_bokeh(kind="line",
+                                                        show_figure=False,
+                                                        legend="top_left",
+                                                        toolbar_location="above",
+                                                        figsize=(900,600),
+                                                        title=FRIENDLY_STAT_NAME_MAP[stat],
+                                                        xlabel="Month",
+                                                        ylabel="Number of Alerts")
+                    # override legend defaults
+                    p.legend.background_fill_alpha = 0
+                    p.legend.border_line_alpha = 0
+                    if 'time' in stat:
+                        p.yaxis.axis_label = "Hours"
+                    html_plots.append(pandas_bokeh.embedded_html(p))
+
+                # over-all alert quantity plot
+                """
+                if 'alert_count' in metric_alert_stats:
+                    p = alert_stat_map['alert_count'].plot_bokeh(kind="line",
+                                                                show_figure=False,
+                                                                legend="top_left",
+                                                                toolbar_location="above",
+                                                                figsize=(900,600),
+                                                                title="Alert Quantities by Disposition",
+                                                                xlabel="Month",
+                                                                ylabel="Number of Alerts")
+                    # override legend defaults
+                    p.legend.background_fill_alpha = 0
+                    p.legend.border_line_alpha = 0
+                    html_plots.append(pandas_bokeh.embedded_html(p))
+                """
 
             if alert_target == 'alert_types':
                 with get_db_connection() as db:
@@ -2105,6 +2140,7 @@ def metrics():
 
     return render_template(
         'analysis/metrics.html',
+        html_plots = html_plots,
         filter_state=filter_state,
         valid_alert_stats=reversed(VALID_ALERT_STATS),
         friendly_stat_name_map=FRIENDLY_STAT_NAME_MAP,

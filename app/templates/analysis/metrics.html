@@ -262,6 +262,10 @@
   </div>
   {% endif %}
   <center>
+  {% for plot in html_plots %}
+      {{plot|safe}}
+  {% endfor %}
+  <br>
   <h4>{{ query }}</h4>
   {% for table in tables %}
       <!--div class="row">
