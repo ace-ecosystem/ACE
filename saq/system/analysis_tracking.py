@@ -52,7 +52,7 @@ def track_root_analysis(root: RootAnalysis):
     get_system().analysis_tracking.track_root_analysis(root.uuid, root.json)
 
 def delete_root_analysis(root: Union[RootAnalysis, str]) -> bool:
-    assert isinstance(root, RootAnalysis) or isinstance(uuid, str)
+    assert isinstance(root, RootAnalysis) or isinstance(root, str)
 
     if isinstance(root, RootAnalysis):
         root = root.uuid

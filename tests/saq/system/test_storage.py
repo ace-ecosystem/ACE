@@ -56,6 +56,20 @@ def test_get_store_delete_content(input_data, name, meta, tmpdir):
     assert get_content_bytes(sha256) is None
     assert get_content_stream(sha256) is None
 
+@pytest.mark.integration
+def test_store_duplicate(tmpdir):
+    path = str(tmpdir / 'test.txt')
+    with open(path, 'w') as fp:
+        fp.write('Hello, world!')
+
+    # store the file content
+    sha256 = store_file(path)
+    assert sha256
+
+    # then try to store it again
+    sha256 = store_file(path)
+    assert sha256
+
 @pytest.mark.unit
 def test_store_get_file(tmpdir):
     path = str(tmpdir / 'test.txt')
