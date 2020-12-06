@@ -63,12 +63,22 @@ def test_store_duplicate(tmpdir):
         fp.write('Hello, world!')
 
     # store the file content
-    sha256 = store_file(path)
+    sha256 = store_file(path, custom={'a': '1'})
     assert sha256
 
+    previous_meta = get_content_meta(sha256)
+    assert previous_meta
+
     # then try to store it again
-    sha256 = store_file(path)
+    sha256 = store_file(path, custom={'a': '2'})
     assert sha256
+    current_meta = get_content_meta(sha256)
+
+    # the current meta should be newer-ish than the previous meta
+    assert current_meta.insert_date >= previous_meta.insert_date
+
+    # and the custom dict should have changed
+    assert current_meta.custom['a'] == '2'
 
 @pytest.mark.unit
 def test_store_get_file(tmpdir):
