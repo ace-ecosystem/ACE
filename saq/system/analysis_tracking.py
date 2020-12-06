@@ -51,11 +51,14 @@ def track_root_analysis(root: RootAnalysis):
     logging.debug(f"tracking {root}")
     get_system().analysis_tracking.track_root_analysis(root.uuid, root.json)
 
-def delete_root_analysis(uuid: str) -> bool:
-    assert isinstance(uuid, str)
+def delete_root_analysis(root: Union[RootAnalysis, str]) -> bool:
+    assert isinstance(root, RootAnalysis) or isinstance(uuid, str)
 
-    logging.debug(f"deleting RootAnalysis with uuid {uuid}")
-    return get_system().analysis_tracking.delete_root_analysis(uuid)
+    if isinstance(root, RootAnalysis):
+        root = root.uuid
+
+    logging.debug(f"deleting RootAnalysis with uuid {root}")
+    return get_system().analysis_tracking.delete_root_analysis(root)
 
 def get_analysis_details(uuid: str) -> Any:
     assert isinstance(uuid, str)

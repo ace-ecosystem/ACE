@@ -1,5 +1,8 @@
+THOUGHTS
+* test store same file multiple times
+
 I AM HERE
-* figuring out where logic for  analysis request in root should go
+* adjusting tracking to keep track of what analysis points to what files
 
 NOTES FROM REVIEWING EXISTING ENGINE
 * get rid of fetch_tags() function call

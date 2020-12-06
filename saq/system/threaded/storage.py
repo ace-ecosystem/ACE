@@ -1,11 +1,13 @@
-from dataclasses import dataclass
-from typing import Union, Optional
+import datetime
 import hashlib
 import io
 import os, os.path
 
+from dataclasses import dataclass
+from typing import Union, Optional, Iterator
+
 from saq.system import ACESystemInterface
-from saq.system.storage import StorageInterface, ContentMetadata
+from saq.system.storage import StorageInterface, ContentMetadata, has_valid_root_reference
 
 class ThreadedStorageInterface(ACESystemInterface):
 
@@ -41,6 +43,14 @@ class ThreadedStorageInterface(ACESystemInterface):
         m.update(data)
         sha256 = m.hexdigest().lower()
 
+        # does this content already exist?
+        existing_meta = self.get_content_meta(sha256)
+        if existing_meta:
+            # append any additional root uuids
+            for root in existing_meta.roots:
+                if root not in meta.roots:
+                    meta.roots.append(root)
+
         meta.size = len(data)
         meta.sha256 = sha256
         self.content[sha256] = meta
@@ -72,6 +82,26 @@ class ThreadedStorageInterface(ACESystemInterface):
             return True
 
         return False
+
+    def iter_expired_content(self) -> Iterator[ContentMetadata]:
+        expired_meta = []
+        for sha256, meta in self.content.items():
+            # does this content not expire?
+            if meta.expiration_date is None:
+                continue
+
+            # is this content not expired yet?
+            if meta.expiration_date > datetime.datetime.now():
+                continue
+
+            # are there still valid root analysis references?
+            if has_valid_root_reference(meta):
+                continue
+
+            # otherwise it's ready to expire
+            expired_meta.append(meta)
+
+        return iter(expired_meta)
 
     def reset(self):
         self.content = {}

@@ -12,6 +12,7 @@ def test_file_observable_download(tmpdir):
     with open(path, 'w') as fp:
         fp.write('test')
 
+    # create a root analysis and add a file to it
     root = RootAnalysis()
     file_observable = root.add_file(path)
     root.save()

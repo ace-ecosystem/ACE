@@ -7,9 +7,11 @@ import os.path
 import shutil
 
 from dataclasses import dataclass, field
-from typing import Union, Optional
+from typing import Union, Optional, Iterator
 
+from saq.analysis import RootAnalysis
 from saq.system import ACESystemInterface, get_system
+from saq.system.analysis_tracking import get_root_analysis
 
 @dataclass
 class ContentMetadata:
@@ -31,11 +33,14 @@ class ContentMetadata:
     expiration_date: Union[datetime.datetime, None] = None
     # dict for storing any required custom properties of the content
     custom: dict = field(default_factory=dict)
+    # the list of RootAnalysis UUIDs that reference this content
+    # an empty list indicates that nothing references it anymore
+    roots: list = field(default_factory=list)
 
 
 #
 # how things are actually stored is abstracted away by this interface
-# content is referenced by the sha256 of the data in hex string format
+# content is referenced by the sha256 of the data in lower case hex string format
 #
 
 class StorageInterface(ACESystemInterface):
@@ -51,10 +56,15 @@ class StorageInterface(ACESystemInterface):
     def get_content_meta(self, sha256: str) -> Union[ContentMetadata, None]:
         raise NotImplementedError()
 
+    def iter_expired_content(self) -> Iterator[ContentMetadata]:
+        raise NotImplementedError()
+
     def delete_content(self, sha256: str) -> bool:
         raise NotImplementedError()
 
 def store_content(content: Union[bytes, str, io.IOBase], meta: ContentMetadata) -> str:
+    assert isinstance(content, bytes) or isinstance(content, str) or isinstance(content, io.IOBase)
+    assert isinstance(meta, ContentMetadata)
     return get_system().storage.store_content(content, meta)
 
 def get_content_bytes(sha256: str) -> Union[bytes, None]:
@@ -65,6 +75,10 @@ def get_content_stream(sha256: str) -> Union[io.IOBase, None]:
 
 def get_content_meta(sha256: str) -> Union[ContentMetadata, None]:
     return get_system().storage.get_content_meta(sha256)
+
+def iter_expired_content() -> Iterator[ContentMetadata]:
+    """Returns an iterator for all the expired content."""
+    return get_system().storage.iter_expired_content()
 
 def delete_content(sha256: str) -> bool:
     return get_system().storage.delete_content(sha256)
@@ -98,3 +112,29 @@ def get_file(sha256: str, path: Optional[str]=None) -> bool:
             shutil.copyfileobj(fp_in, fp_out)
 
     return True
+
+def has_valid_root_reference(meta: ContentMetadata) -> bool:
+    """Returns True if the given meta has a valid (existing) RootAnalysis reference."""
+    for root_uuid in meta.roots:
+        if get_root_analysis(root_uuid) is not None:
+            return True
+
+    return False
+
+def delete_expired_content() -> int:
+    """Deletes all expired content and returns the number of items deleted."""
+    count = 0
+    for meta in iter_expired_content():
+        root_exists = False
+        for root_uuid in meta.roots:
+            if get_root_analysis(root_uuid) is not None:
+                root_exists = True
+                break
+
+        if root_exists:
+            continue
+
+        if delete_content(meta.sha256):
+            count += 1
+
+    return count

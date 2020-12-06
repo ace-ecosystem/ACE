@@ -992,11 +992,11 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
         return observable
 
-    def add_file(self, path: str) -> 'FileObservable':
+    def add_file(self, path: str, **kwargs) -> 'FileObservable':
         """Utility function that adds a F_FILE_OBSERVABLE to the root analysis by passing a path to the file."""
         from saq.system.storage import store_file
         from saq.observables import FileObservable
-        return self.add_observable(FileObservable(value=store_file(path), path=path))
+        return self.add_observable(FileObservable(value=store_file(path, roots=[self.uuid], **kwargs), path=path))
 
     def add_ioc(self, type_: str, value: str, status: str = 'New', tags: List[str] = []):
         self.iocs.append(Indicator(type_, value, status=status, tags=tags))
