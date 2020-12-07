@@ -66,6 +66,7 @@ class DetectionPoint(object):
         dp.json = dp_json
         return dp
 
+    # XXX move to gui code
     @property
     def display_description(self):
         if isinstance(self.description, str):
@@ -114,11 +115,6 @@ class DetectableObject():
     def has_detection_points(self):
         """Returns True if this object has at least one detection point, False otherwise."""
         return len(self._detections) != 0
-
-    @property
-    def is_suspect(self):
-        """Returns True if this object has one or more detection points."""
-        return self.has_detection_points()
 
     def add_detection_point(self, description, details=None):
         """Adds the given detection point to this object."""
@@ -852,17 +848,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         """Returns a human readable summary of the analysis.  Returns None if the analysis is not to be displayed in the GUI."""
         return None
 
-    def is_suspect(self):
-        """Returns True if this Analysis or any child Observables have any detection points."""
-        if super().is_suspect:
-            return True
-
-        for o in self.observables:
-            if o.has_detection_points():
-                return True
-
-        return False
-
     def always_visible(self):
         """If this returns True then this Analysis is always visible in the GUI."""
         return False
@@ -1081,20 +1066,6 @@ class Observable(TaggableObject, DetectableObject):
             return ''
 
         return self.time.strftime(event_time_format_tz)
-
-    @property
-    def is_suspect(self):
-        """Returns True if this Observable or any child Analysis has any detection points."""
-        if super().is_suspect:
-            return True
-
-        for a in self._analysis.values():
-            if not a:
-                continue
-            if a.has_detection_points():
-                return True
-
-        return False
 
     def always_visible(self):
         """If this returns True then this Analysis is always visible in the GUI."""

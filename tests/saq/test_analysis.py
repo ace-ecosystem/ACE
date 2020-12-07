@@ -1,6 +1,6 @@
 # vim: sw=4:ts=4:et
 
-from saq.analysis import RootAnalysis, Analysis, AnalysisModuleType
+from saq.analysis import RootAnalysis, Analysis, AnalysisModuleType, DetectionPoint, DetectableObject
 from saq.system.analysis_module import register_analysis_module_type
 from saq.system.analysis_request import AnalysisRequest
 from saq.constants import F_TEST
@@ -13,6 +13,25 @@ from saq.system.analysis_tracking import (
 import pytest
 
 TEST_DETAILS = { 'hello': 'world' }
+
+@pytest.mark.unit
+def test_detection_point_serialization():
+    dp = DetectionPoint('description', {})
+    dp == DetectionPoint.from_json(dp.json)
+
+@pytest.mark.unit
+def test_detectable_object():
+    target = DetectableObject()
+    assert not target.has_detection_points()
+    assert not target.detections
+
+    target.add_detection_point('Somethign was detected.', { 'detection': 'details' })
+    assert target.has_detection_points()
+    assert target.detections
+
+    target.clear_detection_points()
+    assert not target.has_detection_points()
+    assert not target.detections
 
 @pytest.mark.integration
 def test_save_analysis():
