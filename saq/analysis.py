@@ -694,10 +694,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         # this may return an existing observable if we already have it
         observable = self.root.record_observable(observable)
 
-        # load any user-defined tag mappings from the database
-        # TODO get rid of this
-        observable.fetch_tags()
-
         if observable not in self.observables:
             self.observables.append(observable)
 
@@ -712,10 +708,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         observable = self.root.record_observable_by_spec(o_type, o_value, o_time=o_time)
         if observable is None:
             return None
-
-        # load any user-defined tag mappings from the database
-        # TODO get rid of this
-        observable.fetch_tags()
 
         if observable not in self.observables:
             self.observables.append(observable)
@@ -1196,6 +1188,7 @@ class Observable(TaggableObject, DetectableObject):
 
         logging.debug("linked {} to {}".format(self, target))
 
+    # XXX TODO 
     @property
     def limited_analysis(self):
         return self._limited_analysis
@@ -1381,6 +1374,7 @@ class Observable(TaggableObject, DetectableObject):
 
         return self.request_tracking.get(amt, None)
 
+    # we override add_tag to ensure that linked Observable objects also get the same tags
     def add_tag(self, *args, **kwargs):
         super().add_tag(*args, **kwargs)
         for target in self.links:
@@ -1388,57 +1382,8 @@ class Observable(TaggableObject, DetectableObject):
 
         return self
 
-    # typically tag mapping is looked up using the type and value of the observable
-    # in some cases we actually want to look up something else
-
-    @property
-    def tag_mapping_type(self):
-        return self.type
-
-    @property
-    def tag_mapping_value(self):
-        return self.value
-
-    @property
-    def tag_mapping_md5_hex(self):
-        return self.md5_hex
-
-    # XXX get rid of this
-    def fetch_tags(self):
-        """Fetches user created tags for this observable from the database and adds them to the observables."""
-
-        # don't want to do this more than once
-        if self._tags_fetched:
-            return
-
-        # bail if we don't have what we need
-        if self.tag_mapping_type is None or self.tag_mapping_md5_hex is None:
-            return
-
-        from saq.database import get_db_connection
-        try:
-            with get_db_connection() as db:
-                c = db.cursor()
-                c.execute("""SELECT `tags`.`name`
-                             FROM observables
-                             JOIN observable_tag_mapping ON observables.id = observable_tag_mapping.observable_id
-                             JOIN tags ON observable_tag_mapping.tag_id = tags.id
-                             WHERE `observables`.`type` = %s AND `observables`.`md5` = UNHEX(%s)""", 
-                         (self.tag_mapping_type, self.tag_mapping_md5_hex))
-
-                for row in c:
-                    self.add_tag(row[0])
-
-            self._tags_fetched = True
-
-        except Exception as e:
-            # some times you won't be able to fetch the tags for an observable
-            logging.debug(f"unable to fetch tags for {self}: {e}")
-
     @property
     def analysis(self):
-        """The dict of Analysis objects executed against this Observable.
-           key = Analysis.module_path, value = Analysis or False."""
         return self._analysis
 
     @analysis.setter
@@ -1449,47 +1394,25 @@ class Observable(TaggableObject, DetectableObject):
     @property
     def all_analysis(self):
         """Returns a list of an Analysis objects executed against this Observable."""
-        # we skip over lookups that return False here
-        return [a for a in self._analysis.values() if isinstance(a, Analysis)]
-
+        return [a for a in self._analysis.values()]
 
     @property
     def children(self):
         """Returns what is considered all of the "children" of this object (in this case it is the Analysis.)"""
-        return [a for a in self.all_analysis if a]
+        return [a for a in self.all_analysis]
 
     @property
     def parents(self):
         """Returns a list of Analysis objects that have this Observable."""
         return [a for a in self.root.all_analysis if a and a.has_observable(self)]
 
-    @property
-    def dependencies(self):
-        """Returns the list of all AnalysisDependency objects targeting this Observable."""
-        return [dep for dep in self.root.dependency_tracking if dep.target_observable_id == self.id]
-
-    def add_dependency(self, source_analysis, source_analysis_instance, target_observable, target_analysis, target_analysis_instance):
-        assert inspect.isclass(source_analysis) and issubclass(source_analysis, Analysis)
-        assert source_analysis_instance is None or isinstance(source_analysis_instance, str)
-        assert isinstance(target_observable, Observable)
-        assert inspect.isclass(target_analysis) and issubclass(target_analysis, Analysis)
-        assert target_analysis_instance is None or isinstance(target_analysis_instance, str)
-        
-        self.root.add_dependency(self, source_analysis, source_analysis_instance, target_observable, target_analysis, target_analysis_instance)
-
-    def get_dependency(self, _type):
-        assert isinstance(_type, str)
-        for dep in self.dependencies:
-            if dep.target_analysis_type == _type:
-                return dep
-
-        return None
-
+    # XXX move out
     @property
     def jinja_template_path(self):
         """Return what is to be used when viewing this object via jinja."""
         return "analysis/default_observable.html"
 
+    # XXX move out
     @property
     def jinja_available_actions(self):
         """Returns a list of ObservableAction-based objects that represent what a user can do with this Observable."""
@@ -1508,23 +1431,13 @@ class Observable(TaggableObject, DetectableObject):
         # set the source of the Analysis
         analysis.observable = self
 
-        #
-        # the way we track these now changes from the "module_path" to just the "name" of the type, which should be unique
-        #
-
         # does this analysis already exist?
         if analysis.type.name in self.analysis and not (self.analysis[analysis.type.name] is analysis):
             logging.error("replacing analysis type {} with {} for {} (are you returning the correct type from generated_analysis_type()?)".format(
                 self.analysis[analysis.type.name], analysis, self))
 
-        #if analysis.module_path in self.analysis and not (self.analysis[analysis.module_path] is analysis):
-            #logging.error("replacing analysis {} with {} for {} (are you returning the correct type from generated_analysis_type()?)".format(
-                #self.analysis[analysis.module_path], analysis, self))
-
-        #self.analysis[analysis.module_path] = analysis
         self.analysis[analysis.type.name] = analysis
-
-        logging.debug("added analysis {} type {} to observable {}".format(analysis, analysis.type, self))
+        logging.debug(f"added analysis {analysis} type {analysis.type} to observable {self}")
 
     def get_analysis(self, amt: AnalysisModuleType) -> Union[Analysis, None]:
         """Returns the Analysis of the given type for this Observable, or None."""
@@ -1555,7 +1468,6 @@ class Observable(TaggableObject, DetectableObject):
                 observable = self)
 
             analysis.json = self.analysis[amt_type_name]
-
             self.analysis[amt_type_name] = analysis # replace the JSON dict with the actual object
 
     # TODO refactor
@@ -1578,11 +1490,6 @@ class Observable(TaggableObject, DetectableObject):
 
         recurse_tree(self, _search)
         return result
-
-    def tag_detection(self, source, event, tag):
-        """Adds detections points when tags are added if their score is > 0."""
-        if tag.score > 0:
-            self.add_detection_point("{} was tagged with {}".format(self, tag.name))
 
     def __str__(self):
         if self.time is not None:
