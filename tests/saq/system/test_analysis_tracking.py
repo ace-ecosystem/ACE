@@ -4,9 +4,10 @@ import uuid
 
 import pytest
 
-from saq.analysis import RootAnalysis, Observable, Analysis
+from saq.analysis import RootAnalysis, Observable, Analysis, AnalysisModuleType
 from saq.constants import F_TEST
 from saq.system import get_system
+from saq.system.analysis_module import register_analysis_module_type
 from saq.system.analysis_tracking import (
         get_analysis_details,
         track_root_analysis,
@@ -62,25 +63,22 @@ def test_track_analysis_details():
 @pytest.mark.integration
 def test_analysis_details_deleted_with_root():
     # any details associated to a root are deleted when the root is deleted
-    root = RootAnalysis()
-    root.details = TEST_DETAILS
-    track_root_analysis(root)
-    # track the details of the root analysis
-    track_analysis_details(root, root.uuid, root.details)
-    # make sure it's there
+    register_analysis_module_type(amt := AnalysisModuleType(F_TEST, ''))
+    root = RootAnalysis(details=TEST_DETAILS)
+    observable = root.add_observable(F_TEST, 'test')
+    observable.add_analysis(analysis := Analysis(root=root, analysis_module_type=amt, details=TEST_DETAILS))
+    root.save()
+
+    # make sure the details are there
     assert get_analysis_details(root.uuid) == TEST_DETAILS
+    assert get_analysis_details(analysis.uuid) == TEST_DETAILS
 
-    # mock up an analysis
-    _uuid = str(uuid.uuid4())
-    details = TEST_DETAILS
-    track_analysis_details(root, _uuid, details)
-    assert get_analysis_details(_uuid) == details
-
+    # delete the root
     assert delete_root_analysis(root.uuid)
     # root details should be gone
     assert get_analysis_details(root.uuid) is None
     # and analysis details should be gone
-    assert get_analysis_details(_uuid) is None
+    assert get_analysis_details(analysis.uuid) is None
 
 @pytest.mark.integration
 def test_delete_unknown_root():

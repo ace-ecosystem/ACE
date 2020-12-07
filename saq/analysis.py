@@ -1662,8 +1662,6 @@ class Observable(TaggableObject, DetectableObject):
 
         # set the document root for this analysis
         analysis.root = self.root
-        # XXX bad design
-        analysis.root.analysis_map[analysis.uuid] = analysis
         # set the source of the Analysis
         analysis.observable = self
 
@@ -1694,16 +1692,6 @@ class Observable(TaggableObject, DetectableObject):
         """Returns True if the analysis of the given type has been completed for this Observable."""
         return self.get_analysis(amt) is not None
 
-    # XXX this does not appear to be used
-    def analysis_exists(self, analysis_type):
-        """Returns True if an Analysis of the given type exists."""
-        for a in self.analysis.values():
-            # XXX XXX cannot compare by type any more -- need to include the instance as well
-            if type(a) == analysis_type:
-                return True
-
-        return False
-
     def _load_analysis(self):
         assert isinstance(self.analysis, dict)
 
@@ -1727,6 +1715,7 @@ class Observable(TaggableObject, DetectableObject):
 
             self.analysis[amt_type_name] = analysis # replace the JSON dict with the actual object
 
+    # TODO refactor
     def clear_analysis(self):
         """Deletes all analysis records for this observable."""
         self.analysis = {}
@@ -1905,9 +1894,6 @@ class RootAnalysis(Analysis):
 
         # set to True after load() is called
         self.is_loaded = False
-
-        # utility map to quickly look up Analysis objects
-        self.analysis_map = {}
         
     #
     # the json property is used for internal storage
@@ -2442,7 +2428,6 @@ class RootAnalysis(Analysis):
         # load the Observable references in the Analysis objects
         for analysis in self.all_analysis:
             analysis._load_observable_references()
-            self.analysis_map[analysis.uuid] = analysis
 
         # load Tag objects for analysis
         for analysis in self.all_analysis:
@@ -2676,16 +2661,6 @@ class RootAnalysis(Analysis):
 
         return other.uuid == self.uuid
 
-    def get_object(self, uuid: str) -> Union[Analysis, Observable, None]:
-        """Returns the object with the given uuid, or, None if it is not found."""
-        try:
-            return self.observable_store[uuid]
-        except KeyError:
-            try:
-                return self.analysis_map[uuid]
-            except KeyError:
-                return None
-
     @property   
     def all_analysis(self):
         """Returns the list of all Analysis performed for this Alert."""
@@ -2799,9 +2774,6 @@ class RootAnalysis(Analysis):
                 return o
 
         return None
-
-    def get_analysis(self, uuid: str) -> Analysis:
-        return self.analysis_map.get(uuid)
 
     @property
     def all_detection_points(self):
