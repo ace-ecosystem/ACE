@@ -888,9 +888,6 @@ class Observable(TaggableObject, DetectableObject):
         # reference to the RootAnalysis object
         self.root = None
 
-        # state variable gets set to True when fetch_tags is called
-        self._tags_fetched = False
-
     def track_analysis_request(self, ar: 'saq.system.analysis_request.AnalysisRequest'):
         """Tracks the request for analyze this Observable for the given type of analysis."""
         from saq.system.analysis_request import AnalysisRequest
@@ -910,15 +907,18 @@ class Observable(TaggableObject, DetectableObject):
 
         return None
 
+    # XXX moves out
     def matches(self, value):
         """Returns True if the given value matches this value of this observable.  This can be overridden to provide more advanced matching such as CIDR for ipv4."""
         return self.value == value
 
+    # XXX moves out
     @property
     def display_preview(self):
         """Returns a value that can be used by a display to preview the observation."""
         return None 
 
+    # XXX moves out
     @property
     def display_value(self):
         if isinstance(self.value, str):
@@ -929,6 +929,7 @@ class Observable(TaggableObject, DetectableObject):
         else:
             return self.value
 
+    # XXX moves out
     @property
     def display_time(self):
         if self.time is None:
@@ -936,10 +937,12 @@ class Observable(TaggableObject, DetectableObject):
 
         return self.time.strftime(event_time_format_tz)
 
+    # XXX moves out
     def always_visible(self):
         """If this returns True then this Analysis is always visible in the GUI."""
         return False
 
+    # XXX moves out
     @property
     def disposition_history(self):
         """Returns a DispositionHistory object if self.obj is an Observable, None otherwise."""
@@ -1044,32 +1047,34 @@ class Observable(TaggableObject, DetectableObject):
             self._request_tracking = value[Observable.KEY_REQUEST_TRACKING]
 
     @property
-    def id(self):
+    def id(self) -> str:
         """A unique ID for this Observable instance."""
         return self._id
 
     @id.setter
-    def id(self, value):
+    def id(self, value: str):
         assert isinstance(value, str)
         self._id = value
 
     @property
-    def type(self):
+    def type(self) -> str:
         return self._type
 
     @type.setter
-    def type(self, value):
-        #assert value in VALID_OBSERVABLE_TYPES
+    def type(self, value: str):
+        assert isinstance(value, str)
         self._type = value
 
     @property
-    def value(self):
+    def value(self) -> str:
         return self._value
 
     @value.setter
-    def value(self, value):
+    def value(self, value: str):
+        assert isinstance(value, str)
         self._value = value
 
+    # XXX what is this used for?
     @property
     def md5_hex(self):
         """Returns the hexidecimal MD5 hash of the value of this observable."""
@@ -1082,11 +1087,11 @@ class Observable(TaggableObject, DetectableObject):
         return md5_hasher.hexdigest()
 
     @property
-    def time(self):
+    def time(self) -> Union[datetime.datetime, None]:
         return self._time
 
     @time.setter
-    def time(self, value):
+    def time(self, value: Union[datetime.datetime, str, None]):
         if value is None:
             self._time = None
         elif isinstance(value, datetime.datetime):
@@ -1100,17 +1105,18 @@ class Observable(TaggableObject, DetectableObject):
             raise ValueError("time must be a datetime.datetime object or a string in the format "
                              "%Y-%m-%d %H:%M:%S %z but you passed {}".format(type(value).__name__))
 
+    # XXX can we get rid of this now?
     @property
     def time_datetime(self):
         """Returns self.time. Remains for backwards compatibility."""
         return self.time
 
     @property
-    def directives(self):
+    def directives(self) -> list[str]:
         return self._directives
 
     @directives.setter
-    def directives(self, value):
+    def directives(self, value: list[str]):
         assert isinstance(value, list)
         self._directives = value
 
@@ -1119,45 +1125,42 @@ class Observable(TaggableObject, DetectableObject):
         """Returns a list of remediation targets for the observable, by default this is an empty list."""
         return []
 
-    def add_directive(self, directive):
+    def add_directive(self, directive: str):
         """Adds a directive that analysis modules might use to change their behavior."""
-        assert isinstance(self.directives, list)
+        assert isinstance(directive, str)
         if directive not in self.directives:
             self.directives.append(directive)
-            logging.debug("added directive {} to {}".format(directive, self))
+            logging.debug(f"added directive {directive} to {self}")
 
         return self
 
-    def has_directive(self, directive):
+    def has_directive(self, directive: str) -> bool:
         """Returns True if this Observable has this directive."""
-        if self.directives:
-            return directive in self.directives
+        return directive in self.directives
 
-        return False
-
-    def remove_directive(self, directive):
+    def remove_directive(self, directive: str):
         """Removes the given directive from this observable."""
         if directive in self.directives:
             self.directives.remove(directive)
-            logging.debug("removed directive {} from {}".format(directive, self))
+            logging.debug(f"removed directive {directive} from {self}")
 
         return self
 
-    def copy_directives_to(self, target):
+    def copy_directives_to(self, target: Observable):
         """Copies all directives applied to this Observable to another Observable."""
         assert isinstance(target, Observable)
         for directive in self.directives:
             target.add_directive(directive)
 
     @property
-    def redirection(self):
+    def redirection(self) -> Union[Observable, None]:
         if not self._redirection:
             return None
 
         return self.root.observable_store[self._redirection]
 
     @redirection.setter
-    def redirection(self, value):
+    def redirection(self, value: Observable):
         assert isinstance(value, Observable)
         self._redirection = value.id
 
@@ -1166,7 +1169,7 @@ class Observable(TaggableObject, DetectableObject):
         if not self._links:
             return []
 
-        return [self.root.observable_store[x] for x in self._links]
+        return [self.root.observable_store[_id] for _id in self._links]
 
     @links.setter
     def links(self, value):
