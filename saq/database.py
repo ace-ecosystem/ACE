@@ -2567,7 +2567,7 @@ class ObservableTagIndex(Base):
     tag = relationship('saq.database.Tag', backref='observable_tag_index')
     alert = relationship('saq.database.Alert', backref='observable_tag_index')
 
-class Tag(saq.analysis.Tag, Base):
+class Tag(Base):
     
     __tablename__ = 'tags'
     __table_args__ = { 

@@ -145,73 +145,6 @@ class _JSONEncoder(json.JSONEncoder):
             logging.debug('json type {0}'.format(type(obj)))
             return super(_JSONEncoder, self).default(obj)
 
-class Tag(object):
-    """Gives a bit of metadata to an observable or analysis.  Tags defined in the configuration file are also signals for detection."""
-
-    def __init__(self, name=None, json=None):
-        if json is not None:
-            self.name = json
-        elif name is not None:
-            self.name = name
-
-        # all tags default to these values
-        self.level = 'info'
-        self.score = 0
-        self.css_class = 'label-default' # white
-
-        if self.name is None:
-            logging.error("tag has no name")
-            return
-
-        # note that a tag can have the form of tag_name:random_stuff
-        tag_name_lookup = self.name
-        if ':' in tag_name_lookup:
-            tag_name_lookup = tag_name_lookup.split(':', 1)[0]
-
-        # does this tag exist in the configuration file?
-        try:
-            if hasattr(saq, 'CONFIG'):
-                self.level = saq.CONFIG['tags'][tag_name_lookup]
-        except KeyError:
-            self.level = TAG_LEVEL_INFO
-
-        if self.level == TAG_LEVEL_FALSE_POSITIVE:
-            self.score = 0
-        elif self.level == TAG_LEVEL_INFO:
-            self.score = 0
-        elif self.level == TAG_LEVEL_WARNING:
-            self.score = 1
-        elif self.level == TAG_LEVEL_ALERT:
-            self.score = 3
-        elif self.level == TAG_LEVEL_CRITICAL:
-            self.score = 10
-
-        try:
-            if hasattr(saq, 'CONFIG'):
-                self.css_class = saq.CONFIG['tag_css_class'][self.level]
-        except KeyError:
-            logging.error("invalid tag level {}".format(self.level))
-    
-    @property
-    def json(self):
-        return self.name
-
-    @json.setter
-    def json(self, value):
-        self.name = value
-
-    def __str__(self):
-        return self.name
-
-    def __hash__(self):
-        return self.name.__hash__()
-
-    def __eq__(self, other):
-        if not isinstance(other, Tag):
-            return False
-
-        return self.name == other.name
-
 class TaggableObject():
     """A mixin class that adds a tags property that is a list of tags assigned to this object."""
 
@@ -242,17 +175,16 @@ class TaggableObject():
     @tags.setter
     def tags(self, value):
         assert isinstance(value, list)
-        assert all([isinstance(i, str) or isinstance(i, Tag) for i in value])
+        assert all([isinstance(i, str) for i in value])
         self._tags = value
 
-    def add_tag(self, tag):
+    def add_tag(self, tag: str) -> 'TaggableObject':
         assert isinstance(tag, str)
-        if tag in [t.name for t in self.tags]:
+        if tag in self.tags:
             return self
 
-        t = Tag(name=tag)
-        self.tags.append(t)
-        logging.debug("added {} to {}".format(t, self))
+        self.tags.append(tag)
+        logging.debug(f"added {tag} to {self}")
         return self
 
     def clear_tags(self):
@@ -260,8 +192,9 @@ class TaggableObject():
 
     def has_tag(self, tag_value):
         """Returns True if this object has this tag."""
-        return tag_value in [x.name for x in self.tags]
+        return tag_value in self.tags
 
+    # XXX this moves elsewhere
     @property
     def whitelisted(self):
         """Returns True if this observable has been whitelisted."""
