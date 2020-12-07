@@ -731,22 +731,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     def add_ioc(self, type_: str, value: str, status: str = 'New', tags: List[str] = []):
         self.iocs.append(Indicator(type_, value, status=status, tags=tags))
 
-    # TODO refactor this
-    def tag_detection(self, source, event, tag):
-        """Adds detections points when tags are added if their score is > 0."""
-        if tag.score > 0:
-            self.add_detection_point("{} was tagged with {}".format(self, tag.name))
-
-    # TODO refactor this
-    def observable_detection(self, source, event, observable):
-        """Adds detection points when yara rules and crits indicators are added as observables."""
-        from saq.observables import YaraRuleObservable, IndicatorObservable
-
-        #if isinstance(observable, YaraRuleObservable):
-            #source.add_detection_point("{} matched yara rule {}".format(source.observable, observable.value))
-        if isinstance(observable, IndicatorObservable):
-            source.add_detection_point("{} contains indicator {}".format(source, observable.value))
-
     # TODO refactor
     def __str__(self):
         return '{}'.format(type(self).__name__)
@@ -773,57 +757,10 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     ##########################################################################
     # OVERRIDABLES 
 
-    def initialize_details(self):
-        """REQUIRED: Initializes the details property."""
-        raise NotImplementedError()
-
-    def generate_summary(self):
-        """Returns a human readable summary of the analysis.  Returns None if the analysis is not to be displayed in the GUI."""
-        return None
-
+    # XXX moves to the gui
     def always_visible(self):
         """If this returns True then this Analysis is always visible in the GUI."""
         return False
-
-    def upgrade(self):
-        """Override this function to implement any upgrade routines for the details of the analysis."""
-        return None
-
-class ReadOnlyAnalysis(Analysis):
-    """Represents an Analysis that cannot be modified."""
-
-    def save(self):
-        pass
-
-    def flush(self):
-        pass
-
-    def reset(self):
-        pass
-
-    def discard_details(self):
-        pass
-
-    def clear_observables(self):
-        pass
-
-    def add_observable(self, *args, **kwargs):
-        pass
-
-    def _add_observable(self, observable):
-        pass
-
-    def _add_observable_by_spec(self, o_type, o_value, o_time=None):
-        pass
-
-    def tag_detection(self, source, event, tag):
-        pass
-
-class DeprecatedAnalysis(ReadOnlyAnalysis):
-    """Used when the data.json references an Analysis class that is no longer available."""
-
-class ErrorAnalysis(ReadOnlyAnalysis):
-    """Used when an Analysis object fails to load as a fallback."""
 
 class Relationship(object):
     """Represents a relationship to another object."""
@@ -875,6 +812,7 @@ class Relationship(object):
         if Relationship.KEY_RELATIONSHIP_TARGET in value:
             self.target = value[Relationship.KEY_RELATIONSHIP_TARGET]
 
+# XXX moves out 
 class DispositionHistory(collections.abc.MutableMapping):
     def __init__(self, observable):
         self.observable = observable
@@ -946,8 +884,6 @@ class Observable(TaggableObject, DetectableObject):
             self._relationships = [] # [ Relationship ]
             self._grouping_target = False
             self._request_tracking = {} # key = AnalysisModuleType.name, value = AnalysisRequest.id
-
-        self.cache_id = str(uuid.uuid3(uuid.NAMESPACE_X500, f"{self.type}:{self.value}"))
 
         # reference to the RootAnalysis object
         self.root = None
