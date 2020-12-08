@@ -1658,7 +1658,6 @@ class RootAnalysis(Analysis):
     KEY_TYPE = 'type'
     KEY_DESCRIPTION = 'description'
     KEY_EVENT_TIME = 'event_time'
-    KEY_ACTION_COUNTERS = 'action_counters'
     KEY_DETAILS = 'details'
     KEY_OBSERVABLE_STORE = 'observable_store'
     KEY_NAME = 'name'
@@ -1689,7 +1688,6 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_TYPE: self.alert_type,
             RootAnalysis.KEY_DESCRIPTION: self.description,
             RootAnalysis.KEY_EVENT_TIME: self.event_time,
-            RootAnalysis.KEY_ACTION_COUNTERS: self.action_counters,
             #RootAnalysis.KEY_DETAILS: self.details, <-- this is saved externally
             RootAnalysis.KEY_OBSERVABLE_STORE: self.observable_store,
             RootAnalysis.KEY_NAME: self.name,
@@ -1726,8 +1724,6 @@ class RootAnalysis(Analysis):
             self.description = value[RootAnalysis.KEY_DESCRIPTION]
         if RootAnalysis.KEY_EVENT_TIME in value:
             self.event_time = value[RootAnalysis.KEY_EVENT_TIME]
-        if RootAnalysis.KEY_ACTION_COUNTERS in value:
-            self.action_counters = value[RootAnalysis.KEY_ACTION_COUNTERS]
         if RootAnalysis.KEY_NAME in value:
             self.name = value[RootAnalysis.KEY_NAME]
         if RootAnalysis.KEY_REMEDIATION in value:
@@ -1870,31 +1866,6 @@ class RootAnalysis(Analysis):
         pass
 
     @property
-    def action_counters(self):
-        """A dict() with generic key:value pairs used by the modules to limit specific actions."""
-        return self._action_counters
-
-    @action_counters.setter
-    def action_counters(self, value):
-        assert value is None or isinstance(value, dict)
-        self._action_counters = value
-
-    def get_action_counter(self, value):
-        """Get the current value of an action counter.  Returns 0 if the action counter doesn't exist yet."""
-        try:
-            return self.action_counters[value]
-        except KeyError:
-            return 0
-
-    def increment_action_counter(self, value):
-        """Increment the value of an action counter.  Creates a new one if needed."""
-        if value not in self.action_counters:
-            self.action_counters[value] = 0
-
-        self.action_counters[value] += 1
-        logging.debug("action counter {} for {} incremented to {}".format(value, self, self.action_counters[value]))
-
-    @property
     def observable_store(self):
         """Hash of the actual Observable objects generated during the analysis of this Alert.  key = uuid, value = Observable."""
         return self._observable_store
@@ -2020,11 +1991,6 @@ class RootAnalysis(Analysis):
 
         return self.record_observable(observable)
 
-    def schedule(self, exclusive_uuid=None):
-        """See saq.database.add_workload."""
-        from saq.database import add_workload
-        add_workload(self, exclusive_uuid=exclusive_uuid)
-
     def save(self):
         from saq.system.analysis_tracking import track_root_analysis
         track_root_analysis(self)
@@ -2038,6 +2004,7 @@ class RootAnalysis(Analysis):
         Analysis.save(self)
         return True
 
+    # XXX refactor
     def flush(self):
         """Calls Analysis.flush on all Analysis objects in this RootAnalysis."""
         #logging.debug("called RootAnalysis.flush() on {}".format(self))
@@ -2058,6 +2025,7 @@ class RootAnalysis(Analysis):
         freed_items = gc.collect()
         #logging.debug("{} items freed by gc".format(freed_items))
 
+    # XXX don't think we need this any more
     def merge(self, target_analysis, other):
         """Merges the Observables and Analysis of an existing RootAnalysis into the target Analysis object."""
         assert isinstance(target_analysis, Analysis)
@@ -2179,14 +2147,6 @@ class RootAnalysis(Analysis):
         for analysis in self.all_analysis:
             analysis._load_observable_references()
 
-        # load Tag objects for analysis
-        for analysis in self.all_analysis:
-            analysis.tags = [Tag(json=t) for t in analysis.tags]
-
-        # load Tag objects for observables
-        for observable in self.observable_store.values():
-            observable.tags = [Tag(json=t) for t in observable.tags]
-
         # load DetectionPoints
         for analysis in self.all_analysis:
             analysis.detections = [DetectionPoint.from_json(dp) for dp in analysis.detections]
@@ -2221,6 +2181,7 @@ class RootAnalysis(Analysis):
         for uuid in invalid_uuids:
             del self.observable_store[uuid]
 
+    # XXX reset
     def reset(self):
         """Removes analysis, dispositions and any observables that did not originally come with the alert."""
         from saq.database import acquire_lock, release_lock, LockedException
@@ -2237,6 +2198,7 @@ class RootAnalysis(Analysis):
             if lock_uuid:
                 release_lock(self.uuid, lock_uuid)
 
+    # XXX refactor
     def _reset(self):
         from subprocess import Popen
 
@@ -2293,6 +2255,7 @@ class RootAnalysis(Analysis):
         p = Popen(['find', abs_path(self.storage_dir), '-type', 'd', '-empty', '-delete'])
         p.wait()
 
+    # XXX not quite sure we really need this but refactor if we do
     def archive(self):
         """Removes the details of analysis and external files.  Keeps observables and tags."""
         from subprocess import Popen
@@ -2356,28 +2319,6 @@ class RootAnalysis(Analysis):
         logging.debug("removing empty directories inside {}".format(self.storage_dir))
         p = Popen(['find', os.path.join(saq.SAQ_HOME, self.storage_dir), '-type', 'd', '-empty', '-delete'])
         p.wait()
-
-    def move(self, dest_dir):
-        """Moves the contents of self.storage_dir into dest_dir."""
-        assert dest_dir
-        assert self.storage_dir
-
-        # we must be locked for this to work
-        #if not self.is_locked():
-            #raise RuntimeError("tried to move unlocked analysis {}".format(self))
-
-        if os.path.exists(dest_dir):
-            raise RuntimeError("destination directory {} already exists".format(dest_dir))
-
-        # move the storage directory
-        shutil.move(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir), dest_dir)
-
-        # also move the lock
-        lock_path = '{}.lock'.format(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir))
-        shutil.move(lock_path, dest_dir)
-
-        logging.debug("moved {} to {}".format(self.storage_dir, dest_dir))
-        self.storage_dir = dest_dir
 
     def __del__(self):
         # make sure that any remaining storage directories are wiped out
@@ -2443,11 +2384,6 @@ class RootAnalysis(Analysis):
                 iocs.append(ioc)
 
         return iocs
-
-    def get_analysis_by_type(self, a_type):
-        """Returns the list of all Analysis of a given type()."""
-        assert inspect.isclass(a_type) and issubclass(a_type, Analysis)
-        return [a for a in self.all_analysis if isinstance(a, a_type)]
 
     @property
     def all_observables(self):
@@ -2536,14 +2472,6 @@ class RootAnalysis(Analysis):
 
         return result
 
-    def calculate_priority(self):
-        """Calculates and returns the priority score for the Alert."""
-        score = 0
-        for tag in self.all_tags:
-            score += tag.score
-
-        return score
-
     def has_detections(self):
         """Returns True if this RootAnalysis could become an Alert (has at least one DetectionPoint somewhere.)"""
         if self.has_detection_points():
@@ -2555,6 +2483,7 @@ class RootAnalysis(Analysis):
             if o.has_detection_points():
                 return True
 
+    # XXX move out
     @property
     def event_name_candidate(self):
         """Generates and returns an event name based on the observables in this alert."""
