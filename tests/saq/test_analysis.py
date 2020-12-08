@@ -1,6 +1,9 @@
 # vim: sw=4:ts=4:et
 
-from saq.analysis import RootAnalysis, Analysis, AnalysisModuleType, DetectionPoint, DetectableObject
+import datetime
+import json
+
+from saq.analysis import RootAnalysis, Analysis, AnalysisModuleType, DetectionPoint, DetectableObject, _JSONEncoder, TaggableObject
 from saq.system.analysis_module import register_analysis_module_type
 from saq.system.analysis_request import AnalysisRequest
 from saq.constants import F_TEST
@@ -12,7 +15,35 @@ from saq.system.analysis_tracking import (
 
 import pytest
 
-TEST_DETAILS = { 'hello': 'world' }
+#
+# JSON serialization
+#
+
+@pytest.mark.unit
+def test_encoding():
+
+    test_data = {}
+    class _test(object):
+        json = 'hello world'
+
+    test_data = {
+        'datetime': datetime.datetime(2017, 11, 11, hour=7, minute=36, second=1, microsecond=1),
+        'binary_string': '你好，世界'.encode('utf-8'),
+        'custom_object': _test(), 
+        'dict': {}, 
+        'list': [], 
+        'str': 'test', 
+        'int': 1, 
+        'float': 1.0, 
+        'null': None, 
+        'bool': True }
+
+    json_output = json.dumps(test_data, sort_keys=True, cls=_JSONEncoder)
+    assert json_output == r'{"binary_string": "\u00e4\u00bd\u00a0\u00e5\u00a5\u00bd\u00ef\u00bc\u008c\u00e4\u00b8\u0096\u00e7\u0095\u008c", "bool": true, "custom_object": "hello world", "datetime": "2017-11-11T07:36:01.000001", "dict": {}, "float": 1.0, "int": 1, "list": [], "null": null, "str": "test"}'
+
+#
+# Detection Points
+#
 
 @pytest.mark.unit
 def test_detection_point_serialization():
@@ -33,8 +64,29 @@ def test_detectable_object():
     assert not target.has_detection_points()
     assert not target.detections
 
+#
+# TaggableObject
+#
+
+@pytest.mark.unit
+def test_taggable_object():
+    target = TaggableObject()
+    assert not target.tags
+    assert target.add_tag('tag') is target
+    assert target.tags
+    assert target.has_tag('tag')
+    assert not target.has_tag('t@g')
+    target.clear_tags()
+    assert not target.tags
+
+# 
+# RootAnalysis
+#
+
+TEST_DETAILS = { 'hello': 'world' }
+
 @pytest.mark.integration
-def test_save_analysis():
+def test_save_and_load():
     root = RootAnalysis()
     root.details = TEST_DETAILS
     root.save()
@@ -45,15 +97,20 @@ def test_save_analysis():
 
 @pytest.mark.integration
 def test_add_analysis():
+    amt = AnalysisModuleType('test', '')
     root = RootAnalysis()
-    observable = root.add_observable(IPv4Observable('1.2.3.4'))
+    observable = root.add_observable(TestObservable('test'))
+    # test adding an Analysis object
+    analysis = Analysis(
+            details={'hello': 'world'},
+            analysis_module_type=amt)
+    result = observable.add_analysis(analysis)
+    assert result == analysis
 
-    analysis = Analysis()
-    analysis.type = AnalysisModuleType(
-            name="ipv4_analysis",
-            description="Test Module")
-    observable.add_analysis(analysis)
-    assert analysis.type.name in observable.analysis
+    # test adding just a details, type
+    root = RootAnalysis()
+    observable = root.add_observable(TestObservable('test'))
+    analysis = observable.add_analysis(details={'hello': 'world'}, analysis_module_type=amt)
 
 @pytest.mark.unit
 def test_analysis_completed():
@@ -77,3 +134,41 @@ def test_analysis_tracked():
     ar = AnalysisRequest(root, observable, amt)
     observable.track_analysis_request(ar)
     assert root.analysis_tracked(observable, amt) 
+
+#@pytest.mark.unit
+#def test_analysis_flush():
+    #root = RootAnalysis()
+    #observable = root.add_observable(TestObservable('test'))
+    #analysis = observable.add_analysis(analysis)
+
+@pytest.mark.unit
+def test_has_observable():
+    root = RootAnalysis()
+    observable = root.add_observable(F_TEST, 'test')
+    assert root.has_observable(F_TEST, 'test')
+    assert not root.has_observable(F_TEST, 't3st')
+    assert root.has_observable(TestObservable('test'))
+    assert not root.has_observable(TestObservable('t3st'))
+
+@pytest.mark.unit
+def test_find_observables():
+    root = RootAnalysis()
+    o1 = root.add_observable(F_TEST, 'test_1')
+    o2 = root.add_observable(F_TEST, 'test_2')
+    o_all = sorted([o1, o2])
+
+    # search by type, single observable
+    assert root.find_observable(F_TEST).id in [ o.id for o in o_all ]
+    # search by type, multi observable
+    assert sorted(root.find_observables(F_TEST)) == o_all
+
+    # search by lambda, single observable
+    assert root.find_observable(lambda o: o.type == F_TEST).id in [ o.id for o in o_all]
+    # search by lambda, multi observable
+    assert sorted(root.find_observables(lambda o: o.type == F_TEST)) == o_all
+
+@pytest.mark.unit
+def test_observable_md5():
+    root = RootAnalysis()
+    observable = root.add_observable(F_TEST, 'test_1')
+    observable.md5_hex == '4e70ffa82fbe886e3c4ac00ac374c29b'

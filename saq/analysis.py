@@ -23,7 +23,7 @@ import dateutil.parser
 import requests
 
 from dataclasses import dataclass, field
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Any
 from urllib.parse import urlsplit
 
 import saq
@@ -330,8 +330,12 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     KEY_UUID = 'uuid'
     KEY_IOCS = 'iocs'
 
-    def __init__(self, *args, root=None, analysis_module_type=None, observable=None, details=None, summary=None, **kwargs):
+    def __init__(self, *args, details=None, analysis_module_type=None, root=None, observable=None, summary=None, **kwargs):
         super().__init__(*args, **kwargs)
+        assert root is None or isinstance(root, RootAnalysis)
+        assert analysis_module_type is None or isinstance(analysis_module_type, AnalysisModuleType)
+        assert observable is None or isinstance(observable, Observable)
+        assert summary is None or isinstance(summary, str)
 
         # unique ID
         self.uuid: str = str(uuid.uuid4())
@@ -348,7 +352,7 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         # free form details of the analysis
         # this is run-time-only (never saved to disk)
         # the external_details property is what loads and saves the value of this field
-        self._details = details or None
+        self._details = details 
 
         # the observable this Analysis is for
         self._observable = observable
@@ -382,7 +386,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         """Calls save() and then clears the details property.  It must be load()ed again."""
         self.save()
         self._details = None
-        self.external_details_loaded = False
 
     # XXX refactor for saq.system
     def reset(self):
@@ -399,7 +402,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         self._details = None
         self.external_details_path = None
         self.external_details = None
-        self.external_details_loaded = False
 
     @property
     def details(self):
@@ -419,7 +421,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     def discard_details(self):
         """Simply discards the details of this analysis, not saving any changes."""
         self._details = None
-        self.external_details_loaded = False
 
     def _load_details(self):
         """Returns the details referenced by this object as a dict or None if the operation failed."""
@@ -1422,9 +1423,14 @@ class Observable(TaggableObject, DetectableObject):
         else:
             return [ ObservableActionWhitelist(), ObservableActionUnWhitelist() ]
 
-    def add_analysis(self, analysis: Analysis):
-        assert isinstance(analysis, Analysis)
+    def add_analysis(self, *args, **kwargs):
         assert isinstance(self.root, RootAnalysis)
+
+        # if we didn't pass an Analysis object then we assume the args are for the Analysis constructor
+        if args and isinstance(args[0], Analysis):
+            analysis = args[0]
+        else:
+            analysis = Analysis(*args, **kwargs)
 
         # set the document root for this analysis
         analysis.root = self.root
@@ -1438,6 +1444,7 @@ class Observable(TaggableObject, DetectableObject):
 
         self.analysis[analysis.type.name] = analysis
         logging.debug(f"added analysis {analysis} type {analysis.type} to observable {self}")
+        return analysis
 
     def get_analysis(self, amt: AnalysisModuleType) -> Union[Analysis, None]:
         """Returns the Analysis of the given type for this Observable, or None."""
@@ -1662,7 +1669,6 @@ class RootAnalysis(Analysis):
     KEY_OBSERVABLE_STORE = 'observable_store'
     KEY_NAME = 'name'
     KEY_REMEDIATION = 'remediation'
-    KEY_STATE = 'state'
     KEY_LOCATION = 'location'
     KEY_NETWORK = 'network'
     KEY_QUEUE = 'queue'
@@ -1692,7 +1698,6 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_OBSERVABLE_STORE: self.observable_store,
             RootAnalysis.KEY_NAME: self.name,
             RootAnalysis.KEY_REMEDIATION: self.remediation,
-            RootAnalysis.KEY_STATE: self.state,
             RootAnalysis.KEY_LOCATION: self.location,
             RootAnalysis.KEY_QUEUE: self.queue,
             RootAnalysis.KEY_INSTRUCTIONS: self.instructions,
@@ -1728,8 +1733,6 @@ class RootAnalysis(Analysis):
             self.name = value[RootAnalysis.KEY_NAME]
         if RootAnalysis.KEY_REMEDIATION in value:
             self.remediation = value[RootAnalysis.KEY_REMEDIATION]
-        if RootAnalysis.KEY_STATE in value:
-            self.state = value[RootAnalysis.KEY_STATE]
         if RootAnalysis.KEY_LOCATION in value:
             self.location = value[RootAnalysis.KEY_LOCATION]
         if RootAnalysis.KEY_QUEUE in value:
@@ -1937,15 +1940,6 @@ class RootAnalysis(Analysis):
         self._remediation = value
 
     @property
-    def state(self):
-        """A free form dict that can store any value. Used by AnalysisModules to maintain state."""
-        return self._state
-
-    @state.setter
-    def state(self, value):
-        self._state = value
-
-    @property
     def whitelisted(self):
         """A boolean value (stored as a state field) that indicates the entire analysis has been whitelisted.
            Analysis that is whitelisted does not become an alert."""
@@ -2103,7 +2097,6 @@ class RootAnalysis(Analysis):
                     new_analysis = copy.copy(other_analysis)
                     new_analysis.clear_observables()
                     new_analysis.external_details_path = None
-                    new_analysis.external_details_loaded = False
                     new_analysis.external_details = None
                     new_analysis.details = details
                     #new_analysis = type(other_analysis)()
