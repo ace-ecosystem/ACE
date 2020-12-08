@@ -509,13 +509,12 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         """Returns True if this Analysis has this Observable.  Accepts a single Observable or o_type, o_value."""
         from saq.observables import create_observable
 
-        # TODO why this if statement?
         if isinstance(o_or_o_type, Observable):
             return o_or_o_type in self.observables
         else:
             return create_observable(o_or_o_type, o_value) in self.observables
 
-    # is this still needed?
+    # XXX is this still needed?
     def clear_observables(self):
         """Clears any existing Observables. This is typically only used in special cases such as merging."""
         self._observables = []
@@ -529,13 +528,13 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     def _load_observable_references(self):
         """Utility function to replace uuid strings in Analysis.observables with references to Observable objects in Alert.observable_store."""
         if self.root is None:
-            logging.fatal("the alert property of {0} is not set when _load_observable_references was called".format(self))
+            logging.fatal(f"the alert property of {self} is not set when _load_observable_references was called")
             return
 
         _buffer = []
         for uuid in self._observables:
             if uuid not in self.root.observable_store:
-                logging.warning("missing observable with uuid {} in {}".format(uuid, self.root))
+                logging.warning(f"missing observable with uuid {uuid} in {self.root}")
             else:
                 _buffer.append(self.root.observable_store[uuid])
 
@@ -593,17 +592,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         return result
 
     @property
-    def files(self):
-        """Returns the list of observables of type F_FILE that actually exists with the Alert."""
-        result = []
-        for observable in self.observables:
-            if observable.type == F_FILE:
-                if os.path.exists(os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, observable.value)):
-                    result.append(observable)
-
-        return result
-
-    @property
     def observable(self):
         """The Observable this Analysis is for (or None if this is an Alert.)"""
         return self._observable
@@ -639,6 +627,8 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
     ##########################################################################
     # GUI PROPERTIES
+
+    # XXX these all need to move out
 
     @property
     def jinja_should_render(self):
@@ -677,18 +667,23 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
     ##########################################################################
 
-    def add_observable(self, *args, **kwargs):
+    def add_observable(self, 
+            o_or_o_type: Union[Observable, str], 
+            o_value: Optional[str]=None, 
+            o_time:Union[datetime.datetime, str, None]=None) -> Union[Observable, None]:
         """Adds the Observable to this Analysis.  Returns the Observable object, or the one that already existed."""
-        # you can either specify an already created Observable object, or type, value and optionally time
-        if len(args) > 1:
-            # if more than one argument was passed here then we are using the other style
-            return self._add_observable_by_spec(*args, **kwargs)
-        
-        # otherwise we are using the new style
-        return self._add_observable(*args, **kwargs)
+        assert isinstance(o_or_o_type, Observable) or isinstance(o_or_o_type, str)
+        assert o_value is None or isinstance(o_value, str)
+        assert o_time is None or isinstance(o_time, datetime.datetime) or isinstance(o_time, str)
 
-    def _add_observable(self, observable):
+        if isinstance(o_or_o_type, Observable):
+            return self._add_observable(o_or_o_type)
+        else:
+            return self._add_observable_by_spec(o_or_o_type, o_value, o_time)
+
+    def _add_observable(self, observable: Observable) -> Union[Observable, None]:
         """Adds the Observable to this Analysis.  Returns the Observable object, or the one that already existed."""
+        assert isinstance(self.root, RootAnalysis)
         assert isinstance(observable, Observable)
         
         # this may return an existing observable if we already have it
@@ -699,13 +694,18 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
         return observable
 
-    def _add_observable_by_spec(self, o_type, o_value, o_time=None):
+    def _add_observable_by_spec(self, 
+            o_type: str, 
+            o_value: str, 
+            o_time: Union[datetime.datetime, str, None]=None) -> Union[Observable, None]:
         """Adds this observable specified by type, value and time to this Analysis.  
            Returns the new Observable object, or the one that already existed."""
         assert isinstance(self.root, RootAnalysis)
         assert isinstance(o_type, str)
+        assert isinstance(o_value, str)
+        assert o_time is None or isinstance(o_time, datetime.datetime) or isinstance(o_time, str)
 
-        observable = self.root.record_observable_by_spec(o_type, o_value, o_time=o_time)
+        observable = self.root.record_observable_by_spec(o_type, o_value, o_time)
         if observable is None:
             return None
 
