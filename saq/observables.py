@@ -335,6 +335,7 @@ class URLObservable(Observable):
         if extracted_url:
             self.value = extracted_url
 
+RE_MD5 = re.compile('^[a-f0-9]{64}$')
 class FileObservable(Observable):
 
     KEY_MD5_HASH = 'md5_hash'
@@ -345,6 +346,10 @@ class FileObservable(Observable):
 
     def __init__(self, *args, path=None, **kwargs):
         super().__init__(F_FILE, *args, **kwargs)
+
+        # the value must be an md5 hash of the content of the file
+        if not RE_MD5.match(self.value):
+            raise ObservableValueError("a F_FILE observable value must be the md5 hash of the content of the file")
 
         # the path to the file locally (relative to self.root.storage_dir)
         # if this is None then the file has not been downloaded from the storage system
