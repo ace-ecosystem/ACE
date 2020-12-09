@@ -1892,11 +1892,6 @@ class RootAnalysis(Analysis):
         return True
 
     @property
-    def json_path(self):
-        """Path to the JSON file that stores this alert."""
-        return os.path.join(saq.SAQ_RELATIVE_DIR, self.storage_dir, 'data.json')
-
-    @property
     def name(self):
         """An optional property that defines a name for an alert.  
            Used to track and document analyst response instructions."""
