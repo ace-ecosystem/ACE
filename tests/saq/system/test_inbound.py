@@ -102,7 +102,7 @@ def test_process_duplicate_observable_analysis_request(cache_ttl):
         assert root.uuid in request.additional_roots
 
         # process the result of the original request
-        request.result = Analysis(root=original_root, analysis_module_type=amt, observable=test_observable, details={'Hello': 'World'})
+        request.result = Analysis(root=original_root, type=amt, observable=test_observable, details={'Hello': 'World'})
         process_analysis_request(request)
 
         # now the second root analysis should have it's analysis completed
@@ -141,7 +141,7 @@ def test_process_analysis_result(cache_ttl):
     assert request.status == TRACKING_STATUS_ANALYZING
     assert request.owner == OWNER_UUID
 
-    request.result = Analysis(root=root, analysis_module_type=amt, observable=request.observable, details={'Hello': 'World'})
+    request.result = Analysis(root=root, type=amt, observable=request.observable, details={'Hello': 'World'})
     process_analysis_request(request)
 
     if cache_ttl is not None:
@@ -180,7 +180,7 @@ def test_cached_analysis_result():
     assert get_analysis_request(root_request.id) is None
 
     request = get_next_analysis_request(OWNER_UUID, amt, 0)
-    request.result = Analysis(root=root, analysis_module_type=amt, observable=request.observable, details={'Hello': 'World'})
+    request.result = Analysis(root=root, type=amt, observable=request.observable, details={'Hello': 'World'})
     process_analysis_request(request)
 
     # this analysis result for this observable should be cached now
@@ -246,7 +246,7 @@ def test_known_dependency():
 
     # process the amt request
     request = get_next_analysis_request(OWNER_UUID, amt, 0)
-    request.result = Analysis(root=root, analysis_module_type=amt, observable=request.observable, details={'Hello': 'World'})
+    request.result = Analysis(root=root, type=amt, observable=request.observable, details={'Hello': 'World'})
     process_analysis_request(request)
 
     # now we should have a request for the dependency
@@ -280,7 +280,7 @@ def test_chained_dependency():
 
     # process the amt request
     request = get_next_analysis_request(OWNER_UUID, amt_1, 0)
-    request.result = Analysis(root=root, analysis_module_type=amt_1, observable=request.observable, details={'Hello': 'World'})
+    request.result = Analysis(root=root, type=amt_1, observable=request.observable, details={'Hello': 'World'})
     process_analysis_request(request)
 
     # now amt_2 should be ready but still not amt_3
@@ -290,7 +290,7 @@ def test_chained_dependency():
 
     # process the amt request
     request = get_next_analysis_request(OWNER_UUID, amt_2, 0)
-    request.result = Analysis(root=root, analysis_module_type=amt_2, observable=request.observable, details={'Hello': 'World'})
+    request.result = Analysis(root=root, type=amt_2, observable=request.observable, details={'Hello': 'World'})
     process_analysis_request(request)
 
     # now amt_3 should be ready

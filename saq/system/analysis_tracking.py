@@ -69,12 +69,17 @@ def get_analysis_details(uuid: str) -> Any:
     logging.debug(f"loading analysis details {uuid}")
     return get_system().analysis_tracking.get_analysis_details(uuid)
 
-def track_analysis_details(root: RootAnalysis, uuid: str, value: Any):
+def track_analysis_details(root: RootAnalysis, uuid: str, value: Any) -> bool:
     assert isinstance(root, RootAnalysis) 
     assert isinstance(uuid, str)
 
+    # we don't save Analysis that doesn't have the details set
+    if value is None:
+        return False
+
     logging.debug(f"tracking {root} analysis details {uuid}")
-    return get_system().analysis_tracking.track_analysis_details(root.uuid, uuid, value)
+    get_system().analysis_tracking.track_analysis_details(root.uuid, uuid, value)
+    return True
 
 def delete_analysis_details(uuid: str) -> bool:
     assert isinstance(uuid, str)

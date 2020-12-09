@@ -43,7 +43,7 @@ def test_basic_analysis():
 
     # "analyze" it
     request.result = Analysis(
-        root=root, analysis_module_type=amt, observable=request.observable, details=analysis_details)
+        root=root, type=amt, observable=request.observable, details=analysis_details)
 
     # submit the result of the analysis
     process_analysis_request(request)
@@ -89,13 +89,13 @@ def test_multiple_amts():
 
     # "analyze" them
     request_1.result = Analysis(
-        root=root, analysis_module_type=amt_1, observable=request_1.observable, details=analysis_details_1)
+        root=root, type=amt_1, observable=request_1.observable, details=analysis_details_1)
 
     # submit the result of the analysis
     process_analysis_request(request_1)
 
     request_2.result = Analysis(
-        root=root, analysis_module_type=amt_2, observable=request_2.observable, details=analysis_details_2)
+        root=root, type=amt_2, observable=request_2.observable, details=analysis_details_2)
 
     # submit the result of the analysis
     process_analysis_request(request_2)
@@ -187,7 +187,7 @@ def test_expected_status():
 
     # "analyze" it
     request.result = Analysis(
-        root=root, analysis_module_type=amt, observable=request.observable, details=analysis_details)
+        root=root, type=amt, observable=request.observable, details=analysis_details)
 
     # submit the result of the analysis
     process_analysis_request(request)

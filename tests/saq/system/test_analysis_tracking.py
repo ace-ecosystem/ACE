@@ -66,7 +66,7 @@ def test_analysis_details_deleted_with_root():
     register_analysis_module_type(amt := AnalysisModuleType(F_TEST, ''))
     root = RootAnalysis(details=TEST_DETAILS)
     observable = root.add_observable(F_TEST, 'test')
-    observable.add_analysis(analysis := Analysis(root=root, analysis_module_type=amt, details=TEST_DETAILS))
+    observable.add_analysis(analysis := Analysis(root=root, type=amt, details=TEST_DETAILS))
     root.save()
 
     # make sure the details are there

@@ -80,15 +80,14 @@ def test_taggable_object():
     assert not target.tags
 
 # 
-# RootAnalysis
+# Analysis
 #
 
 TEST_DETAILS = { 'hello': 'world' }
 
 @pytest.mark.integration
 def test_save_and_load():
-    root = RootAnalysis()
-    root.details = TEST_DETAILS
+    root = RootAnalysis(details=TEST_DETAILS)
     root.save()
 
     assert get_root_analysis(root.uuid) == root
@@ -100,17 +99,53 @@ def test_add_analysis():
     amt = AnalysisModuleType('test', '')
     root = RootAnalysis()
     observable = root.add_observable(TestObservable('test'))
+
     # test adding an Analysis object
     analysis = Analysis(
             details={'hello': 'world'},
-            analysis_module_type=amt)
+            type=amt)
     result = observable.add_analysis(analysis)
     assert result == analysis
 
     # test adding just a details, type
     root = RootAnalysis()
     observable = root.add_observable(TestObservable('test'))
-    analysis = observable.add_analysis(details={'hello': 'world'}, analysis_module_type=amt)
+    analysis = observable.add_analysis(details={'hello': 'world'}, type=amt)
+    assert result == analysis
+
+@pytest.mark.integration
+def test_add_analysis_no_amt():
+    """An Analysis must have a type before it can be added."""
+    root = RootAnalysis()
+    observable = root.add_observable(TestObservable('test'))
+    with pytest.raises(ValueError):
+        observable.add_analysis(Analysis())
+
+@pytest.mark.integration
+def test_analysis_save():
+    amt = AnalysisModuleType('test', '')
+    root = RootAnalysis()
+    root.save()
+
+    observable = root.add_observable(TestObservable('test'))
+    analysis = observable.add_analysis(type=amt)
+    # the details have not been set so there is nothing to save
+    assert not analysis.save()
+    assert get_analysis_details(analysis.uuid) is None
+
+    # set the details
+    analysis.details = TEST_DETAILS
+    # now it should save
+    assert analysis.save()
+    assert get_analysis_details(analysis.uuid) == TEST_DETAILS
+
+    # save it again, since it didn't change it should not try to save again
+    assert not analysis.save()
+
+    # modify the details
+    analysis.details = { 'hey': 'there' }
+    assert analysis.save()
+    assert get_analysis_details(analysis.uuid) == { 'hey': 'there' }
 
 @pytest.mark.unit
 def test_analysis_completed():
@@ -120,10 +155,10 @@ def test_analysis_completed():
     root.add_observable(observable := TestObservable('test'))
     assert not root.analysis_completed(observable, amt) 
 
-    observable.add_analysis(Analysis(analysis_module_type=amt, details=TEST_DETAILS))
+    observable.add_analysis(Analysis(type=amt, details=TEST_DETAILS))
     assert root.analysis_completed(observable, amt)
 
-@pytest.mark.unit
+@pytest.mark.integration
 def test_analysis_tracked():
     register_analysis_module_type(amt := AnalysisModuleType('test', 'test', [F_TEST]))
 
@@ -135,10 +170,10 @@ def test_analysis_tracked():
     observable.track_analysis_request(ar)
     assert root.analysis_tracked(observable, amt) 
 
-#@pytest.mark.unit
+#@pytest.mark.integration
 #def test_analysis_flush():
     #root = RootAnalysis()
-    #observable = root.add_observable(TestObservable('test'))
+    ##observable = root.add_observable(TestObservable('test'))
     #analysis = observable.add_analysis(analysis)
 
 @pytest.mark.unit
