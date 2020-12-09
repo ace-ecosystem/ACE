@@ -1562,7 +1562,6 @@ class RootAnalysis(Analysis):
                  remediation=None,
                  state=None,
                  uuid=None,
-                 location=None,
                  storage_dir=None,
                  analysis_mode=None,
                  queue=None,
@@ -1629,14 +1628,6 @@ class RootAnalysis(Analysis):
         if action_counters:
             self.action_counters = action_counters
 
-        self._location = None
-        if location:
-            self.location = location
-        else:
-            # if a location is not specified then we default to locally defined value
-            if hasattr(saq, 'SAQ_NODE'):
-                self.location = saq.SAQ_NODE
-
         self._storage_dir = None
         if storage_dir:
             self.storage_dir = storage_dir
@@ -1669,7 +1660,6 @@ class RootAnalysis(Analysis):
     KEY_OBSERVABLE_STORE = 'observable_store'
     KEY_NAME = 'name'
     KEY_REMEDIATION = 'remediation'
-    KEY_LOCATION = 'location'
     KEY_NETWORK = 'network'
     KEY_QUEUE = 'queue'
     KEY_INSTRUCTIONS = 'instructions'
@@ -1698,7 +1688,6 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_OBSERVABLE_STORE: self.observable_store,
             RootAnalysis.KEY_NAME: self.name,
             RootAnalysis.KEY_REMEDIATION: self.remediation,
-            RootAnalysis.KEY_LOCATION: self.location,
             RootAnalysis.KEY_QUEUE: self.queue,
             RootAnalysis.KEY_INSTRUCTIONS: self.instructions,
         })
@@ -1733,8 +1722,6 @@ class RootAnalysis(Analysis):
             self.name = value[RootAnalysis.KEY_NAME]
         if RootAnalysis.KEY_REMEDIATION in value:
             self.remediation = value[RootAnalysis.KEY_REMEDIATION]
-        if RootAnalysis.KEY_LOCATION in value:
-            self.location = value[RootAnalysis.KEY_LOCATION]
         if RootAnalysis.KEY_QUEUE in value:
             self.queue = value[RootAnalysis.KEY_QUEUE]
         if RootAnalysis.KEY_INSTRUCTIONS in value:
@@ -1903,16 +1890,6 @@ class RootAnalysis(Analysis):
             os.mkdir(self.storage_dir)
 
         return True
-
-    @property
-    def location(self):
-        """Returns the FQDN of the host that contains this analysis."""
-        return self._location
-
-    @location.setter
-    def location(self, value):
-        assert value is None or isinstance(value, str)
-        self._location = value
 
     @property
     def json_path(self):
