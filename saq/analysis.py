@@ -286,6 +286,10 @@ class AnalysisModuleType():
         from saq.system.analysis_module import get_analysis_module_type
         assert isinstance(observable, Observable)
 
+        # has this analysis type been excluded from this observable?
+        if self.name in observable.excluded_analysis:
+            return False
+
         # TODO conditions are OR vertical AND horizontal?
 
         # OR
@@ -1236,62 +1240,40 @@ class Observable(TaggableObject, DetectableObject):
         self._limited_analysis.append(amt)
 
     @property
-    def excluded_analysis(self):
-        """Returns a list of analysis modules in the form of module:class that are excluded from analyzing this Observable."""
+    def excluded_analysis(self) -> list[str]:
+        """Returns a list of analysis modules types that are excluded from analyzing this Observable."""
         return self._excluded_analysis
 
     @excluded_analysis.setter
-    def excluded_analysis(self, value):
+    def excluded_analysis(self, value: list[str]):
         assert isinstance(value, list)
         self._excluded_analysis = value
 
-    def exclude_analysis(self, analysis_module, instance=None):
-        """Directs the engine to avoid analyzing this Observabe with this AnalysisModule.
-           analysis_module can be an instance of type AnalysisModule or the type of the AnalysisModule itself"""
-        from saq.modules import AnalysisModule
-        # TODO check that the type inherits from AnalysisModule
-        assert isinstance(analysis_module, type) or isinstance(analysis_module, AnalysisModule)
-        if isinstance(analysis_module, AnalysisModule):
-            _type = type(analysis_module)
-            instance = analysis_module.instance
-        else:
-            _type = analysis_module
+    def exclude_analysis(self, amt: Union[AnalysisModuleType, str]):
+        """Directs the engine to avoid analyzing this Observabe with this AnalysisModuleType."""
+        assert isinstance(amt, str) or isinstance(amt, AnalysisModuleType)
 
-        name = '{}:{}'.format(analysis_module.__module__, str(_type))
-        if instance is not None:
-            name += f'{instance}'
+        if isinstance(amt, AnalysisModuleType):
+            amt = amt.name
 
-        if name not in self.excluded_analysis:
-            self.excluded_analysis.append(name)
+        if amt not in self.excluded_analysis:
+            self.excluded_analysis.append(amt)
 
-    def is_excluded(self, analysis_module):
-        """Returns True if this Observable has been excluded from analysis by this AnalysisModule."""
-        from saq.modules import AnalysisModule
-        assert isinstance(analysis_module, AnalysisModule)
-        name = '{}:{}'.format(analysis_module.__module__, str(type(analysis_module)))
-        if analysis_module.instance is not None:
-            name += f'{analysis_module.instance}'
+    def is_excluded(self, amt: Union[AnalysisModuleType, str]) -> bool:
+        """Returns True if this Observable has been excluded from analysis by this AnalysisModuleType."""
+        assert isinstance(amt, str) or isinstance(amt, AnalysisModuleType)
+        if isinstance(amt, AnalysisModuleType):
+            amt = amt.name
 
-        return name in self.excluded_analysis
+        return amt in self.excluded_analysis
 
-    def remove_analysis_exclusion(self, analysis_module, instance=None):
-        """Removes AnalysisModule exclusion added to this observable, allowing it to be run again.
-            Example use case: AnalysisModule excluded automatically to prevent recursion, but removed manually by analyst via GUI.
-             USE CAREFULLY!"""
-        from saq.modules import AnalysisModule
-        assert isinstance(analysis_module, type) or isinstance(analysis_module, AnalysisModule)
-        if isinstance(analysis_module, AnalysisModule):
-            _type = type(analysis_module)
-            instance = analysis_module.instance
-        else:
-            _type = analysis_module
+    def remove_analysis_exclusion(self, amt: Union[AnalysisModuleType, str]):
+        """Removes AnalysisModule exclusion added to this observable."""
+        assert isinstance(amt, str) or isinstance(amt, AnalysisModuleType)
+        if isinstance(amt, AnalysisModuleType):
+            amt = amt.name
 
-        name = f'{analysis_module.__module__}:{str(_type)}'
-        if instance is not None:
-            name += f'{instance}'
-
-        while name in self.excluded_analysis:
-            self.excluded_analysis.remove(name)
+        self.excluded_analysis.remove(amt)
 
     @property
     def relationships(self):

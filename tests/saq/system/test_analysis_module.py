@@ -123,6 +123,10 @@ class TempAnalysisModuleType(AnalysisModuleType):
     (TempAnalysisModuleType(), RootAnalysis().add_observable(TestObservable('test', limited_analysis=['test'])), True),
     # limited analysis (not in list)
     (TempAnalysisModuleType(), RootAnalysis().add_observable(TestObservable('test', limited_analysis=['other'])), False),
+    # excluded analysis
+    (TempAnalysisModuleType(), RootAnalysis().add_observable(TestObservable('test', excluded_analysis=['test'])), False),
+    # excluded analysis (not in list)
+    (TempAnalysisModuleType(), RootAnalysis().add_observable(TestObservable('test', excluded_analysis=['other'])), True),
     # valid dependency TODO
     # TODO need to start making modifications to RootAnalysis, Analysis and Observable to support this new system
     #(TempAnalysisModuleType(dependencies=['analysis_module']), RootAnalysis().add_observable(F_IPV4, '1.2.3.4'), True),

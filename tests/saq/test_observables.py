@@ -3,7 +3,7 @@ import shutil
 
 import pytest
 
-from saq.analysis import RootAnalysis
+from saq.analysis import RootAnalysis, AnalysisModuleType
 from saq.constants import *
 from saq.system.analysis_tracking import get_root_analysis
 
@@ -209,3 +209,29 @@ def test_protected_url_sanitization():
     observable = root.add_observable(F_URL, 'https://lahia-my.sharepoint.com/:b:/g/personal/secure_onedrivemsw_bid/EVdjoBiqZTxMnjAcDW6yR4gBqJ59ALkT1C2I3L0yb_n0uQ?e=naeXYD')
     assert observable is not None
     assert observable.value == 'https://lahia-my.sharepoint.com/personal/secure_onedrivemsw_bid/_layouts/15/download.aspx?e=naeXYD&share=EVdjoBiqZTxMnjAcDW6yR4gBqJ59ALkT1C2I3L0yb_n0uQ'
+
+@pytest.mark.unit
+def test_add_limited_analysis():
+    observable = RootAnalysis().add_observable(F_TEST, 'test')
+    assert not observable.limited_analysis
+    observable.limit_analysis('test')
+    assert observable.limited_analysis
+    assert 'test' in observable.limited_analysis
+
+    observable.limit_analysis(AnalysisModuleType('other', ''))
+    assert 'other' in observable.limited_analysis
+
+@pytest.mark.unit
+def test_add_excluded_analysis():
+    observable = RootAnalysis().add_observable(F_TEST, 'test')
+    assert not observable.excluded_analysis
+    assert not observable.is_excluded('test')
+    observable.exclude_analysis('test')
+    assert observable.excluded_analysis
+    assert 'test' in observable.excluded_analysis
+    assert observable.is_excluded('test')
+    observable.remove_analysis_exclusion('test')
+    assert not observable.is_excluded('test')
+
+    observable.exclude_analysis(AnalysisModuleType('other', ''))
+    assert 'other' in observable.excluded_analysis
