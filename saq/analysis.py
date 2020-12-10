@@ -528,11 +528,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         else:
             return create_observable(o_or_o_type, o_value) in self.observables
 
-    # XXX is this still needed?
-    def clear_observables(self):
-        """Clears any existing Observables. This is typically only used in special cases such as merging."""
-        self._observables = []
-
     # TODO I feel like this should be a part of an implementation of an abstract tree-type class?
     @property
     def children(self):
@@ -541,9 +536,7 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
     def _load_observable_references(self):
         """Utility function to replace uuid strings in Analysis.observables with references to Observable objects in Alert.observable_store."""
-        if self.root is None:
-            logging.fatal(f"the alert property of {self} is not set when _load_observable_references was called")
-            return
+        assert isinstance(self.root, RootAnalysis)
 
         _buffer = []
         for uuid in self._observables:
@@ -739,7 +732,9 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
 
     # TODO refactor
     def __str__(self):
-        return '{}'.format(type(self).__name__)
+        result = f'Analysis ({self.uuid},{self.type}'
+        if self.observable:
+            result += ' observable {self.observable}'
 
     # this is used to sort in the GUI
     def __lt__(self, other):
