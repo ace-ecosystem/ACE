@@ -86,15 +86,6 @@ def test_taggable_object():
 TEST_DETAILS = { 'hello': 'world' }
 
 @pytest.mark.integration
-def test_save_and_load():
-    root = RootAnalysis(details=TEST_DETAILS)
-    root.save()
-
-    assert get_root_analysis(root.uuid) == root
-    assert get_analysis_details(root.uuid) == TEST_DETAILS
-    assert get_root_analysis(root.uuid).details == TEST_DETAILS
-
-@pytest.mark.integration
 def test_add_analysis():
     amt = AnalysisModuleType('test', '')
     root = RootAnalysis()
@@ -147,6 +138,29 @@ def test_analysis_save():
     assert analysis.save()
     assert get_analysis_details(analysis.uuid) == { 'hey': 'there' }
 
+@pytest.mark.integration
+def test_analysis_load():
+    amt = AnalysisModuleType('test', '')
+    root = RootAnalysis(details=TEST_DETAILS)
+    observable = root.add_observable(F_TEST, 'test')
+    analysis = observable.add_analysis(type=amt, details=TEST_DETAILS)
+    root.save()
+
+    root = get_root_analysis(root.uuid)
+    # the details should not be loaded yet
+    assert root._details is None
+    # until we access it
+    assert root.details == TEST_DETAILS
+    # and then it is loaded
+    assert root._details is not None
+
+    # same for Analysis objects
+    observable = root.get_observable(observable)
+    analysis = observable.get_analysis(amt)
+    assert analysis._details is None
+    assert analysis.details == TEST_DETAILS
+    assert analysis._details is not None
+
 @pytest.mark.unit
 def test_analysis_completed():
     register_analysis_module_type(amt := AnalysisModuleType('test', 'test', [F_TEST]))
@@ -170,11 +184,22 @@ def test_analysis_tracked():
     observable.track_analysis_request(ar)
     assert root.analysis_tracked(observable, amt) 
 
-#@pytest.mark.integration
-#def test_analysis_flush():
-    #root = RootAnalysis()
-    ##observable = root.add_observable(TestObservable('test'))
-    #analysis = observable.add_analysis(analysis)
+@pytest.mark.integration
+def test_analysis_flush():
+    register_analysis_module_type(amt := AnalysisModuleType('test', 'test', [F_TEST]))
+    root = RootAnalysis()
+    observable = root.add_observable(TestObservable('test'))
+    analysis = observable.add_analysis(type=amt, details=TEST_DETAILS)
+    root.save()
+
+    root = get_root_analysis(root.uuid)
+    observable = root.get_observable(observable)
+    analysis = observable.get_analysis(amt)
+    analysis.flush()
+    # should be gone
+    assert analysis._details is None
+    # but can load it back
+    assert analysis.details == TEST_DETAILS
 
 @pytest.mark.unit
 def test_has_observable():

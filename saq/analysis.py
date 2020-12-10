@@ -431,11 +431,6 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         self._details = value
         self._details_modified = True
 
-    # XXX refactor for saq.system
-    def discard_details(self):
-        """Simply discards the details of this analysis, not saving any changes."""
-        self._details = None
-
     def _load_details(self):
         """Returns the details referenced by this object as a dict or None if the operation failed."""
         # NOTE you should never call this directly
