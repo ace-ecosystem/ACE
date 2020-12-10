@@ -317,6 +317,16 @@ class AnalysisModuleType():
             if not observable.analysis_completed(amt):
                 return False
 
+        # has this observable been limited to specific analysis modules?
+        if observable.limited_analysis:
+            for amt in observable.limited_analysis:
+                if self.name == amt:
+                    return True
+
+            # if we didn't match anything in this list then we didn't match the
+            # thing(s) it is limited to
+            return False
+
         return True
 
 class Analysis(TaggableObject, DetectableObject, Lockable):
@@ -730,11 +740,8 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
     def add_ioc(self, type_: str, value: str, status: str = 'New', tags: List[str] = []):
         self.iocs.append(Indicator(type_, value, status=status, tags=tags))
 
-    # TODO refactor
     def __str__(self):
-        result = f'Analysis ({self.uuid},{self.type}'
-        if self.observable:
-            result += ' observable {self.observable}'
+        return f'Analysis({self.uuid},{self.type},{self.observable})'
 
     # this is used to sort in the GUI
     def __lt__(self, other):
@@ -857,7 +864,19 @@ class Observable(TaggableObject, DetectableObject):
     KEY_GROUPING_TARGET = 'grouping_target'
     KEY_REQUEST_TRACKING = 'request_tracking'
 
-    def __init__(self, type=None, value=None, time=None, json=None, *args, **kwargs):
+    def __init__(self, 
+            type: str = None, 
+            value: str = None, 
+            time: Union[datetime.datetime, str, None] = None, 
+            json: Optional[dict] = None, 
+            directives: Optional[list[str]] = None, 
+            redirection: Optional[Observable] = None, 
+            links: Optional[list[str]] = None, 
+            limited_analysis: Optional[list[str]] = None, 
+            excluded_analysis: Optional[list[str]] = None, 
+            relationships: Optional[list[Relationship]] = None,
+            *args, **kwargs):
+
         super().__init__(*args, **kwargs)
 
         self._directives = []
@@ -877,12 +896,12 @@ class Observable(TaggableObject, DetectableObject):
             self.value = value
             self._time = time
             self._analysis = {}
-            self._directives = [] # of str
-            self._redirection = None # (str)
-            self._links = [] # [ str ]
-            self._limited_analysis = [] # [ str ]
-            self._excluded_analysis = [] # [ str ]
-            self._relationships = [] # [ Relationship ]
+            self._directives = directives or [] # of str
+            self._redirection = redirection or None # (str)
+            self._links = links or [] # [ str ]
+            self._limited_analysis = limited_analysis or [] # [ str ]
+            self._excluded_analysis = excluded_analysis or [] # [ str ]
+            self._relationships = relationships or [] # [ Relationship ]
             self._grouping_target = False
             self._request_tracking = {} # key = AnalysisModuleType.name, value = AnalysisRequest.id
 
@@ -1197,7 +1216,6 @@ class Observable(TaggableObject, DetectableObject):
 
         logging.debug("linked {} to {}".format(self, target))
 
-    # XXX TODO 
     @property
     def limited_analysis(self):
         return self._limited_analysis
@@ -1208,17 +1226,14 @@ class Observable(TaggableObject, DetectableObject):
         assert all([isinstance(x, str) for x in value])
         self._limited_analysis = value
 
-    def limit_analysis(self, analysis_module):
-        """Limit the analysis of this observable to the analysis module specified by configuration section name.
-           For example, if you have a section for a module called [analysis_module_something] then you would pass
-           the value "something" as the analysis_module."""
-        from saq.modules import AnalysisModule
-        assert isinstance(analysis_module, str) or isinstance(analysis_module, AnalysisModule)
+    def limit_analysis(self, amt: Union[AnalysisModuleType, str]):
+        """Limit the analysis of this observable to the analysis module type specified by type or name."""
+        assert isinstance(amt, str) or isinstance(amt, AnalysisModuleType)
 
-        if isinstance(analysis_module, AnalysisModule):
-            self._limited_analysis.append(analysis_module.config_section_name)
-        else:
-            self._limited_analysis.append(analysis_module)
+        if isinstance(amt, AnalysisModuleType):
+            amt = amt.name
+
+        self._limited_analysis.append(amt)
 
     @property
     def excluded_analysis(self):

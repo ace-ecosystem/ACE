@@ -4,6 +4,7 @@ import pytest
 
 from saq.analysis import RootAnalysis, Observable
 from saq.constants import *
+from saq.observables import TestObservable
 from saq.system.analysis_module import (
         AnalysisModuleType, 
         AnalysisModuleTypeVersionError, 
@@ -118,6 +119,10 @@ class TempAnalysisModuleType(AnalysisModuleType):
     # multiple tags missing one
     (TempAnalysisModuleType(tags=['test_1', 'test_2']), 
         RootAnalysis().add_observable(F_IPV4, '1.2.3.4').add_tag('test_1'), False),
+    # limited analysis
+    (TempAnalysisModuleType(), RootAnalysis().add_observable(TestObservable('test', limited_analysis=['test'])), True),
+    # limited analysis (not in list)
+    (TempAnalysisModuleType(), RootAnalysis().add_observable(TestObservable('test', limited_analysis=['other'])), False),
     # valid dependency TODO
     # TODO need to start making modifications to RootAnalysis, Analysis and Observable to support this new system
     #(TempAnalysisModuleType(dependencies=['analysis_module']), RootAnalysis().add_observable(F_IPV4, '1.2.3.4'), True),
