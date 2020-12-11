@@ -235,3 +235,172 @@ def test_add_excluded_analysis():
 
     observable.exclude_analysis(AnalysisModuleType('other', ''))
     assert 'other' in observable.excluded_analysis
+
+@pytest.mark.unit
+def test_merge_directives():
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    target_observable.add_directive('some_directive')
+    
+    assert not observable.has_directive('some_directive')
+    observable.merge(target_observable)
+    assert observable.has_directive('some_directive')
+
+@pytest.mark.unit
+def test_merge_redirection():
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    # test the case where the redirection target does not exist in the root analysis
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    target_redirection_observable = target_root.add_observable('other_type', 'other_value')
+    target_observable.redirection = target_redirection_observable
+
+    assert observable.redirection is None
+    observable.merge(target_observable)
+    assert observable.redirection == target_redirection_observable
+
+    # also test the case where the redirection target already exists in the root analysis
+
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+    root.add_observable('other_type', 'other_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    target_redirection_observable = target_root.add_observable('other_type', 'other_value')
+    target_observable.redirection = target_redirection_observable
+
+    assert observable.redirection is None
+    observable.merge(target_observable)
+    assert observable.redirection == target_redirection_observable
+
+@pytest.mark.unit
+def test_merge_links():
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    # test the case where the link target does not exist in the root analysis
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    linked_observable = target_root.add_observable('other_type', 'other_value')
+    target_observable.add_link(linked_observable)
+
+    assert not observable.links
+    observable.merge(target_observable)
+    assert observable.links
+    assert observable.links[0] == linked_observable
+
+    # also test the case where the link target already exists in the root analysis
+
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+    root.add_observable('other_type', 'other_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    linked_observable = target_root.add_observable('other_type', 'other_value')
+    target_observable.add_link(linked_observable)
+
+    assert not observable.links
+    observable.merge(target_observable)
+    assert observable.links
+    assert observable.links[0] == linked_observable
+
+@pytest.mark.unit
+def test_merge_limited_analysis():
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    target_observable.limit_analysis('some_module')
+
+    assert not observable.limited_analysis
+    observable.merge(target_observable)
+    assert observable.limited_analysis
+    assert observable.limited_analysis[0] == 'some_module'
+
+@pytest.mark.unit
+def test_merge_excluded_analysis():
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    target_observable.exclude_analysis('some_module')
+
+    assert not observable.excluded_analysis
+    observable.merge(target_observable)
+    assert observable.excluded_analysis
+    assert observable.excluded_analysis[0] == 'some_module'
+
+@pytest.mark.unit
+def test_merge_relationships():
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    # test the case where the relationship target does not exist in the root analysis
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    r_observable = target_root.add_observable('other_type', 'other_value')
+    target_observable.add_relationship(R_DOWNLOADED_FROM, r_observable)
+
+    assert not observable.relationships
+    observable.merge(target_observable)
+    assert observable.relationships
+    assert observable.relationships[0].r_type == R_DOWNLOADED_FROM
+    assert observable.relationships[0].target == r_observable
+
+    # also test the case where the relationship target already exists in the root analysis
+
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+    root.add_observable('other_type', 'other_value')
+
+    # test the case where the relationship target does not exist in the root analysis
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    r_observable = target_root.add_observable('other_type', 'other_value')
+    target_observable.add_relationship(R_DOWNLOADED_FROM, r_observable)
+
+    assert not observable.relationships
+    observable.merge(target_observable)
+    assert observable.relationships
+    assert observable.relationships[0].r_type == R_DOWNLOADED_FROM
+    assert observable.relationships[0].target == r_observable
+
+@pytest.mark.unit
+def test_merge_grouping_target():
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    target_observable.grouping_target = True
+
+    assert not observable.grouping_target 
+    observable.merge(target_observable)
+    assert observable.grouping_target
+
+@pytest.mark.unit
+def test_merge_tags():
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    target_observable.add_tag('test')
+
+    assert not observable.tags
+    observable.merge(target_observable)
+    assert observable.tags
+    assert observable.tags[0] == 'test'

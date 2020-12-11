@@ -1237,7 +1237,8 @@ class Observable(TaggableObject, DetectableObject):
         if isinstance(amt, AnalysisModuleType):
             amt = amt.name
 
-        self._limited_analysis.append(amt)
+        if amt not in self._limited_analysis:
+            self._limited_analysis.append(amt)
 
     @property
     def excluded_analysis(self) -> list[str]:
@@ -1452,6 +1453,18 @@ class Observable(TaggableObject, DetectableObject):
                 self.analysis[analysis.type.name], analysis, self))
 
         self.analysis[analysis.type.name] = analysis
+
+        analysis_observables = []
+        # and then make sure that all the observables in this Analysis are added to the root
+        for observable in analysis.observables:
+            observable = root.get_observable(observable)
+            # have we already added it?
+            if observable:
+                analysis_observables.append(observable)
+                continue
+
+            # otherwise we need to add it
+
         logging.debug(f"added analysis {analysis} type {analysis.type} to observable {self}")
         return analysis
 
@@ -1506,6 +1519,54 @@ class Observable(TaggableObject, DetectableObject):
 
         recurse_tree(self, _search)
         return result
+
+    def merge(self, target: Observable) -> Observable:
+        """Merge all the mergable properties of the target Observable into this observable."""
+        assert isinstance(target, Observable)
+        assert target.type == self.type
+        assert target.value == self.value
+
+        for directive in target.directives:
+            self.add_directive(directive)
+
+        if target.redirection:
+            # get a reference to the local copy of the target observable
+            local_observable = self.root.get_observable(target.redirection)
+            if not local_observable:
+                # if we can't get it then add it
+                local_observable = self.root.add_observable(target.redirection)
+
+            self.redirection = local_observable
+
+        for link in target.links:
+            # get a reference to the local copy of the target observable
+            local_observable = self.root.get_observable(link)
+            if not local_observable:
+                # if we can't get it then add it
+                local_observable = self.root.add_observable(link)
+
+            self.add_link(local_observable)
+
+        for amt in target.limited_analysis:
+            self.limit_analysis(amt)
+
+        for amt in target.excluded_analysis:
+            self.exclude_analysis(amt)
+
+        for rel in target.relationships:
+            # get a reference to the local copy of the target observable
+            local_observable = self.root.get_observable(rel.target)
+            if not local_observable:
+                # if we can't get it then add it
+                local_observable = self.root.add_observable(rel.target)
+            
+            self.add_relationship(rel.r_type, local_observable)
+
+        if target.grouping_target:
+            self.grouping_target = target.grouping_target
+
+        for tag in target.tags:
+            self.add_tag(tag)
 
     def __str__(self):
         if self.time is not None:
