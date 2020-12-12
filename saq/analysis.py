@@ -1705,6 +1705,7 @@ class RootAnalysis(Analysis, MergableObject):
                  analysis_mode=None,
                  queue=None,
                  instructions=None,
+                 version=0,
                  *args, **kwargs):
 
         import uuid as uuidlib
@@ -1722,6 +1723,10 @@ class RootAnalysis(Analysis, MergableObject):
         self._uuid = str(uuidlib.uuid4()) # default is new uuid
         if uuid:
             self.uuid = uuid
+
+        self._version = 0
+        if version is not None:
+            self.version = version
 
         self._tool = None
         if tool:
@@ -1789,6 +1794,7 @@ class RootAnalysis(Analysis, MergableObject):
     # json keys
     KEY_ANALYSIS_MODE = 'analysis_mode'
     KEY_ID = 'id'
+    KEY_VERSION = 'version'
     KEY_UUID = 'uuid'
     KEY_TOOL = 'tool'
     KEY_TOOL_INSTANCE = 'tool_instance'
@@ -1818,6 +1824,7 @@ class RootAnalysis(Analysis, MergableObject):
         result.update({
             RootAnalysis.KEY_ANALYSIS_MODE: self.analysis_mode,
             RootAnalysis.KEY_UUID: self.uuid,
+            RootAnalysis.KEY_VERSION: self.version,
             RootAnalysis.KEY_TOOL: self.tool,
             RootAnalysis.KEY_TOOL_INSTANCE: self.tool_instance,
             RootAnalysis.KEY_TYPE: self.alert_type,
@@ -1847,6 +1854,8 @@ class RootAnalysis(Analysis, MergableObject):
             self.analysis_mode = value[RootAnalysis.KEY_ANALYSIS_MODE]
         if RootAnalysis.KEY_UUID in value:
             self.uuid = value[RootAnalysis.KEY_UUID]
+        if RootAnalysis.KEY_VERSION in value:
+            self.version = value[RootAnalysis.KEY_VERSION]
         if RootAnalysis.KEY_TOOL in value:
             self.tool = value[RootAnalysis.KEY_TOOL]
         if RootAnalysis.KEY_TOOL_INSTANCE in value:
@@ -1896,6 +1905,17 @@ class RootAnalysis(Analysis, MergableObject):
     def uuid(self, value):
         assert isinstance(value, str)
         self._uuid = value
+
+    @property
+    def version(self) -> int:
+        """Returns the current version of this RootAnalysis object.
+        The version starts at 0 and increments every time the object is modified and saved."""
+        return self._version
+
+    @version.setter
+    def version(self, value: int):
+        assert isinstance(value, int) and value >= 0
+        self._version = value
 
     @property
     def tool(self):
