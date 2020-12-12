@@ -3,7 +3,7 @@ import shutil
 
 import pytest
 
-from saq.analysis import RootAnalysis, AnalysisModuleType
+from saq.analysis import RootAnalysis, AnalysisModuleType, Analysis
 from saq.constants import *
 from saq.system.analysis_tracking import get_root_analysis
 
@@ -404,3 +404,51 @@ def test_merge_tags():
     observable.merge(target_observable)
     assert observable.tags
     assert observable.tags[0] == 'test'
+
+@pytest.mark.integration
+def test_merge_analysis():
+    amt = AnalysisModuleType('test', '')
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    target_observable.add_analysis(Analysis(type=amt))
+
+    assert not observable.analysis
+    observable.merge(target_observable)
+    assert observable.analysis
+    assert observable.get_analysis('test') is not None
+
+@pytest.mark.integration
+def test_merge_analysis_with_observables():
+    amt = AnalysisModuleType('test', '')
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    analysis = target_observable.add_analysis(Analysis(type=amt))
+    extra_observable = analysis.add_observable('other_type', 'other_value')
+
+    assert not root.get_observable(extra_observable)
+    observable.merge(target_observable)
+    assert root.get_observable(extra_observable) == extra_observable
+
+@pytest.mark.integration
+def test_merge_analysis_with_existing_observables():
+    amt = AnalysisModuleType('test', '')
+    root = RootAnalysis()
+    observable = root.add_observable('some_type', 'some_value')
+    existing_extra_observable = root.add_observable('other_type', 'other_value')
+
+    target_root = RootAnalysis()
+    target_observable = target_root.add_observable('some_type', 'some_value')
+    analysis = target_observable.add_analysis(Analysis(type=amt))
+    extra_observable = analysis.add_observable('other_type', 'other_value')
+
+    # should only have the root as the parent
+    assert len(existing_extra_observable.parents) == 1
+    observable.merge(target_observable)
+    # should now have both the root and the new analysis as parents
+    assert len(existing_extra_observable.parents) == 2

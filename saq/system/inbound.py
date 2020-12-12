@@ -63,6 +63,7 @@ def process_analysis_request(ar: AnalysisRequest):
                     raise UnknownObservableError(observable)
 
                 observable.add_analysis(ar.result)
+                root.merge(ar.root)
                 root.save() # <-- why is this needed?
 
             # if this is a RootAnalysis request make sure it is tracked

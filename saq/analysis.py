@@ -35,7 +35,12 @@ from saq.util import *
 
 STATE_KEY_WHITELISTED = 'whitelisted'
 
-class DetectionPoint(object):
+class MergableObject():
+    """An object is mergable if a newer version of it can be merged into an older existing version."""
+    def merge(target: 'MergableObject') -> Union['MergableObject', None]:
+        raise NotImplemented()
+
+class DetectionPoint():
     """Represents an observation that would result in a detection."""
 
     KEY_DESCRIPTION = 'description'
@@ -49,7 +54,8 @@ class DetectionPoint(object):
     def json(self):
         return {
             DetectionPoint.KEY_DESCRIPTION: self.description,
-            DetectionPoint.KEY_DETAILS: self.details }
+            DetectionPoint.KEY_DETAILS: self.details, 
+        }
 
     @json.setter
     def json(self, value):
@@ -83,7 +89,7 @@ class DetectionPoint(object):
 
         return self.description == other.description and self.details == other.details
 
-class DetectableObject():
+class DetectableObject(MergableObject):
     """Mixin for objects that can have detection points."""
 
     KEY_DETECTIONS = 'detections'
@@ -116,21 +122,31 @@ class DetectableObject():
         """Returns True if this object has at least one detection point, False otherwise."""
         return len(self._detections) != 0
 
-    def add_detection_point(self, description, details=None):
+    def add_detection_point(self, description_or_detection: Union[DetectionPoint, str], details: Optional[str]=None) -> 'DetectableObject':
         """Adds the given detection point to this object."""
-        assert isinstance(description, str)
-        assert description
+        assert isinstance(description_or_detection, str) or isinstance(description_or_detection, DetectionPoint)
 
-        detection = DetectionPoint(description, details)
+        if isinstance(description_or_detection, str):
+            detection = DetectionPoint(description_or_detection, details)
+        else:
+            detection = description_or_detection
 
         if detection in self._detections:
-            return
+            return self
 
         self._detections.append(detection)
-        logging.debug("added detection point {} to {}".format(detection, self))
+        logging.debug(f"added detection point {detection} to {self}")
+        return self
 
     def clear_detection_points(self):
-        self._detections.clear()
+        self._detections = {}
+
+    def merge(self, target: 'DetectableObject') -> 'DetectableObject':
+        assert isinstance(target, DetectableObject)
+        for detection in target.detections:
+            self.add_detection_point(detection)
+
+        return self
 
 # utility class to translate custom objects into JSON
 class _JSONEncoder(json.JSONEncoder):
@@ -145,7 +161,7 @@ class _JSONEncoder(json.JSONEncoder):
             logging.debug('json type {0}'.format(type(obj)))
             return super(_JSONEncoder, self).default(obj)
 
-class TaggableObject():
+class TaggableObject(MergableObject):
     """A mixin class that adds a tags property that is a list of tags assigned to this object."""
 
     KEY_TAGS = 'tags'
@@ -193,6 +209,14 @@ class TaggableObject():
     def has_tag(self, tag_value):
         """Returns True if this object has this tag."""
         return tag_value in self.tags
+
+    def merge(self, target: 'TaggableObject') -> 'TaggableObject':
+        assert isinstance(target, TaggableObject)
+
+        for tag in target.tags:
+            self.add_tag(tag)
+
+        return self
 
     # XXX this moves elsewhere
     @property
@@ -333,7 +357,7 @@ class AnalysisModuleType():
 
         return True
 
-class Analysis(TaggableObject, DetectableObject, Lockable):
+class Analysis(TaggableObject, DetectableObject, MergableObject, Lockable):
     """Represents an output of analysis work."""
 
     # dictionary keys used by the Analysis class
@@ -646,6 +670,21 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         recurse_tree(self, _search)
         return result
 
+    def merge(self, target: 'Analysis') -> 'Analysis':
+        TaggableObject.merge(self, target)
+        DetectableObject.merge(self, target)
+
+        for observable in target.observables:
+            existing_observable = self.root.get_observable(observable)
+            if not existing_observable:
+                # add any missing observables
+                self.add_observable(observable)
+            else:
+                # merge existing observables
+                existing_observable.merge(observable)
+
+        return self
+
     ##########################################################################
     # GUI PROPERTIES
 
@@ -761,7 +800,12 @@ class Analysis(TaggableObject, DetectableObject, Lockable):
         if type(self) is not type(other):
             return False
 
-        return self.details == other.details if self.details and other.details else False
+        # if they have the same uuid then they refer to the same analysis
+        if self.uuid == other.uuid:
+            return True
+
+        # otherwise two Analysis objects are equal if they have the same amt and observable
+        return self.type == other.type and self.observable == other.observable
 
     def __hash__(self):
         return hash(self.summary)
@@ -851,7 +895,7 @@ class DispositionHistory(collections.abc.MutableMapping):
     def __len__(self):
         return len(self.history)
 
-class Observable(TaggableObject, DetectableObject):
+class Observable(TaggableObject, DetectableObject, MergableObject):
     """Represents a piece of information discovered in an analysis that can itself be analyzed."""
 
     KEY_ID = 'id'
@@ -1454,27 +1498,38 @@ class Observable(TaggableObject, DetectableObject):
 
         self.analysis[analysis.type.name] = analysis
 
-        analysis_observables = []
         # and then make sure that all the observables in this Analysis are added to the root
-        for observable in analysis.observables:
-            observable = root.get_observable(observable)
-            # have we already added it?
+        analysis_observables = []
+        for target_observable in analysis.observables:
+            observable = self.root.get_observable(target_observable)
+            # have we not already added it?
+            if not observable:
+                observable = analysis.add_observable(target_observable)
+            else:
+                observable.merge(target_observable)
+
             if observable:
                 analysis_observables.append(observable)
-                continue
 
-            # otherwise we need to add it
+        analysis.observables = analysis_observables
 
         logging.debug(f"added analysis {analysis} type {analysis.type} to observable {self}")
         return analysis
 
-    def get_analysis(self, amt: AnalysisModuleType) -> Union[Analysis, None]:
+    def get_analysis(self, amt: Union[AnalysisModuleType, str]) -> Union[Analysis, None]:
         """Returns the Analysis of the given type for this Observable, or None."""
-        assert isinstance(amt, AnalysisModuleType)
-        return self.analysis.get(amt.name, None)
+        assert isinstance(amt, AnalysisModuleType) or isinstance(amt, str)
+        if isinstance(amt, AnalysisModuleType):
+            amt = amt.name
 
-    def analysis_completed(self, amt: AnalysisModuleType) -> bool:
+        return self.analysis.get(amt, None)
+
+    def analysis_completed(self, amt: Union[AnalysisModuleType, str]) -> bool:
         """Returns True if the analysis of the given type has been completed for this Observable."""
+        assert isinstance(amt, AnalysisModuleType) or isinstance(amt, str)
+        if isinstance(amt, AnalysisModuleType):
+            amt = amt.name
+
         return self.get_analysis(amt) is not None
 
     def _load_analysis(self):
@@ -1520,9 +1575,12 @@ class Observable(TaggableObject, DetectableObject):
         recurse_tree(self, _search)
         return result
 
-    def merge(self, target: Observable) -> Observable:
+    def merge(self, target: 'Observable') -> 'Observable':
         """Merge all the mergable properties of the target Observable into this observable."""
         assert isinstance(target, Observable)
+        TaggableObject.merge(self, target)
+        DetectableObject.merge(self, target)
+
         assert target.type == self.type
         assert target.value == self.value
 
@@ -1567,6 +1625,17 @@ class Observable(TaggableObject, DetectableObject):
 
         for tag in target.tags:
             self.add_tag(tag)
+
+        for amt, analysis in target.analysis.items():
+            existing_analysis = self.get_analysis(amt)
+            if not existing_analysis:
+                # add any missing analysis
+                self.add_analysis(analysis)
+            else:
+                # merge existing analysi
+                existing_analysis.merge(analysis)
+
+        return self
 
     def __str__(self):
         if self.time is not None:
@@ -1617,7 +1686,7 @@ class Observable(TaggableObject, DetectableObject):
 # The hiearchy of relationships goes Analysis --> Alert --> saq.database.Alert
 #
 
-class RootAnalysis(Analysis):
+class RootAnalysis(Analysis, MergableObject):
     """Root analysis object."""
 
     def __init__(self, 
@@ -2059,114 +2128,6 @@ class RootAnalysis(Analysis):
         freed_items = gc.collect()
         #logging.debug("{} items freed by gc".format(freed_items))
 
-    # XXX don't think we need this any more
-    def merge(self, target_analysis, other):
-        """Merges the Observables and Analysis of an existing RootAnalysis into the target Analysis object."""
-        assert isinstance(target_analysis, Analysis)
-        assert isinstance(other, RootAnalysis)
-
-        logging.debug("merging {} into {} target {}".format(other, self, target_analysis))
-
-        # maps the observables from the other alert to new ones in this one
-        transfer_map = {} # key = uuid of other observable, value = uuid of the new observable
-        # go through and copy all the observations over first
-        for other_observable in other.all_observables:
-            # does this observation already exist?
-            existing_observable = self.get_observable_by_spec(other_observable.type, 
-                                                              other_observable.value, 
-                                                              other_observable.time)
-
-            if existing_observable:
-                target_observable = existing_observable
-                logging.debug("merging existing observable {}".format(target_observable))
-            else:
-                # NOTE that here we don't want to actually add this other observable
-                # because it has references to Analysis objects we need to add below
-                # so we create a new one based on this one
-                logging.debug("making copy of {}".format(other_observable))
-                target_observable = copy.copy(other_observable)
-                target_observable.clear_analysis() # make sure these are cleared out (we'll add them back in later...)
-                # note that we use the record_observable here instead of add_observable
-                # we're just moving them over into this RootAnalysis right now
-                target_observable = self.record_observable(target_observable)
-
-                # if the observable is a file then the actual file needs to be copied over
-                # TODO this should go into the functionality of the observable class
-                if target_observable.type == F_FILE:
-                    src_path = os.path.join(other.storage_dir, other_observable.value)
-                    if not os.path.exists(src_path):
-                        logging.error("merge for {} has missing file {}".format(other, src_path))
-                    else:
-                        dest_dir = os.path.join(self.storage_dir, os.path.dirname(other_observable.value))
-                        dest_path = os.path.join(dest_dir, os.path.basename(other_observable.value))
-                        try:
-                            logging.debug("copying merged file observable {} to {}".format(src_path, dest_path))
-                            if not os.path.isdir(dest_dir):
-                                os.makedirs(dest_dir)
-                            shutil.copy(src_path, dest_path)
-                        except Exception as e:
-                            logging.error("unable to copy {} to {}: {}".format(src_path, dest_path, e))
-                            report_exception()
-
-            # keep track of how they are moving over
-            transfer_map[other_observable.id] = target_observable.id
-
-        for other_observable in other.all_observables:
-            # find the corresponding observable in this alert
-            target_observable = self.get_observable_by_spec(other_observable.type,
-                                                            other_observable.value,
-                                                            other_observable.time)
-            if target_observable is None:
-                logging.error("could not find target observable {} in {}".format(other_observable, self))
-                continue
-
-            # remap relationships
-            for r in target_observable.relationships:
-                if r.target.id in transfer_map:
-                    logging.debug("re-targeting {}".format(r))
-                    r.target = self.get_observable_by_spec(other.observable_store[r.target.id].type,
-                                                           other.observable_store[r.target.id].value,
-                                                           other.observable_store[r.target.id].time)
-
-            for other_analysis in other_observable.all_analysis:
-                # do we already have this analysis for this observable in the target?
-                existing_analysis = target_observable.get_analysis(type(other_analysis))
-                if existing_analysis is None:
-                    logging.debug("merging analysis {} into {}".format(other_analysis, target_observable))
-                    details = other_analysis.details
-                    new_analysis = copy.copy(other_analysis)
-                    new_analysis.clear_observables()
-                    new_analysis.external_details_path = None
-                    new_analysis.external_details = None
-                    new_analysis.details = details
-                    #new_analysis = type(other_analysis)()
-                    #new_analysis.details = other_analysis.details
-                    target_observable.add_analysis(new_analysis)
-
-                    # and then copy all the observables in
-                    for o in other_analysis.observables:
-                        # find the corresponding observable in this root
-                        current_observable = self.get_observable_by_spec(o.type, o.value, o.time)
-                        if current_observable is None:
-                            logging.error("could not find current observable {} in {} for {}".format(
-                                          o, self, other_analysis))
-                        else:
-                            new_analysis.add_observable(current_observable)
-                else:
-                    logging.debug("skipping merge for existing analysis {}".format(existing_analysis))
-
-        # finally, all the observables in the RootAnalysis object get added to the target_analysis
-        for other_observable in other.observables:
-            existing_observable = self.get_observable_by_spec(other_observable.type, 
-                                                              other_observable.value, 
-                                                              other_observable.time)
-            if existing_observable is None:
-                logging.error("cannot find observable type {} value {} time {}".format(other_observable.type,
-                                                                                       other_observable.value,
-                                                                                       other_observable.time))
-            else:
-                target_analysis.add_observable(existing_observable)
-
     def load(self):
         """Utility function to replace specific dict() in json with runtime object references."""
         # in other words, load the JSON
@@ -2479,7 +2440,7 @@ class RootAnalysis(Analysis):
         try:
             # if we passed an existing Observable (same id) then we return the reference inside the RootAnalysis
             # with the matching id
-            return self.observable_store[uuid_or_observable.id]
+            return self.observable_store[observable.id]
         except KeyError:
             # otherwise we try to match based on the type, value and time
             return self.find_observable(
@@ -2681,6 +2642,21 @@ class RootAnalysis(Analysis):
             raise UnknownObservableError(observable)
 
         return observable.get_analysis_request_id(amt) is not None
+
+    def merge(self, target: 'RootAnalysis') -> 'RootAnalysis':
+        """Merge all the mergable properties of the target RootAnalysis into this root."""
+        assert isinstance(target, RootAnalysis)
+        Analysis.merge(self, target)
+
+        # you cannot merge two different root analysis objects together
+        if self.uuid != target.uuid:
+            logging.error(f"attempting to merge a different RootAnalysis ({target}) into {self}")
+            return None
+
+        # merge any properties that can be modified after a RootAnalysis is created
+        self.analysis_mode = target.analysis_mode
+        self.queue = target.queue
+        self.description = target.description
 
 def recurse_down(target, callback):
     """Calls callback starting at target back to the RootAnalysis."""

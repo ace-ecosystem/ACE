@@ -232,3 +232,45 @@ def test_observable_md5():
     root = RootAnalysis()
     observable = root.add_observable(F_TEST, 'test_1')
     observable.md5_hex == '4e70ffa82fbe886e3c4ac00ac374c29b'
+
+@pytest.mark.integration
+def test_root_analysis_merge():
+    amt = AnalysisModuleType('test', '')
+    root = RootAnalysis()
+    root.save()
+
+    target_root = get_root_analysis(root)
+    target_root.analysis_mode = 'some_mode'
+    target_root.queue = 'some_queue'
+    target_root.description = 'some description'
+
+    root = get_root_analysis(root)
+    root.merge(target_root)
+
+    assert root.analysis_mode == target_root.analysis_mode
+    assert root.queue == target_root.queue
+    assert root.description == target_root.description
+
+@pytest.mark.unit
+def test_root_analysis_merge_with_observables():
+    amt = AnalysisModuleType('test', '')
+    root = RootAnalysis()
+    existing_observable = root.add_observable('test', 'test')
+    existing_analysis = existing_observable.add_analysis(type=amt)
+    root.save()
+
+    target_root = get_root_analysis(root)
+    # add a new observable to the root
+    new_observable = target_root.add_observable('test', 'new')
+    # and then add a new analysis to that
+    new_analysis = new_observable.add_analysis(type=amt)
+
+    root = get_root_analysis(root)
+    root.merge(target_root)
+
+    # existing observable and analysis should be there
+    assert root.get_observable(existing_observable) == existing_observable
+    assert root.get_observable(existing_observable).get_analysis(amt) == existing_analysis
+    # and the new obs
+    assert root.get_observable(new_observable) == new_observable
+    assert root.get_observable(new_observable).get_analysis(amt) == new_analysis

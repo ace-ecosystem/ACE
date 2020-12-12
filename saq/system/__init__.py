@@ -15,6 +15,8 @@ class ACESystem:
     storage = None
     locking = None
     config = None
+    alert_tracking = None
+    event = None
 
 # the global system object that contains references to all the interfaces
 ace = ACESystem()

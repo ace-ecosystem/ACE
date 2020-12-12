@@ -1,8 +1,16 @@
 THOUGHTS
 * test store same file multiple times
+* alert queue
+* event queue
+* queue vs subscription
 
 I AM HERE
-* adjusting tracking to keep track of what analysis points to what files
+* Working on the merge. Missed this complex piece.
+* cancel analysis
+* alert tracking
+* events
+* Analysis.version
+* Observable.merge :-(
 
 NOTES FROM REVIEWING EXISTING ENGINE
 * get rid of fetch_tags() function call
