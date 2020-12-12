@@ -262,12 +262,8 @@
   </div>
   {% endif %}
   <center>
-  {% for plot in html_plots %}
-      {{plot|safe}}
-  {% endfor %}
-  <br>
   <h4>{{ query }}</h4>
-  {% for table in tables %}
+  {% for result in metric_results %}
       <!--div class="row">
           <div class="col-md-10 col-md-push-1"-->
               {% if selected_companies_map %}
@@ -279,8 +275,12 @@
                       <img src="{{url_for('static', filename='images/company_icons/{}.png'.format(company_name))}}">
                   {% endfor %}
               {% endif %}
-              <h4>{{table.name}}</h4>
-              {{table.to_html(classes='table table-hover')|safe}}
+              <h4>{{result['table'].name}}</h4>
+              {% if result['plot'] is not none %}
+                  {{result['plot']|safe}}
+                  <br>
+              {% endif %}
+              {{result['table'].to_html(classes='table table-hover')|safe}}
           <!--/div>
       </div-->
   {% endfor %}
