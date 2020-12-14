@@ -35,13 +35,6 @@ from subprocess import Popen, PIPE, DEVNULL
 from urllib.parse import urlparse
 from sandboxapi.falcon import FalconAPI
 
-import businesstime
-
-try:
-    import pandas as pd
-except ImportError:
-    pass
-
 import requests
 from pymongo import MongoClient
 
@@ -73,28 +66,6 @@ from saq.tip import tip_factory
 from saq.util import abs_path, find_all_url_domains, create_histogram_string
 from saq.file_upload import *
 from saq.observables import create_observable
-
-from metrics.alerts import ( get_alerts_between_dates,
-                             VALID_ALERT_STATS,
-                             FRIENDLY_STAT_NAME_MAP,
-                             statistics_by_month_by_dispo,
-                             generate_hours_of_operation_summary_table,
-                             generate_overall_summary_table,
-                             define_business_time
-                            )
-from metrics.alerts.users import get_all_users, generate_user_alert_stats
-from metrics.alerts.alert_types import ( all_alert_types,
-                                         unique_alert_types_between_dates,
-                                         count_quantites_by_alert_type,
-                                         get_alerts_between_dates_by_type,
-                                         generate_alert_type_stats
-                                        )
-
-from metrics.events import ( get_events_between_dates,
-                             get_incidents_from_events,
-                             add_email_alert_counts_per_event
-                            )
-from metrics.helpers import get_companies, dataframes_to_xlsx_bytes, dataframes_to_archive_bytes_of_json_files
 
 import ace_api
 
@@ -1920,8 +1891,34 @@ def get_valid_alert_queues():
 @analysis.route('/metrics', methods=['GET', 'POST'])
 @login_required
 def metrics():
+
     if not saq.CONFIG['gui'].getboolean('display_metrics'):
-        # redirect to index
+        return redirect(url_for('analysis.index'))
+
+    try:
+        from ace_metrics.alerts import ( get_alerts_between_dates,
+                                        VALID_ALERT_STATS,
+                                        FRIENDLY_STAT_NAME_MAP,
+                                        statistics_by_month_by_dispo,
+                                        generate_hours_of_operation_summary_table,
+                                        generate_overall_summary_table,
+                                        define_business_time
+                                    )
+        from ace_metrics.alerts.users import get_all_users, generate_user_alert_stats
+        from ace_metrics.alerts.alert_types import ( all_alert_types,
+                                                    unique_alert_types_between_dates,
+                                                    count_quantites_by_alert_type,
+                                                    get_alerts_between_dates_by_type,
+                                                    generate_alert_type_stats
+                                                )
+
+        from ace_metrics.events import ( get_events_between_dates,
+                                        get_incidents_from_events,
+                                        add_email_alert_counts_per_event
+                                    )
+        from ace_metrics.helpers import get_companies, dataframes_to_xlsx_bytes, dataframes_to_archive_bytes_of_json_files, generate_html_plot
+    except ModuleNotFoundError:
+        flash("The ACE metrics library is not installed.")
         return redirect(url_for('analysis.index'))
 
     # get the list of users that have full access to all metrics
@@ -1962,6 +1959,8 @@ def metrics():
     alert_type_count_breakdown = False
     selected_companies_map = {}
     tables = []
+    html_plots = []
+    metric_results = []
 
     # default business hours
     # Use the SLA config section, for now.
@@ -2021,16 +2020,20 @@ def metrics():
 
                 if hours_of_operation:
                     hop_df = generate_hours_of_operation_summary_table(alerts.copy())
+                    metric_results.append({'table': hop_df, 'plot': None})
                     tables.append(hop_df)
 
                 if alert_overall_cycle_time_summary:
                     sla_df = generate_overall_summary_table(alerts.copy())
+                    metric_results.append({'table': sla_df, 'plot': None})
                     tables.append(sla_df)
             
                 alert_stat_map = statistics_by_month_by_dispo(alerts, business_hours=business_hours)
                 for stat in metric_alert_stats:
                     alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
                     tables.append(alert_stat_map[stat])
+                    metric_results.append({'table': alert_stat_map[stat],
+                                           'plot': generate_html_plot(alert_stat_map[stat])})
 
             if alert_target == 'alert_types':
                 with get_db_connection() as db:
@@ -2048,6 +2051,8 @@ def metrics():
                 for alert_type in alert_types:
                     for stat in metric_alert_stats:
                         tables.append(alert_type_stat_map[alert_type][stat])
+                        metric_results.append({'table': alert_type_stat_map[alert_type][stat],
+                                                'plot': None})
 
             if alert_target == 'users':
                 if alerts is None:
@@ -2069,6 +2074,8 @@ def metrics():
                 for user_id in user_ids:
                     for stat in metric_alert_stats:
                         tables.append(all_user_stat_map[user_id][stat])
+                        metric_results.append({'table': all_user_stat_map[user_id][stat],
+                                                'plot': generate_html_plot(all_user_stat_map[user_id][stat])})
 
         for event_target in events_metric_targets:
             # we will get the events no matter what
@@ -2080,10 +2087,12 @@ def metrics():
 
             if event_target == 'events':
                 tables.append(events.drop(columns=['id']))
+                metric_results.append({'table': events, 'plot': None})
 
             if event_target == 'incidents':
                 incidents = get_incidents_from_events(events)
                 tables.append(incidents)
+                metric_results.append({'table': incidents, 'plot': None})
 
         # Independent tables
         if hours_of_operation:
@@ -2096,6 +2105,7 @@ def metrics():
                     alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
             hop_df = generate_hours_of_operation_summary_table(alerts, business_hours)
             tables.append(hop_df)
+            metric_results.append({'table': hop_df, 'plot': None})
 
         if alert_overall_cycle_time_summary:
             if not business_hours:
@@ -2107,12 +2117,14 @@ def metrics():
                     alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
             overall_ct_summary = generate_overall_summary_table(alerts, business_hours)
             tables.append(overall_ct_summary)
+            metric_results.append({'table': overall_ct_summary, 'plot': None})
 
         if alert_type_count_breakdown:
             with get_db_connection() as db:
                 # TODO: implement company selection here
                 at_counts = count_quantites_by_alert_type(daterange_start,daterange_end, db)
             tables.append(at_counts)
+            metric_results.append({'table': at_counts, 'plot': None})
 
         if tables and export_results_to:
             time_stamp = str(datetime.datetime.now().timestamp())
@@ -2137,6 +2149,7 @@ def metrics():
 
     return render_template(
         'analysis/metrics.html',
+        metric_results=metric_results,
         filter_state=filter_state,
         valid_alert_stats=reversed(VALID_ALERT_STATS),
         friendly_stat_name_map=FRIENDLY_STAT_NAME_MAP,
