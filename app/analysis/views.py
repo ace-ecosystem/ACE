@@ -2546,7 +2546,12 @@ def index():
     analysis = alert  # by default it's the alert
 
     if module_path is not None and observable is not None:
-        analysis = observable.analysis[module_path]
+        if module_path == 'saq.analysis:ErrorAnalysis':
+            flash("Analysis object failed to load. Old code?")
+        elif module_path == 'saq.analysis:DeprecatedAnalysis':
+            flash("Analysis has been Deprecated.")
+        else:
+            analysis = observable.analysis[module_path]
 
     # load user comments for the alert
     try:
