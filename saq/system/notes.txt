@@ -1,3 +1,22 @@
+AnalysisRequest
+
+root : <-- merged
+observable: <-- what should be analyzed
+type: <-- with what
+result: <-- resulting analysis
+
+result:
+
+TYPE_ROOT_ANALYSIS: root is inserted or merged
+TYPE_OBSERVABLE_ANALYSIS_REQUEST
+TYPE_OBSERVABLE_ANALYSIS_RESULT: root is ignored except for properties, observable is merged
+
+--> TYPE_ROOT_ANALYSIS
+<-- TYPE_OBSERVABLE_ANALYSIS_REQUEST
+--> TYPE_OBSERVABLE_ANALYSIS_RESULT
+
+
+
 CHANGES FOR 2.0
 
 Analysis is tracked inside the Observable by the AnaysisModuleType.name

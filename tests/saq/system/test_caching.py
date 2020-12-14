@@ -4,12 +4,12 @@ import datetime
 
 import pytest
 
-from saq.analysis import Analysis
+from saq.analysis import RootAnalysis
 from saq.observables import create_observable
 from saq.constants import F_TEST
 
 from saq.system.analysis_module import AnalysisModuleType
-from saq.system.caching import generate_cache_key, cache_analysis, get_cached_analysis
+from saq.system.caching import generate_cache_key, cache_analysis_result, get_cached_analysis_result
 
 amt_1 = AnalysisModuleType(
         name='test_1',
@@ -60,8 +60,6 @@ amt_multiple_cache_keys_2 = AnalysisModuleType(
         cache_ttl=600,
         additional_cache_keys=['key_b', 'key_a'])
 
-analysis = Analysis()
-
 TEST_1 = 'test_1'
 TEST_2 = 'test_2'
 
@@ -106,19 +104,35 @@ def test_generate_cache_invalid_parameters(observable, amt):
     assert generate_cache_key(observable, amt) is None
 
 @pytest.mark.integration
-def test_cache_analysis():
-    assert cache_analysis(observable_1, amt_1, analysis) is not None
-    # NOTE in the threaded implementation of the ACE engine the actual instance is stored and returned
-    # NOTE so the is operator works here
-    assert get_cached_analysis(observable_1, amt_1) is analysis
+def test_cache_analysis_result():
+    root = RootAnalysis()
+    observable = root.add_observable('type', 'value')
+    request = observable.create_analysis_request(amt_1)
+    request.result = request.create_result()
+    analysis = request.result.observable.add_analysis(type=amt_1)
+
+    assert cache_analysis_result(request) is not None
+    assert get_cached_analysis_result(observable, amt_1) == request
 
 @pytest.mark.integration
 def test_nocache_analysis():
-    assert cache_analysis(observable_1, amt_no_cache, analysis) is None
-    assert get_cached_analysis(observable_1, amt_no_cache) is None
+    root = RootAnalysis()
+    observable = root.add_observable('type', 'value')
+    request = observable.create_analysis_request(amt_no_cache)
+    request.result = request.create_result()
+    analysis = request.result.observable.add_analysis(type=amt_no_cache)
+
+    assert cache_analysis_result(request) is None
+    assert get_cached_analysis_result(observable, amt_no_cache) is None
 
 @pytest.mark.integration
 def test_cache_expiration():
-    assert cache_analysis(observable_1, amt_fast_expire_cache, analysis) is not None
+    root = RootAnalysis()
+    observable = root.add_observable('type', 'value')
+    request = observable.create_analysis_request(amt_fast_expire_cache)
+    request.result = request.create_result()
+    analysis = request.result.observable.add_analysis(type=amt_fast_expire_cache)
+
+    assert cache_analysis_result(request) is not None
     # should have expired right away
-    assert get_cached_analysis(observable_1, amt_no_cache) is None
+    assert get_cached_analysis_result(observable, amt_fast_expire_cache) is None

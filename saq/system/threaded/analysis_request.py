@@ -47,7 +47,7 @@ class ThreadedAnalysisRequestTrackingInterface(AnalysisRequestTrackingInterface)
             if request.cache_key:
                 self.cache_index[request.cache_key] = request
 
-            if request.analysis_module_type:
+            if request.type:
                 # if we've started analyzing this request then we start tracking expiration of the request
                 if request.status == TRACKING_STATUS_ANALYZING:
                     self._track_request_expiration(request)
@@ -60,7 +60,7 @@ class ThreadedAnalysisRequestTrackingInterface(AnalysisRequestTrackingInterface)
         # are we already tracking this?
         if request.id not in self.expiration_tracking:
             self.expiration_tracking[request.id] = (
-                    datetime.datetime.now() + datetime.timedelta(seconds=request.analysis_module_type.timeout),
+                    datetime.datetime.now() + datetime.timedelta(seconds=request.type.timeout),
                     request)
 
     def _delete_request_expiration(self, request: AnalysisRequest) -> bool:
@@ -85,7 +85,7 @@ class ThreadedAnalysisRequestTrackingInterface(AnalysisRequestTrackingInterface)
                 self.cache_index.pop(request.cache_key, None)
 
             # and finally delete any expiration tracking if it exists
-            if request.analysis_module_type:
+            if request.type:
                 self._delete_request_expiration(request)
 
             logging.debug(f"deleted {request}")
@@ -110,7 +110,7 @@ class ThreadedAnalysisRequestTrackingInterface(AnalysisRequestTrackingInterface)
         with self.sync_lock:
             target_list = [] # the list of request.id that we need to get rid of
             for request_id, request in self.request_tracking.items():
-                if request.analysis_module_type.name == amt.name:
+                if request.type.name == amt.name:
                     target_list.append(request_id)
 
             for request_id in target_list:

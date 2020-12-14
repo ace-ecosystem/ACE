@@ -11,7 +11,7 @@ from saq.system.analysis_module import AnalysisModuleType
 from saq.system.exceptions import *
 
 @dataclass
-class RootAnalysisTracking: # XXX why are we using this here?
+class RootAnalysisTracking:
     root: str
     details: List[str] = field(default_factory=list)
 

@@ -37,7 +37,10 @@ STATE_KEY_WHITELISTED = 'whitelisted'
 
 class MergableObject():
     """An object is mergable if a newer version of it can be merged into an older existing version."""
-    def merge(target: 'MergableObject') -> Union['MergableObject', None]:
+    def apply_merge(self, target: 'MergableObject') -> Union['MergableObject', None]:
+        raise NotImplemented()
+
+    def apply_diff_merge(self, before: 'MergableObject', after: 'MergableObject') -> Union['MergableObject', None]:
         raise NotImplemented()
 
 class DetectionPoint():
@@ -141,10 +144,19 @@ class DetectableObject(MergableObject):
     def clear_detection_points(self):
         self._detections = {}
 
-    def merge(self, target: 'DetectableObject') -> 'DetectableObject':
+    def apply_merge(self, target: 'DetectableObject') -> 'DetectableObject':
         assert isinstance(target, DetectableObject)
         for detection in target.detections:
             self.add_detection_point(detection)
+
+        return self
+
+    def apply_diff_merge(self, before: 'DetectableObject', after: 'DetectableObject') -> 'DetectableObject':
+        assert isinstance(before, DetectableObject)
+        assert isinstance(after, DetectableObject)
+        for detection in after.detections:
+            if detection not in before.detections:
+                self.add_detection_point(detection)
 
         return self
 
@@ -210,11 +222,21 @@ class TaggableObject(MergableObject):
         """Returns True if this object has this tag."""
         return tag_value in self.tags
 
-    def merge(self, target: 'TaggableObject') -> 'TaggableObject':
+    def apply_merge(self, target: 'TaggableObject') -> 'TaggableObject':
         assert isinstance(target, TaggableObject)
 
         for tag in target.tags:
             self.add_tag(tag)
+
+        return self
+
+    def apply_diff_merge(self, before: 'TaggableObject', after: 'TaggableObject') -> 'TaggableObject':
+        assert isinstance(before, TaggableObject)
+        assert isinstance(after, TaggableObject)
+
+        for tag in after.tags:
+            if tag not in before.tags:
+                self.add_tag(tag)
 
         return self
 
@@ -410,7 +432,6 @@ class Analysis(TaggableObject, DetectableObject, MergableObject, Lockable):
         # List of IOCs that the analysis contains
         self._iocs = IndicatorList()
 
-
     #
     # Lockable interface
     #
@@ -508,6 +529,9 @@ class Analysis(TaggableObject, DetectableObject, MergableObject, Lockable):
         })
         return result
 
+    def to_dict(self) -> dict:
+        return self.json
+
     @json.setter
     def json(self, value):
         assert isinstance(value, dict)
@@ -532,6 +556,12 @@ class Analysis(TaggableObject, DetectableObject, MergableObject, Lockable):
 
         if Analysis.KEY_UUID in value:
             self.uuid = value[Analysis.KEY_UUID]
+
+    @staticmethod
+    def from_dict(json_dict: dict) -> 'Analysis':
+        analysis = Analysis()
+        analysis.json = json_dict
+        return analysis
 
     @property
     def iocs(self):
@@ -671,8 +701,8 @@ class Analysis(TaggableObject, DetectableObject, MergableObject, Lockable):
         return result
 
     def merge(self, target: 'Analysis') -> 'Analysis':
-        TaggableObject.merge(self, target)
-        DetectableObject.merge(self, target)
+        TaggableObject.apply_merge(self, target)
+        DetectableObject.apply_merge(self, target)
 
         for observable in target.observables:
             existing_observable = self.root.get_observable(observable)
@@ -681,7 +711,7 @@ class Analysis(TaggableObject, DetectableObject, MergableObject, Lockable):
                 self.add_observable(observable)
             else:
                 # merge existing observables
-                existing_observable.merge(observable)
+                existing_observable.apply_merge(observable)
 
         return self
 
@@ -962,7 +992,7 @@ class Observable(TaggableObject, DetectableObject, MergableObject):
         assert isinstance(ar, AnalysisRequest)
 
         logging.debug(f"tracking analysis request {ar} for {self}")
-        self.request_tracking[ar.analysis_module_type.name] = ar.id
+        self.request_tracking[ar.type.name] = ar.id
 
     @staticmethod
     def from_json(json_data):
@@ -1081,6 +1111,9 @@ class Observable(TaggableObject, DetectableObject, MergableObject):
         })
         return result
 
+    def to_dict(self):
+        return self.json
+
     @json.setter
     def json(self, value):
         assert isinstance(value, dict)
@@ -1113,6 +1146,21 @@ class Observable(TaggableObject, DetectableObject, MergableObject):
             self._grouping_target = value[Observable.KEY_GROUPING_TARGET]
         if Observable.KEY_REQUEST_TRACKING in value:
             self._request_tracking = value[Observable.KEY_REQUEST_TRACKING]
+
+    def load(self) -> 'Observable':
+        new_analysis = {}
+        for amt, analysis in self.analysis.items():
+            if isinstance(analysis, dict):
+                new_analysis[amt] = Analysis.from_dict(analysis)
+            else:
+                new_analysis[amt] = analysis
+
+        self.analysis = new_analysis
+        return self
+
+    @staticmethod
+    def from_dict(json_dict: dict) -> 'Observable':
+        return Observable.from_json(json_dict)
 
     @property
     def id(self) -> str:
@@ -1506,7 +1554,7 @@ class Observable(TaggableObject, DetectableObject, MergableObject):
             if not observable:
                 observable = analysis.add_observable(target_observable)
             else:
-                observable.merge(target_observable)
+                observable.apply_merge(target_observable)
 
             if observable:
                 analysis_observables.append(observable)
@@ -1575,11 +1623,11 @@ class Observable(TaggableObject, DetectableObject, MergableObject):
         recurse_tree(self, _search)
         return result
 
-    def merge(self, target: 'Observable') -> 'Observable':
+    def apply_merge(self, target: 'Observable') -> 'Observable':
         """Merge all the mergable properties of the target Observable into this observable."""
         assert isinstance(target, Observable)
-        TaggableObject.merge(self, target)
-        DetectableObject.merge(self, target)
+        TaggableObject.apply_merge(self, target)
+        DetectableObject.apply_merge(self, target)
 
         assert target.type == self.type
         assert target.value == self.value
@@ -1633,9 +1681,81 @@ class Observable(TaggableObject, DetectableObject, MergableObject):
                 self.add_analysis(analysis)
             else:
                 # merge existing analysi
-                existing_analysis.merge(analysis)
+                existing_analysis.apply_merge(analysis)
 
         return self
+
+    def apply_diff_merge(self, before: 'Observable', after: 'Observable') -> 'Observable':
+        """Merge all the mergable properties of the target Observable into this observable."""
+        assert isinstance(before, Observable)
+        assert isinstance(after, Observable)
+        assert before.type == after.type == self.type
+        assert before.value == after.value == self.value
+
+        TaggableObject.apply_diff_merge(self, before, after)
+        DetectableObject.apply_diff_merge(self, before, after)
+
+        for directive in after.directives:
+            if directive not in before.directives:
+                self.add_directive(directive)
+
+        if after.redirection != before.redirection:
+            # get a reference to the local copy of the target observable
+            local_observable = self.root.get_observable(after.redirection)
+            if not local_observable:
+                # if we can't get it then add it
+                local_observable = self.root.add_observable(after.redirection)
+
+            self.redirection = local_observable
+
+        for link in after.links:
+            if link in before.links:
+                continue
+
+            # get a reference to the local copy of the target observable
+            local_observable = self.root.get_observable(link)
+            if not local_observable:
+                # if we can't get it then add it
+                local_observable = self.root.add_observable(link)
+
+            self.add_link(local_observable)
+
+        for amt in after.limited_analysis:
+            if amt not in before.limited_analysis:
+                self.limit_analysis(amt)
+
+        for amt in after.excluded_analysis:
+            if amt not in before.excluded_analysis:
+                self.exclude_analysis(amt)
+
+        for rel in after.relationships:
+            if rel in before.relationships:
+                continue
+
+            # get a reference to the local copy of the target observable
+            local_observable = self.root.get_observable(rel.target)
+            if not local_observable:
+                # if we can't get it then add it
+                local_observable = self.root.add_observable(rel.target)
+            
+            self.add_relationship(rel.r_type, local_observable)
+
+        if before.grouping_target != after.grouping_target:
+            self.grouping_target = after.grouping_target
+
+        for amt, analysis in after.analysis.items():
+            if before.get_analysis(amt):
+                continue
+
+            # add any missing analysis
+            self.add_analysis(analysis)
+
+        return self
+
+    def create_analysis_request(self, amt: AnalysisModuleType) -> 'saq.system.analysis_request.AnalysisRequest':
+        """Creates and returns a new saq.system.analysis_request.AnalysisRequest object from this Observable."""
+        from saq.system.analysis_request import AnalysisRequest
+        return AnalysisRequest(root=self.root, observable=self, type=amt)
 
     def __str__(self):
         if self.time is not None:
@@ -1809,7 +1929,7 @@ class RootAnalysis(Analysis, MergableObject):
     KEY_QUEUE = 'queue'
     KEY_INSTRUCTIONS = 'instructions'
 
-    def as_dict(self) -> dict:
+    def to_dict(self) -> dict:
         return self.json
 
     @staticmethod
@@ -2663,10 +2783,10 @@ class RootAnalysis(Analysis, MergableObject):
 
         return observable.get_analysis_request_id(amt) is not None
 
-    def merge(self, target: 'RootAnalysis') -> 'RootAnalysis':
+    def apply_merge(self, target: 'RootAnalysis') -> 'RootAnalysis':
         """Merge all the mergable properties of the target RootAnalysis into this root."""
         assert isinstance(target, RootAnalysis)
-        Analysis.merge(self, target)
+        Analysis.apply_merge(self, target)
 
         # you cannot merge two different root analysis objects together
         if self.uuid != target.uuid:
@@ -2677,6 +2797,29 @@ class RootAnalysis(Analysis, MergableObject):
         self.analysis_mode = target.analysis_mode
         self.queue = target.queue
         self.description = target.description
+        return self
+
+    def apply_diff_merge(self, before: 'RootAnalysis', after: 'RootAnalysis') -> 'RootAnalysis':
+        assert isinstance(before, RootAnalysis)
+        assert isinstance(after, RootAnalysis)
+
+        if before.uuid != after.uuid:
+            logging.error(f"attempting to apply diff merge against two difference roots {before} and {after}")
+            return None
+
+        TaggableObject.apply_diff_merge(self, before, after)
+        DetectableObject.apply_diff_merge(self, before, after)
+
+        if before.analysis_mode != after.analysis_mode:
+            self.analysis_mode = after.analysis_mode
+
+        if before.queue != after.queue:
+            self.queue = after.queue
+
+        if before.description != after.description:
+            self.description = after.description
+
+        return self
 
 def recurse_down(target, callback):
     """Calls callback starting at target back to the RootAnalysis."""

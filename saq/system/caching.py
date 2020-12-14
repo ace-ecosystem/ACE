@@ -3,9 +3,10 @@ import hashlib
 
 from typing import Union, Optional
 
-from saq.analysis import Analysis, Observable
+from saq.analysis import Observable
 from saq.system import ACESystemInterface, get_system
 from saq.system.analysis_module import AnalysisModuleType
+from saq.system.analysis_request import AnalysisRequest
 
 def generate_cache_key(observable: Observable, amt: AnalysisModuleType) -> str:
     """Returns the key that should be used for caching the result of the
@@ -35,22 +36,25 @@ def generate_cache_key(observable: Observable, amt: AnalysisModuleType) -> str:
     return h.hexdigest()
 
 class CachingInterface(ACESystemInterface):
-    def get_cached_analysis(self, cache_key: str) -> Union[dict, None]:
+    def get_cached_analysis_result(self, cache_key: str) -> Union[AnalysisRequest, None]:
         raise NotImplementedError()
 
-    def cache_analysis(self, cache_key: str, analysis: Analysis, expiration: Optional[int]) -> str:
+    def cache_analysis_result(self, cache_key: str, request: AnalysisRequest, expiration: Optional[int]) -> str:
         raise NotImplementedError()
 
-def get_cached_analysis(observable: Observable, amt: AnalysisModuleType) -> Union[Analysis, None]:
+def get_cached_analysis_result(observable: Observable, amt: AnalysisModuleType) -> Union[AnalysisRequest, None]:
     cache_key = generate_cache_key(observable, amt)
     if cache_key is None:
         return None
 
-    return get_system().caching.get_cached_analysis(cache_key)
+    return get_system().caching.get_cached_analysis_result(cache_key)
 
-def cache_analysis(observable: Observable, amt: AnalysisModuleType, analysis: Analysis) -> Union[str, None]:
-    cache_key = generate_cache_key(observable, amt)
+def cache_analysis_result(request: AnalysisRequest) -> Union[str, None]:
+    assert isinstance(request, AnalysisRequest)
+    assert request.is_observable_analysis_result
+
+    cache_key = generate_cache_key(request.observable, request.type)
     if cache_key is None:
         return None
 
-    return get_system().caching.cache_analysis(cache_key, analysis, amt.cache_ttl)
+    return get_system().caching.cache_analysis_result(cache_key, request, request.type.cache_ttl)

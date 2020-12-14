@@ -42,8 +42,8 @@ def test_basic_analysis():
     analysis_details = {'test': 'result'}
 
     # "analyze" it
-    request.result = Analysis(
-        root=root, type=amt, observable=request.observable, details=analysis_details)
+    request.result = request.create_result()
+    request.result.observable.add_analysis(type=amt, details=analysis_details)
 
     # submit the result of the analysis
     process_analysis_request(request)
@@ -88,14 +88,14 @@ def test_multiple_amts():
     analysis_details_2 = {'test_2': 'result_2'}
 
     # "analyze" them
-    request_1.result = Analysis(
-        root=root, type=amt_1, observable=request_1.observable, details=analysis_details_1)
+    request_1.result = request_1.create_result()
+    request_1.result.observable.add_analysis(type=amt_1, details=analysis_details_1)
 
     # submit the result of the analysis
     process_analysis_request(request_1)
 
-    request_2.result = Analysis(
-        root=root, type=amt_2, observable=request_2.observable, details=analysis_details_2)
+    request_2.result = request_2.create_result()
+    request_2.result.observable.add_analysis(type=amt_2, details=analysis_details_2)
 
     # submit the result of the analysis
     process_analysis_request(request_2)
@@ -170,7 +170,7 @@ def test_expected_status():
 
     assert request.owner is None
     assert request.status == TRACKING_STATUS_QUEUED
-    assert request.result is None
+    assert not request.result
 
     # have the amt receive the next work item
     request = get_next_analysis_request(owner_uuid, amt, 0)
@@ -181,13 +181,13 @@ def test_expected_status():
 
     assert request.owner == owner_uuid
     assert request.status == TRACKING_STATUS_ANALYZING
-    assert request.result is None
+    assert not request.result
 
     analysis_details = {'test': 'result'}
 
     # "analyze" it
-    request.result = Analysis(
-        root=root, type=amt, observable=request.observable, details=analysis_details)
+    request.result = request.create_result()
+    request.result.observable.add_analysis(type=amt, details=analysis_details)
 
     # submit the result of the analysis
     process_analysis_request(request)
@@ -215,14 +215,18 @@ def test_get_next_analysis_request_locking():
 
     # a root analysis with a observable has been submitted and we've got a reference to the request
 
-    def _lock(request, event):
+    def _lock(request, event, lock_acquired_event):
         with request.lock():
+            lock_acquired_event.set()
             event.wait(3)
 
     # lock the request on another thread
     event = threading.Event()
-    t = threading.Thread(target=_lock, args=(request, event))
+    lock_acquired_event = threading.Event()
+    t = threading.Thread(target=_lock, args=(request, event, lock_acquired_event))
     t.start()
+
+    lock_acquired_event.wait(3)
 
     # try to lock the request on the main thread
     with pytest.raises(LockAcquireFailed):
