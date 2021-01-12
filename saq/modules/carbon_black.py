@@ -179,7 +179,7 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
         for _k, query in queries.items():
             logging.debug(f"{self} attempting correlation of {observable.value} with query: '{query}' between '{start_time}' and '{end_time}'")
             try:
-                processes[_k] = cb.select(Process).where(query).group_by('id')#.min_last_server_update(start_time).max_last_server_update(end_time)
+                processes[_k] = cb.select(Process).where(query).group_by('id').min_last_update(start_time).max_last_update(end_time)
                 if processes[_k]:
                     any_results = True
             except Exception as e:
