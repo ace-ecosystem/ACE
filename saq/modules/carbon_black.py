@@ -3,6 +3,7 @@
 import datetime
 import logging
 import pytz
+import requests
 
 import saq
 
@@ -13,8 +14,21 @@ from saq.modules import AnalysisModule, SplunkAnalysisModule
 from saq.util import parse_event_time, create_histogram_string
 
 from cbapi.response import *
+from cbapi.psc.threathunter import CbThreatHunterAPI, Process
 
-import requests
+from cbinterface.helpers import is_psc_guid
+from cbinterface.psc.process import (
+    select_process,
+    print_process_info,
+    print_modloads,
+    print_filemods,
+    print_netconns,
+    print_regmods,
+    print_crossprocs,
+    print_childprocs,
+    print_scriptloads,
+    process_to_dict,
+)
 
 # helpers
 def process_metadata_to_json(process: models.Process):
@@ -466,3 +480,140 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
             analysis.add_observable(F_FQDN, _domain)
 
         return True
+
+
+class CarbonBlackCloudProcessAnalysis(Analysis):
+    """What activity did this process perform?"""
+
+    def initialize_details(self):
+        self.details = {}
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/cbc_process_guid.html"
+
+    @property
+    def cbc_url(self):
+        return saq.CONFIG['carbon_black']['cbc_url']
+
+    @property
+    def weblink(self):
+        if 'info' not in self.details:
+            return None
+        process_guid = self.details['info'].get('process_guid')
+        return f"{self.cbc_url}/analyze?processGUID={process_guid}"
+
+    @property
+    def max_events(self):
+        return saq.CONFIG['analysis_module_cbc_process_analysis'].getint('max_events', 10000)
+
+    @property
+    def reported_events(self):
+        if 'info' not in self.details:
+            return None
+        total_events = 0
+        for key,value in self.details['info'].items():
+            if key.endswith("_count"):
+                total_events += value
+        return total_events
+
+    def format_filemods(self):
+        return print_filemods(self.details, return_string=True)
+
+    def format_netconns(self):
+        return print_netconns(self.details, return_string=True)
+
+    def format_regmods(self):
+        return print_regmods(self.details, return_string=True)
+
+    def format_modloads(self):
+        return print_modloads(self.details, return_string=True)
+
+    def format_crossprocs(self):
+        return print_crossprocs(self.details, return_string=True)
+
+    def format_scriptloads(self):
+        return print_scriptloads(self.details, return_string=True)
+
+    def format_childprocs(self):
+        return print_childprocs(self.details, return_string=True)
+
+    def generate_summary(self):
+        if 'info' not in self.details:
+            return "CBC Process Analysis: ERROR occured, details missing."
+        process_name = self.details['info'].get('process_name')
+        device_name = self.details['info'].get('device_name')
+        username = self.details['info'].get('process_username')
+        if username and isinstance(username, list):
+            username = username[0]
+        return f"CBC Process Analysis: {username} - {device_name} - {process_name}"
+
+class CarbonBlackCloudProcessAnalyzer(AnalysisModule):
+    def verify_environment(self):
+
+        if not 'carbon_black' in saq.CONFIG:
+            raise ValueError("missing config section carbon_black")
+
+        keys = ['cbc_url', 'cbc_token', 'org_key']
+        for key in keys:
+            if key not in saq.CONFIG['carbon_black']:
+                raise ValueError("missing config item {key} in section carbon_black")
+
+    @property
+    def generated_analysis_type(self):
+        return CarbonBlackCloudProcessAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_CBC_PROCESS_GUID
+
+    @property
+    def cbc_token(self):
+        return saq.CONFIG['carbon_black']['cbc_token']
+
+    @property
+    def cbc_url(self):
+        return saq.CONFIG['carbon_black']['cbc_url']
+
+    @property
+    def org_key(self):
+        return saq.CONFIG['carbon_black']['org_key']
+
+    @property
+    def max_events(self):
+        return self.config.getint('max_events', 10000)
+
+    # TODO: add support for observable time to focus on pulling
+    # process events during a specific time window.
+
+    def execute_analysis(self, observable):
+
+        process_id = observable.value
+        if not is_psc_guid(process_id):
+            logging.error(f"{process_id} is not in the form of a Carbon Black Cloud process guid.")
+            return False
+
+        cbapi = CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
+        # HACK: directly setting proxies as passing above reveals cbapi error
+        cbapi.session.proxies = saq.proxy.proxies()
+
+        proc = None
+        try:
+            proc = select_process(cbapi, process_id)
+        except Exception as e:
+            logging.error(f"unexpected problem finding process: {e}")
+            return False
+
+        if not proc:
+            logging.warning(f"Process data does not exist for GUID={process_id}")
+            return False
+
+        analysis = self.create_analysis(observable)
+        try:
+            analysis.details = process_to_dict(proc, max_events=self.max_events)
+            return True
+        except Exception as e:
+            logging.error(f"problem exporting cabon black response process: {observable} : {e}")
+            report_exception()
+            return False
+

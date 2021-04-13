@@ -62,6 +62,7 @@ F_MESSAGE_ID = 'message_id'
 F_O365_FILE = 'o365_file'
 F_PCAP = 'pcap'
 F_PROCESS_GUID = 'process_guid'
+F_CBC_PROCESS_GUID = 'cbc_process_guid'
 F_SHA1 = 'sha1'
 F_SHA256 = 'sha256'
 F_SNORT_SIGNATURE = 'snort_sig'
@@ -100,7 +101,8 @@ OBSERVABLE_DESCRIPTIONS = {
     F_MESSAGE_ID: 'email Message-ID',
     F_O365_FILE: 'graph api path to a file in o365',
     F_PCAP: 'path to a pcap formatted file *** DEPRECATED (use F_FILE instead)',
-    F_PROCESS_GUID: 'CarbonBlack global process identifier',
+    F_PROCESS_GUID: 'Carbon Black Response global process identifier',
+    F_CBC_PROCESS_GUID: 'Carbon Black Cloud process identifier',
     F_SHA1: 'SHA1 hash',
     F_SHA256: 'SHA256 hash',
     F_SNORT_SIGNATURE: 'snort signature ID',
@@ -141,6 +143,7 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_O365_FILE,
     F_PCAP,
     F_PROCESS_GUID,
+    F_CBC_PROCESS_GUID,
     F_SHA1,
     F_SHA256,
     F_SNORT_SIGNATURE,
