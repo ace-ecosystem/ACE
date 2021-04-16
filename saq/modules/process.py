@@ -268,11 +268,6 @@ class Bit9FileHashAnalyzer_v1(SplunkAnalysisModule):
 #            What does the process tree look like?
 #
 
-
-# XXX Refactor this to accept process_guid:process_segment accuracy
-# XXX The module should, by default, focus on the process_segment and
-# XXX then expand in both time directions capturing as much as possible
-# XXX until the segment_limit is reached.
 class ProcessGUIDAnalysis(Analysis):
     """What activity did this process perform?"""
 
@@ -362,7 +357,7 @@ class ProcessGUIDAnalyzer(AnalysisModule):
             analysis.details = {}
             # create info string
             analysis.details['process_info_str'] = print_process_info(proc, return_string=True, raw_print=True)
-            process = process_to_dict(proc, max_segments=1)#segment_limit)
+            process = process_to_dict(proc, max_segments=segment_limit)
             analysis.details.update(process)
             return True
         except Exception as e:

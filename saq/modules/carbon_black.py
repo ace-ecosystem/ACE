@@ -5,16 +5,9 @@ import logging
 import pytz
 import requests
 
-import saq
-
-from saq.analysis import Analysis, Observable
-from saq.constants import *
-from saq.error import report_exception
-from saq.modules import AnalysisModule, SplunkAnalysisModule
-from saq.util import parse_event_time, create_histogram_string
-
+from tabulate import tabulate
 from cbapi.response import *
-from cbapi.psc.threathunter import CbThreatHunterAPI, Process
+from cbapi.psc import threathunter
 
 from cbinterface.helpers import is_psc_guid
 from cbinterface.psc.process import (
@@ -30,7 +23,15 @@ from cbinterface.psc.process import (
     process_to_dict,
 )
 
-# helpers
+import saq
+
+from saq.analysis import Analysis, Observable
+from saq.constants import *
+from saq.error import report_exception
+from saq.modules import AnalysisModule, SplunkAnalysisModule
+from saq.util import parse_event_time, create_histogram_string, local_time, create_timedelta
+
+# Cb Response helpers
 def process_metadata_to_json(process: models.Process):
     return {'id': process.id,
             'start': process.start,
@@ -94,7 +95,7 @@ class CarbonBlackProcessAnalysis_v2(Analysis):
         if self.details['total_process_results'] == 0:
             return None
 
-        return 'Carbon Black Process Analysis ({} process matches - Sample of {} processes)'.format(self.details['total_process_results'],
+        return 'CB Response Process Analysis ({} process matches - Sample of {} processes)'.format(self.details['total_process_results'],
                                                                                                     self.process_sample_size)
 
 class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
@@ -593,7 +594,7 @@ class CarbonBlackCloudProcessAnalyzer(AnalysisModule):
             logging.error(f"{process_id} is not in the form of a Carbon Black Cloud process guid.")
             return False
 
-        cbapi = CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
+        cbapi = threathunter.CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
         # HACK: directly setting proxies as passing above reveals cbapi error
         cbapi.session.proxies = saq.proxy.proxies()
 
@@ -616,4 +617,155 @@ class CarbonBlackCloudProcessAnalyzer(AnalysisModule):
             logging.error(f"problem exporting cabon black response process: {observable} : {e}")
             report_exception()
             return False
+
+class HostnameCBCAlertAnalysis(Analysis):
+    """Any alerts on this host?"""
+
+    def initialize_details(self):
+        self.details = {}
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/generic_summary_tables.html"
+
+    @property
+    def cbc_url(self):
+        return saq.CONFIG['carbon_black']['cbc_url']
+
+    @property
+    def weblink(self):
+        if 'device_name' not in self.details:
+            return None
+        link = f"{self.cbc_url}/alerts?s[highlight]=true&s[fromRow]=1&s[maxRows]=50&s[searchWindow]=ONE_MONTH&s[sort][0][field]=last_event_time&s[sort][0][order]=DESC&s[c][group_results]=false&s[category][0]=THREAT&s[c][workflow][0]=OPEN&s[c][query_string][0]="
+        link += f"device_name%3A{self.details['device_name']}"
+        return link
+
+    @property
+    def table_fields(self):
+        return ['create_time', 'last_event_time', 'severity', 'process_name', 'reason', 'process_guid']
+
+    def generate_summary(self):
+        device_name = self.details.get('device_name')
+        total_alerts = self.details.get('total_alerts')
+        detection_score = self.details.get('detection_score')
+        return f"CBC Signal Analysis: {device_name} has {total_alerts} alerts with detection score of {detection_score}"
+
+    def generate_summary_tables(self):
+        if 'alerts' not in self.details:
+            return None
+        # create a list of value lists for the table_fields we care to summarize
+        alert_summary_data = [{key:value for key,value in alert.items() if key in self.table_fields} for alert in self.details['alerts']]
+        medium_high_severity = [data for data in alert_summary_data if data['severity'] > 4]
+        lower_severity = [data for data in alert_summary_data if data['severity'] < 5]
+        tables = {"Summary of Medium-High Severity CBC Alerts": tabulate(medium_high_severity, headers='keys'),
+                  "Summary of Lower Severity CBC Aelrts": tabulate(lower_severity, headers='keys')}
+        return tables
+
+class HostnameCBCAlertAnalyzer(AnalysisModule):
+    def verify_environment(self):
+
+        if not 'carbon_black' in saq.CONFIG:
+            raise ValueError("missing config section carbon_black")
+
+        keys = ['cbc_url', 'cbc_token', 'org_key']
+        for key in keys:
+            if key not in saq.CONFIG['carbon_black']:
+                raise ValueError("missing config item {key} in section carbon_black")
+
+    @property
+    def generated_analysis_type(self):
+        return HostnameCBCAlertAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_HOSTNAME
+
+    @property
+    def cbc_token(self):
+        return saq.CONFIG['carbon_black']['cbc_token']
+
+    @property
+    def cbc_url(self):
+        return saq.CONFIG['carbon_black']['cbc_url']
+
+    @property
+    def org_key(self):
+        return saq.CONFIG['carbon_black']['org_key']
+
+    @property
+    def time_range(self):
+        # default 30 days
+        return create_timedelta(self.config.get("time_range", "30:00:00:00"))
+
+    @property
+    def max_alerts(self):
+        return self.config.getint("max_alerts", 500)
+
+    @property
+    def detection_alert_severity_minimum(self):
+        return self.config.getint("detection_alert_severity_minimum", 5)
+
+    @property
+    def detection_alert_severity_threshold(self):
+        return self.config.getint("detection_alert_severity_threshold", 50)
+
+    def execute_analysis(self, observable):
+
+        from cbinterface.psc.intel import get_all_alerts, alert_search
+
+        cbapi = threathunter.CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
+        # HACK: directly setting proxies as passing above reveals cbapi error
+        cbapi.session.proxies = saq.proxy.proxies()
+
+        end_time = local_time()
+        start_time = end_time - self.time_range
+
+        #criteria = {'device_name': [observable.value], XXX case-sensitive, so more room for error with this method. Using query.
+        query = f"device_name:{observable.value}"
+        criteria =  {'last_event_time': {'start': start_time.isoformat(), 'end': end_time.isoformat()},
+                    "workflow": ["OPEN"]
+                    }
+        sort = [{"field": "last_event_time", "order": "DESC"}]
+
+        total_alerts = 0
+        alerts = None
+        try:
+            # do a single alert_search first to store the total result count
+            result = alert_search(cbapi, query=query, criteria=criteria, rows=100, sort=sort)
+            if not result:
+                return None
+            total_alerts = result["num_found"]
+            alerts = result.get("results", [])
+            position = len(alerts)
+            # get any remaining alerts
+            alerts.extend(get_all_alerts(cbapi, query=query, criteria=criteria, rows=200, sort=sort, max_results=self.max_alerts, start=position))
+        except Exception as e:
+            logging.error(f"unexpected problem searching for cbc alerts: {e}")
+            report_exception()
+            return False
+
+        if not alerts:
+            return None
+
+        analysis = self.create_analysis(observable)
+
+        # enumerate a detection score based on alert severities
+        detection_threshold = 0
+        for alert in alerts:
+            if alert.get('severity', 0) >= self.detection_alert_severity_minimum:
+                detection_threshold += alert['severity']
+        if detection_threshold >  self.detection_alert_severity_threshold:
+            analysis.add_detection_point(f"Hostname={observable.value} crossed CBC alert severity threshold with detection score of {detection_threshold} - alert severity threshold is {self.detection_alert_severity_threshold}")
+
+        analysis.details = {'device_name': observable.value,
+                            'alerts': alerts,
+                            'total_alerts': total_alerts,
+                            'time_range': {'start': start_time,
+                                           'end': end_time},
+                            'configured_max_alerts': self.max_alerts,
+                            'detection_score': detection_threshold
+                            }
+
+        return True
+
 

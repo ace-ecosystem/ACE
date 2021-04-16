@@ -48,9 +48,9 @@ class CarbonBlackAlertCollector(Collector):
         url = f"/appservices/v6/orgs/{self.cbapi.credentials.org_key}/alerts/watchlist/_search"
 
         criteria = {'watchlist_id': [watchlist_id],
-                    'last_event_time': {'start': start_time.isoformat(), 'end': end_time.isoformat()},
+                    'create_time': {'start': start_time.isoformat(), 'end': end_time.isoformat()},
                     'workflow': ["OPEN"]}
-        sort = [{"field": "last_update_time", "order": "ASC"}]
+        sort = [{"field": "first_event_time", "order": "ASC"}]
         search_data = {"criteria": criteria, "rows": -1, "sort": sort}
 
         position = 0
@@ -126,11 +126,16 @@ class CarbonBlackAlertCollector(Collector):
                     event_time = dateutil.parser.parse(alert_data[0]["first_event_time"])
 
                     observables = []
+                    hostname = device_name[:device_name.rfind('\\')+1] if '\\' in device_name else device_name
                     observables.append({'type': F_HOSTNAME,
-                                        'value': device_name})
+                                        'value': hostname})
                     for alert in alert_data:
+                        # add weblink
+                        alert['weblink'] = f"{self.cb_url}/alerts?s[c][query_string][0]=alert_id%3A{alert['id']}"
                         observables.append({'type': F_FILE_NAME,
                                             'value': alert["process_name"]})
+                        observables.append({'type': F_CBC_PROCESS_GUID,
+                                            'value': alert["process_guid"]})
                         if alert.get("threat_cause_actor_sha256"):
                             observables.append({'type': F_SHA256,
                                                 'value': alert["threat_cause_actor_sha256"]})
@@ -144,8 +149,10 @@ class CarbonBlackAlertCollector(Collector):
                             observables.append({'type': F_IPV4,
                                                 'value': alert["device_external_ip"]})
                         if alert.get("device_username"):
+                            username = alert["device_username"]
+                            username = username[:username.rfind('\\')+1] if '\\' in username else username
                             observables.append({'type': F_USER,
-                                                'value': alert["device_username"]})
+                                                'value': username})
 
                     submission = Submission(
                             description = f"Carbon Black: {report_name} - {device_name} ({len(alert_data)})",
