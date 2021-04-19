@@ -1,0 +1,152 @@
+<p><b>Process Information</b></p>
+<p>CBC link: <a target="_blank" href="{{analysis.weblink}}">{{analysis.weblink}}</a></p>
+<div class="row">
+    <div class="col-md-12">
+        {% block alert_details %} <pre>{{ analysis.details['info']|pprint}}</pre> {% endblock %}
+    </div>
+</div>
+
+<div id="accordion" role="tablist" aria-multiselectable="true">
+    <div class="card">
+        <div class="card-header" role="tab" id="headingAncestry">
+          <h5 class="mb-0">
+            <a data-toggle="collapse" data-parent="#accordion" href="#collapseAncestry">
+              Ancestry Details
+            </a>
+          </h5>
+        </div>
+        <div id="collapseAncestry" class="collapse" role="tabpanel">
+          <div class="card-block">
+              <div class="row">
+              <div class="col-md-12">
+                {% block alert_proc_ancestry %} <pre>{{ analysis.details['process_ancestry'] }}</pre> {% endblock %}
+                </div>
+              </div>
+          </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" role="tab" id="headingOne">
+          <h5 class="mb-0">
+            <a data-toggle="collapse" data-parent="#accordion" href="#collapseProcessTree" aria-controls="collapseProcessTree">
+              Process Execution Tree
+            </a>
+          </h5>
+        </div>
+        <div id="collapseProcessTree" class="collapse" role="tabpanel" aria-labelledby="headingOne">
+          <div class="row">
+              <div class="col-md-12">
+                {% block alert_proc_tree %} <pre>{{ analysis.details['process_tree'] }}</pre> {% endblock %}
+              </div>
+            </div>
+        </div>
+    </div>
+
+    <h5>Process Events</h5> {% if analysis.max_events < analysis.reported_events %}<i>ACE hit max event limit. Captured {{analysis.max_events}} out of {{analysis.reported_events}}.</i>{% endif %}
+    <div class="card">
+        <div class="card-header" role="tab" id="headingTwo">
+            <h5 class="mb-0">
+                <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseFileMods" aria-expanded="false" aria-controls="collapseFileMods">
+                File Modifications ({{analysis.details['events'].get('filemod', [])|length}} events captured)
+                </a>
+            </h5>
+        </div>
+        <div id="collapseFileMods" class="collapse" role="tabpanel" aria-labelledby="headingTwo">
+            <div class="card-block">
+              <pre>{{analysis.format_filemods()}}</pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" role="tab" id="headingTwo">
+          <h5 class="mb-0">
+            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseNetconns" aria-expanded="false" aria-controls="collapseFileMods">
+                Network Connections ({{analysis.details['events'].get('netconn', [])|length}} events captured)
+            </a>
+          </h5>
+        </div>
+        <div id="collapseNetconns" class="collapse" role="tabpanel" aria-labelledby="headingTwo">
+          <div class="card-block">
+            <pre>{{analysis.format_netconns()}}</pre>
+          </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" role="tab" id="headingFour">
+          <h5 class="mb-0">
+            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseRegMods" aria-expanded="false" aria-controls="collapseRegMods">
+            Registry Modifications ({{analysis.details['events'].get('regmod', [])|length}} events captured)
+            </a>
+          </h5>
+        </div> 
+        <div id="collapseRegMods" class="collapse" role="tabpanel">
+          <div class="card-block">
+            <pre>{{analysis.format_regmods()}}</pre>
+          </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" role="tab" id="headingFour">
+          <h5 class="mb-0">
+            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseModLoads" aria-expanded="false" aria-controls="collapseModLoads">
+              ModLoads ({{analysis.details['events'].get('modload', [])|length}} events captured)
+            </a>
+          </h5>
+        </div> 
+        <div id="collapseModLoads" class="collapse" role="tabpanel">
+          <div class="card-block">
+            <pre>{{analysis.format_modloads()}}</pre>
+          </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header" role="tab" id="headingFour">
+          <h5 class="mb-0">
+            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseCrossProcs" aria-expanded="false" aria-controls="collapseCrossProcs">
+            Crossprocs ({{analysis.details['events'].get('crossproc', [])|length}} events captured)
+            </a>
+          </h5>
+        </div> 
+        <div id="collapseCrossProcs" class="collapse" role="tabpanel">
+            <div class="card-block">
+                <pre>{{analysis.format_crossprocs()}}</pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" role="tab" id="headingFour">
+        <h5 class="mb-0">
+          <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseScriptLoads" aria-expanded="false" aria-controls="collapseScriptLoads">
+          Script Loads ({{analysis.details['events'].get('scriptload', [])|length}} events captured)
+          </a>
+        </h5>
+      </div> 
+      <div id="collapseScriptLoads" class="collapse" role="tabpanel">
+          <div class="card-block">
+              <pre>{{analysis.format_scriptloads()}}</pre>
+          </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" role="tab" id="headingFour">
+        <h5 class="mb-0">
+          <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseChildProc" aria-expanded="false" aria-controls="collapseChildProc">
+          Child processes ({{analysis.details['events'].get('childproc', [])|length}} events captured)
+          </a>
+        </h5>
+      </div> 
+      <div id="collapseChildProc" class="collapse" role="tabpanel">
+          <div class="card-block">
+              <pre>{{analysis.format_childprocs()}}</pre>
+          </div>
+      </div>
+    </div>
+
+</div>
