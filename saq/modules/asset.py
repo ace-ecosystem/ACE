@@ -659,18 +659,6 @@ class CarbonBlackAssetIdentAnalyzer(CarbonBlackAnalysisModule):
 
         return True
 
-# DEPRECATED
-class ProxyAnalysis(Analysis):
-    @property
-    def jinja_template_path(self):
-        return "analysis/bluecoat_proxy_requests.html"
-
-    def generate_summary(self):
-        if isinstance(self.details, list) and len(self.details) > 0:
-            return "Proxy Requests By Source ({0} events)".format(len(self.details))
-
-        return None
-
 _ASSET_HOSTNAME = 'hostname'
 _ASSET_DOMAIN = 'domain'
 _ASSET_MAC = 'mac'

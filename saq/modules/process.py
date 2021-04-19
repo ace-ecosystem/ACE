@@ -5,9 +5,9 @@ import re
 import os
 import saq
 
-from saq.analysis import Analysis, Observable
+from saq.analysis import Analysis
 from saq.constants import *
-from saq.modules import AnalysisModule, SplunkAnalysisModule, splunktime_to_saqtime
+from saq.modules import AnalysisModule
 
 from cbapi import auth, connection
 from cbapi.response import *
