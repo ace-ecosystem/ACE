@@ -126,7 +126,7 @@ class CarbonBlackAlertCollector(Collector):
                     event_time = dateutil.parser.parse(alert_data[0]["first_event_time"])
 
                     observables = []
-                    hostname = device_name[:device_name.rfind('\\')+1] if '\\' in device_name else device_name
+                    hostname = device_name[device_name.rfind('\\')+1:] if '\\' in device_name else device_name
                     observables.append({'type': F_HOSTNAME,
                                         'value': hostname})
                     for alert in alert_data:
@@ -150,7 +150,7 @@ class CarbonBlackAlertCollector(Collector):
                                                 'value': alert["device_external_ip"]})
                         if alert.get("device_username"):
                             username = alert["device_username"]
-                            username = username[:username.rfind('\\')+1] if '\\' in username else username
+                            username = username[username.rfind('\\')+1:] if '\\' in username else username
                             observables.append({'type': F_USER,
                                                 'value': username})
 
