@@ -7,7 +7,6 @@ import requests
 
 from tabulate import tabulate
 from cbapi.response import *
-from cbapi.psc import threathunter
 
 from cbinterface.helpers import is_psc_guid
 from cbinterface.psc.process import (
@@ -30,6 +29,8 @@ from saq.constants import *
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule
 from saq.util import parse_event_time, create_histogram_string, local_time, create_timedelta
+
+from saq.carbon_black import CBC_API
 
 # Cb Response helpers
 def process_metadata_to_json(process: models.Process):
@@ -594,13 +595,12 @@ class CarbonBlackCloudProcessAnalyzer(AnalysisModule):
             logging.error(f"{process_id} is not in the form of a Carbon Black Cloud process guid.")
             return False
 
-        cbapi = threathunter.CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
-        # HACK: directly setting proxies as passing above reveals cbapi error
-        cbapi.session.proxies = saq.proxy.proxies()
+        if not CBC_API:
+            return None
 
         proc = None
         try:
-            proc = select_process(cbapi, process_id)
+            proc = select_process(CBC_API, process_id)
         except Exception as e:
             logging.error(f"unexpected problem finding process: {e}")
             return False
@@ -713,9 +713,8 @@ class HostnameCBCAlertAnalyzer(AnalysisModule):
 
         from cbinterface.psc.intel import get_all_alerts, alert_search
 
-        cbapi = threathunter.CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
-        # HACK: directly setting proxies as passing above reveals cbapi error
-        cbapi.session.proxies = saq.proxy.proxies()
+        if not CBC_API:
+            return None
 
         end_time = local_time()
         start_time = end_time - self.time_range
@@ -731,14 +730,14 @@ class HostnameCBCAlertAnalyzer(AnalysisModule):
         alerts = None
         try:
             # do a single alert_search first to store the total result count
-            result = alert_search(cbapi, query=query, criteria=criteria, rows=100, sort=sort)
+            result = alert_search(CBC_API, query=query, criteria=criteria, rows=100, sort=sort)
             if not result:
                 return None
             total_alerts = result["num_found"]
             alerts = result.get("results", [])
             position = len(alerts)
             # get any remaining alerts
-            alerts.extend(get_all_alerts(cbapi, query=query, criteria=criteria, rows=200, sort=sort, max_results=self.max_alerts, start=position))
+            alerts.extend(get_all_alerts(CBC_API, query=query, criteria=criteria, rows=200, sort=sort, max_results=self.max_alerts, start=position))
         except Exception as e:
             logging.error(f"unexpected problem searching for cbc alerts: {e}")
             report_exception()

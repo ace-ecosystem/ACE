@@ -756,7 +756,21 @@ class IndicatorObservable(Observable):
             result.append(ObservableActionSetSIPIndicatorStatus_New())
             result.append(ObservableActionSetSIPIndicatorStatus_Analyzed())
 
+        # CBC indicators
+        elif self.is_cbc_ioc:
+            result.append(ObservableActionSetCBC_IOC_StatusActive())
+            result.append(ObservableActionSetCBC_IOC_StatusIgnore())
+
         return result
+
+    @property
+    def is_cbc_ioc(self):
+        if self.value.startswith('cbc:'):
+            if '/' not in self.value:
+                logging.warning(f"{self.value} not correctly formatted as cbc:report_id/ioc_id")
+                return False
+            return True
+        return False
 
     @property
     def is_sip_indicator(self):
@@ -787,6 +801,15 @@ class IndicatorObservable(Observable):
             return None
 
         return self.sip_details['status']
+
+    @property
+    def cbc_ioc_status(self):
+        "Ignored OR Active?"
+        from saq.carbon_black import get_cbc_ioc_status
+        if not self.is_cbc_ioc:
+            return None
+        return get_cbc_ioc_status(self.value)
+
 
 class MD5Observable(CaselessObservable):
     def __init__(self, *args, **kwargs):

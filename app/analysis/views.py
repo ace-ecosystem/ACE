@@ -3060,6 +3060,29 @@ def observable_action():
                 report_exception()
                 return "request failed - check logs", 500
 
+        elif action_id in [ACTION_SET_CBC_IOC_IGNORE, ACTION_SET_CBC_IOC_ACTIVE]:
+            from saq.carbon_black import CBC_API
+            from cbinterface.psc.intel import ignore_ioc, activate_ioc
+
+            if not CBC_API:
+                return "Unavailable", 400
+
+            try:
+                report_id, ioc_id = observable.value[len('cbc:'):].split('/', 1)
+                result = None
+                if action_id == ACTION_SET_CBC_IOC_IGNORE:
+                    result = ignore_ioc(CBC_API, report_id, ioc_id)
+                    if result:
+                        return "Ignored", 200
+                if action_id == ACTION_SET_CBC_IOC_ACTIVE:
+                    result = activate_ioc(CBC_API, report_id, ioc_id)
+                    if result:
+                        return "Activated", 200
+                return f"Unexpected Result: {result}", 400
+            except Exception as e:
+                logging.error(f"unable to execute cbc ioc update action: {e}")
+                return f"Error: {e}", 400
+
         elif action_id in [ ACTION_SET_SIP_INDICATOR_STATUS_ANALYZED, 
                             ACTION_SET_SIP_INDICATOR_STATUS_INFORMATIONAL,
                             ACTION_SET_SIP_INDICATOR_STATUS_NEW ]:

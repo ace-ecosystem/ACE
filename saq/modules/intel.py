@@ -7,7 +7,6 @@
 import logging
 import pysip
 
-from cbapi.psc import threathunter
 from cbinterface.psc.intel import get_report, is_ioc_ignored
 
 from saq.proxy import proxies
@@ -17,6 +16,7 @@ from saq.database import use_db
 from saq.error import report_exception
 from saq.intel import *
 from saq.modules import AnalysisModule
+from saq.carbon_black import CBC_API, get_cbc_ioc_status
 
 class CBC_IOC_Analysis(Analysis):
     """Carbon Black Cloud IOCs"""
@@ -60,15 +60,7 @@ class CBC_IOC_Analysis(Analysis):
        return self.details.get('id')
 
     def get_current_status(self):
-        try:
-            cbapi = threathunter.CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
-            # HACK: directly setting proxies as passing above reveals cbapi error
-            cbapi.session.proxies = proxies()
-            ignored = is_ioc_ignored(cbapi, self.report_id, self.ioc_id)
-            return "IGNORED" if ignored else "ACTIVE"
-        except Exception as e:
-            logging.error(f"could not get cbc ioc status: {e}")
-            return "Could not get current status."
+        return get_cbc_ioc_status(f"{self.report_id}/{self.ioc_id}")
 
     def generate_summary(self):
         if self.details is None:
@@ -123,23 +115,17 @@ class CBC_IOC_Analyzer(AnalysisModule):
     def execute_analysis(self, indicator):
 
         # is this a CBC indicator?
-        if not indicator.value.startswith("cbc:"):
+        if not indicator.is_cbc_ioc:
             return False
 
-        # is it of the expected report_id/ioc_id format?
-        if "/" not in indicator.value:
-            logging.error(f"{indicator.value} not correctly formatted as cbc:report_id/ioc_id")
-            return False
-
-        cbapi = threathunter.CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
-        # HACK: directly setting proxies as passing above reveals cbapi error
-        cbapi.session.proxies = proxies()
+        if not CBC_API:
+            return None
 
         report_id, ioc_id = indicator.value[len('cbc:'):].split('/', 1)
 
         report = None
         try:
-            report = get_report(cbapi, report_id)
+            report = get_report(CBC_API, report_id)
         except Exception as e:
             logging.error(f"error getting report for indicator {indicator.value}: {e}")
             return False
@@ -159,7 +145,7 @@ class CBC_IOC_Analyzer(AnalysisModule):
 
         ioc_intel["ignored"] = "unknown status"
         try:
-            ioc_intel["ignored"] = is_ioc_ignored(cbapi, report_id, ioc_id)
+            ioc_intel["ignored"] = is_ioc_ignored(CBC_API, report_id, ioc_id)
         except Exception as e:
             logging.error(f"error getting indicator status for {indicator.value}: {e}")
 
