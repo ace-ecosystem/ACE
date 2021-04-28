@@ -136,6 +136,8 @@ class CarbonBlackAlertCollector(Collector):
                                             'value': alert["process_name"]})
                         observables.append({'type': F_CBC_PROCESS_GUID,
                                             'value': alert["process_guid"]})
+                        observables.append({'type': F_INDICATOR,
+                                            'value': f"cbc:{alert['report_id']}/{alert.get('ioc_id')}"})
                         if alert.get("threat_cause_actor_sha256"):
                             observables.append({'type': F_SHA256,
                                                 'value': alert["threat_cause_actor_sha256"]})
