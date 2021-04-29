@@ -349,7 +349,7 @@ class ProcessGUIDAnalyzer(AnalysisModule):
             return False
         
         if not proc:
-            logging.error(f"this shouldn't happend: couln't get process {proc.id}")
+            logging.error(f"this shouldn't happen: couldn't get process {proc.id}")
             return None
 
         analysis = self.create_analysis(observable)

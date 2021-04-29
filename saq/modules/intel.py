@@ -7,16 +7,13 @@
 import logging
 import pysip
 
-from cbinterface.psc.intel import get_report, is_ioc_ignored
-
-from saq.proxy import proxies
 from saq.analysis import Analysis, DetectionPoint, Observable
 from saq.constants import *
 from saq.database import use_db
 from saq.error import report_exception
 from saq.intel import *
 from saq.modules import AnalysisModule
-from saq.carbon_black import CBC_API, get_cbc_ioc_status
+from saq.carbon_black import CBC_API, get_cbc_ioc_status, get_cbc_ioc_details
 
 class CBC_IOC_Analysis(Analysis):
     """Carbon Black Cloud IOCs"""
@@ -29,16 +26,8 @@ class CBC_IOC_Analysis(Analysis):
         return 'analysis/cbc_intel.html'
 
     @property
-    def cbc_token(self):
-        return saq.CONFIG['carbon_black']['cbc_token']
-
-    @property
     def cbc_url(self):
         return saq.CONFIG['carbon_black']['cbc_url']
-
-    @property
-    def org_key(self):
-        return saq.CONFIG['carbon_black']['org_key']
 
     @property
     def ioc_value(self):
@@ -58,6 +47,10 @@ class CBC_IOC_Analysis(Analysis):
     @property
     def ioc_id(self):
        return self.details.get('id')
+
+    @property
+    def cbc_link_to_ioc(self):
+        return f"{self.cbc_url}/enforce/watchlists/report/{self.report_id}"
 
     def get_current_status(self):
         return get_cbc_ioc_status(f"{self.report_id}/{self.ioc_id}")
@@ -118,46 +111,14 @@ class CBC_IOC_Analyzer(AnalysisModule):
         if not indicator.is_cbc_ioc:
             return False
 
-        if not CBC_API:
-            return None
-
-        report_id, ioc_id = indicator.value[len('cbc:'):].split('/', 1)
-
-        report = None
-        try:
-            report = get_report(CBC_API, report_id)
-        except Exception as e:
-            logging.error(f"error getting report for indicator {indicator.value}: {e}")
-            return False
-
-        if not report:
-            return False
-
-        # does this IOC actually exist in this report?
-        ioc_intel = None
-        for ioc in report["iocs_v2"]:
-            if ioc['id'] == ioc_id:
-                ioc_intel = ioc.copy()
-                break
-        else:
-            logging.error(f"{ioc_id} does not exist in {report_id}")
-            return False
-
-        ioc_intel["ignored"] = "unknown status"
-        try:
-            ioc_intel["ignored"] = is_ioc_ignored(CBC_API, report_id, ioc_id)
-        except Exception as e:
-            logging.error(f"error getting indicator status for {indicator.value}: {e}")
-
-        ioc_intel["source_report"] = report
-        del ioc_intel["source_report"]["iocs_v2"]
-        del ioc_intel["source_report"]["iocs"]
+        if not indicator.cbc_ioc_details:
+            return indicator.cbc_ioc_details
 
         analysis = self.create_analysis(indicator)
-        analysis.details = ioc_intel
+        analysis.details = indicator.cbc_ioc_details
 
         # extract any tags (buckets) associated with the indicator
-        for tag in ioc_intel["source_report"]['tags']:
+        for tag in analysis.details["source_report"]['tags']:
             indicator.add_tag(tag)
 
         return True

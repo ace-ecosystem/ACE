@@ -23,9 +23,15 @@
             <td>Status</td>
             <td>{{analysis.get_current_status()}}</td>
         </tr>
-        <tr>
+        {% if analysis.details['link'] %}
+          <tr>
             <td>Reference</td>
             <td><a target="_blank" href="{{analysis.details['link']}}">{{analysis.details['link']}}</a></td>
+          </tr>
+        {% endif %}
+        <tr>
+            <td>IOC Link</td>
+            <td><a target="_blank" href="{{analysis.cbc_link_to_ioc}}">{{analysis.cbc_link_to_ioc}}</a></td>
         </tr>
       </table>
     </div>

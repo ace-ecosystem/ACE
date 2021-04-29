@@ -16,6 +16,7 @@ from urlfinderlib import is_url
 import saq
 from saq.analysis import Observable, DetectionPoint
 from saq.constants import *
+from saq.carbon_black import get_cbc_ioc_status, get_cbc_ioc_details
 from saq.email import normalize_email_address, normalize_message_id
 from saq.error import report_exception
 from saq.gui import *
@@ -741,6 +742,7 @@ class IndicatorObservable(Observable):
         super().__init__(F_INDICATOR, *args, **kwargs)
         self.value = self.value.strip()
         self._sip_details = None
+        self._cbc_ioc_details = None
 
     @property
     def jinja_template_path(self):
@@ -758,19 +760,13 @@ class IndicatorObservable(Observable):
 
         # CBC indicators
         elif self.is_cbc_ioc:
-            result.append(ObservableActionSetCBC_IOC_StatusActive())
-            result.append(ObservableActionSetCBC_IOC_StatusIgnore())
+            if not self.is_cbc_query_ioc:
+                # Query based IOCs should be tuned.
+                # equality or regex IOCs can be turned off/on.
+                result.append(ObservableActionSetCBC_IOC_StatusActive())
+                result.append(ObservableActionSetCBC_IOC_StatusIgnore())
 
         return result
-
-    @property
-    def is_cbc_ioc(self):
-        if self.value.startswith('cbc:'):
-            if '/' not in self.value:
-                logging.warning(f"{self.value} not correctly formatted as cbc:report_id/ioc_id")
-                return False
-            return True
-        return False
 
     @property
     def is_sip_indicator(self):
@@ -803,9 +799,36 @@ class IndicatorObservable(Observable):
         return self.sip_details['status']
 
     @property
+    def is_cbc_ioc(self):
+        if self.value.startswith('cbc:'):
+            if '/' not in self.value:
+                logging.warning(f"{self.value} not correctly formatted as cbc:report_id/ioc_id")
+                return False
+            return True
+        return False
+
+    @property
+    def cbc_ioc_details(self):
+        if not self.is_cbc_ioc:
+            return None
+        if not self._cbc_ioc_details:
+            self._cbc_ioc_details = get_cbc_ioc_details(self.value)
+        return self._cbc_ioc_details
+
+    @property
+    def is_cbc_query_ioc(self):
+        if not self.is_cbc_ioc:
+            return None
+        if not self.cbc_ioc_details:
+            return None
+        ioc_type = self.cbc_ioc_details.get('match_type')
+        if ioc_type == "query":
+            return True
+        return False
+
+    @property
     def cbc_ioc_status(self):
         "Ignored OR Active?"
-        from saq.carbon_black import get_cbc_ioc_status
         if not self.is_cbc_ioc:
             return None
         return get_cbc_ioc_status(self.value)
