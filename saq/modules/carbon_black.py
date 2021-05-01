@@ -29,6 +29,7 @@ from saq.analysis import Analysis, Observable
 from saq.constants import *
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule
+from saq.modules.file_analysis import FileHashAnalysis
 from saq.util import parse_event_time, create_histogram_string, local_time, create_timedelta
 
 from saq.carbon_black import CBC_API
@@ -804,7 +805,7 @@ class CBC_UniversalBinaryStore_Analysis(Analysis):
             return "CBC Binary Analysis: Error: You should never see this."
         num_devices = self.device_summary.get('num_devices')
         file_path_count = self.file_path_summary.get('file_path_count')
-        # unique signature count over 
+        # unique signature count over
         # signatures_count is unique count and total_signatures_count is similar to num_devices
         signatures_count = self.signature_summary.get('signatures_count')
         return f"CBC Binary Analysis: observed on {num_devices} device(s) with {file_path_count} file path(s) and {signatures_count} digital signature(s)"
@@ -882,5 +883,173 @@ class CBC_UniversalBinaryStore_Analyzer(AnalysisModule):
             dest_path = os.path.join(download_storage_dir, sha256_hash)
             if request_and_get_file(CBC_API, sha256_hash, expiration_seconds=60, write_path=dest_path, compressed=False):
                 analysis.add_observable(F_FILE, os.path.relpath(dest_path, start=self.root.storage_dir))
+
+        return True
+
+class CarbonBlackCloudAnalysis(Analysis):
+    """How many times have we seen this anywhere in our environment?"""
+    def initialize_details(self):
+        self.details = {
+            'queries': {}, # query_key -> query string
+            'query_weblinks': {}, # query_key -> link to load query in CBC
+            'start_time': None,
+            'end_time': None,
+            'total_query_results': {}, # query_key -> result count
+            'process_samples': {}, # query_key -> list of first X process samples
+            'total_process_results': 0, # A total result accross all queries
+            'histogram_data': {} # query_key -> {title, histogram data}
+        }
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/carbon_black_cloud.html"
+
+    #def print_facet_histogram(self, title, facets):
+        #return create_facet_histogram_string(title, facets)
+
+    @property
+    def process_sample_size(self):
+        _total_samples = 0
+        for _k in self.details['process_samples'].keys():
+            _total_samples += len(self.details['process_samples'][_k])
+        return _total_samples
+
+    def weblink_for(self, process_guid):
+        if not self.details:
+            return None
+        return f"{CBC_API.url}/analyze?processGUID={process_guid}"
+
+    def generate_summary(self):
+        if self.details is None:
+            return None
+
+        if self.details['total_process_results'] == 0:
+            return None
+
+        return f"CBC Analysis ({self.details['total_process_results']} process matches - Sample of {self.process_sample_size} processes)"
+
+
+class CarbonBlackCloudAnalyzer(AnalysisModule):
+    def verify_environment(self):
+        if not CBC_API:
+            raise ValueError("missing Carbon Black Cloud API connection.")
+
+    @property
+    def max_samples(self):
+        return self.config.getint('max_samples')
+
+    @property
+    def max_process_guids(self):
+        return self.config.getint('max_process_guids')
+
+    @property
+    def relative_hours_before(self):
+        return self.config.getint('relative_hours_before')
+
+    @property
+    def relative_hours_after(self):
+        return self.config.getint('relative_hours_after')
+
+    @property
+    def generated_analysis_type(self):
+        return CarbonBlackCloudAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return ( F_IPV4, F_FQDN, F_FILE_PATH, F_FILE_NAME, F_MD5, F_SHA256, F_URL )
+
+    def custom_requirement(self, observable):
+        if observable not in self.root.observables and not observable.is_suspect:
+            # we only analyze observables that came with the alert and ones with detection points
+            logging.debug(f"{self} skipping {observable}.")
+            return False
+        if observable.type == F_IPV4 and observable.is_managed():
+            # we don't analyze our own IP address space
+            logging.debug(f"{self} skipping analysis for managed ipv4 {observable}")
+            return False
+        return True
+
+    def execute_analysis(self, observable):
+        from cbinterface.psc.query import make_process_query, print_facet_histogram_v2
+
+        target_time = observable.time if observable.time else self.root.event_time
+        # CB default timezone is GMT/UTC, same as ACE.
+        start_time = target_time.astimezone(pytz.timezone('UTC')) - datetime.timedelta(hours=self.relative_hours_before)
+        end_time = target_time.astimezone(pytz.timezone('UTC')) + datetime.timedelta(hours=self.relative_hours_after)
+        # hackery: remove TZ for avoiding org.apache.solr.common.SolrException: Invalid Date in Date Math String:'2021-04-28T16:00:00+00:00'
+        start_time = datetime.datetime.strptime(start_time.strftime("%Y-%m-%d %H:%M:%S"), "%Y-%m-%d %H:%M:%S")
+        end_time = datetime.datetime.strptime(end_time.strftime("%Y-%m-%d %H:%M:%S"), "%Y-%m-%d %H:%M:%S")
+
+        queries = {}
+        # generate the query based on the indicator type
+        if observable.type == F_IPV4:
+            queries['netconn_ipv4'] = f"netconn_ipv4:{observable.value}"
+        elif observable.type == F_FQDN:
+            queries['netconn_domain'] = f"netconn_domain:{observable.value}"
+        elif observable.type == F_FILE_PATH:
+            _value = observable.value.replace('"', '\\"')
+            _value = _value.replace('\\', '\\\\')
+            #queries['verbose_file_path'] = f'"{_value}"'
+            queries['filemod_name'] = f'filemod_name:"{_value}"'
+            queries['process_cmdline'] = f'process_cmdline:"{_value}"'
+        elif observable.type == F_FILE_NAME:
+            queries['process_cmdline'] = f'process_cmdline:"{observable.value}"'
+            queries['filemod_name'] = f'filemod_name:"{observable.value}"'
+        elif observable.type == F_MD5 or observable.type == F_SHA256:
+            queries['hash'] = f"hash:{observable.value}"
+        elif observable.type == F_URL:
+            queries['process_cmdline'] = f'process_cmdline:"{observable.value}"'
+        else:
+            logging.error("invalid observable type {observable.type}")
+            return False
+
+        processes = {}
+        any_results = False
+        for _k, query in queries.items():
+            logging.debug(f"{self} attempting correlation of {observable.value} with query: '{query}' between '{start_time}' and '{end_time}'")
+            try:
+                processes[_k] = make_process_query(CBC_API, query, start_time, end_time)
+                if processes[_k]:
+                    any_results = True
+                    # convert AsyncProcessQuery to list of actual results.
+                    #processes[_k] = list(processes[_k])
+            except Exception as e:
+                logging.error(f"problem querying carbonblack for {observable} with '{query}' : {e}")
+
+        if not any_results:
+            return False
+
+        analysis = self.create_analysis(observable)
+        analysis.details['queries'] = queries
+        analysis.details['start_time'] = start_time
+        analysis.details['end_time'] = end_time
+
+        # complete the data
+        for _k in queries.keys():
+            # save weblinks
+            #process_guid = processes[_k].get('process_guid')
+            analysis.details['query_weblinks'][_k] = f"{CBC_API.url}/cb/investigate/processes?query={queries[_k]}"
+
+            # get histogram data
+            analysis.details['histogram_data'][_k] = print_facet_histogram_v2(CBC_API, queries[_k], return_string=True)
+
+            # count the results
+            analysis.details['total_query_results'][_k] = len(processes[_k])
+            analysis.details['total_process_results'] += analysis.details['total_query_results'][_k]
+            # take samples
+            analysis.details['process_samples'][_k] = []
+            for process in processes[_k]:
+                if len(analysis.details['process_samples'][_k]) >= self.max_samples:
+                    break
+                analysis.details['process_samples'][_k].append(process._info)
+
+            if len(processes[_k]) == 1:
+                process = processes[_k][0]
+                analysis.add_observable(F_CBC_PROCESS_GUID, process.get('process_guid'))
+
+            elif len(processes[_k]) < self.max_process_guids:
+                # if there was only a few process results, add
+                for process in processes[_k]:
+                    analysis.add_observable(F_CBC_PROCESS_GUID, process.get('process_guid'))
 
         return True
