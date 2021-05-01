@@ -1053,3 +1053,92 @@ class CarbonBlackCloudAnalyzer(AnalysisModule):
                     analysis.add_observable(F_CBC_PROCESS_GUID, process.get('process_guid'))
 
         return True
+
+
+class CBC_AssetIdentifierAnalysis(Analysis):
+    """Did a Carbon Black device have this IPv4?"""
+    def initialize_details(self):
+        self.details = {}
+
+    def weblink_for(self, process_guid):
+        if not self.details:
+            return None
+        return f"{CBC_API.url}/analyze?processGUID={process_guid}"
+
+    def generate_summary(self):
+        if not self.details:
+            return None
+        return f"CBC Asset Identifier: {self.details['num_found']} associated devices."
+
+class CBC_AssetIdentifier(AnalysisModule):
+    def verify_environment(self):
+        if not CBC_API:
+            raise ValueError("missing Carbon Black Cloud API connection.")
+
+    @property
+    def relative_duration_before(self):
+        return self.config.get('relative_duration_before')
+
+    @property
+    def relative_duration_after(self):
+        return self.config.get('relative_duration_after')
+
+    @property
+    def max_device_results(self):
+        return self.config.getint('max_device_results', 10)
+
+    @property
+    def hostname_limit(self):
+        return self.config.getint('hostname_limit', 2)
+
+    @property
+    def generated_analysis_type(self):
+        return CBC_AssetIdentifierAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_IPV4
+
+    def execute_analysis(self, observable):
+        from cbapi.psc import Device
+
+        target_time = observable.time if observable.time else self.root.event_time
+        # CB default timezone is GMT/UTC, same as ACE.
+        start_time = target_time.astimezone(pytz.timezone('UTC')) - create_timedelta(self.relative_duration_before)
+        end_time = target_time.astimezone(pytz.timezone('UTC')) + create_timedelta(self.relative_duration_after)
+        # hackery: remove TZ for avoiding org.apache.solr.common.SolrException: Invalid Date in Date Math String:'2021-04-28T16:00:00+00:00'
+
+        def _device_search(query, start_time, end_time, max_results=self.max_device_results):
+            """Yield alerts."""
+            url = f"/appservices/v6/orgs/{CBC_API.credentials.org_key}/devices/_search"
+
+            criteria = {'last_contact_time': {'start': start_time.isoformat(), 'end': end_time.isoformat()}}
+            sort = [{"field": "last_contact_time", "order": "ASC"}]
+            search_data = {"criteria": criteria,
+                           "rows": max_results,
+                           "sort": sort,
+                           "query": query,
+                           "start": 0}
+
+            return CBC_API.post_object(url, search_data).json()
+
+        query = f"lastInternalIpAddress:{observable.value} OR lastExternalIpAddress:{observable.value}"
+        results = None
+        try:
+            results = _device_search(query, start_time, end_time)
+        except Exception as e:
+            logging.error(f"couldn't perform cb query: {e}")
+            return False
+
+        if not results or results.get('num_found') < 1:
+            return None
+
+        analysis = self.create_analysis(observable)
+        analysis.details = results
+
+        for device in analysis.details.get('results', [])[:self.hostname_limit]:
+            if device.get('name'):
+                analysis.add_observable(F_HOSTNAME, device['name'])
+
+        return True
+
