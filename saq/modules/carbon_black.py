@@ -1,5 +1,6 @@
 # vim: sw=4:ts=4:et
 
+import os
 import datetime
 import logging
 import pytz
@@ -768,3 +769,118 @@ class HostnameCBCAlertAnalyzer(AnalysisModule):
         return True
 
 
+class CBC_UniversalBinaryStore_Analysis(Analysis):
+    """Any alerts on this host?"""
+
+    def initialize_details(self):
+        self.details = {}
+
+    @property
+    def device_summary(self):
+        if not self.details.get('device_summary'):
+            return None
+        return self.details['device_summary'][0]
+
+    @property
+    def file_path_summary(self):
+        if not self.details.get('file_path_summary'):
+            return None
+        return self.details['file_path_summary'][0]
+
+    @property
+    def metadata_summary(self):
+        if not self.details.get('metadata'):
+            return None
+        return self.details['metadata'][0]
+
+    @property
+    def signature_summary(self):
+        if not self.details.get('signature_summary'):
+            return None
+        return self.details['signature_summary'][0]
+
+    def generate_summary(self):
+        if not self.details:
+            return "CBC Binary Analysis: Error: You should never see this."
+        num_devices = self.device_summary.get('num_devices')
+        file_path_count = self.file_path_summary.get('file_path_count')
+        # unique signature count over 
+        # signatures_count is unique count and total_signatures_count is similar to num_devices
+        signatures_count = self.signature_summary.get('signatures_count')
+        return f"CBC Binary Analysis: observed on {num_devices} device(s) with {file_path_count} file path(s) and {signatures_count} digital signature(s)"
+
+
+class CBC_UniversalBinaryStore_Analyzer(AnalysisModule):
+    def verify_environment(self):
+        if not CBC_API:
+            raise ValueError("missing Carbon Black Cloud API connection.")
+
+    @property
+    def generated_analysis_type(self):
+        return CBC_UniversalBinaryStore_Analysis
+
+    @property
+    def valid_observable_types(self):
+        return F_SHA256
+
+    @property
+    def add_rare_file_path_observables(self):
+        return self.config.getboolean('add_rare_file_path_observables')
+
+    @property
+    def add_file_observable(self):
+        return self.config.getboolean('add_file_observable')
+
+    def execute_analysis(self, observable):
+        from cbinterface.psc.ubs import consolidate_metadata_and_summaries, request_and_get_file
+
+        results = consolidate_metadata_and_summaries(CBC_API, [observable.value])
+        if not results:
+            return None
+
+        if not isinstance(results, list) and len(results) == 1:
+            logging.warning(f"got unexpected results from cbinterface.psc.ubs.consolidate_metadata_and_summaries")
+            return False
+
+        analysis = self.create_analysis(observable)
+        analysis.details = results[0]
+
+        # Add rare file_paths if the data set is small
+        if self.add_rare_file_path_observables:
+            if analysis.details.get('file_path_summary'):
+                if analysis.details['file_path_summary'][0]['file_path_count'] < 10:
+                    for fp_data in analysis.details['file_path_summary'][0]['file_paths']:
+                        if fp_data['count'] < 3:
+                            analysis.add_observable(F_FILE_PATH, fp_data['file_path'])
+
+        # download the file?
+        if not self.add_file_observable:
+            return True
+
+        # if this is a hash for a file that we already have then we don't need to download it
+        download = True
+        for f in self.root.all_observables:
+            if f.type == F_FILE:
+                a = f.get_analysis(FileHashAnalysis)
+                if a:
+                    for h in a.observables:
+                        if h == observable and f.exists:
+                            logging.debug(f"hash {observable} belongs to file {f} -- not downloading")
+                            download = False
+
+        if download:
+            download_storage_dir = os.path.join(self.root.storage_dir, 'cbc_ubs_downloads')
+            if not os.path.exists(download_storage_dir):
+                try:
+                    os.makedirs(download_storage_dir)
+                except Exception as e:
+                    logging.error("unable to create directory {}: {}".format(download_storage_dir, e))
+                    report_exception()
+                    return False
+
+            sha256_hash = observable.value
+            dest_path = os.path.join(download_storage_dir, sha256_hash)
+            if request_and_get_file(CBC_API, sha256_hash, expiration_seconds=60, write_path=dest_path, compressed=False):
+                analysis.add_observable(F_FILE, os.path.relpath(dest_path, start=self.root.storage_dir))
+
+        return True
