@@ -7,7 +7,7 @@ import saq
 
 from saq.analysis import Analysis
 from saq.constants import *
-from saq.modules import AnalysisModule
+from saq.modules import AnalysisModule, SplunkAnalysisModule
 
 from cbapi import auth, connection
 from cbapi.response import *
@@ -349,7 +349,7 @@ class ProcessGUIDAnalyzer(AnalysisModule):
             return False
         
         if not proc:
-            logging.error(f"this shouldn't happend: couln't get process {proc.id}")
+            logging.error(f"this shouldn't happen: couldn't get process {proc.id}")
             return None
 
         analysis = self.create_analysis(observable)
@@ -359,6 +359,13 @@ class ProcessGUIDAnalyzer(AnalysisModule):
             analysis.details['process_info_str'] = print_process_info(proc, return_string=True, raw_print=True)
             process = process_to_dict(proc, max_segments=segment_limit)
             analysis.details.update(process)
+
+            if analysis.details.get('username'):
+                if '\\' in analysis.details['username']:
+                    username = analysis.details['username'].split('\\')[1]
+                else:
+                    username = analysis.details['username']
+                analysis.add_observable(F_USER, username)
             return True
         except Exception as e:
             logging.error(f"problem exporting cabon black response process: {observable} : {e}")

@@ -1,5 +1,6 @@
 # vim: sw=4:ts=4:et
 
+import os
 import datetime
 import logging
 import pytz
@@ -7,7 +8,6 @@ import requests
 
 from tabulate import tabulate
 from cbapi.response import *
-from cbapi.psc import threathunter
 
 from cbinterface.helpers import is_psc_guid
 from cbinterface.psc.process import (
@@ -29,7 +29,10 @@ from saq.analysis import Analysis, Observable
 from saq.constants import *
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule
+from saq.modules.file_analysis import FileHashAnalysis
 from saq.util import parse_event_time, create_histogram_string, local_time, create_timedelta
+
+from saq.carbon_black import CBC_API
 
 # Cb Response helpers
 def process_metadata_to_json(process: models.Process):
@@ -594,13 +597,12 @@ class CarbonBlackCloudProcessAnalyzer(AnalysisModule):
             logging.error(f"{process_id} is not in the form of a Carbon Black Cloud process guid.")
             return False
 
-        cbapi = threathunter.CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
-        # HACK: directly setting proxies as passing above reveals cbapi error
-        cbapi.session.proxies = saq.proxy.proxies()
+        if not CBC_API:
+            return None
 
         proc = None
         try:
-            proc = select_process(cbapi, process_id)
+            proc = select_process(CBC_API, process_id)
         except Exception as e:
             logging.error(f"unexpected problem finding process: {e}")
             return False
@@ -713,9 +715,8 @@ class HostnameCBCAlertAnalyzer(AnalysisModule):
 
         from cbinterface.psc.intel import get_all_alerts, alert_search
 
-        cbapi = threathunter.CbThreatHunterAPI(url=self.cbc_url, token=self.cbc_token, org_key=self.org_key)
-        # HACK: directly setting proxies as passing above reveals cbapi error
-        cbapi.session.proxies = saq.proxy.proxies()
+        if not CBC_API:
+            return None
 
         end_time = local_time()
         start_time = end_time - self.time_range
@@ -731,14 +732,14 @@ class HostnameCBCAlertAnalyzer(AnalysisModule):
         alerts = None
         try:
             # do a single alert_search first to store the total result count
-            result = alert_search(cbapi, query=query, criteria=criteria, rows=100, sort=sort)
+            result = alert_search(CBC_API, query=query, criteria=criteria, rows=100, sort=sort)
             if not result:
                 return None
             total_alerts = result["num_found"]
             alerts = result.get("results", [])
             position = len(alerts)
             # get any remaining alerts
-            alerts.extend(get_all_alerts(cbapi, query=query, criteria=criteria, rows=200, sort=sort, max_results=self.max_alerts, start=position))
+            alerts.extend(get_all_alerts(CBC_API, query=query, criteria=criteria, rows=200, sort=sort, max_results=self.max_alerts, start=position))
         except Exception as e:
             logging.error(f"unexpected problem searching for cbc alerts: {e}")
             report_exception()
@@ -768,4 +769,376 @@ class HostnameCBCAlertAnalyzer(AnalysisModule):
 
         return True
 
+
+class CBC_UniversalBinaryStore_Analysis(Analysis):
+    """Any alerts on this host?"""
+
+    def initialize_details(self):
+        self.details = {}
+
+    @property
+    def device_summary(self):
+        if not self.details.get('device_summary'):
+            return None
+        return self.details['device_summary'][0]
+
+    @property
+    def file_path_summary(self):
+        if not self.details.get('file_path_summary'):
+            return None
+        return self.details['file_path_summary'][0]
+
+    @property
+    def metadata_summary(self):
+        if not self.details.get('metadata'):
+            return None
+        return self.details['metadata'][0]
+
+    @property
+    def signature_summary(self):
+        if not self.details.get('signature_summary'):
+            return None
+        return self.details['signature_summary'][0]
+
+    def generate_summary(self):
+        if not self.details:
+            return "CBC Binary Analysis: Error: You should never see this."
+        num_devices = self.device_summary.get('num_devices')
+        file_path_count = self.file_path_summary.get('file_path_count')
+        # unique signature count over
+        # signatures_count is unique count and total_signatures_count is similar to num_devices
+        signatures_count = self.signature_summary.get('signatures_count')
+        return f"CBC Binary Analysis: observed on {num_devices} device(s) with {file_path_count} file path(s) and {signatures_count} digital signature(s)"
+
+
+class CBC_UniversalBinaryStore_Analyzer(AnalysisModule):
+    def verify_environment(self):
+        if not CBC_API:
+            raise ValueError("missing Carbon Black Cloud API connection.")
+
+    @property
+    def generated_analysis_type(self):
+        return CBC_UniversalBinaryStore_Analysis
+
+    @property
+    def valid_observable_types(self):
+        return F_SHA256
+
+    @property
+    def add_rare_file_path_observables(self):
+        return self.config.getboolean('add_rare_file_path_observables')
+
+    @property
+    def add_file_observable(self):
+        return self.config.getboolean('add_file_observable')
+
+    def execute_analysis(self, observable):
+        from cbinterface.psc.ubs import consolidate_metadata_and_summaries, request_and_get_file
+
+        results = consolidate_metadata_and_summaries(CBC_API, [observable.value])
+        if not results:
+            return None
+
+        if not isinstance(results, list) and len(results) == 1:
+            logging.warning(f"got unexpected results from cbinterface.psc.ubs.consolidate_metadata_and_summaries")
+            return False
+
+        analysis = self.create_analysis(observable)
+        analysis.details = results[0]
+
+        # Add rare file_paths if the data set is small
+        if self.add_rare_file_path_observables:
+            if analysis.details.get('file_path_summary'):
+                if analysis.details['file_path_summary'][0]['file_path_count'] < 10:
+                    for fp_data in analysis.details['file_path_summary'][0]['file_paths']:
+                        if fp_data['count'] < 3:
+                            analysis.add_observable(F_FILE_PATH, fp_data['file_path'])
+
+        # download the file?
+        if not self.add_file_observable:
+            return True
+
+        # if this is a hash for a file that we already have then we don't need to download it
+        download = True
+        for f in self.root.all_observables:
+            if f.type == F_FILE:
+                a = f.get_analysis(FileHashAnalysis)
+                if a:
+                    for h in a.observables:
+                        if h == observable and f.exists:
+                            logging.debug(f"hash {observable} belongs to file {f} -- not downloading")
+                            download = False
+
+        if download:
+            download_storage_dir = os.path.join(self.root.storage_dir, 'cbc_ubs_downloads')
+            if not os.path.exists(download_storage_dir):
+                try:
+                    os.makedirs(download_storage_dir)
+                except Exception as e:
+                    logging.error("unable to create directory {}: {}".format(download_storage_dir, e))
+                    report_exception()
+                    return False
+
+            sha256_hash = observable.value
+            dest_path = os.path.join(download_storage_dir, sha256_hash)
+            if request_and_get_file(CBC_API, sha256_hash, expiration_seconds=60, write_path=dest_path, compressed=False):
+                analysis.add_observable(F_FILE, os.path.relpath(dest_path, start=self.root.storage_dir))
+
+        return True
+
+class CarbonBlackCloudAnalysis(Analysis):
+    """How many times have we seen this anywhere in our environment?"""
+    def initialize_details(self):
+        self.details = {
+            'queries': {}, # query_key -> query string
+            'query_weblinks': {}, # query_key -> link to load query in CBC
+            'start_time': None,
+            'end_time': None,
+            'total_query_results': {}, # query_key -> result count
+            'process_samples': {}, # query_key -> list of first X process samples
+            'total_process_results': 0, # A total result accross all queries
+            'histogram_data': {} # query_key -> {title, histogram data}
+        }
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/carbon_black_cloud.html"
+
+    #def print_facet_histogram(self, title, facets):
+        #return create_facet_histogram_string(title, facets)
+
+    @property
+    def process_sample_size(self):
+        _total_samples = 0
+        for _k in self.details['process_samples'].keys():
+            _total_samples += len(self.details['process_samples'][_k])
+        return _total_samples
+
+    def weblink_for(self, process_guid):
+        if not self.details:
+            return None
+        return f"{CBC_API.url}/analyze?processGUID={process_guid}"
+
+    def generate_summary(self):
+        if self.details is None:
+            return None
+
+        if self.details['total_process_results'] == 0:
+            return None
+
+        return f"CBC Analysis ({self.details['total_process_results']} process matches - Sample of {self.process_sample_size} processes)"
+
+
+class CarbonBlackCloudAnalyzer(AnalysisModule):
+    def verify_environment(self):
+        if not CBC_API:
+            raise ValueError("missing Carbon Black Cloud API connection.")
+
+    @property
+    def max_samples(self):
+        return self.config.getint('max_samples')
+
+    @property
+    def max_process_guids(self):
+        return self.config.getint('max_process_guids')
+
+    @property
+    def relative_hours_before(self):
+        return self.config.getint('relative_hours_before')
+
+    @property
+    def relative_hours_after(self):
+        return self.config.getint('relative_hours_after')
+
+    @property
+    def generated_analysis_type(self):
+        return CarbonBlackCloudAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return ( F_IPV4, F_FQDN, F_FILE_PATH, F_FILE_NAME, F_MD5, F_SHA256, F_URL )
+
+    def custom_requirement(self, observable):
+        if observable not in self.root.observables and not observable.is_suspect:
+            # we only analyze observables that came with the alert and ones with detection points
+            logging.debug(f"{self} skipping {observable}.")
+            return False
+        if observable.type == F_IPV4 and observable.is_managed():
+            # we don't analyze our own IP address space
+            logging.debug(f"{self} skipping analysis for managed ipv4 {observable}")
+            return False
+        return True
+
+    def execute_analysis(self, observable):
+        from cbinterface.psc.query import make_process_query, print_facet_histogram_v2
+
+        target_time = observable.time if observable.time else self.root.event_time
+        # CB default timezone is GMT/UTC, same as ACE.
+        start_time = target_time.astimezone(pytz.timezone('UTC')) - datetime.timedelta(hours=self.relative_hours_before)
+        end_time = target_time.astimezone(pytz.timezone('UTC')) + datetime.timedelta(hours=self.relative_hours_after)
+        # hackery: remove TZ for avoiding org.apache.solr.common.SolrException: Invalid Date in Date Math String:'2021-04-28T16:00:00+00:00'
+        start_time = datetime.datetime.strptime(start_time.strftime("%Y-%m-%d %H:%M:%S"), "%Y-%m-%d %H:%M:%S")
+        end_time = datetime.datetime.strptime(end_time.strftime("%Y-%m-%d %H:%M:%S"), "%Y-%m-%d %H:%M:%S")
+
+        queries = {}
+        # generate the query based on the indicator type
+        if observable.type == F_IPV4:
+            queries['netconn_ipv4'] = f"netconn_ipv4:{observable.value}"
+        elif observable.type == F_FQDN:
+            queries['netconn_domain'] = f"netconn_domain:{observable.value}"
+        elif observable.type == F_FILE_PATH:
+            _value = observable.value.replace('"', '\\"')
+            _value = _value.replace('\\', '\\\\')
+            #queries['verbose_file_path'] = f'"{_value}"'
+            queries['filemod_name'] = f'filemod_name:"{_value}"'
+            queries['process_cmdline'] = f'process_cmdline:"{_value}"'
+        elif observable.type == F_FILE_NAME:
+            queries['process_cmdline'] = f'process_cmdline:"{observable.value}"'
+            queries['filemod_name'] = f'filemod_name:"{observable.value}"'
+        elif observable.type == F_MD5 or observable.type == F_SHA256:
+            queries['hash'] = f"hash:{observable.value}"
+        elif observable.type == F_URL:
+            queries['process_cmdline'] = f'process_cmdline:"{observable.value}"'
+        else:
+            logging.error("invalid observable type {observable.type}")
+            return False
+
+        processes = {}
+        any_results = False
+        for _k, query in queries.items():
+            logging.debug(f"{self} attempting correlation of {observable.value} with query: '{query}' between '{start_time}' and '{end_time}'")
+            try:
+                processes[_k] = make_process_query(CBC_API, query, start_time, end_time)
+                if processes[_k]:
+                    any_results = True
+                    # convert AsyncProcessQuery to list of actual results.
+                    #processes[_k] = list(processes[_k])
+            except Exception as e:
+                logging.error(f"problem querying carbonblack for {observable} with '{query}' : {e}")
+
+        if not any_results:
+            return False
+
+        analysis = self.create_analysis(observable)
+        analysis.details['queries'] = queries
+        analysis.details['start_time'] = start_time
+        analysis.details['end_time'] = end_time
+
+        # complete the data
+        for _k in queries.keys():
+            # save weblinks
+            #process_guid = processes[_k].get('process_guid')
+            analysis.details['query_weblinks'][_k] = f"{CBC_API.url}/cb/investigate/processes?query={queries[_k]}"
+
+            # get histogram data
+            analysis.details['histogram_data'][_k] = print_facet_histogram_v2(CBC_API, queries[_k], return_string=True)
+
+            # count the results
+            analysis.details['total_query_results'][_k] = len(processes[_k])
+            analysis.details['total_process_results'] += analysis.details['total_query_results'][_k]
+            # take samples
+            analysis.details['process_samples'][_k] = []
+            for process in processes[_k]:
+                if len(analysis.details['process_samples'][_k]) >= self.max_samples:
+                    break
+                analysis.details['process_samples'][_k].append(process._info)
+
+            if len(processes[_k]) == 1:
+                process = processes[_k][0]
+                analysis.add_observable(F_CBC_PROCESS_GUID, process.get('process_guid'))
+
+            elif len(processes[_k]) < self.max_process_guids:
+                # if there was only a few process results, add
+                for process in processes[_k]:
+                    analysis.add_observable(F_CBC_PROCESS_GUID, process.get('process_guid'))
+
+        return True
+
+
+class CBC_AssetIdentifierAnalysis(Analysis):
+    """Did a Carbon Black device have this IPv4?"""
+    def initialize_details(self):
+        self.details = {}
+
+    def weblink_for(self, process_guid):
+        if not self.details:
+            return None
+        return f"{CBC_API.url}/analyze?processGUID={process_guid}"
+
+    def generate_summary(self):
+        if not self.details:
+            return None
+        return f"CBC Asset Identifier: {self.details['num_found']} associated devices."
+
+class CBC_AssetIdentifier(AnalysisModule):
+    def verify_environment(self):
+        if not CBC_API:
+            raise ValueError("missing Carbon Black Cloud API connection.")
+
+    @property
+    def relative_duration_before(self):
+        return self.config.get('relative_duration_before')
+
+    @property
+    def relative_duration_after(self):
+        return self.config.get('relative_duration_after')
+
+    @property
+    def max_device_results(self):
+        return self.config.getint('max_device_results', 10)
+
+    @property
+    def hostname_limit(self):
+        return self.config.getint('hostname_limit', 2)
+
+    @property
+    def generated_analysis_type(self):
+        return CBC_AssetIdentifierAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_IPV4
+
+    def execute_analysis(self, observable):
+        from cbapi.psc import Device
+
+        target_time = observable.time if observable.time else self.root.event_time
+        # CB default timezone is GMT/UTC, same as ACE.
+        start_time = target_time.astimezone(pytz.timezone('UTC')) - create_timedelta(self.relative_duration_before)
+        end_time = target_time.astimezone(pytz.timezone('UTC')) + create_timedelta(self.relative_duration_after)
+        # hackery: remove TZ for avoiding org.apache.solr.common.SolrException: Invalid Date in Date Math String:'2021-04-28T16:00:00+00:00'
+
+        def _device_search(query, start_time, end_time, max_results=self.max_device_results):
+            """Yield alerts."""
+            url = f"/appservices/v6/orgs/{CBC_API.credentials.org_key}/devices/_search"
+
+            criteria = {'last_contact_time': {'start': start_time.isoformat(), 'end': end_time.isoformat()}}
+            sort = [{"field": "last_contact_time", "order": "ASC"}]
+            search_data = {"criteria": criteria,
+                           "rows": max_results,
+                           "sort": sort,
+                           "query": query,
+                           "start": 0}
+
+            return CBC_API.post_object(url, search_data).json()
+
+        query = f"lastInternalIpAddress:{observable.value} OR lastExternalIpAddress:{observable.value}"
+        results = None
+        try:
+            results = _device_search(query, start_time, end_time)
+        except Exception as e:
+            logging.error(f"couldn't perform cb query: {e}")
+            return False
+
+        if not results or results.get('num_found') < 1:
+            return None
+
+        analysis = self.create_analysis(observable)
+        analysis.details = results
+
+        for device in analysis.details.get('results', [])[:self.hostname_limit]:
+            if device.get('name'):
+                analysis.add_observable(F_HOSTNAME, device['name'])
+
+        return True
 
