@@ -1131,7 +1131,7 @@ class CBC_AssetIdentifier(AnalysisModule):
             return False
 
         if not results or results.get('num_found') < 1:
-            return None
+            return False
 
         analysis = self.create_analysis(observable)
         analysis.details = results
