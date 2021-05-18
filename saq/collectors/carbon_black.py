@@ -23,6 +23,7 @@ from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
 
 from cbinterface.psc.query import make_process_query
 from cbinterface.psc.ubs import get_file_metadata, request_and_get_file
+from cbinterface.helpers import get_os_independent_filepath
 
 @persistant_property('last_end_time') 
 class CarbonBlackAlertCollector(Collector):
@@ -288,12 +289,19 @@ class CarbonBlackCloudBinaryCollector(Collector):
                 except Exception as e:
                     logging.error(f"unable to create directory {subdir_path}: {e}")
 
-            binary_path = os.path.join(subdir_path, sha256)
             binary_data_path = os.path.join(subdir_path, f"{sha256}.json")
-            if os.path.exists(binary_data_path) or os.path.exists(binary_path):
+            if os.path.exists(binary_data_path):
                 logging.debug(f"skipping already analyzed file: {binary_data_path}")
                 skipped_count += 1
                 continue
+
+            # get the file_path and file_name
+            file_path = all_binaries[sha256].get('modload_name')
+            if not file_path:
+                file_path = all_binaries[sha256].get('process_name')
+
+            file_name = get_os_independent_filepath(file_path).name or sha256
+            binary_path = os.path.join(subdir_path, file_name)
 
             # get the binary and make the submission
             downloaded = False
@@ -313,10 +321,6 @@ class CarbonBlackCloudBinaryCollector(Collector):
                 metadata = {'event_info': all_binaries[sha256]._info,
                             'ubs': ubs_file_data}
 
-                file_name = all_binaries[sha256].get('modload_name')
-                if not file_name:
-                    file_name = all_binaries[sha256].get('process_name')
-
                 event_time = all_binaries[sha256].get('event_timestamp')
                 if not event_time:
                     event_time = all_binaries[sha256].get('process_start_time')
@@ -325,10 +329,10 @@ class CarbonBlackCloudBinaryCollector(Collector):
 
                 observables = []
                 description = sha256
-                if file_name:
-                    observables.append({'type': F_FILE_NAME,
-                                        'value': file_name})
-                    description = file_name
+                if file_path:
+                    observables.append({'type': F_FILE_PATH,
+                                        'value': file_path})
+                    description = file_path
 
                 process_guid = all_binaries[sha256].get('process_guid')
                 observables.append({'type': F_CBC_PROCESS_GUID,
