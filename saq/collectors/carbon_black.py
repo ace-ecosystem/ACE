@@ -252,9 +252,14 @@ class CarbonBlackCloudBinaryCollector(Collector):
         all_binaries = {}
         for p in procs:
             logging.debug(f"getting suspect modloads from {p.get('process_guid')}")
-            for ml in p.events(event_type="modload").and_(modload_publisher_state='FILE_SIGNATURE_STATE_NOT_SIGNED'):
-                if ml.get('modload_sha256') and ml.get('modload_sha256') not in all_binaries:
-                    all_binaries[ml.get('modload_sha256')] = ml
+            try:
+                for ml in p.events(event_type="modload").and_(modload_publisher_state='FILE_SIGNATURE_STATE_NOT_SIGNED'):
+                    if ml.get('modload_sha256') and ml.get('modload_sha256') not in all_binaries:
+                        all_binaries[ml.get('modload_sha256')] = ml
+            except ServerError as e:
+                # XXX TODO create persistence to stop here and pick back up later so hashes don't get missed
+                logging.warning(f"problem collecting modload binary hashes for {p.get('process_guid')}. Can happen when the data set is very large.")
+                continue
 
         # get unsigned processes
         query = 'process_publisher_state:FILE_SIGNATURE_STATE_NOT_SIGNED'
