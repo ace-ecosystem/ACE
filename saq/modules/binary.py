@@ -297,6 +297,11 @@ class CapaAnalyzer(AnalysisModule):
         return abs_path(rules_dir)
 
     @property
+    def behavior_blacklist(self):
+        """A list of noisy behaviors not to use as detection points."""
+        return self.config.get('behavior_blacklist', "").split(',')
+
+    @property
     def generated_analysis_type(self):
         return CapaAnalysis
 
@@ -359,13 +364,16 @@ class CapaAnalyzer(AnalysisModule):
             # means the capability information shouldn't be considered.
 
         analysis = self.create_analysis(observable)
-        # XXX redundant filters through their json decoder
+        # XXX redundant but filters through their json decoder
         analysis.details = json.loads(capa.render.render_json(meta, rules, capabilities))
 
         mbc_analysis = get_mbc_id_dict(analysis.details)
         if mbc_analysis:
             for key, values in mbc_analysis.items():
                 if key.startswith("B"):
+                    observable.add_tag(key)
+                    if key in self.behavior_blacklist:
+                        continue
                     for detection in values:
                         observable.add_detection_point(f"MBC Behavior: {detection}")
 
