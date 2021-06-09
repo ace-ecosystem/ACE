@@ -302,6 +302,31 @@ class CapaAnalyzer(AnalysisModule):
         return self.config.get('behavior_blacklist', "").split(',')
 
     @property
+    def behavior_combo_detection_map(self):
+        """Yield any combination detection points."""
+        combo_detection_map = {}
+        for key,value in self.config.items():
+            if not key.startswith('behavior_combo_detection_'):
+                continue
+            item = key.split('behavior_combo_detection_')[1].split('_')[0]
+            if item not in combo_detection_map:
+                combo_detection_map[item] = {}
+            if key.endswith('_rule'):
+                # comma sep list
+                combo_detection_map[item]['rule'] = value
+            if key.endswith('_text'):
+                # detection point description
+                combo_detection_map[item]['text'] = value
+
+        # there must be a rule and txt
+        for item_key,detection_map in combo_detection_map.copy().items():
+            if 'text' not in detection_map or 'rule' not in detection_map:
+                logging.warning(f"missing rule or text for capa detection combo item #{item_key}: {detection_map}")
+                del combo_detection_map[item_key]
+
+        return combo_detection_map
+
+    @property
     def generated_analysis_type(self):
         return CapaAnalysis
 
@@ -376,5 +401,10 @@ class CapaAnalyzer(AnalysisModule):
                         continue
                     for detection in values:
                         observable.add_detection_point(f"MBC Behavior: {detection}")
+
+            for key,detection_map in self.behavior_combo_detection_map.items():
+                behaviors = detection_map['rule'].split(',')
+                if all(b in mbc_analysis.keys() for b in behaviors):
+                    observable.add_detection_point(detection_map['text'])
 
         return True
