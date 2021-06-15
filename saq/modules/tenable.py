@@ -74,6 +74,10 @@ class TenableAssetSearchAnalyzer(AnalysisModule):
     def valid_observable_types(self):
         return F_IPV4
 
+    @property
+    def add_most_recent_hostname_observable(self):
+        return self.config.getboolean('add_most_recent_hostname_observable')
+
     def custom_requirement(self, observable):
         if observable.type == F_IPV4 and not observable.is_managed():
             # we only analyze our own IP address space.
@@ -109,5 +113,10 @@ class TenableAssetSearchAnalyzer(AnalysisModule):
             last_seen_time = dateutil.parser.parse(asset_result["last_seen"])
             if last_seen_time > dateutil.parser.parse(analysis.details['freshest_result']['last_seen']):
                 analysis.details['freshest_result'] = asset_result
+
+        if self.add_most_recent_hostname_observable:
+            hostname = analysis.details['freshest_result'].get('hostname')
+            if hostname and len(hostname) == 1:
+                analysis.add_observable(F_HOSTNAME, hostname[0])
 
         return True
