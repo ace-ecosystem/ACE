@@ -3,7 +3,6 @@ import sys
 import logging
 
 from ip_inspector import maxmind
-from ip_inspector.config import load as load_ipi_config
 from ip_inspector import Inspector, Inspected_IP
 
 import saq
@@ -192,11 +191,8 @@ class IPIAnalyzer(AnalysisModule):
     def execute_analysis(self, observable):
         logging.debug("Inspecting {}".format(observable.value))
         try:
-            _proxies = proxies() if self.use_proxy else None
             # Create Inspector with MaxMind API
-            mmi = Inspector(maxmind.Client(license_key=self.license_key, proxies=_proxies),
-                            blacklists=self.blacklist_maps,
-                            whitelists=self.whitelist_maps)
+            mmi = Inspector(maxmind_license_key=self.license_key)
         except Exception as e:
             logging.error("Failed to create MaxMind Inspector: {}".format(e))
             return False
