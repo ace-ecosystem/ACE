@@ -563,7 +563,7 @@ class Event(Base):
     campaign = relationship('saq.database.Campaign', foreign_keys=[campaign_id])
     type = Column(Enum('phish','recon','host compromise','credential compromise','web browsing'), nullable=False)
     malware = relationship("saq.database.MalwareMapping", passive_deletes=True, passive_updates=True)
-    #alert_mappings = relationship("saq.database.EventMapping", passive_deletes=True, passive_updates=True)
+    alert_mappings = relationship("saq.database.EventMapping", passive_deletes=True, passive_updates=True)
     companies = relationship("saq.database.CompanyMapping", passive_deletes=True, passive_updates=True)
     event_time = Column(DATETIME, nullable=True)
     alert_time = Column(DATETIME, nullable=True)
@@ -1336,7 +1336,7 @@ class Alert(RootAnalysis, Base):
     owner = relationship('saq.database.User', foreign_keys=[owner_id])
     remover = relationship('saq.database.User', foreign_keys=[removal_user_id])
     #observable_mapping = relationship('saq.database.ObservableMapping')
-    #tag_mappings = relationship('saq.database.TagMapping', passive_deletes=True, passive_updates=True)
+    tag_mappings = relationship('saq.database.TagMapping', passive_deletes=True, passive_updates=True)
     #delayed_analysis = relationship('saq.database.DelayedAnalysis')
 
     @property
@@ -1774,10 +1774,10 @@ class Alert(RootAnalysis, Base):
                             primaryjoin='saq.database.Workload.uuid == Alert.uuid')
 
     delayed_analysis = relationship('saq.database.DelayedAnalysis', foreign_keys=[uuid],
-                                    primaryjoin='saq.database.DelayedAnalysis.uuid == Alert.uuid', overlaps="workload")
+                                    primaryjoin='saq.database.DelayedAnalysis.uuid == Alert.uuid')
 
     lock = relationship('saq.database.Lock', foreign_keys=[uuid],
-                        primaryjoin='saq.database.Lock.uuid == Alert.uuid', overlaps="delayed_analysis,workload")
+                        primaryjoin='saq.database.Lock.uuid == Alert.uuid')
 
     nodes = relationship('saq.database.Nodes', foreign_keys=[location], primaryjoin='saq.database.Nodes.name == Alert.location')
 
@@ -1935,7 +1935,7 @@ class Observable(Base):
     def display_value(self):
         return self.value.decode('utf8', errors='ignore')
 
-    #tags = relationship('saq.database.ObservableTagMapping', passive_deletes=True, passive_updates=True)
+    tags = relationship('saq.database.ObservableTagMapping', passive_deletes=True, passive_updates=True)
 
 class ObservableMapping(Base):
 
