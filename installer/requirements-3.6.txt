@@ -73,3 +73,4 @@ tabulate
 fakeredis
 distorm3
 requests-mock
+flare-capa

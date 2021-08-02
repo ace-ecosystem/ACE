@@ -23,6 +23,7 @@ from cbapi.errors import ServerError, ClientError, ObjectNotFoundError
 
 from cbinterface.psc.query import make_process_query
 from cbinterface.psc.ubs import get_file_metadata, request_and_get_file
+from cbinterface.helpers import get_os_independent_filepath
 
 @persistant_property('last_end_time') 
 class CarbonBlackAlertCollector(Collector):
@@ -35,6 +36,9 @@ class CarbonBlackAlertCollector(Collector):
         self.query_frequency = create_timedelta(self.service_config['query_frequency'])
         self.initial_range = create_timedelta(self.service_config['initial_range'])
         self.alert_queue = self.service_config.get('alert_queue', fallback=saq.constants.QUEUE_DEFAULT)
+        # the alert API returns alerts on processes before the process data is accessible via the process search API
+        # introducing this delay to give the data time to propagate for correlation
+        self.time_delay = create_timedelta(self.service_config.get('query_time_delay', '00:05:00'))
 
         self.cb_url = self.service_config['url']
         self.token = self.service_config['token']
@@ -87,7 +91,7 @@ class CarbonBlackAlertCollector(Collector):
 
     def collect_watchlist_alerts(self):
 
-        end_time = local_time()
+        end_time = local_time() - self.time_delay
         start_time = self.last_end_time
         if start_time is None:
             start_time = end_time - self.initial_range
@@ -196,8 +200,13 @@ class CarbonBlackCloudBinaryCollector(Collector):
 
         self.query_frequency = create_timedelta(self.service_config['query_frequency'])
         self.initial_range = create_timedelta(self.service_config['initial_range'])
+        # the alert API returns alerts on processes before the process data is accessible via the process search API
+        # introducing this delay to give the data time to propagate for correlation
+        self.time_delay = create_timedelta(self.service_config.get('query_time_delay', '00:05:00'))
         self.alert_queue = self.service_config.get('alert_queue', fallback=saq.constants.QUEUE_DEFAULT)
         self.tracking_dir = os.path.join(saq.DATA_DIR, self.service_config['tracking_dir'])
+        self.modload_query = self.service_config.get('modload_query')
+        self.process_query = self.service_config.get('process_query')
 
     def execute_extended_collection(self):
         try:
@@ -216,7 +225,7 @@ class CarbonBlackCloudBinaryCollector(Collector):
             logging.critical("missing CBC API connection.")
             return False
 
-        end_time = local_time()
+        end_time = local_time() - self.time_delay
         start_time = self.last_end_time
         if start_time is None:
             start_time = end_time - self.initial_range
@@ -233,46 +242,65 @@ class CarbonBlackCloudBinaryCollector(Collector):
             except Exception as e:
                 logging.error("unable to create directory {}: {}".format(self.tracking_dir, e))
 
-        # get processes with unsigned modloads
-        query = 'modload_publisher_state:FILE_SIGNATURE_STATE_NOT_SIGNED'
-        procs = None
-        try:
-            logging.info(f"making query='{query}' between {start_time} and {end_time}")
-            procs = make_process_query(CBC_API, query, start_time, end_time)
-        except Exception as e:
-            logging.error(f"problem querying CBC: {e}")
-            return False
-
-        if not procs:
-            logging.info(f"no results for query='{query}' between {start_time} and {end_time}")
+        if not self.modload_query and not self.process_query:
+            logging.error("No modload or process queries configured. There is nothing to do...")
             return None
-        logging.info(f"{len(procs)} results for query='{query}' between {start_time} and {end_time}")
 
+        # map tracking unique binaries needing analysis
         all_binaries = {}
-        for p in procs:
-            logging.debug(f"getting suspect modloads from {p.get('process_guid')}")
-            for ml in p.events(event_type="modload").and_(modload_publisher_state='FILE_SIGNATURE_STATE_NOT_SIGNED'):
-                if ml.get('modload_sha256') and ml.get('modload_sha256') not in all_binaries:
-                    all_binaries[ml.get('modload_sha256')] = ml
+
+        # target unsigned DLLs loaded by the processes resulting from the modload_query
+        # NOTE: the modload_query is just a process query but the behavior is such that modloads are crawled for unsigned binaries
+        if self.modload_query:
+            # TODO: Refine the query in the docs.
+            # TODO: See if we can query the Events directly instead of crawling every modload event for every process result.
+            procs = None
+            try:
+                logging.info(f"making query='{self.modload_query}' between {start_time} and {end_time}")
+                procs = make_process_query(CBC_API, self.modload_query, start_time, end_time)
+            except Exception as e:
+                logging.error(f"problem querying CBC: {e}")
+                return False
+
+            if not procs:
+                logging.info(f"no results for query='{self.modload_query}' between {start_time} and {end_time}")
+                return None
+            logging.info(f"{len(procs)} results for query='{self.modload_query}' between {start_time} and {end_time}")
+
+            for p in procs:
+                logging.debug(f"getting suspect modloads from {p.get('process_guid')}")
+                try:
+                    for ml in p.events(event_type="modload").and_(modload_publisher_state='FILE_SIGNATURE_STATE_NOT_SIGNED'):
+                        if ml.get('modload_sha256') and ml.get('modload_sha256') not in all_binaries:
+                            all_binaries[ml.get('modload_sha256')] = ml._info
+                except ServerError as e:
+                    # XXX TODO create persistence to stop here and pick back up later so hashes don't get missed
+                    logging.warning(f"problem collecting modload binary hashes for {p.get('process_guid')}. Can happen when the data set is very large.")
+                    continue
+        else:
+            logging.debug(f"Modload query not defined.")
 
         # get unsigned processes
-        query = 'process_publisher_state:FILE_SIGNATURE_STATE_NOT_SIGNED'
-        procs = None
-        try:
-            logging.info(f"making query='{query}' between {start_time} and {end_time}")
-            procs = make_process_query(CBC_API, query, start_time, end_time)
-        except Exception as e:
-            logging.error(f"problem querying CBC: {e}")
-            return False
+        if self.process_query:
+            procs = None
+            try:
+                logging.info(f"making query='{self.process_query}' between {start_time} and {end_time}")
+                procs = make_process_query(CBC_API, self.process_query, start_time, end_time)
+            except Exception as e:
+                logging.error(f"problem querying CBC: {e}")
+                return False
 
-        if not procs:
-            logging.info(f"no results for query='{query}' between {start_time} and {end_time}")
-            return None
-        logging.info(f"{len(procs)} results for query='{query}' between {start_time} and {end_time}")
+            if not procs:
+                logging.info(f"no results for query='{self.process_query}' between {start_time} and {end_time}")
+                return None
+            logging.info(f"{len(procs)} results for query='{self.process_query}' between {start_time} and {end_time}")
 
-        for p in procs:
-            if p.get('process_sha256') and p.get('process_sha256') not in all_binaries:
-                all_binaries[p.get('process_sha256')] = p
+            for p in procs:
+                if p.get('process_sha256') and p.get('process_sha256') not in all_binaries:
+                    logging.debug(f"adding suspect process identified by {p.get('process_guid')}")
+                    all_binaries[p.get('process_sha256')] = p._info
+        else:
+            logging.debug(f"Process query not defined.")
 
         logging.info(f"processing {len(all_binaries.keys())} binaries.")
 
@@ -288,12 +316,19 @@ class CarbonBlackCloudBinaryCollector(Collector):
                 except Exception as e:
                     logging.error(f"unable to create directory {subdir_path}: {e}")
 
-            binary_path = os.path.join(subdir_path, sha256)
             binary_data_path = os.path.join(subdir_path, f"{sha256}.json")
-            if os.path.exists(binary_data_path) or os.path.exists(binary_path):
+            if os.path.exists(binary_data_path):
                 logging.debug(f"skipping already analyzed file: {binary_data_path}")
                 skipped_count += 1
                 continue
+
+            # get the file_path and file_name
+            file_path = all_binaries[sha256].get('modload_name')
+            if not file_path:
+                file_path = all_binaries[sha256].get('process_name')
+
+            file_name = get_os_independent_filepath(file_path).name or sha256
+            binary_path = os.path.join(subdir_path, file_name)
 
             # get the binary and make the submission
             downloaded = False
@@ -310,12 +345,8 @@ class CarbonBlackCloudBinaryCollector(Collector):
                 except Exception as e:
                     logging.error(f"failed to get metadata for {sha256}: {e}")
 
-                metadata = {'event_info': all_binaries[sha256]._info,
+                metadata = {'event_info': all_binaries[sha256],
                             'ubs': ubs_file_data}
-
-                file_name = all_binaries[sha256].get('modload_name')
-                if not file_name:
-                    file_name = all_binaries[sha256].get('process_name')
 
                 event_time = all_binaries[sha256].get('event_timestamp')
                 if not event_time:
@@ -325,10 +356,10 @@ class CarbonBlackCloudBinaryCollector(Collector):
 
                 observables = []
                 description = sha256
-                if file_name:
-                    observables.append({'type': F_FILE_NAME,
-                                        'value': file_name})
-                    description = file_name
+                if file_path:
+                    observables.append({'type': F_FILE_PATH,
+                                        'value': file_path})
+                    description = file_path
 
                 process_guid = all_binaries[sha256].get('process_guid')
                 observables.append({'type': F_CBC_PROCESS_GUID,
