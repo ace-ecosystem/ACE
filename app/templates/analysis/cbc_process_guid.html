@@ -43,7 +43,13 @@
         </div>
     </div>
 
-    <h5>Process Events</h5> {% if analysis.max_events < analysis.reported_events %}<i>ACE hit max event limit. Captured {{analysis.max_events}} out of {{analysis.reported_events}}.</i>{% endif %}
+    <h5>Process Events</h5> 
+    {% if (analysis.max_events == analysis.total_events) and (analysis.max_events < analysis.reported_events) %}
+        <i>ACE hit max event limit. Captured {{analysis.max_events}} out of {{analysis.reported_events}} reported events.</i><br>
+    {% endif %}
+    {% if analysis.time_constrained %}
+        <i>{{analysis.time_constrained}}</i>
+    {% endif %}
     <div class="card">
         <div class="card-header" role="tab" id="headingTwo">
             <h5 class="mb-0">
@@ -54,7 +60,7 @@
         </div>
         <div id="collapseFileMods" class="collapse" role="tabpanel" aria-labelledby="headingTwo">
             <div class="card-block">
-              <pre>{{analysis.format_filemods()}}</pre>
+              <pre>{% for fm in analysis.format_filemods() %}{{fm}}{% endfor %}</pre>
             </div>
         </div>
     </div>
@@ -63,13 +69,13 @@
         <div class="card-header" role="tab" id="headingTwo">
           <h5 class="mb-0">
             <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseNetconns" aria-expanded="false" aria-controls="collapseFileMods">
-                Network Connections ({{analysis.details['events'].get('netconn', [])|length}} events captured)
+                Network Connections ({{(analysis.details['events'].get('netconn', []) + analysis.details['events'].get('netconn_proxy'))|length}} events captured)
             </a>
           </h5>
         </div>
         <div id="collapseNetconns" class="collapse" role="tabpanel" aria-labelledby="headingTwo">
           <div class="card-block">
-            <pre>{{analysis.format_netconns()}}</pre>
+            <pre>{% for nc in analysis.format_netconns() %}{{nc}}{% endfor %}</pre>
           </div>
         </div>
     </div>
@@ -84,7 +90,7 @@
         </div> 
         <div id="collapseRegMods" class="collapse" role="tabpanel">
           <div class="card-block">
-            <pre>{{analysis.format_regmods()}}</pre>
+            <pre>{% for e in analysis.format_regmods() %}{{e}}{% endfor %}</pre>
           </div>
         </div>
     </div>
@@ -99,7 +105,7 @@
         </div> 
         <div id="collapseModLoads" class="collapse" role="tabpanel">
           <div class="card-block">
-            <pre>{{analysis.format_modloads()}}</pre>
+            <pre>{% for e in analysis.format_modloads() %}{{e}}{% endfor %}</pre>
           </div>
         </div>
     </div>
@@ -114,7 +120,7 @@
         </div> 
         <div id="collapseCrossProcs" class="collapse" role="tabpanel">
             <div class="card-block">
-                <pre>{{analysis.format_crossprocs()}}</pre>
+              <pre>{% for e in analysis.format_crossprocs() %}{{e}}{% endfor %}</pre>
             </div>
         </div>
     </div>
@@ -129,7 +135,22 @@
       </div> 
       <div id="collapseScriptLoads" class="collapse" role="tabpanel">
           <div class="card-block">
-              <pre>{{analysis.format_scriptloads()}}</pre>
+            <pre>{% for e in analysis.format_scriptloads() %}{{e}}{% endfor %}</pre>
+          </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" role="tab" id="headingFour">
+        <h5 class="mb-0">
+          <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseFilelessScriptLoads" aria-expanded="false" aria-controls="collapseFilelessScriptLoads">
+          Fileless Script Loads ({{analysis.details['events'].get('fileless_scriptload', [])|length}} events captured)
+          </a>
+        </h5>
+      </div> 
+      <div id="collapseFilelessScriptLoads" class="collapse" role="tabpanel">
+          <div class="card-block">
+            <pre>{% for e in analysis.format_fileless_scriptloads() %}{{e}}{% endfor %}</pre>
           </div>
       </div>
     </div>
@@ -144,7 +165,7 @@
       </div> 
       <div id="collapseChildProc" class="collapse" role="tabpanel">
           <div class="card-block">
-              <pre>{{analysis.format_childprocs()}}</pre>
+            <pre>{% for e in analysis.format_childprocs() %}{{e}}{% endfor %}</pre>
           </div>
       </div>
     </div>
