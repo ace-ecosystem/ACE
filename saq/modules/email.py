@@ -1534,6 +1534,12 @@ class EmailAnalyzer(AnalysisModule):
                     if mail_from:
                         analysis.add_observable(F_EMAIL_CONVERSATION, create_email_conversation(mail_from, address))
 
+        for addr in email_details[KEY_TO_ADDRESSES]:
+            address = normalize_email_address(decode_rfc2822(addr))
+            if address:
+                if is_local_email_domain(address):
+                    analysis.add_observable(F_EMAIL_ADDRESS, address)
+
         if 'cc' in target_email:
             email_details[KEY_CC] = get_address_list(target_email, 'cc')
             for address in email_details[KEY_CC]:
