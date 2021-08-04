@@ -14,9 +14,7 @@
         <br>
         {% if analysis.details['histogram_data'] %}
         <b>Process Histograms</b>:
-        {% for title, facets in analysis.details['histogram_data'][key].items() %}
-            <pre>{{analysis.print_facet_histogram(title, facets)}}</pre>
-        {% endfor %}
+          <pre>{{analysis.details['histogram_data'][key]}}</pre>
         <hr>
         {% endif %}
 
@@ -24,9 +22,9 @@
             <div class="panel-heading">The <i>most recent</i> <b>{{analysis.details['process_samples'][key]|length}}</b> processes:</div>
             <div class="panel-body">
               {% for sample in analysis.details['process_samples'][key] %}
-                <b>Process GUID = {{sample['id']}}:</b>
-                <div class="well"><a href="{{sample['webui_link']}}" target="_blank">{{sample['start']}} UTC <b>{{sample['username']}}@{{sample['hostname']}}</b> <span style="color: #0000FF">{{sample['path']}}</span> <span style="color: #FF0000">{{sample['cmdline']}}</span> <span style="color: #008000">{{sample['process_md5']}}</span> - {{sample['id']}}</a></div>
-                <pre>{{sample['full_info_string']}}</pre>
+                <b>Process GUID = {{sample['process_guid']}}:</b>
+                <div class="well"><a href="{{analysis.weblink_for(sample['process_guid'])}}" target="_blank">{{sample['process_start_time']}} UTC <b>{{sample['process_username'][0]}}@{{sample['device_name']}}</b><span style="color: #FF0000">{{sample['process_cmdline'][0]}}</span> - {{sample['process_guid']}}</a></div>
+                <pre>{{sample|pprint}}</pre>
                 <hr>
               {% endfor %}
             </div>

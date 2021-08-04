@@ -52,7 +52,10 @@
                 <tbody>
                     {% for alert in alerts %}
                     {# we can use this ID to modify an alert row #}
-                    <tr id="alert_row_{{alert.uuid}}" >
+                    <tr id="alert_row_{{alert.uuid}}"
+                        {% if alert.is_over_sla %} class="danger"
+                        {% elif alert.is_approaching_sla %} class="warning"
+                        {% endif %}>
                         <td>
                             <button onclick="load_alert_observables('{{alert.uuid}}'); toggle_chevron('alert_row_dropdown_{{alert.uuid}}')" type="button" class="btn btn-default btn-xs"><span id="alert_row_dropdown_{{alert.uuid}}" class="glyphicon glyphicon-chevron-down"></span></button>
                         </td>
@@ -102,7 +105,12 @@
                             <span style="cursor:pointer" onmousedown='add_filter("Disposition", ["{{alert.disposition}}"])'>{{alert.disposition}}</span>
                         </td>
                         {% endif %}
-                        <td id="alert_status_{{ alert.uuid }}" style="white-space: nowrap;">{{alert.status}}</td>
+                        <td id="alert_status_{{ alert.uuid }}" style="white-space: nowrap;">
+                            {% if alert.is_over_sla %}Danger: {{alert.business_time_str}}
+                            {% elif alert.is_approaching_sla %}Warning: {{alert.business_time_str}}
+                            {% else %}{{alert.status}}
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

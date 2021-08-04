@@ -171,7 +171,7 @@ function select_event_name_candidate_from_manage_view() {
 
         // only consider alert event name candidates that have finished analyzing
         let alert_analysis_status = document.getElementById(`alert_status_${checked_alert_uuid}`).innerHTML
-        if (alert_analysis_status !== "Completed") return;
+        if (!alert_analysis_status.includes("Completed")) return;
 
         let checked_alert_date = new Date(document.getElementById(`alert_date_${checked_alert_uuid}`).title);
         // base case -- set first 'earliest_date' with first date we check

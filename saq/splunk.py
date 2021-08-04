@@ -1,6 +1,7 @@
 # vim: sw=4:ts=4:et
 
 import datetime
+import pytz
 import json
 import logging
 import re
@@ -11,6 +12,7 @@ import warnings
 import xml.etree.ElementTree as ET
 
 #logging.getLogger("requests").setLevel(logging.WARNING)
+from saq import LOCAL_TIMEZONE
 from saq.util import local_time
 
 
@@ -32,10 +34,16 @@ def create_timedelta(timespec):
     return datetime.timedelta(days=days, seconds=seconds, minutes=minutes, hours=hours)
 
 
-def extract_event_timestamp(obj, event):
+def extract_event_timestamp(obj, event, timezone=None):
     if '_time' not in event:
         logging.warning(f"splunk event missing _time field for {obj}")
         return local_time()
+
+    try:
+        timezone = pytz.timezone(timezone) if isinstance(timezone, str) else LOCAL_TIMEZONE
+    except pytz.exceptions.UnknownTimeZoneError:
+        logging.error(f"{timezone} is an unknown time zone.")
+        timezone = LOCAL_TIMEZONE
 
     m = re.match(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})\.[0-9]{3}[-+][0-9]{2}:[0-9]{2}$', event['_time'])
     if not m:
@@ -43,13 +51,13 @@ def extract_event_timestamp(obj, event):
         return local_time()
     else:
         # reformat this time for ACE
-        return datetime.datetime.strptime('{0}-{1}-{2} {3}:{4}:{5}'.format(
+        return timezone.localize(datetime.datetime.strptime('{0}-{1}-{2} {3}:{4}:{5}'.format(
             m.group(1),
             m.group(2),
             m.group(3),
             m.group(4),
             m.group(5),
-            m.group(6)), '%Y-%m-%d %H:%M:%S')
+            m.group(6)), '%Y-%m-%d %H:%M:%S'))
 
 
 class SplunkQueryObject(object):

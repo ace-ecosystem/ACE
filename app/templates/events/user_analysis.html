@@ -15,7 +15,7 @@
             {% if 'ldap' in user.jinja_details %}
                 <tr>
                     <td>
-                        {% if 'cn' in user.jinja_details['ldap'] %}
+                        {% if 'cn' in user.jinja_details['ldap'] and user.jinja_details['ldap'] %}
                             {{ user.jinja_details['ldap']['cn'] }}
                         {% endif %}
                     </td>

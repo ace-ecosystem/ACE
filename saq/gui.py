@@ -126,6 +126,24 @@ class ObservableActionUploadToCrits(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/upload_to_crits.html'
         self.icon = 'cloud-upload'
 
+class ObservableActionSetCBC_IOC_StatusActive(ObservableAction):
+    """Action to set the status of a CBC IOC to Active."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_SET_CBC_IOC_ACTIVE
+        self.description = "Set CBC IOC status to Active"
+        self.jinja_action_path = 'analysis/observable_actions/set_cbc_ioc_status.html'
+        self.icon = 'thumbs-up'
+
+class ObservableActionSetCBC_IOC_StatusIgnore(ObservableAction):
+    """Action to set the status of a CBC IOC to Ignore."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_SET_CBC_IOC_IGNORE
+        self.description = "Set CBC IOC status to Ignore"
+        self.jinja_action_path = 'analysis/observable_actions/set_cbc_ioc_status.html'
+        self.icon = 'remove'
+
 class ObservableActionSetSIPIndicatorStatus_Analyzed(ObservableAction):
     """Action to set the status of a SIP indicator to Analyzed."""
     def __init__(self, *args, **kwargs):
