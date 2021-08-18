@@ -13,14 +13,9 @@ from cbinterface.helpers import is_psc_guid
 from cbinterface.psc.process import (
     select_process,
     print_process_info,
-    print_modloads,
-    print_filemods,
-    print_netconns,
-    print_regmods,
-    print_crossprocs,
-    print_childprocs,
-    print_scriptloads,
     process_to_dict,
+    format_event_data,
+    get_events_by_type
 )
 
 import saq
@@ -521,26 +516,51 @@ class CarbonBlackCloudProcessAnalysis(Analysis):
                 total_events += value
         return total_events
 
+    @property
+    def total_events(self):
+        count = 0
+        if self.details.get("events"):
+            for et in self.details["events"].values():
+                count += len(et)
+        return count
+
+    @property
+    def time_constrained(self):
+        if self.details.get("event_start_time") and self.details.get("event_end_time"):
+            return f"Captured {self.total_events} events that occurred between {self.details.get('event_start_time')} and {self.details.get('event_end_time')}."
+        return ""
+
     def format_filemods(self):
-        return print_filemods(self.details, return_string=True)
+        for e in get_events_by_type(self.details, ["filemod"]):
+            yield f"{format_event_data(e)}\n"
 
     def format_netconns(self):
-        return print_netconns(self.details, return_string=True)
+        for e in get_events_by_type(self.details, ["netconn", "netconn_proxy"]):
+            yield f"{format_event_data(e)}\n"
 
     def format_regmods(self):
-        return print_regmods(self.details, return_string=True)
+        for e in get_events_by_type(self.details, ["regmod"]):
+            yield f"{format_event_data(e)}\n"
 
     def format_modloads(self):
-        return print_modloads(self.details, return_string=True)
+        for e in get_events_by_type(self.details, ["modload"]):
+            yield f"{format_event_data(e)}\n"
 
     def format_crossprocs(self):
-        return print_crossprocs(self.details, return_string=True)
+        for e in get_events_by_type(self.details, ["crossproc"]):
+            yield f"{format_event_data(e)}\n"
 
     def format_scriptloads(self):
-        return print_scriptloads(self.details, return_string=True)
+        for e in get_events_by_type(self.details, ["scriptload"]):
+            yield f"{format_event_data(e)}\n"
+
+    def format_fileless_scriptloads(self):
+        for e in get_events_by_type(self.details, ["fileless_scriptload"]):
+            yield f"{format_event_data(e)}\n"
 
     def format_childprocs(self):
-        return print_childprocs(self.details, return_string=True)
+        for e in get_events_by_type(self.details, ["childproc"]):
+            yield f"{format_event_data(e)}\n"
 
     def generate_summary(self):
         if 'info' not in self.details:
@@ -587,6 +607,14 @@ class CarbonBlackCloudProcessAnalyzer(AnalysisModule):
     def max_events(self):
         return self.config.getint('max_events', 10000)
 
+    @property
+    def duration_before(self):
+        return create_timedelta(self.config.get('relative_duration_before', '04:00:00'))
+
+    @property
+    def duration_after(self):
+        return create_timedelta(self.config.get('relative_duration_after', '04:00:00'))
+
     # TODO: add support for observable time to focus on pulling
     # process events during a specific time window.
 
@@ -611,9 +639,16 @@ class CarbonBlackCloudProcessAnalyzer(AnalysisModule):
             logging.warning(f"Process data does not exist for GUID={process_id}")
             return False
 
+        start_time = end_time = None
+        if observable.time:
+            start_time = observable.time - self.duration_before
+            end_time = observable.time + self.duration_after
+
         analysis = self.create_analysis(observable)
         try:
-            analysis.details = process_to_dict(proc, max_events=self.max_events)
+            analysis.details = process_to_dict(proc, max_events=self.max_events, start_time=start_time, end_time=end_time)
+            analysis.details["event_start_time"] = start_time
+            analysis.details["event_end_time"] = end_time
             return True
         except Exception as e:
             logging.error(f"problem exporting cabon black response process: {observable} : {e}")
