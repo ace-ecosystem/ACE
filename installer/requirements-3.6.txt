@@ -74,4 +74,5 @@ fakeredis
 distorm3
 requests-mock
 flare-capa
+pytenable
 ip_inspector>=0.1.10
