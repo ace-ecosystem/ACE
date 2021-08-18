@@ -157,6 +157,12 @@ class IPIAnalyzer(AnalysisModule):
         """
         return ['on_blacklist', 'not_whitelisted', 'ignore_blacklist']
 
+    def custom_requirement(self, observable):
+        if observable.type == F_IPV4 and observable.is_managed():
+            logging.debug(f"{self} skipping analysis for managed ipv4 {observable}")
+            return False
+        return True
+
     def execute_analysis(self, observable):
 
         from ip_inspector import Inspector
