@@ -2756,6 +2756,10 @@ update_organization_parsers = subparsers.add_parser('update-organization',
     help="Updates the files used by the UserTaggingAnalyzer module.")
 update_organization_parsers.set_defaults(func=update_organization)
 
+# ============================================================================
+# ip-inspector utilities
+#
+
 def update_maxmind_databases(args):
     from saq import proxy
     from ip_inspector import maxmind
@@ -2775,6 +2779,28 @@ update_maxmind_parser = subparsers.add_parser('update-maxmind-databases',
 update_maxmind_parser.add_argument('--license-key', action='store', default=None,
     help="Manually supply a license key.")
 update_maxmind_parser.set_defaults(func=update_maxmind_databases)
+
+from ip_inspector.cli import build_parser
+
+ip_inspector_parser = subparsers.add_parser("ip-inspector", help="ACE's IP Inspector environment.")
+build_parser(ip_inspector_parser)
+
+def ipinspector(args):
+    """Interface with the ip_inspector lib."""
+    from saq import proxy
+    from ip_inspector.cli import execute
+
+    config = saq.CONFIG['analysis_module_ip_inspector']
+    use_proxy = config.getboolean('use_proxy')
+    if use_proxy:
+        proxies = proxy.proxies()
+        os.environ['https_proxy'] = proxies['https']
+        os.environ['http_proxy'] = proxies['http']
+
+    return execute(args)
+
+ip_inspector_parser.set_defaults(func=ipinspector)
+
 
 # TODO move this into integration
 def update_crits_cache(args):

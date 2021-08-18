@@ -4,6 +4,8 @@ import logging
 
 import pytz
 
+from tabulate import tabulate
+
 import saq
 from saq.constants import *
 from saq.modules.api_analysis import BaseAPIAnalysis, BaseAPIAnalyzer
@@ -20,7 +22,6 @@ from saq.splunk import extract_event_timestamp, SplunkQueryObject
 
 class SplunkAPIAnalysis(BaseAPIAnalysis):
     pass
-
 
 class SplunkAPIAnalyzer(BaseAPIAnalyzer):
     """Base Module to make AnalysisModule performing correlational Splunk queries.
@@ -81,6 +82,7 @@ class SplunkAPIAnalyzer(BaseAPIAnalyzer):
 
     def execute_query(self):
         try:
+            logging.debug(f"splunk api module executing: {self.target_query}")
             client = SplunkQueryObject(
                     uri=saq.CONFIG[self.api]['uri'],
                     username=saq.CONFIG[self.api]['username'],
@@ -104,6 +106,28 @@ class SplunkAPIAnalyzer(BaseAPIAnalyzer):
             return None
 
         return query_result
+
+
+class GenericSummaryTableForSplunkAPIAnalysis(BaseAPIAnalysis):
+    @property
+    def jinja_template_path(self):
+        return "analysis/generic_api_tables.html"
+
+    def build_ascii_table(self) -> None:
+        if not self.details:
+            return None
+        table_name = self.details.get("summary_table_name", "Result Table")
+        primary_data = []
+        for row in self.details['query_results']:
+            data = {key:value for (key,value) in row.items() if not key.startswith("_") or key == "_time"}
+            primary_data.append(data)
+        return {table_name: tabulate(primary_data, headers='keys', tablefmt="psql")}
+
+
+class GenericSplunkAPIAnalyzer(SplunkAPIAnalyzer):
+    @property
+    def generated_analysis_type(self):
+        return GenericSummaryTableForSplunkAPIAnalysis
 
 
 SAFE_AWS_EVENT_NAME_PREFIXES = ['Get', 'List', 'Describe']

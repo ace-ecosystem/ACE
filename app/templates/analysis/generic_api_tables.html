@@ -21,6 +21,13 @@
             <pre>{{data_table}}</pre>
         <hr>
         {% endfor %}
+    {% elif analysis.build_ascii_table is defined %}
+        {% for table_name, data_table in analysis.build_ascii_table().items() %}
+            <br>
+            <b>{{table_name}}:</b>
+            <pre>{{data_table}}</pre>
+        <hr>
+        {% endfor %}
     {% endif %}
 
     {% if 'query' in analysis.details %}

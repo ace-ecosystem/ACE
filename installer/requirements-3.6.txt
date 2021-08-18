@@ -8,7 +8,7 @@ MarkupSafe
 Pandas
 Pillow
 PyMySQL
-SQLAlchemy>=1.3.0
+SQLAlchemy==1.3.18
 Werkzeug==0.16.0
 WTForms
 beautifulsoup4
@@ -75,3 +75,4 @@ distorm3
 requests-mock
 flare-capa
 pytenable
+ip_inspector>=0.1.10

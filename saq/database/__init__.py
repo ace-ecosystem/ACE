@@ -1951,7 +1951,7 @@ class ObservableMapping(Base):
         ForeignKey('alerts.id'),
         primary_key=True)
 
-    alert = relationship('saq.database.Alert', backref='observable_mappings')
+    alert = relationship('saq.database.Alert', backref='observable_mappings' )
     observable = relationship('saq.database.Observable', backref='observable_mappings')
 
 # this is used to automatically map tags to observables
