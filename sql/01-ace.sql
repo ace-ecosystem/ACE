@@ -99,6 +99,7 @@ CREATE TABLE `cloudphish_analysis_results` (
   `insert_date` datetime NOT NULL COMMENT 'When this entry was created.',
   `uuid` varchar(36) CHARACTER SET ascii NOT NULL COMMENT 'The UUID of the analysis. This would also become the UUID of the alert if it ends up becoming one.',
   `status` enum('NEW','ANALYZING','ANALYZED') NOT NULL DEFAULT 'NEW',
+  `redirection_target_url` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci COMMENT 'The value of a redirection target URL.',
   PRIMARY KEY (`sha256_url`),
   KEY `insert_date_index` (`insert_date`),
   KEY `sha256_content_index` (`sha256_content`)

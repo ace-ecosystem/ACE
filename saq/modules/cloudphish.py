@@ -398,6 +398,11 @@ class CloudphishAnalyzer(AnalysisModule):
             analysis.result_details = 'EMPTY CONTENT'
             return True
 
+        # Was there a redirection URL to add as an observable?
+        if response.get('redirection_target_url'):
+            final_url = analysis.add_observable(F_URL, response['redirection_target_url'])
+            final_url.add_tag('redirection_target')
+
         # save the analysis results
         analysis.query_result = response
 
@@ -483,6 +488,7 @@ class CloudphishAnalyzer(AnalysisModule):
                 logging.error("unable to download file {} for url {} from cloudphish: {}".format(
                               target_file, url.value, e))
                 report_exception()
+
 
         return True
 
@@ -613,12 +619,18 @@ class CloudphishRequestAnalyzer(AnalysisModule):
 
             break
 
+        # if there was a redirection url
+        redirection_target_url = None
+        if crawlphish_analysis.final_url and crawlphish_analysis.final_url != url.value:
+            redirection_target_url = crawlphish_analysis.final_url
+
         update_cloudphish_result(sha256_url, 
                                  http_result_code=http_result_code,
                                  http_message=http_message,
                                  result=scan_result,
                                  sha256_content=sha256_content,
-                                 status=STATUS_ANALYZED)
+                                 status=STATUS_ANALYZED,
+                                 redirection_target_url=redirection_target_url)
 
         if sha256_content:
             update_content_metadata(sha256_content, saq.SAQ_NODE, file_name)

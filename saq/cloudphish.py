@@ -82,6 +82,7 @@ KEY_SHA256_URL = 'sha256_url'
 KEY_LOCATION = 'location'
 KEY_FILE_NAME = 'file_name'
 KEY_UUID = 'uuid'
+KEY_REDIRECT_URL = 'redirection_target_url'
 
 STATUS_NEW = 'NEW'
 STATUS_ANALYZING = 'ANALYZING'
@@ -106,7 +107,8 @@ def update_cloudphish_result(
     http_message=None,
     sha256_content=None,
     result=None,
-    status=None, 
+    status=None,
+    redirection_target_url=None,
     db=None, c=None):
     
     sql = []
@@ -132,6 +134,10 @@ def update_cloudphish_result(
         sql.append('status = %s')
         params.append(status)
 
+    if redirection_target_url is not None:
+        sql.append('redirection_target_url = %s')
+        params.append(redirection_target_url)
+
     if not sql:
         logging.warning("update_cloudphish_result called for {} but nothing was passed in to update?".format(sha256_url))
         return
@@ -150,7 +156,10 @@ ON DUPLICATE KEY UPDATE node = %s, name = %s""", ( sha256_content, node, file_na
 
 @use_db
 def get_content_metadata(sha256_content, db, c):
-    assert isinstance(sha256_content, str) and sha256_content
+    if not isinstance(sha256_content, str) and sha256_content:
+        logging.error(f"got type:{type(sha256_content)} for sha256 content")
+        #assert isinstance(sha256_content, str) and sha256_content
+        return None
     c.execute("SELECT node, name FROM cloudphish_content_metadata WHERE sha256_content = UNHEX(%s)", 
               sha256_content)
     row = c.fetchone()
@@ -178,7 +187,7 @@ def hash_url(url):
 
 class CloudphishAnalysisResult(object):
     def __init__(self, result, details, status=None, analysis_result=None, http_result=None, http_message=None,
-                 sha256_content=None, sha256_url=None, location=None, file_name=None, uuid=None):
+                 sha256_content=None, sha256_url=None, location=None, file_name=None, uuid=None, redirect_url=None):
 
         self.result = result
         self.details = details
@@ -191,6 +200,7 @@ class CloudphishAnalysisResult(object):
         self.location = location
         self.file_name = file_name
         self.uuid = uuid
+        self.redirect_url = redirect_url
 
     def json(self):
         return { KEY_RESULT: self.result,
@@ -203,13 +213,14 @@ class CloudphishAnalysisResult(object):
                  KEY_SHA256_URL: self.sha256_url,
                  KEY_LOCATION: self.location,
                  KEY_FILE_NAME: self.file_name,
-                 KEY_UUID: self.uuid }
+                 KEY_UUID: self.uuid,
+                 KEY_REDIRECT_URL: self.redirect_url}
 
     def __str__(self):
         return "CloudphishAnalysisResult(result:{},details:{},status:{},analysis_result:{},http_result:{}," \
-               "http_message:{},sha256_content:{},sha256_url:{},location:{},file_name:{},uuid:{})".format(
+               "http_message:{},sha256_content:{},sha256_url:{},location:{},file_name:{},uuid:{},redirection_to:{})".format(
             self.result, self.details, self.status, self.analysis_result, self.http_result, self.http_message,
-            self.sha256_content, self.sha256_url, self.location, self.file_name, self.uuid)
+            self.sha256_content, self.sha256_url, self.location, self.file_name, self.uuid, self.redirect_url)
     
     def __repr__(self):
         return str(self)
@@ -238,14 +249,15 @@ def _get_cached_analysis(url, db, c):
                      HEX(ar.sha256_content),
                      cm.node,
                      cm.name,
-                     ar.uuid
+                     ar.uuid,
+                     ar.redirection_target_url
                  FROM cloudphish_analysis_results AS ar
                  LEFT JOIN cloudphish_content_metadata AS cm ON ar.sha256_content = cm.sha256_content
                  WHERE sha256_url = UNHEX(%s)""", (sha256,))
 
     row = c.fetchone()
     if row:
-        status, result, http_result, http_message, sha256_content, node, file_name, uuid = row
+        status, result, http_result, http_message, sha256_content, node, file_name, uuid, redirect_url = row
         if file_name:
             file_name = file_name.decode('utf-16le')
 
@@ -282,7 +294,8 @@ def _get_cached_analysis(url, db, c):
                                         sha256_url=sha256,
                                         location=node,
                                         file_name=file_name,
-                                        uuid=uuid)
+                                        uuid=uuid,
+                                        redirect_url=redirect_url)
 
     # if we have not then we return None
     return None
@@ -311,6 +324,12 @@ def _create_analysis(url, reprocess, details, db, c):
         # if we're reprocessing the url then we clear any existing analysis
         # IF the current analysis has completed
         # it's OK if we delete nothing here
+        # XXX NOTE: existing error here as this function is missing args (did this ever work?)
+        # should be: execute_with_retry(db, c, ...
+        # However, when fixing this and testing it a loop is introduced that I didn't have time
+        # to troubleshoot. So leaving this broken for now as a failure is better than the possibility
+        # of introducting a loop.
+        raise NotImplementedError("REPROCESSING BROKEN AT THE MOMENT!")
         execute_with_retry("""DELETE FROM cloudphish_analysis_results 
                               WHERE sha256_url = UNHEX(%s) AND status = 'ANALYZED'""", 
                           (sha256_url,), commit=True)
@@ -397,7 +416,6 @@ def analyze_url(url, reprocess, ignore_filters, details):
     assert isinstance(details, dict)
 
     result = None
-
     # if we've not requested reprocessing then we get the cached results if they exist
     if not reprocess:
         result = get_cached_analysis(url)
