@@ -400,8 +400,15 @@ class CloudphishAnalyzer(AnalysisModule):
 
         # Was there a redirection URL to add as an observable?
         if response.get('redirection_target_url'):
+            from saq.modules.url import CrawlphishAnalyzer
+            from saq.modules.render import RenderAnalyzer
             final_url = analysis.add_observable(F_URL, response['redirection_target_url'])
             final_url.add_tag('redirection_target')
+            final_url.add_relationship(R_REDIRECTED_FROM, url)
+            final_url.exclude_analysis(RenderAnalyzer)
+            final_url.exclude_analysis(CrawlphishAnalyzer)
+            final_url.exclude_analysis(CloudphishAnalyzer)
+            analysis.iocs.add_url_iocs(final_url.value, tags=['crawlphish', 'redirection_target'])
 
         # save the analysis results
         analysis.query_result = response
