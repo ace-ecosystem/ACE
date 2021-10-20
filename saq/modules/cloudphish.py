@@ -247,11 +247,57 @@ class CloudphishAnalyzer(AnalysisModule):
     def cloudphish_request_limit(self):
         return self.config.getint('cloudphish_request_limit')
 
+    @property
+    def suspicious_redirection_targets(self):
+        _targets = []
+        suspect_targets_path = self.config.get('redirection_target_list_path')
+        if not suspect_targets_path:
+            return _targets
+        if not os.path.isabs(suspect_targets_path):
+            suspect_targets_path = os.path.join(saq.SAQ_HOME, suspect_targets_path)
+
+        with open(suspect_targets_path, 'r') as fp:
+            for line in fp:
+                line = line.strip()
+                # skip comments
+                if line.startswith('#'):
+                    continue
+                # skip blank lines
+                if line == '':
+                    continue
+                _targets.append(line)
+
+        return _targets
+
+    @property
+    def ignore_redirection_from_these(self):
+        _targets = []
+        path = self.config.get('ignore_these_redirections_from_list_path')
+        if not path:
+            return _targets
+        if not os.path.isabs(path):
+            path = os.path.join(saq.SAQ_HOME, path)
+
+        with open(path, 'r') as fp:
+            for line in fp:
+                line = line.strip()
+                # skip comments
+                if line.startswith('#'):
+                    continue
+                # skip blank lines
+                if line == '':
+                    continue
+                _targets.append(line)
+
+        return _targets
+
+
     def verify_environment(self):
         self.verify_config_exists('timeout')
         self.verify_config_exists('use_proxy')
         self.verify_config_exists('frequency')
         self.verify_config_exists('cloudphish_request_limit')
+        self.verify_config_exists('zero_data_blacklist_path')
 
     def get_cloudphish_server(self):
         """Returns the next cloudphish hostname[:port] to use.  This will round robin available selections."""
@@ -393,10 +439,48 @@ class CloudphishAnalyzer(AnalysisModule):
         # we ignore this case
         if response[KEY_SHA256_CONTENT] and response[KEY_SHA256_CONTENT].upper() == \
         'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855':
-            logging.debug("ignoring result of 0 length data for {}".format(url.value))
+            logging.info("ignoring result of 0 length data for {}".format(url.value))
             analysis.result = RESULT_ERROR
             analysis.result_details = 'EMPTY CONTENT'
             return True
+            # load content blacklist
+            # TODO: The thought here was to do something special as some malicious URLs
+            # respond with empty content if they do not like our request. Submit to urlscan.io?
+            """
+            content_blacklist_path = self.config.get('zero_data_blacklist_path')
+            with open(content_blacklist_path, 'r') as fp:
+                content_blacklist = fp.readlines()
+            ignore_strings = [s.strip() for s in content_blacklist if not s.startswith('#')]
+            for content in ignore_strings:
+                if url.value.endswith('.gif') or content in url.value:
+                    logging.info("ignoring result of 0 length data for {}".format(url.value))
+                    analysis.result = RESULT_ERROR
+                    analysis.result_details = 'EMPTY CONTENT'
+                    return True
+            # if here, treat this as suspicious.
+            url.add_tag('suspect')
+            url.add_tag('http_200_but_zero_data') 
+            """
+
+        # Was there a redirection URL to add as an observable?
+        if response.get('redirection_target_url'):
+            from saq.modules.url import CrawlphishAnalyzer
+            from saq.modules.render import RenderAnalyzer
+            redirection_target_url = response['redirection_target_url']
+
+            # Is this a suspicious redirect?
+            if any([_t in redirection_target_url for _t in self.suspicious_redirection_targets]) and \
+               not any([_t in url.value for _t in self.ignore_redirection_from_these]):
+                analysis.add_detection_point(f"Fools Redirect Detected: {url.value} REDIRECTED to {redirection_target_url}")
+                analysis.add_tag('Fools Redirect')
+
+            final_url = analysis.add_observable(F_URL, redirection_target_url)
+            final_url.add_tag('redirection_target')
+            final_url.add_relationship(R_REDIRECTED_FROM, url)
+            final_url.exclude_analysis(RenderAnalyzer)
+            final_url.exclude_analysis(CrawlphishAnalyzer)
+            final_url.exclude_analysis(CloudphishAnalyzer)
+            analysis.iocs.add_url_iocs(final_url.value, tags=['crawlphish', 'redirection_target'])
 
         # save the analysis results
         analysis.query_result = response
@@ -483,6 +567,7 @@ class CloudphishAnalyzer(AnalysisModule):
                 logging.error("unable to download file {} for url {} from cloudphish: {}".format(
                               target_file, url.value, e))
                 report_exception()
+
 
         return True
 
@@ -613,12 +698,18 @@ class CloudphishRequestAnalyzer(AnalysisModule):
 
             break
 
+        # if there was a redirection url
+        redirection_target_url = None
+        if crawlphish_analysis.final_url and crawlphish_analysis.final_url != url.value:
+            redirection_target_url = crawlphish_analysis.final_url
+
         update_cloudphish_result(sha256_url, 
                                  http_result_code=http_result_code,
                                  http_message=http_message,
                                  result=scan_result,
                                  sha256_content=sha256_content,
-                                 status=STATUS_ANALYZED)
+                                 status=STATUS_ANALYZED,
+                                 redirection_target_url=redirection_target_url)
 
         if sha256_content:
             update_content_metadata(sha256_content, saq.SAQ_NODE, file_name)

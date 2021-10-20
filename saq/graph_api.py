@@ -1,9 +1,10 @@
 """Module is a grouping of Graph API authentication and helper classes."""
 
+import os
 import configparser
 from typing import Union
 import urllib.parse
-
+import json
 import logging
 import msal
 import requests
@@ -84,7 +85,7 @@ class GraphConfig:
         self.thumbprint = section["thumbprint"]
         self.private_key = None
         self.client_credential = section.get("client_credential", None)
-        if self.client_credential is None:
+        if not self.client_credential:
             self.private_key = kwargs.get('private_key') or read_private_key(section["private_key_file"])
             self.client_credential = {
                 "thumbprint": self.thumbprint,
@@ -119,9 +120,12 @@ class GraphAPI:
 
     def __init__(self, graph_config, verify_auth=True, verify_graph=True, proxies=None, **kwargs):
         self.config = kwargs.get('config_override') or GraphConfig(graph_config)
-        self.proxies = proxies or {}
+        if not proxies:
+            proxies = saq.proxy.proxies()
+        self.proxies = proxies
         self.client_app = None
         self.token = None
+        self.token_expiration_time = 0
         self.verify = verify_graph
         self.verify_auth = verify_auth
         self.base_url = self.config.endpoint
@@ -151,9 +155,13 @@ class GraphAPI:
 
         _proxies = proxies or self.proxies
 
-        # TODO - Do we need a 'refresh' process in case the token expires after 1 hour?
-        if not self.token:
+        if self.token is None or self.token_expiration_time < time.time():
+            # add a 10 second grace period for long running analysis
+            start = time.time() - 10
             self.get_token()
+            self.token_expiration_time = start + self.token['expires_in']
+        else:
+            logging.debug("re-using existing token")
 
         # If the endpoint is not defined properly in the configuration, then it can cause the
         # urllib.parse.urljoin in self.build_url to join paths incorrectly.
@@ -177,8 +185,9 @@ class GraphAPI:
 
         if kwargs.get('headers'):
             http_headers = {**http_headers, **kwargs['headers']}
+            kwargs.pop('headers')
 
-        logging.info(f'making authenticated graph api request HTTP {method.upper()} {endpoint}')
+        logging.debug(f'making authenticated graph api request HTTP {method.upper()} {endpoint}')
         return request_method(endpoint, *args, headers=http_headers, verify=self.verify, proxies=_proxies, **kwargs)
 
 
@@ -259,3 +268,117 @@ def get_graph_api_object(config_section: configparser.SectionProxy, **kwargs) ->
         logging.error(f"error creating Graph API object: {e.__class__} '{e}'")
         report_exception()
         raise e
+
+def dismiss_riskyUser(api: GraphAPI, userIds: list, **kwargs):
+    """Dismiss a list of riskyUsers"""
+    _request_func = kwargs.get('request_func') or api.request
+    url = api.build_url(f"v1.0/identityProtection/riskyUsers/dismiss")
+    data = {"userIds": userIds}
+
+    response = _request_func(url, method='post', data=json.dumps(data))
+    if response.status_code != 204:
+        logging.error(f"HTTP Status Code {response.status_code} : {response.text}")
+        return False
+
+    logging.info(f"dismissed riskyUsers: {userIds}")
+    return True
+
+def load_collection_accounts():
+    collection_accounts = {}
+    default_collection_account_name = 'default'
+    for section_name in saq.CONFIG.keys():
+        if not section_name.startswith('graph_collection_account'):
+            continue
+
+        account_name = None
+        if section_name == 'graph_collection_account':
+            account_name = default_collection_account_name
+        else:
+            if not section_name.startswith('graph_collection_account_'):
+                continue
+            account_name = section_name[len('graph_collection_account_'):]
+
+        collection_accounts[account_name] = saq.CONFIG[section_name]
+
+    return collection_accounts
+
+def build_graph_api_client_map():
+    collection_accounts = load_collection_accounts()
+    if not collection_accounts:
+        logging.error(f"no graph collection accounts detected")
+        return None
+
+    graph_api_clients = {}
+    for account, _config in collection_accounts.items():
+        graph_api_clients[account] = GraphAPI(_config, proxies=saq.proxy.proxies())
+
+    return graph_api_clients
+
+def get_api(account_name: str='default'):
+
+    graph_api_clients = build_graph_api_client_map()
+    if not graph_api_clients:
+        logging.error(f"unable to load any graph api clients")
+        return None
+    
+    if account_name is None:
+        return None
+        # XXX if company_id in map, use name
+        #company_name = [c['name'] for c in saq.NODE_COMPANIES if c['id'] == self.root.company_id]
+        #if company_name:
+        #    account_name = company_name[0]
+        
+    if account_name not in graph_api_clients.keys():
+        logging.debug(f"{account_name} not found in graph api client map. using 'default'.")
+        return None
+
+    return graph_api_clients[account_name]
+
+
+def execute_request(api: GraphAPI, url: str, method='get', params={}, data={}, **kwargs):
+    response = api.request(url, method=method, proxies=saq.proxy.proxies(), params=params, data=json.dumps(data), **kwargs)
+    if response.status_code == 401:
+        error = response.json()['error']
+        logging.warning(f"authentication failed: {error['message']}")
+        # try again with a fresh token
+        api.get_token()
+        response = api.request(url, method=method, proxies=saq.proxy.proxies(), params=params, data=json.dumps(data), **kwargs)
+    if response.status_code != 200:
+        error = response.json()['error']
+        logging.error(f"got {response.status_code} getting {url}: {error['code']} : {error['message']}")
+        return False
+
+    return response.json()
+
+def execute_and_get_all(api: GraphAPI, url: str, params={}, data={}, **kwargs):
+    """Execute and method='get' all values accross all pages if there are values.
+        NOTE this will return an empty list even if the api call fails.
+    """
+    values = []
+    results = execute_request(api, url, params=params, data=data, **kwargs)
+    if not results:
+        return values
+    if 'value' not in results:
+        return values
+    values = results['value']
+    result_count = len(values)
+    logging.info(f"got {result_count} initial results ...")
+    # get any and all paged content
+    if '@odata.nextLink' in results:
+        url = results['@odata.nextLink']
+        while url is not None:
+            results = execute_request(api, url, **kwargs)
+            if not results:
+                break
+            #results = response.json()
+            if 'value' in results and results['value']:
+                result_count += len(results['value'])
+                logging.info(f"got {len(results['value'])} more results ...")
+                values.extend(results['value'])
+            if '@odata.nextLink' in results:
+                url = results['@odata.nextLink']
+            else:
+                url = None
+
+    logging.info(f"got {result_count} total results.")
+    return values

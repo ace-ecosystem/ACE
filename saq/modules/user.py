@@ -1,5 +1,6 @@
 # vim: sw=4:ts=4:et
 
+import base64
 import os
 import os.path
 import logging
@@ -8,10 +9,11 @@ import sys
 import json
 
 import saq
+from saq.email import is_local_email_domain
 from saq.error import report_exception
 from saq.analysis import Analysis, Observable
-from saq.modules import AnalysisModule
-from saq.email import is_local_email_domain
+from saq.modules import AnalysisModule, LDAPAnalysisModule, GraphAnalysisModule
+from saq.util import create_timedelta, local_time, is_ipv4
 from saq.constants import *
 import saq.ldap
 import saq.util
@@ -162,5 +164,305 @@ class UserAnalyzer(AnalysisModule):
         # did we get an email address?
         if 'mail' in analysis.details['ldap'] and analysis.details['ldap']['mail'] is not None:
             analysis.add_observable(F_EMAIL_ADDRESS, analysis.details['ldap']['mail'])
+
+        return True
+
+class UserPrincipleNameAnalysis(Analysis):
+    """Who is the user?"""
+
+    def initialize_details(self):
+        self.user_id = None
+        self.details = {'user': {},
+                        'groups': {},
+                        'teams': {},
+                        'manager': {},
+                        'directReports': {},
+                        'encoded_profile_photo': None}
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/upn.html"
+
+    def generate_summary(self):
+        if self.details:
+            user_details = self.details['user']
+            if not user_details:
+                return None
+            desc = ""
+            if 'displayName' in user_details:
+                desc += f" - {user_details['displayName']}"
+            if 'companyName' in user_details:
+                desc += f" - {user_details['companyName']}"
+            if 'department' in user_details:
+                desc += f" - {user_details['department']}"
+            if 'jobTitle' in user_details:
+                desc += f" - {user_details['jobTitle']}"
+            if 'officeLocation' in user_details:
+                desc += f" - {user_details['officeLocation']}"
+            if 'preferredLanguage' in user_details:
+                desc += f" - {user_details['preferredLanguage']}"
+            return f"UserPrincipleName Analysis{desc}"
+        return None
+
+class UserPrincipleNameAnalyzer(GraphAnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return UserPrincipleNameAnalysis
+
+    @property
+    def select_properties(self):
+        # https://docs.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0#properties
+        user_properties = [ 'id',
+                            'employeeId',
+                            'displayName',
+                            'surname',
+                            'givenName',
+                            'city',
+                            'state',
+                            'streetAddress',
+                            'country',
+                            'postalCode',
+                            'officeLocation',
+                            'companyName',
+                            'department',
+                            'jobTitle',
+                            'externalUserState',
+                            'hireDate',
+                            'lastPasswordChangeDateTime',
+                            'mail',
+                            'mobilePhone',
+                            'onPremisesDistinguishedName',
+                            'preferredLanguage',
+                            'preferredName',
+                            'usageLocation',
+                            'userType',
+                            'userPrincipalName']
+        return ",".join(user_properties)
+
+    @property
+    def upn_observable_type_pointer(self):
+        return self.config.get('upn_pointer', None)
+
+    @property
+    def api_version(self):
+        return self.config.get('resource_api_version', 'v1.0')
+
+    @property
+    def graph_account_name(self):
+        return self.config.get('graph_account_name', None)
+
+    @property
+    def get_profile_photo(self):
+        return self.config.getboolean('get_profile_photo', None)
+
+    @property
+    def profile_photo_size(self):
+        return self.config.get('profile_photo_size', "120x120")
+
+    @property
+    def valid_observable_types(self):
+        # ADD an F_UPN observable to ACE? Not sure it's necessary, yet.
+        o_types = (  )
+        if self.upn_observable_type_pointer and self.upn_observable_type_pointer in VALID_OBSERVABLE_TYPES:
+            if self.upn_observable_type_pointer not in o_types:
+                o_types += (self.upn_observable_type_pointer, )
+        return o_types
+
+    def execute_analysis(self, upn):
+        if upn.type == F_EMAIL_ADDRESS:
+            if not is_local_email_domain(upn.value):
+                logging.info(f"not analyzing non-local email observable: {upn}")
+                return False
+
+        api = self.get_api(self.graph_account_name)
+        api.initialize()
+
+        # user
+        url = api.build_url(f"{self.api_version}/users/{upn.value}?$select={self.select_properties}")
+        results = self.execute_request(api, url)
+        if not results:
+            return False
+
+        analysis = self.create_analysis(upn)
+
+        analysis.details['user'] = results.json()
+        analysis.user_id = analysis.details['user']['id']
+
+        # The employee identifier assigned to the user by the organization.
+        employeeId = analysis.details['user'].get('employeeId', None)
+        if employeeId:
+            analysis.add_observable(F_USER, employeeId)
+
+        # groups
+        url = api.build_url(f"{self.api_version}/users/{upn.value}/memberOf")
+        analysis.details['groups'] = self.execute_and_get_all(api, url)
+
+        # teams
+        if analysis.user_id:
+            url = api.build_url(f"{self.api_version}/users/{analysis.user_id}/joinedTeams")
+            results = self.execute_request(api, url)
+            if results:
+                analysis.details['teams'] = results.json()
+
+        # manager
+        url = api.build_url(f"{self.api_version}/users/{upn.value}/manager")
+        results = self.execute_request(api, url)
+        if results:
+            analysis.details['manager'] = results.json()
+
+        # directReports
+        url = api.build_url(f"{self.api_version}/users/{upn.value}/directReports")
+        results = self.execute_request(api, url)
+        if results:
+            analysis.details['directReports'] = results.json()
+
+        # photo ?
+        if self.get_profile_photo:
+            url = api.build_url(f"{self.api_version}/users/{upn.value}/photos/{self.profile_photo_size}/$value")
+            try:
+                results = self.execute_request(api, url, stream=True)
+                if results:
+                    analysis.details['encoded_profile_photo'] = base64.b64encode(results.content)
+            except Exception as e:
+                logging.warning(f"couldn't download profile photo: {e}")
+
+        if analysis.details:
+            return True
+        return False
+
+class UserSignInHistoryAnalysis(Analysis):
+    """What can the user's recent authentication history tell us?"""
+
+    def initialize_details(self):
+        self.details = {}
+
+    @property
+    def jinja_template_path(self):
+        return "analysis/user_auth_history.html"
+
+    def generate_summary(self):
+        if self.details:
+            desc = f"UserSignInHistoryAnalysis ({self.details['day_interval']} days) -"
+            total_events = len(self.details['raw_events'])
+            desc += f" TotalAttempts={total_events}"
+            percent = self.details['auth_sucess_count']/total_events * 100
+            desc += f" Successful={percent:.2f}%"
+            percent = self.details['auth_fail_count']/total_events * 100
+            desc += f" Failed={percent:.2f}%"
+            percent = self.details['count_from_managed']/total_events * 100
+            desc += f" ManagedDevice={percent:.2f}%"
+            desc += f" - UniqueIP={len(self.details['unique_ipaddr'])}"
+            desc += f" - UniqueApp={len(self.details['apps'])}"
+
+            return desc
+        return None
+
+class UserSignInHistoryAnalyzer(GraphAnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return UserSignInHistoryAnalysis
+
+    @property
+    def upn_observable_type_pointer(self):
+        return self.config.get('upn_pointer', None)
+
+    @property
+    def day_interval(self):
+        # how far back to query the user's sign-in history, in days
+        return self.config.get('day_interval', 7)
+
+    @property
+    def api_version(self):
+        return self.config.get('resource_api_version', 'v1.0')
+
+    @property
+    def graph_account_name(self):
+        return self.config.get('graph_account_name', None)
+
+    @property
+    def valid_observable_types(self):
+        # ADD an F_UPN observable to ACE? Not sure it's necessary, yet.
+        o_types = (  )
+        if self.upn_observable_type_pointer and self.upn_observable_type_pointer in VALID_OBSERVABLE_TYPES:
+            if self.upn_observable_type_pointer not in o_types:
+                o_types += (self.upn_observable_type_pointer, )
+        return o_types
+
+    def execute_analysis(self, upn):
+        if upn.type == F_EMAIL_ADDRESS:
+            if not is_local_email_domain(upn.value):
+                logging.info(f"not analyzing non-local email observable: {upn}")
+                return False
+
+        api = self.get_api(self.graph_account_name)
+        api.initialize()
+
+        time_interval = create_timedelta(f'{self.day_interval}:00:00:00')
+        start_time = (local_time() - time_interval).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+        # sign ins
+        url = api.build_url(f"{self.api_version}/auditLogs/signIns")
+        params = {'$filter': f"userPrincipalName eq '{upn.value}' and createdDateTime gt {start_time}"}
+        events = self.execute_and_get_all(api, url, params=params)
+        if not events:
+            return False
+
+        analysis = self.create_analysis(upn)
+
+        analysis.details['raw_events'] = events
+        analysis.details['day_interval'] = self.day_interval
+        analysis.details['start_time'] = start_time
+
+        # how does MS categorize the user's risk?
+        # this is not really sign in history analysis ...
+        # should it go in the UPN analyzer?
+        user_id = events[0]['userId']
+        url = api.build_url(f"{self.api_version}/identityProtection/riskyUsers/{user_id}")
+        results = self.execute_request(api, url)
+        if results:
+            results = results.json()
+            analysis.details['risk_result'] = results
+            risk_state = f"{results['riskLevel']} {results['riskState']}"
+            analysis.details['risk_state'] = risk_state
+            if results['riskLevel'] in ['high', 'medium']:
+                analysis.add_tag(risk_state)
+
+        # parse out some simple stats to display
+        # and add any observables
+
+        # ips
+        unique_ips = list(set([si['ipAddress'] for si in events if si.get('ipAddress')]))
+        analysis.details['unique_ipaddr'] = unique_ips
+        # XXX not adding these, can make the alerts "noisy" looking
+        #for ip in unique_ips:
+        #    if is_ipv4(ip):
+        #        analysis.add_observable(F_IPV4, ip)
+            # else we need to add an F_IPV6
+
+        # apps
+        apps = list(set([si['appDisplayName'] for si in events if si.get('appDisplayName')]))
+        analysis.details['apps'] = apps
+
+        # devices
+        devices = [si['deviceDetail'] for si in events if si.get('deviceDetail')]
+        unique_devices = []
+        analysis.details['count_from_managed'] = 0
+        for device in devices:
+            if device.get('isManaged'):
+                analysis.details['count_from_managed'] += 1
+            if device.get('displayName') and device['displayName'] not in unique_devices:
+                unique_devices.append(device['displayName'])
+        for dname in unique_devices:
+            analysis.add_observable(F_HOSTNAME, dname)
+
+        # auth success / failure counts
+        auth_results = [si['status'] for si in events]
+        analysis.details['auth_sucess_count'] = 0
+        analysis.details['auth_fail_count'] = 0
+        for auth in auth_results:
+            if auth['errorCode'] == 0:
+                analysis.details['auth_sucess_count'] += 1
+            else:
+                analysis.details['auth_fail_count'] += 1
 
         return True
