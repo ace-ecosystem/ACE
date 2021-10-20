@@ -1166,11 +1166,11 @@ class Alert(RootAnalysis, Base):
         """Returns self.business_time as a formatted string for display."""
         result = ""
         if self.business_time.days:
-            result = '{} day{}'.format(self.business_time.days, 's' if self.business_time.days > 1 else '')
+            result = '{} day{}, '.format(self.business_time.days, 's' if self.business_time.days > 1 else '')
 
         hours = int(self.business_time.seconds / 60 / 60)
         if hours:
-            result = '{}, {} hour{}'.format(result, int(self.business_time.seconds / 60 / 60), 's' if hours > 1 else '')
+            result = '{}{} hour{}'.format(result, int(self.business_time.seconds / 60 / 60), 's' if hours > 1 else '')
         return result
 
     @property
@@ -1995,7 +1995,7 @@ class ObservableMapping(Base):
         ForeignKey('alerts.id'),
         primary_key=True)
 
-    alert = relationship('saq.database.Alert', backref='observable_mappings')
+    alert = relationship('saq.database.Alert', backref='observable_mappings' )
     observable = relationship('saq.database.Observable', backref='observable_mappings')
 
 # this is used to automatically map tags to observables
@@ -2333,12 +2333,11 @@ class Remediation(Base):
             'result': self.result,
             'comment': self.comment,
             'successful': self.successful,
-            'company_id': self.company_id,
             'status': self.status,
         }
 
     def __str__(self):
-        return f"Remediation: {self.action} - {self.type} - {self.status} - {self.key} - {self.result}"
+        return f"Remediation #{self.id}: {self.action} - {self.type} - {self.status} - {self.key}"
 
 
 class Message(Base):
@@ -2742,7 +2741,6 @@ def initialize_database():
         close_all_sessions()
 
 def initialize_automation_user():
-    # get the id of the ace automation account
     try:
         #import pymysql
         #pymysql.connections.DEBUG = True

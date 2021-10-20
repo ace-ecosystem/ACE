@@ -1,5 +1,8 @@
 import json
 import re
+import logging
+from ldap3.core import exceptions
+from ldap3.utils.conv import escape_filter_chars
 from ldap3 import Server, Connection, SIMPLE, RESTARTABLE, SUBTREE, ALL, ALL_ATTRIBUTES
 from ldap3.utils.ciDict import CaseInsensitiveDict
 import saq
@@ -55,10 +58,12 @@ def lookup_email_address(email_address):
     # lookup the user for an email by name so that it will match various internal domains
     email = saq.email.normalize_email_address(email_address)
     name, domain = email.split('@', 1)
+    name = escape_filter_chars(name)
     return search(f"(mail={name}@*)")
 
 # lookup a user by cn and return the attributes including manager cn
 def lookup_user(user):
+    user = escape_filter_chars(user)
     entries = search(f"(cn={user})")
     if len(entries) == 0:
         return None

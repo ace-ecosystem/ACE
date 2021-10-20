@@ -30,7 +30,11 @@ class O365FileAnalyzer(AnalysisModule):
         super().__init__(*args, **kwargs)
         self.session = requests.Session()
         self.session.proxies = proxies()
-        self.session.auth = GraphApiAuth(self.config['client_id'], self.config['tenant_id'], self.config['thumbprint'], self.config['private_key'])
+        self.session.auth = GraphApiAuth(self.config['client_id'],
+                                         self.config['tenant_id'],
+                                         self.config['thumbprint'],
+                                         self.config['private_key'],
+                                         client_credential = self.config.get("client_credential", None))
 
     @property
     def generated_analysis_type(self):

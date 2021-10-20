@@ -229,6 +229,16 @@ class BaseAPIAnalyzer(AnalysisModule):
         self.query_timeout = self.config.getint('query_timeout',
                                                 fallback=saq.CONFIG['query_hunter']['query_timeout'])
 
+    def _reload_target_query(self):
+        # load the query query for this instance
+        if 'query' in self.config:
+            self.target_query = self.config['query']
+        elif 'query_path' in self.config:
+            with open(abs_path(self.config['query_path']), 'r') as fp:
+                self.target_query = fp.read()
+        else:
+            raise RuntimeError(f"module {self} missing query or query_path settings in configuration")
+
     def build_target_query(self, observable: Observable, **kwargs) -> None:
         """Fills in the target_query attribute with observable value and time specification for correlation.
 
@@ -236,6 +246,12 @@ class BaseAPIAnalyzer(AnalysisModule):
                 observable: observable that is being analyzed.
                 **kwargs: additional variables used for unit testing.
         """
+
+        # XXX for some reason the self.target_query is getting cached when the same module runs for the same analysis
+        # for different observables
+        if '<O_VALUE>' not in self.target_query: 
+            self._reload_target_query()
+            logging.warning(f"had to reset self.target_query to clear previous use")
 
         self.target_query = self.target_query.replace('<O_TYPE>', observable.type) \
             .replace('<O_VALUE>', observable.value)  # TODO property escape stuff

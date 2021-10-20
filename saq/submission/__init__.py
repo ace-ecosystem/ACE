@@ -335,6 +335,9 @@ class SubmissionFilter(object):
 
     def update_rules(self):
         # is it time to check to see if the rules needs to be checked for updates?
+        if self.tracking_scanner is None:
+            return 
+
         need_update = False
         if self.next_update is None:
             need_update = True

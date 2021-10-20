@@ -1,5 +1,6 @@
 from base64 import b64encode, b64decode
 from datetime import datetime, timedelta
+from typing import Union, List
 import importlib
 import json
 import logging
@@ -60,6 +61,7 @@ def RemediationIgnore(message):
 def RemediationSuccess(message, restore_key=None):
     return RemediationResult(REMEDIATOR_STATUS_SUCCESS, message, restore_key=restore_key)
 
+
 class Remediator():
     def __init__(self, config_section):        
         self.name = config_section
@@ -81,58 +83,77 @@ class Remediator():
         return RemediationFailure('restore not implemented')
 
 class RemediationTarget():
-    def __init__(self, type=None, value=None, id=None):
-        # set type and value
+    def __init__(self,
+                 type=None,
+                 key_value=None,
+                 id=None,
+                 restore_key=None,
+                 user_id=saq.AUTOMATION_USER_ID,
+                 action=REMEDIATION_ACTION_REMOVE,
+                 comment=None
+                 ):
+        # set type, value, and remediation default
         self.type = type
-        self.value = value
+        self.key = key_value
+        self.user_id = user_id
+        self.action = action
+        self.comment = comment
 
         # if id is givent then decode it and use for type and value
         if id is not None:
-            self.type, self.value = b64decode(id.encode('ascii')).decode('utf-8').split('|', 1)
+            self.type, self.key = b64decode(id.encode('ascii')).decode('utf-8').split('|', 1)
 
         # get remediation history for this target
         query = saq.db.query(Remediation)
         query = query.filter(Remediation.type == self.type)
-        query = query.filter(Remediation.key == self.value)
+        query = query.filter(Remediation.key == self.key)
         query = query.order_by(Remediation.id.desc())
         self.history = query.all()
 
+        if restore_key is None:
+            self.restore_key = self.last_restore_key
+
     @property
     def id(self):
-        # return an html/js friendly representation of the target
-        return b64encode(f"{self.type}|{self.value}".encode('utf-8')).decode('ascii')
+        """Return an html/js friendly representation of the target"""
+        return b64encode(f"{self.type}|{self.key}".encode('utf-8')).decode('ascii')
 
     @property
     def processing(self):
-        return len(self.history) > 0 and self.history[0].status != REMEDIATION_STATUS_COMPLETED
+        """Return True if the target's last remediation is not complete."""
+        if self.last_remediation:
+            return self.last_remediation.status != REMEDIATION_STATUS_COMPLETED
+        return False
 
     @property
     def state(self):
-        if len(self.history) > 0:
-            if self.history[0].status == REMEDIATION_STATUS_COMPLETED:
-                if self.history[0].successful:
-                    return f'{self.history[0].action}d'
-                return f'{self.history[0].action} failed'
-            elif self.history[0].status == REMEDIATION_STATUS_IN_PROGRESS:
-                return f'{self.history[0].action[:-1]}ing'
+        """Human readable descripiton of the targets state."""
+        if self.last_remediation:
+            if self.last_remediation.status == REMEDIATION_STATUS_COMPLETED:
+                if self.last_remediation.successful:
+                    return f'{self.last_remediation.action}d'
+                return f'{self.last_remediation.action} failed'
+            elif self.last_remediation.status == REMEDIATION_STATUS_IN_PROGRESS:
+                return f'{self.last_remediation.action[:-1]}ing'
         return 'new'
 
     @property
     def css_class(self):
-        if len(self.history) > 0:
-            if self.history[0].status == REMEDIATION_STATUS_COMPLETED:
-                if self.history[0].successful:
+        """Helper for highlighting results in a GUI"""
+        if self.last_remediation:
+            if self.last_remediation.status == REMEDIATION_STATUS_COMPLETED:
+                if self.last_remediation.successful:
                     return 'success'
                 return 'danger'
-            elif self.history[0].status == REMEDIATION_STATUS_IN_PROGRESS:
-                if self.history[0].successful:
+            elif self.last_remediation.status == REMEDIATION_STATUS_IN_PROGRESS:
+                if self.last_remediation.successful:
                     return 'warning'
                 return 'danger'
         return ''
 
-    # return the last seen restore key or none if there are no restore keys
     @property
     def last_restore_key(self):
+        """Return the last seen restore key or none."""
         if len(self.history) == 0:
             return None
         for h in self.history:
@@ -140,18 +161,152 @@ class RemediationTarget():
                 return h.restore_key
         return None
 
-    # insert a remediation entry into the database which is then processed by the remediation service
-    def queue(self, action, user_id):
+    def queue(self, action=None, user_id=None, comment=None):
+        """Insert a remediation entry into the database."""
+        action = self.action if action is None else action
+        user_id = self.user_id if user_id is None else user_id
+        comment = self.comment if comment is None else comment
         remediation = Remediation(
             action=action,
             type=self.type,
-            key=self.value,
+            key=self.key,
             successful=True,
             user_id=user_id,
             restore_key=self.last_restore_key,
+            comment=comment,
         )
         saq.db.add(remediation)
         saq.db.commit()
+        logging.info(f"Queued {remediation}")
+
+    def refresh(self):
+        """Refresh the remediation history."""
+        # Rollback to discard changes in the transaction buffer and avoide lazy loads.
+        # NOTE idk why expiring/refreshing the objects doesn't work here.
+        saq.db.rollback()
+        query = saq.db.query(Remediation)
+        query = query.filter(Remediation.type == self.type)
+        query = query.filter(Remediation.key == self.key)
+        query = query.order_by(Remediation.id.desc())
+        self.history = query.all()
+        return self
+
+    @property
+    def last_remediation(self):
+        """Get the last known remediation or return None.
+
+        NOTE that this does NOT refresh the remediation history.
+        """
+        if len(self.history) > 0:
+            return self.history[0]
+        return None
+
+    def __str__(self):
+        return f"RemediationTarget: {self.type} - {self.key} - {self.state} - history={len(self.history)}"
+
+def load_all_remediators() -> List[Remediator]:
+    """Load all configured Remediators."""
+    remediators = []
+    for section in saq.CONFIG:
+        if section.startswith('remediator_'):
+            logging.info(f"Loading {section}")
+            module = importlib.import_module(saq.CONFIG[section]['module'])
+            remediator = getattr(module, saq.CONFIG[section]['class'])
+            remediators.append(remediator(section))
+    return remediators
+
+def remediate_target(remediators: List[Remediator], target: Union[RemediationTarget, Remediation]) -> None:
+    """Execute the remediation of a target."""
+
+    try:
+        logging.info(f"STARTED {target.action[:-1]}ing {target.type} {target.key}")
+
+        # load results from previous runs
+        results = {}
+        if isinstance(target, Remediation) and target.result:
+            results = json.loads(target.result)
+
+        # run all remediators on the target
+        status = REMEDIATION_STATUS_COMPLETED
+        restore_key = target.restore_key
+        for remediator in remediators:
+
+            # only run remediators for target type
+            if remediator.type != target.type:
+                continue
+
+            # only run remediators that are not already complete for this target
+            if remediator.name not in results or results[remediator.name]['status'] not in COMPLETED_REMEDIATOR_STATUSES:
+                try:
+                    # run the remediator on the target
+                    results[remediator.name] = remediator.remediate(target)
+                except Exception as e:
+                    # delay remediation and log error
+                    results[remediator.name] = RemediationError(f"{e.__class__.__name__}: {e}")
+                    logging.error(f"{remediator.name} failed to {target.action} {target.type} {target.key}: {e}")
+                    logging.error(traceback.format_exc())
+
+                # delay remediation if not complete
+                if results[remediator.name]['status'] not in COMPLETED_REMEDIATOR_STATUSES:
+                    status = REMEDIATION_STATUS_IN_PROGRESS
+
+                # set restore key if one was given
+                if results[remediator.name]['restore_key'] is not None:
+                    restore_key = results[remediator.name]['restore_key']
+
+        # mark as successful if no remediators failed/errored and at least one remediator succeeded
+        successful = False
+        for remediator in results:
+            if results[remediator]['status'] in UNSUCCESSFUL_REMEDIATOR_STATUSES:
+                successful = False
+                break
+            elif results[remediator]['status'] in SUCCESSFUL_REMEDIATOR_STATUSES:
+                successful = True
+
+        # log result
+        logging.info(f"{status} {target.action[:-1]}ing {target.type} {target.key}")
+
+        # database result
+        if target.id is None or isinstance(target, RemediationTarget):
+            # record this target remediation in the remediation table
+            remediation = Remediation(
+                action = target.action,
+                type = target.type,
+                key = target.key,
+                status = status,
+                successful = successful,
+                result = json.dumps(results),
+                user_id = target.user_id,
+                restore_key = restore_key,
+                comment = target.comment,
+            )
+            saq.db.add(remediation)
+            saq.db.commit()
+        else:
+            # update target in remediation table
+            update = Remediation.__table__.update()
+            update = update.values(
+                lock = None,
+                status = status,
+                successful = successful,
+                result = json.dumps(results),
+                restore_key = restore_key,
+                update_time = datetime.utcnow(),
+            )
+            update = update.where(Remediation.id == target.id)
+            saq.db.execute(update)
+            saq.db.commit()
+
+    except Exception as e:
+        logging.error(f"Unhandled exception: {e}")
+        logging.error(traceback.format_exc())
+        report_exception()
+    finally:
+        try:
+            saq.db.remove()
+        except Exception as e:
+            logging.error(f"unable to return db session: {e}")
+            report_exception()
 
     def stop_remediation(self):
         for h in self.history:
@@ -172,12 +327,7 @@ class RemediationService(ACEService):
 
     def execute_service(self):
         # load all remediators
-        for section in saq.CONFIG:
-            if section.startswith('remediator_'):
-                logging.info(f"Loading {section}")
-                module = importlib.import_module(saq.CONFIG[section]['module'])
-                remediator = getattr(module, saq.CONFIG[section]['class'])
-                self.remediators.append(remediator(section))
+        self.remediators = load_all_remediators()
 
         # process targets until shutdown event is set
         targets = []
@@ -249,70 +399,7 @@ class RemediationService(ACEService):
 
     def remediate(self, target):
         try:
-            logging.info(f"STARTED {target.action[:-1]}ing {target.type} {target.key}")
-
-            # load results from previous runs
-            results = {} if target.result is None else json.loads(target.result)
-
-            # run all remediators on the target
-            status = REMEDIATION_STATUS_COMPLETED
-            restore_key = target.restore_key
-            for remediator in self.remediators:
-                # only run remediators for target type
-                if remediator.type != target.type:
-                    continue
-
-                # only run remediators that are not already complete for this target
-                if remediator.name not in results or results[remediator.name]['status'] not in COMPLETED_REMEDIATOR_STATUSES:
-                    try:
-                        # run the remediator on the target
-                        results[remediator.name] = remediator.remediate(target)
-                    except Exception as e:
-                        # delay remediation and log error
-                        results[remediator.name] = RemediationError(f"{e.__class__.__name__}: {e}")
-                        logging.error(f"{remediator.name} failed to {target.action} {target.type} {target.key}: {e}")
-                        logging.error(traceback.format_exc())
-
-                    # delay remediation if not complete
-                    if results[remediator.name]['status'] not in COMPLETED_REMEDIATOR_STATUSES:
-                        status = REMEDIATION_STATUS_IN_PROGRESS
-
-                    # set restore key if one was given
-                    if results[remediator.name]['restore_key'] is not None:
-                        restore_key = results[remediator.name]['restore_key']
-
-            # mark as successful if no remediators failed/errored and at least one remediator succeeded
-            successful = False
-            for remediator in results:
-                if results[remediator]['status'] in UNSUCCESSFUL_REMEDIATOR_STATUSES:
-                    successful = False
-                    break
-                elif results[remediator]['status'] in SUCCESSFUL_REMEDIATOR_STATUSES:
-                    successful = True
-
-            # update target in remediation table
-            update = Remediation.__table__.update()
-            update = update.values(
-                lock = None,
-                status = status,
-                successful = successful,
-                result = json.dumps(results),
-                restore_key = restore_key,
-                update_time = datetime.utcnow(),
-            )
-            update = update.where(Remediation.id == target.id)
-            saq.db.execute(update)
-            saq.db.commit()
-
-            # log result
-            logging.info(f"{status} {target.action[:-1]}ing {target.type} {target.key}")
-
+            remediate_target(self.remediators, target)
         except Exception as e:
             logging.error(f"Unhandled exception: {e}")
             report_exception()
-        finally:
-            try:
-                saq.db.remove()
-            except Exception as e:
-                logging.error(f"unable to return db session: {e}")
-                report_exception()

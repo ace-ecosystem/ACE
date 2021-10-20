@@ -51,10 +51,7 @@
                         <td class="event-cell"><button onclick="load_event_alerts('{{event.id}}')" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-triangle-right"></span></button></td>
                         <td class="event-cell"><button onclick="edit_event('{{event.id}}')" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-pencil"></span></button></td>
                         <td class="event-cell">{{event.creation_date}}</td>
-                        <td class="event-cell">{{event.type}} - {{event.vector}} - <a target="_blank" href="{{url_for('events.index', direct=event.id)}}">{{event.name}}</a>{% if event.wiki %} | <a href="{{ event.wiki }}" target="_blank">Wiki</a>{% endif %}</td>
-                        {% if tip.name and tip.event_url(event.uuid) %}
-                            <td><a href="{{ tip.event_url(event.uuid) }}" target="_blank">{{ tip.name }}</a></td>
-                        {% endif %}
+                        <td class="event-cell">{{event.type}} - {{event.vector}} - {% if event.wiki %}<a href="{{ event.wiki }}" target="_blank">Wiki</a>{% endif %} | <a target="_blank" href="{{url_for('events.index', direct=event.id)}}">{{event.name}}</a></td>
                         <td>
                             {% for t in event.threats %}
                             <span class="label label-default">{{t}}</span>

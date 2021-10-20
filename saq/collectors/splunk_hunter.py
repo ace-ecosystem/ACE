@@ -37,8 +37,9 @@ class SplunkHunt(QueryHunt):
         self.namespace_user = '-' # defaults to wildcards
         self.namespace_app = '-'
 
-    def extract_event_timestamp(self, event):
-        return extract_event_timestamp(self, event)
+    def extract_event_timestamp(self, event, timezone=None):
+        timezone = self.timezone if timezone is None else timezone
+        return extract_event_timestamp(self, event, timezone=timezone)
 
     def formatted_query(self):
         return self.query.replace('{time_spec}', self.time_spec)

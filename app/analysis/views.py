@@ -35,13 +35,6 @@ from subprocess import Popen, PIPE, DEVNULL
 from urllib.parse import urlparse, quote as url_encode
 from sandboxapi.falcon import FalconAPI
 
-import businesstime
-
-try:
-    import pandas as pd
-except ImportError:
-    pass
-
 import requests
 from pymongo import MongoClient
 
@@ -73,28 +66,6 @@ from saq.tip import tip_factory
 from saq.util import abs_path, find_all_url_domains, create_histogram_string
 from saq.file_upload import *
 from saq.observables import create_observable
-
-from metrics.alerts import ( get_alerts_between_dates,
-                             VALID_ALERT_STATS,
-                             FRIENDLY_STAT_NAME_MAP,
-                             statistics_by_month_by_dispo,
-                             generate_hours_of_operation_summary_table,
-                             generate_overall_summary_table,
-                             define_business_time
-                            )
-from metrics.alerts.users import get_all_users, generate_user_alert_stats
-from metrics.alerts.alert_types import ( all_alert_types,
-                                         unique_alert_types_between_dates,
-                                         count_quantites_by_alert_type,
-                                         get_alerts_between_dates_by_type,
-                                         generate_alert_type_stats
-                                        )
-
-from metrics.events import ( get_events_between_dates,
-                             get_incidents_from_events,
-                             add_email_alert_counts_per_event
-                            )
-from metrics.helpers import get_companies, dataframes_to_xlsx_bytes, dataframes_to_archive_bytes_of_json_files
 
 import ace_api
 
@@ -1204,10 +1175,11 @@ def add_to_event():
         dbm.commit()
 
         # generate wiki
-        c.execute("""SELECT creation_date, name FROM events WHERE id = %s""", event_id)
+        c.execute("""SELECT creation_date, name, status FROM events WHERE id = %s""", event_id)
         result = c.fetchone()
         creation_date = result[0]
         event_name = result[1]
+        event_status = result[2]
         c.execute("""SELECT uuid, storage_dir FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE 
         event_mapping.event_id = %s""", event_id)
         rows = c.fetchall()
@@ -1218,7 +1190,13 @@ def add_to_event():
             alert_uuids.append(row[0])
             alert_paths.append(row[1])
 
-        if not new_event: 
+        if not new_event:
+            # Re-OPEN event?
+            if event_status != "OPEN":
+                ace_api.set_default_remote_host(saq.CONFIG['global']['node'])
+                ace_api.set_default_ssl_ca_path(saq.CONFIG['SSL']['ca_chain_path'])
+                ace_api.update_event_status(event_id, 'OPEN')
+
             c.execute("""SELECT disposition FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE 
             event_mapping.event_id = %s ORDER BY disposition DESC""", event_id)
             result = c.fetchone()
@@ -1589,12 +1567,22 @@ def reset_checked_alerts():
 
 def reset_sort_filter():
     session['sort_filter'] = 'Alert Date'
-    session['sort_filter_desc'] = True
+    if 'sla' not in session:
+        session['sort_filter_desc'] = True
 
 def reset_pagination():
     session['page_offset'] = 0
     if 'page_size' not in session:
         session['page_size'] = 50
+
+def apply_sla_filters():
+    # display all open alerts
+    if 'Owner' in session['filters']:
+        del session['filters']['Owner']
+    # put the oldest alert at the top
+    session['sort_filter_desc'] = False
+    # record that SLA has been applied to the session
+    session['sla'] = True
 
 @analysis.route('/set_sort_filter', methods=['GET', 'POST'])
 @login_required
@@ -1622,6 +1610,10 @@ def reset_filters():
     reset_pagination()
     reset_sort_filter()
     reset_checked_alerts()
+
+    if 'sla' in session:
+        # sla will trigger again, if needed
+        del session['sla']
 
     # return empy page
     return ('', 204)
@@ -1778,9 +1770,27 @@ def manage():
     if hasFilter('Observable'):
         query = query.join(ObservableMapping, GUIAlert.id == ObservableMapping.alert_id).join(Observable, ObservableMapping.observable_id == Observable.id)
 
+    # we want to display alerts that are either approaching or exceeding SLA
+    sla_ids = [] # list of alert IDs that need to be displayed
+    if saq.GLOBAL_SLA_SETTINGS.enabled or any([s.enabled for s in saq.OTHER_SLA_SETTINGS]):
+        _query = db.session.query(GUIAlert).filter(GUIAlert.disposition == None)
+        for alert_type in saq.EXCLUDED_SLA_ALERT_TYPES:
+            _query = _query.filter(GUIAlert.alert_type != alert_type)
+        for alert in _query:
+            if alert.is_over_sla or alert.is_approaching_sla:
+                sla_ids.append(alert.id)
+
+    if sla_ids:
+        logging.info(f"{len(sla_ids)} alerts over or approaching SLA.")
+        if 'sla' not in session:
+            apply_sla_filters()
+    elif 'sla' in session:
+        # remove sla mode
+        del session['sla']
+
     # apply filters
     filters = getFilters()
-    for name in session['filters']:
+    for name in session['filters']: 
         if session['filters'][name] and len(session['filters'][name]) > 0:
             query = filters[name].apply(query, session['filters'][name])
 
@@ -1855,7 +1865,7 @@ def manage():
 
         # filter
         filters=filters,
-        
+
         # alert data
         alerts=alerts,
         comments=comments,
@@ -1864,7 +1874,7 @@ def manage():
         total_alerts=total_alerts,
 
         # event data
-        open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all(),
+        open_events = db.session.query(Event).filter(or_(Event.status == 'OPEN', Event.status == 'COMPLETED')).order_by(Event.creation_date.desc()).all(),
         campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all(),
 
         # user data
@@ -1884,8 +1894,34 @@ def get_valid_alert_queues():
 @analysis.route('/metrics', methods=['GET', 'POST'])
 @login_required
 def metrics():
+
     if not saq.CONFIG['gui'].getboolean('display_metrics'):
-        # redirect to index
+        return redirect(url_for('analysis.index'))
+
+    try:
+        from ace_metrics.alerts import ( get_alerts_between_dates,
+                                        VALID_ALERT_STATS,
+                                        FRIENDLY_STAT_NAME_MAP,
+                                        statistics_by_month_by_dispo,
+                                        generate_hours_of_operation_summary_table,
+                                        generate_overall_summary_table,
+                                        define_business_time
+                                    )
+        from ace_metrics.alerts.users import get_all_users, generate_user_alert_stats
+        from ace_metrics.alerts.alert_types import ( all_alert_types,
+                                                    unique_alert_types_between_dates,
+                                                    count_quantites_by_alert_type,
+                                                    get_alerts_between_dates_by_type,
+                                                    generate_alert_type_stats
+                                                )
+
+        from ace_metrics.events import ( get_events_between_dates,
+                                        get_incidents_from_events,
+                                        add_email_alert_counts_per_event
+                                    )
+        from ace_metrics.helpers import get_companies, dataframes_to_xlsx_bytes, dataframes_to_archive_bytes_of_json_files, generate_html_plot
+    except ModuleNotFoundError:
+        flash("The ACE metrics library is not installed.")
         return redirect(url_for('analysis.index'))
 
     # get the list of users that have full access to all metrics
@@ -1926,6 +1962,8 @@ def metrics():
     alert_type_count_breakdown = False
     selected_companies_map = {}
     tables = []
+    html_plots = []
+    metric_results = []
 
     # default business hours
     # Use the SLA config section, for now.
@@ -1985,16 +2023,20 @@ def metrics():
 
                 if hours_of_operation:
                     hop_df = generate_hours_of_operation_summary_table(alerts.copy())
+                    metric_results.append({'table': hop_df, 'plot': None})
                     tables.append(hop_df)
 
                 if alert_overall_cycle_time_summary:
                     sla_df = generate_overall_summary_table(alerts.copy())
+                    metric_results.append({'table': sla_df, 'plot': None})
                     tables.append(sla_df)
             
                 alert_stat_map = statistics_by_month_by_dispo(alerts, business_hours=business_hours)
                 for stat in metric_alert_stats:
                     alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
                     tables.append(alert_stat_map[stat])
+                    metric_results.append({'table': alert_stat_map[stat],
+                                           'plot': generate_html_plot(alert_stat_map[stat])})
 
             if alert_target == 'alert_types':
                 with get_db_connection() as db:
@@ -2012,6 +2054,8 @@ def metrics():
                 for alert_type in alert_types:
                     for stat in metric_alert_stats:
                         tables.append(alert_type_stat_map[alert_type][stat])
+                        metric_results.append({'table': alert_type_stat_map[alert_type][stat],
+                                                'plot': None})
 
             if alert_target == 'users':
                 if alerts is None:
@@ -2033,6 +2077,8 @@ def metrics():
                 for user_id in user_ids:
                     for stat in metric_alert_stats:
                         tables.append(all_user_stat_map[user_id][stat])
+                        metric_results.append({'table': all_user_stat_map[user_id][stat],
+                                                'plot': generate_html_plot(all_user_stat_map[user_id][stat])})
 
         for event_target in events_metric_targets:
             # we will get the events no matter what
@@ -2044,10 +2090,12 @@ def metrics():
 
             if event_target == 'events':
                 tables.append(events.drop(columns=['id']))
+                metric_results.append({'table': events, 'plot': None})
 
             if event_target == 'incidents':
                 incidents = get_incidents_from_events(events)
                 tables.append(incidents)
+                metric_results.append({'table': incidents, 'plot': None})
 
         # Independent tables
         if hours_of_operation:
@@ -2060,6 +2108,7 @@ def metrics():
                     alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
             hop_df = generate_hours_of_operation_summary_table(alerts, business_hours)
             tables.append(hop_df)
+            metric_results.append({'table': hop_df, 'plot': None})
 
         if alert_overall_cycle_time_summary:
             if not business_hours:
@@ -2071,12 +2120,14 @@ def metrics():
                     alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
             overall_ct_summary = generate_overall_summary_table(alerts, business_hours)
             tables.append(overall_ct_summary)
+            metric_results.append({'table': overall_ct_summary, 'plot': None})
 
         if alert_type_count_breakdown:
             with get_db_connection() as db:
                 # TODO: implement company selection here
                 at_counts = count_quantites_by_alert_type(daterange_start,daterange_end, db)
             tables.append(at_counts)
+            metric_results.append({'table': at_counts, 'plot': None})
 
         if tables and export_results_to:
             time_stamp = str(datetime.datetime.now().timestamp())
@@ -2101,6 +2152,7 @@ def metrics():
 
     return render_template(
         'analysis/metrics.html',
+        metric_results=metric_results,
         filter_state=filter_state,
         valid_alert_stats=reversed(VALID_ALERT_STATS),
         friendly_stat_name_map=FRIENDLY_STAT_NAME_MAP,
@@ -2542,7 +2594,12 @@ def index():
     analysis = alert  # by default it's the alert
 
     if module_path is not None and observable is not None:
-        analysis = observable.analysis[module_path]
+        if module_path == 'saq.analysis:ErrorAnalysis':
+            flash("Analysis object failed to load. Old code?")
+        elif module_path == 'saq.analysis:DeprecatedAnalysis':
+            flash("Analysis has been Deprecated.")
+        else:
+            analysis = observable.analysis[module_path]
 
     # load user comments for the alert
     try:
@@ -2713,7 +2770,7 @@ def index():
         db.session.rollback()
         all_users = db.session.query(User).order_by('username').all()
 
-    open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all()
+    open_events = db.session.query(Event).filter(or_(Event.status == 'OPEN', Event.status == 'COMPLETED')).order_by(Event.creation_date.desc()).all()
     malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
     companies = db.session.query(Company).order_by(Company.name.asc()).all()
     campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all()
@@ -3002,6 +3059,29 @@ def observable_action():
                 report_exception()
                 return "request failed - check logs", 500
 
+        elif action_id in [ACTION_SET_CBC_IOC_IGNORE, ACTION_SET_CBC_IOC_ACTIVE]:
+            from saq.carbon_black import CBC_API
+            from cbinterface.psc.intel import ignore_ioc, activate_ioc
+
+            if not CBC_API:
+                return "Unavailable", 400
+
+            try:
+                report_id, ioc_id = observable.value[len('cbc:'):].split('/', 1)
+                result = None
+                if action_id == ACTION_SET_CBC_IOC_IGNORE:
+                    result = ignore_ioc(CBC_API, report_id, ioc_id)
+                    if result:
+                        return "Ignored", 200
+                if action_id == ACTION_SET_CBC_IOC_ACTIVE:
+                    result = activate_ioc(CBC_API, report_id, ioc_id)
+                    if result:
+                        return "Activated", 200
+                return f"Unexpected Result: {result}", 400
+            except Exception as e:
+                logging.error(f"unable to execute cbc ioc update action: {e}")
+                return f"Error: {e}", 400
+
         elif action_id in [ ACTION_SET_SIP_INDICATOR_STATUS_ANALYZED, 
                             ACTION_SET_SIP_INDICATOR_STATUS_INFORMATIONAL,
                             ACTION_SET_SIP_INDICATOR_STATUS_NEW ]:
@@ -3178,7 +3258,7 @@ def o365_file_download():
     c = saq.CONFIG['analysis_module_o365_file_analyzer']
     s = requests.Session()
     s.proxies = proxies()
-    s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'])
+    s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'], c.get('client_credential'))
     r = s.get(f"{c['base_uri']}{path}:/content", stream=True)
     if r.status_code == requests.codes.not_found:
         return 'File does not exist', r.status_code
@@ -3203,12 +3283,15 @@ def get_remediation_targets(alert_uuids):
     targets = {}
     for o in observables:
         observable = create_observable(o.type, o.display_value)
+        if observable is None:
+            logging.info(f"invalid value {o.display_value} for observable type {o.type}")
+            continue
         for target in observable.remediation_targets:
             targets[target.id] = target
 
     # return sorted list of targets
     targets = list(targets.values())
-    targets.sort(key=lambda x: f"{x.type}|{x.value}")
+    targets.sort(key=lambda x: f"{x.type}|{x.key}")
     return targets
 
 @analysis.route('/remediation_targets', methods=['POST', 'PUT', 'DELETE', 'PATCH'])
@@ -3228,22 +3311,27 @@ def remediation_targets():
 
     # queue targets for removal/restoration
     action = 'remove' if request.method == 'DELETE' else 'restore'
-    for target in body['targets']:
-        RemediationTarget(id=target).queue(action, current_user.id)
+    logging.info(f"{action}ing {len(body['targets'])} targets")
+    for target_id in body['targets']:
+        target = RemediationTarget(id=target_id)
+        logging.info(f"target has {len(target.history)} historical remediations")
+        target.queue(action, current_user.id)
 
     # wait until all remediations are complete or we run out of time
     complete = False
     quit_time = time.time() + saq.CONFIG['service_remediation'].getint('request_wait_time', fallback=10)
     while not complete and time.time() < quit_time:
         complete = True
-        for target in body['targets']:
-            if RemediationTarget(id=target).processing:
+        for target in targets:
+            target.refresh()
+            logging.info(f"target remediation is {target.last_remediation}")
+            if target.processing:
                 complete = False
                 break
         time.sleep(1)
 
     # return rendered remediation results table
-    return render_template('analysis/remediation_results.html', targets=[RemediationTarget(id=target) for target in body['targets']])
+    return render_template('analysis/remediation_results.html', targets=targets)
 
 @analysis.route('/<uuid>/event_name_candidate', methods=['GET'])
 @login_required

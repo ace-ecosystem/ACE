@@ -63,6 +63,7 @@ F_O365_FILE = 'o365_file'
 F_O365_FILE_CONVERSATION = 'o365_file_conversation'
 F_PCAP = 'pcap'
 F_PROCESS_GUID = 'process_guid'
+F_CBC_PROCESS_GUID = 'cbc_process_guid'
 F_SHA1 = 'sha1'
 F_SHA256 = 'sha256'
 F_SNORT_SIGNATURE = 'snort_sig'
@@ -102,7 +103,8 @@ OBSERVABLE_DESCRIPTIONS = {
     F_O365_FILE: 'graph api path to a file in o365',
     F_O365_FILE_CONVERSATION: 'two users sharing o365 files',
     F_PCAP: 'path to a pcap formatted file *** DEPRECATED (use F_FILE instead)',
-    F_PROCESS_GUID: 'CarbonBlack global process identifier',
+    F_PROCESS_GUID: 'Carbon Black Response global process identifier',
+    F_CBC_PROCESS_GUID: 'Carbon Black Cloud process identifier',
     F_SHA1: 'SHA1 hash',
     F_SHA256: 'SHA256 hash',
     F_SNORT_SIGNATURE: 'snort signature ID',
@@ -144,6 +146,7 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_O365_FILE_CONVERSATION,
     F_PCAP,
     F_PROCESS_GUID,
+    F_CBC_PROCESS_GUID,
     F_SHA1,
     F_SHA256,
     F_SNORT_SIGNATURE,
@@ -471,6 +474,8 @@ ACTION_FILE_VIEW_VX = 'file_view_vx'
 ACTION_REMEDIATE = 'remediate'
 ACTION_REMEDIATE_EMAIL = 'remediate_email'
 ACTION_RESTORE = 'restore'
+ACTION_SET_CBC_IOC_ACTIVE = 'cbc_ioc_active'
+ACTION_SET_CBC_IOC_IGNORE = 'cbc_ioc_ignore'
 ACTION_SET_SIP_INDICATOR_STATUS_ANALYZED = 'sip_status_analyzed'
 ACTION_SET_SIP_INDICATOR_STATUS_INFORMATIONAL = 'sip_status_informational'
 ACTION_SET_SIP_INDICATOR_STATUS_NEW = 'sip_status_new'
@@ -544,7 +549,9 @@ ANALYSIS_TYPE_FALCON = 'falcon'
 ANALYSIS_TYPE_FIREEYE = 'fireeye'
 ANALYSIS_TYPE_QRADAR_OFFENSE = 'qradar_offense'
 ANALYSIS_TYPE_BRICATA = 'bricata'
+ANALYSIS_TYPE_GRAPH_RESOURCE = 'graph - resource'
 ANALYSIS_TYPE_O365 = 'o365'
+ANALYSIS_TYPE_CARBON_BLACK = 'carbon_black'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'

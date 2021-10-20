@@ -1545,6 +1545,12 @@ class EmailAnalyzer(AnalysisModule):
                     if mail_from:
                         analysis.add_observable(F_EMAIL_CONVERSATION, create_email_conversation(mail_from, address))
 
+        for addr in email_details[KEY_TO_ADDRESSES]:
+            address = normalize_email_address(decode_rfc2822(addr))
+            if address:
+                if is_local_email_domain(address):
+                    analysis.add_observable(F_EMAIL_ADDRESS, address)
+
         if 'cc' in target_email:
             email_details[KEY_CC] = get_address_list(target_email, 'cc')
             for address in email_details[KEY_CC]:
@@ -2658,115 +2664,6 @@ class EmailHistoryAnalyzer_v1(SplunkAnalysisModule):
 
         analysis = self.create_analysis(email_address)
         analysis.emails = self.json()
-
-class EmailHistoryRecord(object):
-    """Utility class to add extra fields not present in the splunk logs."""
-
-    def __init__(self, details):
-        self.details = details
-
-    #def __getattr__(self, name):
-        #return self.details[name]
-    
-    def __getitem__(self, key):
-        return self.details[key]
-
-    @property
-    def md5(self):
-        file_name = os.path.basename(self.details['archive_path'])
-        md5, ext = os.path.splitext(file_name)
-        return md5
-
-class EmailHistoryAnalysis_v2(Analysis):
-    """How many emails did this user receive?  What is the general summary of them?"""
-
-    def initialize_details(self):
-        self.details = {
-            KEY_EMAILS: None,
-        }
-
-    @property
-    def emails(self):
-        if not self.details:
-            return []
-
-        if not self.details[KEY_EMAILS]:
-            return []
-        
-        return [EmailHistoryRecord(email) for email in self.details[KEY_EMAILS]]
-
-    @emails.setter
-    def emails(self, value):
-        assert value is None or isinstance(value, list)
-        self.details[KEY_EMAILS] = value
-
-    @property
-    def jinja_template_path(self):
-        return 'analysis/email_history_v2.html'
-
-    def generate_summary(self):
-        if not self.emails:
-            return None
-
-        if not isinstance(self.emails, list):
-            logging.error("self.emails should be a list but it is a {}".format(str(type(self.emails))))
-            return None
-
-        return "Scanned Email History ({} recevied emails)".format(len(self.emails))
-
-class EmailHistoryAnalyzer_v2(SplunkAnalysisModule):
-    @property
-    def generated_analysis_type(self):
-        return EmailHistoryAnalysis_v2
-
-    @property
-    def valid_observable_types(self):
-        return F_EMAIL_ADDRESS
-
-    def execute_analysis(self, email_address):
-
-        alias_groups = [] # list of lists of domains
-        for config_item in self.config.keys():
-            if config_item.startswith('map_'):
-                domains = [x.strip().lower() for x in self.config[config_item].split(',')]
-                if domains:
-                    logging.debug("adding alias group {} ({})".format(config_item, domains))
-                    alias_groups.append(domains)
-
-        initial_search_query = []
-        specific_search_query = []
-
-        # does the domain match an alias?
-        try:
-            user, domain = email_address.value.lower().split('@', 1)
-        except ValueError:
-            logging.warning("{} does not appear to be a valid email address".format(email_address.value))
-            return False
-
-        for alias_group in alias_groups:
-            if domain in alias_group:
-                logging.debug("email address {} matches alias group {}".format(email_address.value, alias_group))
-                for alias_domain in alias_group:
-                    initial_search_query.append('"{}@{}"'.format(user, alias_domain))
-                    specific_search_query.append('env_rcpt_to = "*{}@{}*"'.format(user, alias_domain))
-
-        # did not match an alias?
-        if not initial_search_query:
-            initial_search_query = [ email_address.value ]
-            specific_search_query = [ "*{}*".format(email_address.value) ]
-
-        self.splunk_query('index=email_* {} | search {} | sort _time | fields *'.format(
-            ' OR '.join(initial_search_query),
-            ' OR '.join(specific_search_query)),
-            self.root.event_time_datetime if email_address.time_datetime is None else email_address.time_datetime)
-
-        if self.search_results is None:
-            logging.debug("missing search results after splunk query")
-            return False
-
-        analysis = self.create_analysis(email_address)
-        analysis.emails = self.json()
-        return True
 
 class EmailLoggingAnalysis(Analysis):
     def initialize_details(self):

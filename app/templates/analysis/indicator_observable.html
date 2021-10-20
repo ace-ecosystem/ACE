@@ -2,6 +2,10 @@
 {% block observable_display_value %}
 {% if ace_config['gui'].getboolean('hide_intel') %}
     <a>Hidden from public view.</a>
+{% elif _observable.value.startswith('cbc:') %}
+    {{_observable.value}} status:{{_observable.cbc_ioc_status}}
+{% elif _observable.value.startswith('sip:') %}
+    {{_observable.value}} status:{{_observable.sip_status}}
 {% else %}
    {{_observable.value}}
 {% endif %}
