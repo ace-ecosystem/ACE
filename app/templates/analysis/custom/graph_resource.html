@@ -1,0 +1,35 @@
+{% extends "analysis/alert.html" %}
+{% block alert_details %}
+
+    {% if 'resource_description' in analysis.details %}
+         <b>Resource Description:</b> {{ analysis.details['resource_description'] }}
+         <br><br>
+    {% endif %}
+    
+
+    {% for id in analysis.details['event_uuids'] %}
+    <div class="panel panel-default" style="width: 90%">
+        <div class="panel-heading"><h4 class="panel-title">Event Overview</h4></div>
+            <div class="panel-body">
+                <div class="raw-log">{{ analysis.details['provider_descriptions'][id] }}</div>
+                <br>
+                <i>Vendor References:</i><br>
+                {% for ref in analysis.details['provider_references'][id] %}
+                    <a href="{{ref}}" target="_blank">{{ref}}</a><br>
+                {% endfor %}
+                <br>
+                <div class="panel panel-default" style="width: 100%">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">Raw Event Details <a role="button" data-toggle="collapse" data-target="#collapse_raw_graph_resource_details_{{id}}" aria-expanded="true" aria-controls="collapse_raw_graph_resource_details_{{id}}">(hide/show)</a></h3>
+                    </div>
+                    <div class="well raw-log panel-body collapse" id="collapse_raw_graph_resource_details_{{id}}" style="word-break:break-all; -webkit-text-size-adjust: 110%">
+                        {% for event in analysis.details['events'] if event['id'] == id %}
+                            <pre>{% if event != None %}{{ event | pprint }}{% endif %}</pre>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+    </div>
+    {% endfor %}
+
+{% endblock %}
