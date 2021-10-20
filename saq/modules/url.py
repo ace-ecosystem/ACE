@@ -915,6 +915,8 @@ class CrawlphishAnalyzer(AnalysisModule):
         analysis.file_name = file_name
         analysis.requested_url = formatted_url
         analysis.final_url = response.url
+        if analysis.final_url.endswith('/'):
+            analysis.final_url = analysis.final_url[:-1]
 
         # if the final url is different than the original url, record that url as an observable
         final_url = None
