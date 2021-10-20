@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+bin/stop-dev-gui && bin/start-dev-gui

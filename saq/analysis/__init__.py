@@ -22,10 +22,15 @@ import uuid
 import dateutil.parser
 import requests
 
+from typing import List
+from urllib.parse import urlsplit
+
 import saq
 from saq.constants import *
 from saq.error import report_exception
+from saq.indicators import Indicator, IndicatorList
 from saq.submission import Submission
+from saq.tip import tip_factory
 from saq.util import *
 
 STATE_KEY_WHITELISTED = 'whitelisted'
@@ -36,7 +41,12 @@ def MODULE_PATH(m, instance=None):
 
     assert isinstance(m, Analysis) or \
            isinstance(m, AnalysisModule) or \
-           (inspect.isclass(m) and issubclass(m, Analysis))
+           (inspect.isclass(m) and issubclass(m, Analysis)) or \
+           isinstance(m, str)
+
+    # is this already a module path?
+    if isinstance(m, str) and _MODULE_PATH_REGEX.match(m):
+        return m
 
     # did we pass an instance of an Analysis
     if isinstance(m, Analysis):
@@ -462,6 +472,8 @@ class Analysis(TaggableObject, DetectableObject):
     KEY_ALERTED = 'alerted' # boolean to indicate that this analysis has been submitted as an alert
     KEY_DELAYED = 'delayed' # boolean to indicate that the analysis has been delayed
 
+    KEY_IOCS = 'iocs'
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -522,6 +534,12 @@ class Analysis(TaggableObject, DetectableObject):
 
         # set to True when delayed analysis is requested
         self._delayed = False
+
+        # List of IOCs that the analysis contains
+        self._iocs = IndicatorList()
+
+        # Intel database / TIP to use
+        self._tip = None
 
     def define_dict_property(self, name, _type, docstring=None):
         def _getter(self):
@@ -738,6 +756,7 @@ class Analysis(TaggableObject, DetectableObject):
             Analysis.KEY_COMPLETED: self.completed,
             Analysis.KEY_ALERTED: self.alerted,
             Analysis.KEY_DELAYED: self.delayed,
+            Analysis.KEY_IOCS: self.iocs.json
         })
         return result
 
@@ -770,6 +789,27 @@ class Analysis(TaggableObject, DetectableObject):
 
         if Analysis.KEY_DELAYED in value:
             self.delayed = value[Analysis.KEY_DELAYED]
+
+        if Analysis.KEY_IOCS in value:
+            self.iocs = value[Analysis.KEY_IOCS]
+
+    @property
+    def tip(self):
+        if self._tip is None:
+            self._tip = tip_factory()
+
+        return self._tip
+
+    @property
+    def iocs(self):
+        return self._iocs
+
+    @iocs.setter
+    def iocs(self, value):
+        assert isinstance(value, list)
+        self._iocs = IndicatorList()
+        for i in value:
+            self._iocs.append(i)
 
     @property
     def delayed(self):
@@ -1059,6 +1099,10 @@ class Analysis(TaggableObject, DetectableObject):
 
         return observable
 
+    def add_ioc(self, indicator_type: str, indicator_value: str, status: str = '', tags: List[str] = []):
+        indicator = self.tip.create_indicator(indicator_type, indicator_value, status=status, tags=tags)
+        self.iocs.append(indicator)
+
     def tag_detection(self, source, event, tag):
         """Adds detections points when tags are added if their score is > 0."""
         if tag.score > 0:
@@ -1089,6 +1133,15 @@ class Analysis(TaggableObject, DetectableObject):
         other_str = other.summary if other.summary is not None else str(other)
 
         return self_str < other_str
+
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return False
+
+        return self.details == other.details if self.details and other.details else False
+
+    def __hash__(self):
+        return hash(self.summary)
 
     ##########################################################################
     # OVERRIDABLES 
@@ -1209,6 +1262,32 @@ class Relationship(object):
         if Relationship.KEY_RELATIONSHIP_TARGET in value:
             self.target = value[Relationship.KEY_RELATIONSHIP_TARGET]
 
+class DispositionHistory(collections.abc.MutableMapping):
+    def __init__(self, observable):
+        self.observable = observable
+        self.history = {} # key = disposition, value = count
+
+    def __getitem__(self, key):
+        return self.history[key]
+
+    def __setitem__(self, key, value):
+        if key == DISPOSITION_UNKNOWN:
+            return
+        self.history[key] = value
+
+    def __delitem__(self, key):
+        pass
+
+    def __iter__(self):
+        total = sum([self.history[disp] for disp in self.history.keys()])
+        dispositions = [disposition for disposition in self.history]
+        dispositions = sorted(dispositions, key=lambda disposition: (self.history[disposition] / total) * 100.0, reverse=True)
+        for disposition in dispositions:
+            yield disposition, self.history[disposition], (self.history[disposition] / total) * 100.0
+
+    def __len__(self):
+        return len(self.history)
+
 class Observable(TaggableObject, DetectableObject):
     """Represents a piece of information discovered in an analysis that can itself be analyzed."""
 
@@ -1268,8 +1347,11 @@ class Observable(TaggableObject, DetectableObject):
         """Returns an object inheriting from Observable built from the given json."""
         from saq.observables import create_observable
         result = create_observable(json_data[Observable.KEY_TYPE], json_data[Observable.KEY_VALUE])
-        result.json = json_data
-        return result
+        if result:
+            result.json = json_data
+            return result
+
+        return None
 
     def matches(self, value):
         """Returns True if the given value matches this value of this observable.  This can be overridden to provide more advanced matching such as CIDR for ipv4."""
@@ -1314,6 +1396,54 @@ class Observable(TaggableObject, DetectableObject):
     def always_visible(self):
         """If this returns True then this Analysis is always visible in the GUI."""
         return False
+
+    @property
+    def disposition_history(self):
+        """Returns a DispositionHistory object if self.obj is an Observable, None otherwise."""
+        from saq.database import get_db_connection
+
+        if hasattr(self, '_disposition_history'):
+            return self._disposition_history
+
+        self._disposition_history = None
+
+        if self.whitelisted:
+            return None
+
+        if self.type == F_FILE:
+            from saq.modules.file_analysis import FileHashAnalysis
+            for child in self.children:
+                if isinstance(child, FileHashAnalysis):
+                    for grandchild in child.children:
+                        if isinstance(grandchild.obj, saq.analysis.Observable) and grandchild.obj.type == F_SHA256:
+                            self._disposition_history = grandchild.disposition_history
+                            return self._disposition_history
+
+            return None
+
+        self._disposition_history = DispositionHistory(self)
+
+        with get_db_connection() as db:
+            c = db.cursor()
+            c.execute("""
+        SELECT 
+            a.disposition, COUNT(*) 
+        FROM 
+            observables o JOIN observable_mapping om ON o.id = om.observable_id
+            JOIN alerts a ON om.alert_id = a.id
+        WHERE 
+            o.type = %s AND 
+            o.md5 = UNHEX(%s) AND
+            a.alert_type != 'faqueue' AND
+            (a.disposition IS NULL OR
+            a.disposition != 'UNKNOWN')
+        GROUP BY a.disposition""", (self.type, self.md5_hex))
+
+            for row in c:
+                disposition, count = row
+                self._disposition_history[disposition] = count
+
+        return self._disposition_history
 
     @property
     def json(self):
@@ -1437,6 +1567,11 @@ class Observable(TaggableObject, DetectableObject):
     def directives(self, value):
         assert isinstance(value, list)
         self._directives = value
+
+    @property
+    def remediation_targets(self):
+        """Returns a list of remediation targets for the observable, by default this is an empty list."""
+        return []
 
     def add_directive(self, directive):
         """Adds a directive that analysis modules might use to change their behavior."""
@@ -1569,6 +1704,25 @@ class Observable(TaggableObject, DetectableObject):
             name += f'{analysis_module.instance}'
 
         return name in self.excluded_analysis
+
+    def remove_analysis_exclusion(self, analysis_module, instance=None):
+        """Removes AnalysisModule exclusion added to this observable, allowing it to be run again.
+            Example use case: AnalysisModule excluded automatically to prevent recursion, but removed manually by analyst via GUI.
+             USE CAREFULLY!"""
+        from saq.modules import AnalysisModule
+        assert isinstance(analysis_module, type) or isinstance(analysis_module, AnalysisModule)
+        if isinstance(analysis_module, AnalysisModule):
+            _type = type(analysis_module)
+            instance = analysis_module.instance
+        else:
+            _type = analysis_module
+
+        name = f'{analysis_module.__module__}:{str(_type)}'
+        if instance is not None:
+            name += f'{instance}'
+
+        while name in self.excluded_analysis:
+            self.excluded_analysis.remove(name)
 
     @property
     def relationships(self):
@@ -2189,6 +2343,10 @@ class AnalysisDependency(object):
         self._source_observable = self.root.get_observable(self.source_observable_id)
         return self._source_observable
 
+def _get_failed_analysis_key(observable_type, observable_value):
+    """Utility function that returns the key used to look up if analysis failed or not."""
+    return f'{observable_type}:{observable_value}'
+
 #
 # saq.database.Alert vs saq.analysis.Alert
 # This system is designed to work both with and without the database running.
@@ -2220,6 +2378,7 @@ class RootAnalysis(Analysis):
                  analysis_mode=None,
                  queue=None,
                  instructions=None,
+                 analysis_failures=None,
                  *args, **kwargs):
 
         import uuid as uuidlib
@@ -2266,6 +2425,10 @@ class RootAnalysis(Analysis):
         self._instructions = None
         if instructions:
             self.instructions = instructions
+
+        self._analysis_failures = {}
+        if analysis_failures:
+            self.analysis_failures = analysis_failures
 
         self._event_time = None
         if event_time:
@@ -2398,6 +2561,7 @@ class RootAnalysis(Analysis):
     KEY_DEPENDECY_TRACKING = 'dependency_tracking'
     KEY_QUEUE = 'queue'
     KEY_INSTRUCTIONS = 'instructions'
+    KEY_ANALYSIS_FAILURES = 'analysis_failures'
 
     @property
     def json(self):
@@ -2423,6 +2587,7 @@ class RootAnalysis(Analysis):
             RootAnalysis.KEY_DEPENDECY_TRACKING: self.dependency_tracking,
             RootAnalysis.KEY_QUEUE: self.queue,
             RootAnalysis.KEY_INSTRUCTIONS: self.instructions,
+            RootAnalysis.KEY_ANALYSIS_FAILURES: self.analysis_failures,
         })
         return result
 
@@ -2475,6 +2640,8 @@ class RootAnalysis(Analysis):
             self.queue = value[RootAnalysis.KEY_QUEUE]
         if RootAnalysis.KEY_INSTRUCTIONS in value:
             self.instructions = value[RootAnalysis.KEY_INSTRUCTIONS]
+        if RootAnalysis.KEY_ANALYSIS_FAILURES in value:
+            self.analysis_failures = value[RootAnalysis.KEY_ANALYSIS_FAILURES]
 
     @property
     def analysis_mode(self):
@@ -2562,6 +2729,46 @@ class RootAnalysis(Analysis):
     @instructions.setter
     def instructions(self, value):
         self._instructions = value
+
+    @property
+    def analysis_failures(self):
+        """Returns a dict of recorded analysis failures. 
+        key = MODULE_PATH(analysis)
+        value = {
+            key = observable.type:observable.value
+            value = error_message or None
+        }"""
+        return self._analysis_failures
+
+    @analysis_failures.setter
+    def analysis_failures(self, value):
+        assert value is None or isinstance(value, dict)
+        self._analysis_failures = value
+
+    def set_analysis_failed(self, module, observable_type, observable_value, error_message=None):
+        assert observable_type is None or isinstance(observable_type, str)
+        assert observable_value is None or isinstance(observable_value, str)
+
+        module = MODULE_PATH(module)
+
+        if module not in self.analysis_failures:
+            self.analysis_failures[module] = {}
+
+        self.analysis_failures[module][_get_failed_analysis_key(observable_type, observable_value)] = error_message
+
+    def is_analysis_failed(self, module, observable):
+        module_path = MODULE_PATH(module)
+        try:
+            return _get_failed_analysis_key(observable.type, observable.value) in self.analysis_failures[module_path]
+        except KeyError:
+            return False
+
+    def get_analysis_failed_message(self, module, observable):
+        module_path = MODULE_PATH(module)
+        try:
+            return self.analysis_failures[module_path][_get_failed_analysis_key(observable_type, observable_value)]
+        except KeyError:
+            return None
 
     @property
     def description(self):
@@ -3475,6 +3682,16 @@ class RootAnalysis(Analysis):
 
         return result
 
+    @property
+    def all_iocs(self) -> list:
+        iocs = IndicatorList()
+
+        for analysis in self.all_analysis:
+            for ioc in analysis.iocs:
+                iocs.append(ioc)
+
+        return iocs
+
     def get_analysis_by_type(self, a_type):
         """Returns the list of all Analysis of a given type()."""
         assert inspect.isclass(a_type) and issubclass(a_type, Analysis)
@@ -3570,6 +3787,149 @@ class RootAnalysis(Analysis):
         for o in self.all_observables:
             if o.has_detection_points():
                 return True
+
+    @property
+    def event_name_candidate(self):
+        """Generates and returns an event name based on the observables in this alert."""
+
+        def _get_lowest_fp_observable(observables):
+            lowest_fp_observable = None
+            lowest_fp_percent = 100
+            for ob in observables:
+                if not ob.disposition_history:
+                    lowest_fp_observable = ob
+                    lowest_fp_percent = 0
+                    continue
+
+                for history in ob.disposition_history:
+                    # disposition_history example: ('FALSE_POSITIVE', 1, 50.0)
+                    if 'FALSE_POSITIVE' in history:
+                        if history[2] < lowest_fp_percent:
+                            lowest_fp_observable = ob
+                            lowest_fp_percent = history[2]
+                    else:
+                        lowest_fp_observable = ob
+                        lowest_fp_percent = 0
+
+            return lowest_fp_observable
+
+        if not self.completed:
+            return ''
+
+        if isinstance(self.event_time, datetime.datetime):
+            yyyymmdd = datetime.datetime.strftime(self.event_time, '%Y%m%d')
+        elif isinstance(self.event_time, str):
+            event_time_obj = datetime.datetime.strptime(self.event_time, '%Y-%m-%dT%H:%M:%S.%f%z')
+            yyyymmdd = datetime.datetime.strftime(event_time_obj, '%Y%m%d')
+        else:
+            yyyymmdd = datetime.datetime.strftime(datetime.datetime.now(), '%Y%m%d')
+
+        possible_tags = []
+
+        # First preferred tag is the phish sender domain. There are a couple ways to get this in order of preference:
+        #
+        # 1. domain from email_address observable if its not one of our own domains and not tagged "smtp_mail_from"
+        # 2. domain from email_address observable tagged "smtp_mail_from"
+        phish_sender_tag = next(
+            (
+                o.value.lower().split('@')[1] for o in self.all_observables
+                if o.type == F_EMAIL_ADDRESS
+                and not any(t.name == 'smtp_mail_from' for t in o.tags)
+                and o.value.lower().split('@')[1] not in saq.CONFIG['global']['local_email_domains']
+            ), ''
+        )
+        if phish_sender_tag:
+            possible_tags.append(phish_sender_tag)
+        else:
+            phish_sender_tag = next(
+                (
+                    o.value.lower().split('@')[1] for o in self.all_observables
+                    if o.type == F_EMAIL_ADDRESS
+                    and any(t.name == 'smtp_mail_from' for t in o.tags)
+                ), ''
+            )
+            if phish_sender_tag:
+                possible_tags.append(phish_sender_tag)
+
+        # Second preferred tag is a portion of the email subject
+        email_subject_tag = next(
+            (
+                o.value for o in self.all_observables
+                if o.type == F_EMAIL_SUBJECT
+            ), ''
+        )
+        if email_subject_tag:
+            possible_tags.append(email_subject_tag[:32])
+
+        # Third preferred tag is the FQDN observable with lowest FP percentage
+        fqdn_observables = [
+            o for o in self.all_observables
+            if o.type == F_FQDN
+            and o.value.lower() not in phish_sender_tag
+            and o.value.lower() not in saq.CONFIG['global']['local_email_domains'].split(',')
+        ]
+
+        lowest_fp_fqdn_observable = _get_lowest_fp_observable(fqdn_observables)
+        if lowest_fp_fqdn_observable:
+            possible_tags.append(lowest_fp_fqdn_observable.value)
+
+        # Fourth preferred tag is the domain from the URL observable with lowest FP percentage
+        url_observables = [
+            o for o in self.all_observables
+            if o.type == F_URL
+            and not any(domain in o.value for domain in saq.CONFIG['global']['local_email_domains'].split(','))
+        ]
+
+        lowest_fp_url_observable = _get_lowest_fp_observable(url_observables)
+        if lowest_fp_url_observable:
+            try:
+                split_url = urlsplit(lowest_fp_url_observable.value)
+                if split_url.netloc:
+                    possible_tags.append(split_url.netloc)
+            except ValueError:
+                pass
+
+        # Fifth preferred tag is the hostname observable with lowest FP percentage
+        lowest_fp_hostname_observable = _get_lowest_fp_observable([o for o in self.all_observables if o.type == F_HOSTNAME])
+        if lowest_fp_hostname_observable:
+            possible_tags.append(lowest_fp_hostname_observable.value)
+
+        # Sixth preferred tag is the filename observable with lowest FP percentage
+        lowest_fp_filename_observable = _get_lowest_fp_observable([o for o in self.all_observables if o.type == F_FILE_NAME])
+        if lowest_fp_filename_observable:
+            possible_tags.append(lowest_fp_filename_observable.value)
+
+        # Seventh preferred tag is the IPv4 observable with the lowest FP percentage
+        lowest_fp_ip_observable = _get_lowest_fp_observable([o for o in self.all_observables if o.type == F_IPV4])
+        if lowest_fp_ip_observable:
+            possible_tags.append(lowest_fp_ip_observable.value)
+
+        # Use the alert description UUID as a fallback in case no other tags exist
+        if self.description:
+            possible_tags.append(self.description[:32])
+        else:
+            possible_tags.append('Unknown')
+        possible_tags.append(self.uuid)
+
+        if saq.CONFIG['mediawiki'].getboolean('enabled'):
+            # remove the date and alert_type from the recommendation
+            result = f'{possible_tags[0]}-{possible_tags[1]}'
+            _name_depth = saq.CONFIG['mediawiki'].getint('name_recomendation_depth', 2)
+            if _name_depth > 2 and len(possible_tags) > _name_depth:
+                for tag in possible_tags[2:_name_depth]:
+                    result += f'-{tag}'
+        else:
+            result = f'{yyyymmdd}-{self.alert_type.replace(" ", "")}-{possible_tags[0]}-{possible_tags[1]}'
+
+        # Remove any invalid characters from the name
+        invalid_chars = re.findall(r'[^a-zA-Z0-9-. ]', result)
+        for invalid_char in invalid_chars:
+            result = result.replace(invalid_char, '-')
+
+        logging.debug(f'event_name_candidate for {self.uuid}: {result[:128]}')
+
+        # Event name in the database can only be 128 characters long
+        return result.rstrip('-')[:128]
 
 def recurse_down(target, callback):
     """Calls callback starting at target back to the RootAnalysis."""

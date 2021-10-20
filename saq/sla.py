@@ -7,7 +7,7 @@ class SLA(object):
         self.name = name
         self.enabled = enabled
         self.timeout = timeout
-        self.warning = warning
+        self.warning = 1 if warning is None else warning
         self._property = _property
         self._value = _value
 

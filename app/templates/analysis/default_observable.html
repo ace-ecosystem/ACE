@@ -5,7 +5,7 @@
 {% if _observable.display_time %} @ {{ _observable.display_time }} {% endif %}</span>
 <script type="text/javascript">
     $('#o_filter_{{unique_reference}}').on('click', function() {
-        set_filters({'Observable':[['{{_observable.type}}',atob('{{_observable.value | s64encode}}')]]});
+        set_filters({'Observable':[['{{_observable.type}}',decodeURIComponent(atob('{{_observable.value | b64escape}}'))]]});
     });
 </script>
 {% endblock %}
@@ -14,7 +14,7 @@
 <script type="text/javascript">
     $('#copy_action_{{unique_reference}}').on('click', function() {
         // avoid escaping issues going from python to javascript by using base64
-        var observable_value = atob('{{_observable.value | s64encode}}');
+        var observable_value = decodeURIComponent(atob('{{_observable.value | b64escape}}'));
         // see app/static/js/ace.js
         copy_to_clipboard(observable_value);
         // let the user know it was copied by flashing it a bit

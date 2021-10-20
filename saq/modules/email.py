@@ -34,11 +34,9 @@ from saq.email import (
 )
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule, AnalysisModule
-from saq.modules.remediation import *
 from saq.modules.util import get_email
 from saq.process_server import Popen, PIPE
-from saq.remediation.constants import *
-from saq.remediation import request_remediation
+from saq.util import get_observable_analysis_path
 from saq.whitelist import BrotexWhitelist, WHITELIST_TYPE_SMTP_FROM, WHITELIST_TYPE_SMTP_TO
 
 import dateutil
@@ -55,6 +53,7 @@ r'^_[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{1,5}'
 '-'
 '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}:[0-9]{1,5}_\.stream$')
 
+KEY_CC = 'cc'
 KEY_COUNT = 'count'
 KEY_DECODED_SUBJECT = 'decoded_subject'
 KEY_EMAIL = 'email'
@@ -65,6 +64,7 @@ KEY_ENVELOPES_RCPT_TO = 'rcpt_to'
 KEY_ENV_MAIL_FROM = 'env_mail_from'
 KEY_ENV_RCPT_TO = 'env_rcpt_to'
 KEY_FROM = 'from'
+KEY_FROM_ADDRESS = 'from_address'
 KEY_HEADERS = 'headers'
 KEY_LOG_ENTRY = 'log_entry'
 KEY_MESSAGE_ID = 'message-id'
@@ -72,17 +72,24 @@ KEY_O365_DETECTIONS = 'o365_detections'
 KEY_ORIGINATING_IP = 'originating_ip'
 KEY_PARSING_ERROR = 'parsing_error'
 KEY_REPLY_TO = 'reply_to'
+KEY_REPLY_TO_ADDRESS = 'reply_to_address'
 KEY_RESULT = 'result'
 KEY_SENDER = 'sender'
 KEY_SMTP_FILES = 'smtp_files'
 KEY_SUBJECT = 'subject'
 KEY_TIMED_OUT = 'timed_out'
 KEY_TO = 'to'
+KEY_TO_ADDRESSES = 'to_addresses'
 KEY_UUIDS = 'uuids'
 KEY_CONNECTION_ID = 'connection_id'
 KEY_SOURCE_IPV4 = 'source_ipv4'
 KEY_SOURCE_PORT = 'source_port'
 KEY_RETURN_PATH = 'return_path'
+KEY_X_SENDER = 'x-sender'
+KEY_X_SENDER_ID = 'x-sender-id'
+KEY_X_AUTH_ID = 'x-auth-id'
+KEY_X_ORIGINAL_SENDER = 'x-original-sender'
+KEY_X_SENDER_IP = 'x-sender-ip'
 
 TAG_OUTBOUND_EMAIL = 'outbound_email'
 TAG_OUTBOUND_EXCEPTION_EMAIL = 'outbound_email_exception'
@@ -95,6 +102,24 @@ RE_EMAIL_HEADER_CONTINUE = re.compile(r'^\s.*$')
 RE_EMAIL_RECEIVED_DATE = re.compile(r';\s?(.+)$')
 
 MAILBOX_ALERT_PREFIX = 'ACE Mailbox Scanner Detection -'
+
+
+def get_address_list(email_obj, header_name):
+    header = email_obj.get_all(header_name, [])
+    addresses = email.utils.getaddresses(header)
+    return [x[1] for x in addresses]
+
+
+def get_received_time(received_header):
+    m = RE_EMAIL_RECEIVED_DATE.search(received_header, re.M)
+    if m:
+        try:
+            return dateutil.parser.parse(m.group(1)).astimezone(pytz.UTC)
+        except Exception as e:
+            logging.debug(f"unable to parse {m.group(1)} as date time: {e}")
+
+    return None
+
 class MailboxEmailAnalysis(Analysis):
     def initialize_details(self):
         self.details = None
@@ -992,16 +1017,44 @@ class EmailAnalysis(Analysis):
         return None
 
     @property
+    def mail_from_address(self):
+        if self.email and KEY_FROM_ADDRESS in self.email:
+            return self.email[KEY_FROM_ADDRESS]
+
+        return None
+
+    @property
     def mail_to(self):
         if self.email and KEY_TO in self.email:
             return self.email[KEY_TO]
 
-        return None
+        return []
+
+    @property
+    def mail_to_addresses(self):
+        if self.email and KEY_TO_ADDRESSES in self.email:
+            return self.email[KEY_TO_ADDRESSES]
+
+        return []
+
+    @property
+    def cc(self):
+        if self.email and KEY_CC in self.email:
+            return self.email[KEY_CC]
+
+        return []
 
     @property
     def reply_to(self):
         if self.email and KEY_REPLY_TO in self.email:
             return self.email[KEY_REPLY_TO]
+
+        return None
+
+    @property
+    def reply_to_address(self):
+        if self.email and KEY_REPLY_TO_ADDRESS in self.email:
+            return self.email[KEY_REPLY_TO_ADDRESS]
 
         return None
 
@@ -1065,11 +1118,25 @@ class EmailAnalysis(Analysis):
         return result
 
     @property
+    def received_time(self):
+        if self.received:
+            return get_received_time(self.received[0])
+
+        return None
+
+    @property
     def headers(self):
         if self.email and KEY_HEADERS in self.email:
             return self.email[KEY_HEADERS]
 
         return None
+
+    @property
+    def headers_formatted(self) -> str:
+        headers = ''
+        for header in self.headers:
+            headers = f'{headers}{header[0]}: {header[1]}\n'
+        return headers
 
     @property
     def log_entry(self):
@@ -1092,6 +1159,32 @@ class EmailAnalysis(Analysis):
                 return value
 
         return None
+
+    @property
+    def body_html(self) -> str:
+        body_observable = next(
+            (o for o in self.observables if o.type == F_FILE and o.value.endswith('unknown_text_html_000')), None)
+
+        if body_observable:
+            path = get_observable_analysis_path(self, body_observable)
+            if os.path.exists(path):
+                with open(path, 'rb') as f:
+                    return f.read().decode('utf-8', errors='ignore')
+
+        return ''
+
+    @property
+    def body_text(self) -> str:
+        body_observable = next(
+            (o for o in self.observables if o.type == F_FILE and o.value.endswith('unknown_text_plain_000')), None)
+
+        if body_observable:
+            path = get_observable_analysis_path(self, body_observable)
+            if os.path.exists(path):
+                with open(path, 'rb') as f:
+                    return f.read().decode('utf-8', errors='ignore')
+
+        return ''
     
     @property
     def body(self):
@@ -1148,6 +1241,16 @@ class EmailAnalysis(Analysis):
             result.append(_file)
 
         return result
+
+    @property
+    def attachment_names(self):
+        """Returns the list of the attachment filenames."""
+        return [
+            a.value for a in self.attachments
+            if not a.value.endswith('unknown_text_plain_000')
+            and not a.value.endswith('unknown_text_html_000')
+            and not a.value.endswith('rfc822.headers')
+        ]
 
     @property
     def jinja_template_path(self):
@@ -1370,20 +1473,25 @@ class EmailAnalyzer(AnalysisModule):
         # figure out when the email was received
         if 'received' in target_email:
             # use the last received email header as the date
-            received = target_email.get_all('received')[-1]
-            m = RE_EMAIL_RECEIVED_DATE.search(received, re.M)
-            if m:
-                try:
-                    received_time = dateutil.parser.parse(m.group(1)).astimezone(pytz.UTC)
-                except Exception as e:
-                    logging.debug(f"unable to parse {m.group(1)} as date time: {e}")
+            received_time = get_received_time(target_email.get_all('received')[0])
 
         if 'from' in target_email:
             email_details[KEY_FROM] = decode_rfc2822(target_email['from'])
+            email_details[KEY_FROM_ADDRESS] = get_address_list(target_email, 'from')[0]
 
             address = normalize_email_address(email_details[KEY_FROM])
             if address:
                 mail_from = address
+
+                if is_local_email_domain(address):
+                    analysis.add_ioc(I_EMAIL_FROM_ADDRESS, address, status='Informational', tags=['from_address'])
+                    if len(address.split('@')) > 1:
+                        analysis.add_ioc(I_DOMAIN, address.split('@')[1], status='Informational', tags=['from_domain'])
+                else:
+                    analysis.add_ioc(I_EMAIL_FROM_ADDRESS, address, tags=['from_address'])
+                    if len(address.split('@')) > 1:
+                        analysis.add_ioc(I_DOMAIN, address.split('@')[1], tags=['from_domain'])
+
                 from_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if from_address:
                     from_address.add_tag('mail_from')
@@ -1397,11 +1505,17 @@ class EmailAnalyzer(AnalysisModule):
                 if mail_to is None:
                     mail_to = address
 
+                if is_local_email_domain(address):
+                    analysis.add_ioc(I_EMAIL_TO_ADDRESS, address, status='Informational', tags=['to_address'])
+                else:
+                    analysis.add_ioc(I_EMAIL_TO_ADDRESS, address, tags=['to_address'])
+
                 to_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if to_address and mail_from:
                     analysis.add_observable(F_EMAIL_CONVERSATION, create_email_conversation(mail_from, address))
         
         email_details[KEY_TO] = target_email.get_all('to', [])
+        email_details[KEY_TO_ADDRESSES] = get_address_list(target_email, 'to')
         for addr in email_details[KEY_TO]:
             address = normalize_email_address(decode_rfc2822(addr))
             if address:
@@ -1409,16 +1523,81 @@ class EmailAnalyzer(AnalysisModule):
                 if mail_to is None:
                     mail_to = address
 
+                if is_local_email_domain(address):
+                    analysis.add_ioc(I_EMAIL_TO_ADDRESS, address, status='Informational', tags=['to_address'])
+                else:
+                    analysis.add_ioc(I_EMAIL_TO_ADDRESS, address, tags=['to_address'])
+
                 to_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if to_address:
                     to_address.add_tag('mail_to')
                     if mail_from:
                         analysis.add_observable(F_EMAIL_CONVERSATION, create_email_conversation(mail_from, address))
 
+        for addr in email_details[KEY_TO_ADDRESSES]:
+            address = normalize_email_address(decode_rfc2822(addr))
+            if address:
+                if is_local_email_domain(address):
+                    analysis.add_observable(F_EMAIL_ADDRESS, address)
+
+        if 'cc' in target_email:
+            email_details[KEY_CC] = get_address_list(target_email, 'cc')
+            for address in email_details[KEY_CC]:
+                if is_local_email_domain(address):
+                    analysis.add_ioc(I_EMAIL_CC_ADDRESS, address, status='Informational', tags=['cc_address'])
+                else:
+                    analysis.add_ioc(I_EMAIL_CC_ADDRESS, address, tags=['cc_address'])
+
+                cc_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
+                if cc_address:
+                    cc_address.add_tag('cc')
+                    if mail_from:
+                        analysis.add_observable(F_EMAIL_CONVERSATION, create_email_conversation(mail_from, address))
+
+        if 'x-sender' in target_email:
+            email_details[KEY_X_SENDER] = get_address_list(target_email, 'x-sender')
+            for address in email_details[KEY_X_SENDER]:
+                analysis.add_ioc(I_EMAIL_X_SENDER, address, tags=['x-sender'])
+
+                x_sender_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
+                if x_sender_address:
+                    x_sender_address.add_tag('x-sender')
+
+        if 'x-sender-id' in target_email:
+            email_details[KEY_X_SENDER_ID] = get_address_list(target_email, 'x-sender-id')
+            for address in email_details[KEY_X_SENDER_ID]:
+                analysis.add_ioc(I_EMAIL_X_SENDER_ID, address, tags=['x-sender-id'])
+
+                x_sender_id_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
+                if x_sender_id_address:
+                    x_sender_id_address.add_tag('x-sender-id')
+
+        if 'x-auth-id' in target_email:
+            email_details[KEY_X_AUTH_ID] = get_address_list(target_email, 'x-auth-id')
+            for address in email_details[KEY_X_AUTH_ID]:
+                analysis.add_ioc(I_EMAIL_X_AUTH_ID, address, tags=['x-auth-id'])
+
+                x_auth_id_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
+                if x_auth_id_address:
+                    x_auth_id_address.add_tag('x-auth-id')
+
+        if 'x-original-sender' in target_email:
+            email_details[KEY_X_ORIGINAL_SENDER] = get_address_list(target_email, 'x-original-sender')
+            for address in email_details[KEY_X_ORIGINAL_SENDER]:
+                analysis.add_ioc(I_EMAIL_X_ORIGINAL_SENDER, address, tags=['x-original-sender'])
+
+                x_original_sender_address = analysis.add_observable(F_EMAIL_ADDRESS, address)
+                if x_original_sender_address:
+                    x_original_sender_address.add_tag('x-original-sender')
+
         if 'reply-to' in target_email:
             email_details[KEY_REPLY_TO] = target_email['reply-to']
             address = normalize_email_address(target_email['reply-to'])
             if address:
+                email_details[KEY_REPLY_TO_ADDRESS] = address
+
+                analysis.add_ioc(I_EMAIL_REPLY_TO, address, tags=['reply_to'])
+
                 reply_to = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if reply_to:
                     reply_to.add_tag('reply_to')
@@ -1429,6 +1608,8 @@ class EmailAnalyzer(AnalysisModule):
             email_details[KEY_RETURN_PATH] = target_email['return-path']
             address = normalize_email_address(target_email['return-path'])
             if address:
+                analysis.add_ioc(I_EMAIL_RETURN_PATH, address, tags=['return_path'])
+
                 return_path = analysis.add_observable(F_EMAIL_ADDRESS, address)
                 if return_path:
                     return_path.add_tag('return_path')
@@ -1437,6 +1618,9 @@ class EmailAnalyzer(AnalysisModule):
         
         if 'subject' in target_email:
             email_details[KEY_SUBJECT] = target_email['subject']
+            if target_email['subject']:
+                analysis.add_observable(F_EMAIL_SUBJECT, target_email['subject'])
+                analysis.add_ioc(I_EMAIL_SUBJECT, target_email['subject'], tags=['subject'])
 
         if 'message-id' in target_email:
             email_details[KEY_MESSAGE_ID] = target_email['message-id']
@@ -1444,6 +1628,7 @@ class EmailAnalyzer(AnalysisModule):
                     F_MESSAGE_ID, 
                     normalize_message_id(target_email['message-id']),
                     o_time=received_time)
+            analysis.add_ioc(I_EMAIL_MESSAGE_ID, target_email['message-id'], status='Informational')
 
             if message_id_observable: 
                 # this module will extract an email from the archives based on the message-id
@@ -1489,19 +1674,31 @@ class EmailAnalyzer(AnalysisModule):
         x_mailer = None
         if 'x-mailer' in target_email:
             x_mailer = target_email['x-mailer']
+            analysis.add_ioc(I_EMAIL_X_MAILER, x_mailer, status='Informational', tags=['x-mailer'])
 
         # sender IP address (office365)
         if 'x-originating-ip' in target_email:
             value = target_email['x-originating-ip']
             value = re.sub(r'[^0-9\.]', '', value) # these seem to have extra characters added
             email_details[KEY_ORIGINATING_IP] = value
+            analysis.add_ioc(I_EMAIL_X_ORIGINATING_IP, value, tags=['x-originating-ip'])
             ipv4 = analysis.add_observable(F_IPV4, value, o_time=received_time)
-            if ipv4: 
+            if ipv4:
+                ipv4.add_tag('sender_ip')
+
+        if 'x-sender-ip' in target_email:
+            value = target_email['x-sender-ip']
+            value = re.sub(r'[^0-9\.]', '', value)  # these seem to have extra characters added
+            email_details[KEY_X_SENDER_IP] = value
+            analysis.add_ioc(I_EMAIL_X_SENDER_IP, value, tags=['x-sender-ip'])
+            ipv4 = analysis.add_observable(F_IPV4, value, o_time=received_time)
+            if ipv4:
                 ipv4.add_tag('sender_ip')
 
         # is the subject rfc2822 encoded?
         if KEY_SUBJECT in email_details:
             email_details[KEY_DECODED_SUBJECT] = decode_rfc2822(email_details[KEY_SUBJECT])
+            analysis.add_ioc(I_EMAIL_SUBJECT, decode_rfc2822(email_details[KEY_SUBJECT]), tags=['subject'])
 
         # get the first and last received header values
         last_received = None
@@ -1557,6 +1754,7 @@ class EmailAnalyzer(AnalysisModule):
                                 logging.warning(str(e))
 
                     file_name = re.sub(r'[\r\n]', '', file_name)
+                    analysis.add_ioc(I_EMAIL_ATTACHMENT_NAME, file_name, tags=['attachment'])
 
                 else:
                     file_name = '{}.unknown_{}_{}_000'.format(_file.value, target.get_content_maintype(), 
@@ -2421,115 +2619,6 @@ class EmailHistoryAnalyzer_v1(SplunkAnalysisModule):
 
         analysis = self.create_analysis(email_address)
         analysis.emails = self.json()
-
-class EmailHistoryRecord(object):
-    """Utility class to add extra fields not present in the splunk logs."""
-
-    def __init__(self, details):
-        self.details = details
-
-    #def __getattr__(self, name):
-        #return self.details[name]
-    
-    def __getitem__(self, key):
-        return self.details[key]
-
-    @property
-    def md5(self):
-        file_name = os.path.basename(self.details['archive_path'])
-        md5, ext = os.path.splitext(file_name)
-        return md5
-
-class EmailHistoryAnalysis_v2(Analysis):
-    """How many emails did this user receive?  What is the general summary of them?"""
-
-    def initialize_details(self):
-        self.details = {
-            KEY_EMAILS: None,
-        }
-
-    @property
-    def emails(self):
-        if not self.details:
-            return []
-
-        if not self.details[KEY_EMAILS]:
-            return []
-        
-        return [EmailHistoryRecord(email) for email in self.details[KEY_EMAILS]]
-
-    @emails.setter
-    def emails(self, value):
-        assert value is None or isinstance(value, list)
-        self.details[KEY_EMAILS] = value
-
-    @property
-    def jinja_template_path(self):
-        return 'analysis/email_history_v2.html'
-
-    def generate_summary(self):
-        if not self.emails:
-            return None
-
-        if not isinstance(self.emails, list):
-            logging.error("self.emails should be a list but it is a {}".format(str(type(self.emails))))
-            return None
-
-        return "Scanned Email History ({} recevied emails)".format(len(self.emails))
-
-class EmailHistoryAnalyzer_v2(SplunkAnalysisModule):
-    @property
-    def generated_analysis_type(self):
-        return EmailHistoryAnalysis_v2
-
-    @property
-    def valid_observable_types(self):
-        return F_EMAIL_ADDRESS
-
-    def execute_analysis(self, email_address):
-
-        alias_groups = [] # list of lists of domains
-        for config_item in self.config.keys():
-            if config_item.startswith('map_'):
-                domains = [x.strip().lower() for x in self.config[config_item].split(',')]
-                if domains:
-                    logging.debug("adding alias group {} ({})".format(config_item, domains))
-                    alias_groups.append(domains)
-
-        initial_search_query = []
-        specific_search_query = []
-
-        # does the domain match an alias?
-        try:
-            user, domain = email_address.value.lower().split('@', 1)
-        except ValueError:
-            logging.warning("{} does not appear to be a valid email address".format(email_address.value))
-            return False
-
-        for alias_group in alias_groups:
-            if domain in alias_group:
-                logging.debug("email address {} matches alias group {}".format(email_address.value, alias_group))
-                for alias_domain in alias_group:
-                    initial_search_query.append('"{}@{}"'.format(user, alias_domain))
-                    specific_search_query.append('env_rcpt_to = "*{}@{}*"'.format(user, alias_domain))
-
-        # did not match an alias?
-        if not initial_search_query:
-            initial_search_query = [ email_address.value ]
-            specific_search_query = [ "*{}*".format(email_address.value) ]
-
-        self.splunk_query('index=email_* {} | search {} | sort _time | fields *'.format(
-            ' OR '.join(initial_search_query),
-            ' OR '.join(specific_search_query)),
-            self.root.event_time_datetime if email_address.time_datetime is None else email_address.time_datetime)
-
-        if self.search_results is None:
-            logging.debug("missing search results after splunk query")
-            return False
-
-        analysis = self.create_analysis(email_address)
-        analysis.emails = self.json()
-        return True
 
 class EmailLoggingAnalysis(Analysis):
     def initialize_details(self):
@@ -3743,7 +3832,7 @@ class MSOfficeEncryptionAnalyzer(AnalysisModule):
 
                 # OK then we've found an office document that is encrypted
                 # we'll try to find the passwords by looking at the plain text and html of the email, if they exist
-                email = seach_down(_file, lambda obj: isinstance(obj, EmailAnalysis) and obj.email is not None)
+                email = search_down(_file, lambda obj: isinstance(obj, EmailAnalysis) and obj.email is not None)
                 if email is None:
                     logging.info("encrypted word document {} found but no associated email was found".format(_file.value))
                     return False
@@ -3796,25 +3885,3 @@ class MSOfficeEncryptionAnalyzer(AnalysisModule):
             logging.debug("decryption for {} failed: {}".format(_file.value, e))
             #report_exception()
             return False
-
-class AutomatedEmailRemediationAction(RemediationAction):
-    """This email was marked for automated remediation."""
-    pass
-
-class AutomatedEmailRemediationAnalyzer(RemediationAnalyzer):
-    @property
-    def generated_analysis_type(self):
-        return AutomatedEmailRemediationAction
-
-    @property
-    def valid_observable_types(self):
-        return F_EMAIL_DELIVERY
-
-    # base class requires DIRECTIVE_REMEDIATE directive
-
-    def request_remediation(self, email_delivery):
-        return request_remediation(REMEDIATION_TYPE_EMAIL,
-                                   f'{email_delivery.message_id}:{email_delivery.email_address}',
-                                   saq.AUTOMATION_USER_ID,
-                                   saq.COMPANY_ID,
-                                   f"auto-remediated for {self.root.uuid}")

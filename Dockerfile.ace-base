@@ -1,16 +1,27 @@
-FROM python:3.8-buster
+FROM python:3.8.3-buster
 ENV SAQ_HOME /opt/ace
 ENV SAQ_USER ace
 ENV SAQ_GROUP ace
 ENV TZ UTC
 ENV DEBIAN_FRONTEND noninteractive
+# by default we use uid and guid 1000 inside the linux container
+# for the development environment this needs to map to whatever uid is being used
+# for the bind mounts to work in linux (not sure about macos or windows yet)
+# these params are set in the docker build script
+ARG SAQ_USER_ID=1000
+ARG SAQ_GROUP_ID=1000
+ARG http_proxy
+ARG https_proxy
+ENV http_proxy $http_proxy
+ENV https_proxy $https_proxy
+COPY docker/provision/ace/etc/apt/proxy.conf /etc/apt/apt.conf.d/proxy.conf
 RUN groupadd ace \
-    && useradd -g ace -G sudo -m -s /bin/bash ace \
+    && useradd -g ace -G sudo -m -s /bin/bash -u $SAQ_USER_ID ace \
     && sed -i -e 's/main$/main contrib non-free/g' /etc/apt/sources.list \
-    && apt -y update \
-    && apt -y install --no-install-recommends apt-utils \
+    && apt-get -y update \
+    && apt-get -y install --no-install-recommends apt-utils \
     && mkdir -p /usr/share/man/man1/ \
-    && apt -y install --no-install-recommends \
+    && apt-get -y install --no-install-recommends \
         ca-certificates \
         nmap \
         libldap2-dev \
@@ -47,7 +58,9 @@ RUN groupadd ace \
     && chown ace:ace /venv 
 RUN mkdir /usr/local/share/ca-certificates/extra
 COPY ssl/extra /usr/local/share/ca-certificates/extra
-RUN update-ca-certificates \
+COPY docker/provision/ace/install_site_CAs.sh /install_site_CAs.sh
+RUN /install_site_CAs.sh \
+    && update-ca-certificates \
     && python3 -m pip config set global.cert /etc/ssl/certs/ca-certificates.crt \
     && python2.7 -m pip config set global.cert /etc/ssl/certs/ca-certificates.crt \ 
     && python3 -m pip install pip virtualenv --upgrade \

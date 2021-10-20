@@ -2,11 +2,19 @@
 #
 
 RESET=""
-while getopts "r" opt
+RESET_SSL=""
+INSTANCE_TYPE="DEVELOPMENT"
+while getopts "rst:" opt
 do
     case ${opt} in
         r)
             RESET="Y"
+            ;;
+        s)
+            RESET_SSL="Y"
+            ;;
+        t)
+            INSTANCE_TYPE="$OPTARG"
             ;;
         *)
             echo "invalid command line option ${opt}"
@@ -36,12 +44,12 @@ do
     chown $SAQ_USER:$SAQ_GROUP "$d"
 done
 
-if grep SAQ_ENC $SAQ_HOME/load_local_environment > /dev/null 2>&1
-then
-	echo 'export SAQ_ENC=ace'  >> $SAQ_HOME/load_local_environment
-fi
+#if grep SAQ_ENC $SAQ_HOME/load_local_environment > /dev/null 2>&1
+#then
+	#echo 'export SAQ_ENC=ace'  >> $SAQ_HOME/load_local_environment
+#fi
 
-if [ ! -e etc/brotex.whitelist -o -n "$RESET" ]
+if [ ! -e etc/brotex.whitelist ]
 then
     cp -a etc/brotex.whitelist.sample etc/brotex.whitelist || fail "unable to configure brotex.whitelist"
 fi
@@ -94,19 +102,29 @@ if [ ! -e etc/local_networks.csv -o -n "$RESET" ]; then echo 'Indicator,Indicato
 
 if [ ! -e etc/saq.ini -o -n "$RESET" ]
 then
-    if [ "$(hostname)" == "ace-dev" ]
-    then
-        cat > etc/saq.ini <<EOF
-[config]
-docker_default = etc/saq.docker-dev.ini
-EOF
-    else
-        cat > etc/saq.ini <<EOF
+    cat > etc/saq.ini <<EOF
 [config]
 docker_default = etc/saq.docker.ini
 EOF
+
+    if [ "$INSTANCE_TYPE" == "DEVELOPMENT" ]
+    then
+        sed -i -e '/^docker_default =/a docker_dev = etc/saq.docker-dev.ini' etc/saq.ini
     fi
 fi
+    #if [ "$(hostname)" == "ace-dev" ]
+    #then
+        #cat > etc/saq.ini <<EOF
+#[config]
+#docker_default = etc/saq.docker-dev.ini
+#EOF
+    #else
+        #cat > etc/saq.ini <<EOF
+#[config]
+#docker_default = etc/saq.docker.ini
+#EOF
+    #fi
+#fi
 
 cp etc/saq.docker.unittest.ini etc/saq.unittest.ini
 
@@ -127,4 +145,11 @@ done
     #ace enc set -p ace
 #fi
 
-docker/provision/ace/install_ssl_certs.sh
+if [ ! -e /home/ace/.vimrc -o -n "$RESET" ]; then cp etc/vimrc /home/ace/.vimrc; fi
+if [ ! -e /home/ace/.screenrc -o -n "$RESET" ]; then cp etc/screenrc /home/ace/.screenrc; fi
+if [ ! -e /home/ace/.vscode-server/extensions ]; then mkdir -p /home/ace/.vscode-server/extensions; fi
+if [ ! -e /home/ace/.vscode-server/extensionsCache ]; then mkdir -p /home/ace/.vscode-server/extensionsCache; fi
+
+chown -R ace:ace /home/ace
+docker/provision/ace/install_ssl_certs.sh $RESET_SSL
+chown -R ace:ace /opt/ace/ssl

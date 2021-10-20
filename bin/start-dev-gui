@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+cd $SAQ_HOME
+
+if [ -e data/var/daemon/gui.pid ]
+then
+    echo "ERROR: data/var/daemon/gui.pid exists (already running?)"
+    exit 1
+else
+    ace -L etc/gui_logging.ini start-gui &
+    GUI_PID=$!
+    echo "$GUI_PID" > data/var/daemon/gui.pid
+    exit 0
+fi

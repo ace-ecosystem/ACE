@@ -12,6 +12,31 @@ function get_all_checked_alerts() {
     return result;
 }
 
+function setup_daterange_pickers() {
+    $('.daterange').each(function(index) {
+        if ($(this).val() == '') {
+            $(this).val(
+                moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
+                moment().format("MM-DD-YYYY HH:mm"));
+        }
+    });
+
+    $('.daterange').daterangepicker({
+        timePicker: true,
+        format: 'MM-DD-YYYY HH:mm',
+        startDate:  moment().subtract(6, 'days').startOf('day'),
+        endDate: moment(),
+        ranges: {
+           'Today': [moment().startOf('day'), moment().endOf('day')],
+           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
+           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
+           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
+           'This Month': [moment().startOf('month').startOf('day'), moment()],
+           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
+        }
+    });
+}
+
 $(document).ready(function() {
 
     document.getElementById("event_time").value = moment().utc().format("YYYY-MM-DD HH:mm:ss");
@@ -47,22 +72,39 @@ $(document).ready(function() {
         }
     });
 
+    $("#btn-save-to-event").click(function(e) {
+        let all_alert_uuids = get_all_checked_alerts();
+        if (all_alert_uuids.length > 0) {
+            $("#event-form").append('<input type="hidden" name="alert_uuids" value="' + all_alert_uuids.join(",") + '" />');
+            $("#event_disposition").val($("input[name='disposition']:checked").val());
+        }
+
+        let comment_value = $("textarea[name='comment']").val()
+
+        if(comment_value !== "") {
+            $.ajax({
+                dataType: "html",
+                type: "post",
+                url: 'add_comment',
+                traditional: true,
+                data: {
+                    uuids: all_alert_uuids.join(","),
+                    comment: comment_value,
+                    redirect: ''
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    alert(jqXHR.responseText);
+                }
+            });
+        }
+    });
+
     $("#btn-realHours").click(function(e) {
         $("#frm-sla_hours").append('<input type="hidden" name="SLA_real-hours" value="1">').submit();
     });
 
     $("#btn-BusinessHours").click(function(e) {
         $("#frm-sla_hours").append('<input type="hidden" name="SLA_business-hours" value="1">').submit();
-    });
-
-    $("#btn-reset-filters").click(function(e) {
-        $("#frm-filter").append('<input type="hidden" name="reset-filters" value="1">').submit();
-    });
-
-    // when the user clicks on the search button we just submit the filter dialog as-is
-    // the filter dialog will be filled out with the current filter settings
-    $("#btn-search").click(function(e) {
-        $("#frm-filter").submit();
     });
 
     $("#btn-submit-comment").click(function(e) {
@@ -134,99 +176,7 @@ $(document).ready(function() {
         timeFormat: 'HH:mm:ss'
     });
 
-    $('.daterange').val(
-        moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
-        moment().format("MM-DD-YYYY HH:mm"));
-
-    $('.daterange').daterangepicker({
-        timePicker: true,
-        format: 'MM-DD-YYYY HH:mm',
-        startDate:  moment().subtract(6, 'days').startOf('day'),
-        endDate: moment(),
-        ranges: {
-           'Today': [moment().startOf('day'), moment().endOf('day')],
-           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-           'This Month': [moment().startOf('month').startOf('day'), moment()],
-           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-        }
-    });
-
-    if ($('input[name="daterange"]').val() == '') {
-        $('input[name="daterange"]').val(
-            moment().subtract(6, "days").startOf('day').format("MM-DD-YYYY HH:mm") + ' - ' +
-            moment().format("MM-DD-YYYY HH:mm"));
-    }
-
-    $('input[name="remediate_daterange"]').daterangepicker({
-        timePicker: true,
-        format: 'MM-DD-YYYY HH:mm',
-        startDate:  moment().subtract(6, 'days').startOf('day'),
-        endDate: moment(),
-        ranges: {
-           'Today': [moment().startOf('day'), moment().endOf('day')],
-           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-           'This Month': [moment().startOf('month').startOf('day'), moment()],
-           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-        }
-    });
-
-    $('input[name="daterange"]').daterangepicker({
-        timePicker: true,
-        format: 'MM-DD-YYYY HH:mm',
-        startDate:  moment().subtract(6, 'days').startOf('day'),
-        endDate: moment(),
-        ranges: {
-           'Today': [moment().startOf('day'), moment().endOf('day')],
-           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-           'This Month': [moment().startOf('month').startOf('day'), moment()],
-           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-        }
-    });
-
-    if ($('input[name="disposition_daterange"]').val() == '') {
-        $('input[name="disposition_daterange"]').val(
-            moment().subtract(6, "days").format("MM-DD-YYYY HH:mm") + ' - ' + 
-            moment().format("MM-DD-YYYY HH:mm"));
-    }
-
-    $('input[name="disposition_daterange"]').daterangepicker({
-        timePicker: true,
-        format: 'MM-DD-YYYY HH:mm',
-        startDate:  moment().subtract(6, "days").startOf('day'),
-        endDate: moment(),
-        ranges: {
-           'Today': [moment().startOf('day'), moment().endOf('day')],
-           'Yesterday': [moment().subtract(1, 'days').startOf('day'), moment().subtract(1, 'days').endOf('day')],
-           'Last 7 Days': [moment().subtract(6, 'days').startOf('day'), moment()],
-           'Last 30 Days': [moment().subtract(29, 'days').startOf('day'), moment()],
-           'This Month': [moment().startOf('month').startOf('day'), moment()],
-           'Last Month': [moment().subtract(1, 'month').startOf('month').startOf('day'), moment().subtract(1, 'month').endOf('month').endOf('day')]
-        }
-    });
-
-    // add event handlers to the column headers to trigger column sorting
-    $("span[id^='sort_by_']").each(function(index) {
-        var $this = $(this);
-        $this.click(function(e) {
-            //alert(this.id);
-            sort_field = this.id.replace(/^sort_by_/, "");
-            $("#frm-filter").append('<input type="hidden" name="sort_field" value="' + sort_field + '">');
-
-            // was the user pressing shift? this indicates we want to add this column to the sort
-            if (e.shiftKey) {
-                $("#frm-filter").append('<input type="hidden" name="sort_field_add" value="1">');
-            }
-
-            // submit the form
-            $("#frm-filter").submit();
-        });
-    });
+    setup_daterange_pickers();
 
     $("#btn-take-ownership").click(function(e) {
         all_alert_uuids = get_all_checked_alerts();
@@ -259,35 +209,6 @@ $(document).ready(function() {
 
         // add a hidden field to the form and then submit
         $("#assign-ownership-form").append('<input type="hidden" name="alert_uuids" value="' + all_alert_uuids.join(",") + '" />').submit();
-    });
-
-    $("#btn-remediate-alerts").click(function(e) {
-        var all_alert_uuids = get_all_checked_alerts();
-        var message_ids = null;
-
-        if (all_alert_uuids.length == 0 ) {
-            // just prompt for the message_id
-            var message_id = prompt("Enter a message_id to remediate.");
-            if (message_id.length == 0) 
-                return;
-
-            message_ids = [message_id];
-            all_alert_uuids = null;
-        }
-
-        remediate_emails(all_alert_uuids, message_ids);
-    });
-
-    $('#btn-mass-remediation').click(function(e) {
-        var all_alert_uuids = get_all_checked_alerts();
-        var message_ids = null;
-
-        if (all_alert_uuids.length == 0 ) {
-            alert("You need to select some alerts first. And THEN click this button. lol.")
-            return;
-        } else {
-            remediation_selection(all_alert_uuids, null);
-        }
     });
 
     $('#btn-limit').click(function(e) {
@@ -347,7 +268,7 @@ function add_filter(name, values) {
         traditional: true,
         data: { filter: JSON.stringify({"name":name, "values":values}) },
         success: function(data, textStatus, jqXHR) {
-            window.location.replace("/ace/manage")
+            window.location.replace("/ace/manage");
         },
         error: function(jqXHR, textStatus, errorThrown) {
             alert("DOH: " + textStatus);
@@ -357,22 +278,43 @@ function add_filter(name, values) {
 
 // adds selected filter from filter modal
 function apply_filter() {
-    name = document.getElementById("filter_name").value;
-    filter_inputs = $("[name='filter_value_" + name + "']");
-    if (filter_inputs.length == 1) {
-        val = filter_inputs.val();
-        if (Array.isArray(val)) {
-            add_filter(name, val);
-        } else {
-            add_filter(name, [val]);
+    filter_settings = {};
+    filters = document.getElementsByName("filter_name");
+    for (i = 0; i < filters.length; i++) {
+        filter_name = filters[i].value;
+        if (!(filter_name in filter_settings)) {
+            filter_settings[filter_name] = [];
         }
-    } else {
-        val = []
-        filter_inputs.each(function(index) {
-            val.push($(this).val())
-        });
-        add_filter(name, [val]);
+        filter_inputs = $("[name='" + filters[i].id + "_value_" + filter_name + "']");
+        if (filter_inputs.length == 1) {
+            val = filter_inputs.val();
+            if (Array.isArray(val)) {
+                filter_settings[filter_name].push(...val);
+            } else {
+                filter_settings[filter_name].push(val);
+            }
+        } else {
+            val = [];
+            filter_inputs.each(function(index) {
+                val.push($(this).val());
+            });
+            filter_settings[filter_name].push(val);
+        }
     }
+
+    $.ajax({
+        dataType: "html",
+        url: 'set_filters',
+        traditional: true,
+        data: { filters: JSON.stringify(filter_settings) },
+        success: function(data, textStatus, jqXHR) {
+            window.location.replace("/ace/manage");
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus);
+        }
+    });
+
     return false; // prevents form from submitting
 }
 
@@ -471,14 +413,23 @@ function set_page_size(current_size) {
 
 // hides/shows correct filter value input based on filter name selection
 function on_filter_changed(filter_name) {
-    filters = document.getElementsByName("filter_value_container");
+    filters = document.getElementsByName(filter_name.id + "_value_container");
     for (i = 0; i < filters.length; i++) {
-        if (filters[i].id == "filter_value_container_" + filter_name.value) {
+        if (filters[i].id == filter_name.id + "_value_container_" + filter_name.value) {
             filters[i].style.display = "block";
         } else {
             filters[i].style.display = "none";
         }
     }
+}
+
+function removeElement(id) {
+    var elem = document.getElementById(id);
+    return elem.parentNode.removeChild(elem);
+}
+
+function removeElements(id_starts_with) {
+    $('[id^="' + id_starts_with + '"]').remove();
 }
 
 // hides/shows correct input options
@@ -488,6 +439,21 @@ function toggle_options(input, options_id) {
     } else {
         input.setAttribute('list', null)
     }
+}
+
+function new_filter_option() {
+  $.ajax({
+    dataType: "html",
+    url: 'new_filter_option',
+    data: {},
+    success: function(data, textStatus, jqXHR) {
+      $('#filter_modal_body').append(data);
+      setup_daterange_pickers()
+    },
+    error: function(jqXHR, textStatus, errorThrown) {
+      alert("DOH: " + textStatus);
+    }
+  });
 }
 
 // gets called when the user clicks on the right triangle button next to each alert
@@ -512,34 +478,6 @@ function load_alert_observables(alert_uuid) {
         }
     });
     
-}
-
-function change_limit(current_limit) {
-    limit = prompt("How many alerts should be shown in the screen at once?", String(current_limit));
-    if (limit == null) return;
-    err = function() {
-        alert("error: enter an integer value between 1 and 1000");
-    };
-
-    try {
-        limit = parseInt(limit);
-    } catch (e) {
-        alert(e);
-        return;
-    }
-
-    if (limit < 1 || limit > 1000) {
-        err();
-        return;
-    }
-
-    $("#frm-filter").append('<input type="hidden" name="modify_limit" value="' + limit.toString() + '"/>');
-    $("#frm-filter").submit();
-}
-
-function navigate(direction) {
-    $("#frm-filter").append('<input type="hidden" name="navigate" value="' + direction + '"/>');
-    $("#frm-filter").submit();
 }
 
 function toggle_chevron(alert_row_id) {

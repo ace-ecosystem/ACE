@@ -18,8 +18,9 @@ import smtplib
 import socket
 import tempfile
 import traceback
-import uuid
+import uuid as uuidlib
 import zipfile
+import time
 
 from collections import defaultdict
 from datetime import timedelta
@@ -34,23 +35,17 @@ from subprocess import Popen, PIPE, DEVNULL
 from urllib.parse import urlparse
 from sandboxapi.falcon import FalconAPI
 
-import businesstime
-
-try:
-    import pandas as pd
-except ImportError:
-    pass
-
 import requests
 from pymongo import MongoClient
 
 import saq
 import saq.analysis
 import saq.intel
-import saq.remediation
+from saq.remediation import RemediationTarget
 import virustotal
 
 from saq import SAQ_HOME
+from saq.graph_api import GraphApiAuth
 from saq.constants import *
 from saq.crits import update_status
 from saq.analysis import Tag
@@ -61,16 +56,16 @@ from saq.database import User, UserAlertMetrics, Comment, get_db_connection, Eve
                          acquire_lock, release_lock, \
                          get_available_nodes, use_db, set_dispositions, add_workload, \
                          add_observable_tag_mapping, remove_observable_tag_mapping, \
-                         Remediation
+                         Remediation, Owner, DispositionBy, RemediatedBy
 from saq.email import search_archive, get_email_archive_sections
 from saq.error import report_exception
 from saq.gui import GUIAlert
 from saq.performance import record_execution_time
 from saq.proxy import proxies
-from saq.util import abs_path
-from saq.remediation.constants import REMEDIATION_TYPE_EMAIL
-from saq.remediation import request_remediation, request_restoration, execute_remediation, execute_restoration
+from saq.tip import tip_factory
+from saq.util import abs_path, find_all_url_domains, create_histogram_string
 from saq.file_upload import *
+from saq.observables import create_observable
 
 import ace_api
 
@@ -78,7 +73,7 @@ from app import db
 from app.analysis import *
 from app.analysis.filters import *
 from flask import jsonify, render_template, redirect, request, url_for, flash, session, \
-                  make_response, g, send_from_directory, send_file
+                  make_response, g, send_from_directory, send_file, stream_with_context, Response
 from flask_login import login_user, logout_user, login_required, current_user
 
 from sqlalchemy import and_, or_, func, distinct
@@ -101,7 +96,7 @@ DEFAULT_PRUNE = True
 @analysis.context_processor
 def generic_functions():
     def generate_unique_reference():
-        return str(uuid.uuid4())
+        return str(uuidlib.uuid4())
 
     return { 'generate_unique_reference': generate_unique_reference }
 
@@ -382,7 +377,7 @@ def email_file():
                     zf.writestr(os.path.basename(full_path), msg)
                 finally:
                     zf.close()
-            except Exceptoin as e:
+            except Exception as e:
                 logging.error("Could not compress " + full_path + ': ' + str(e))
                 report_exception()
                 flash("internal error compressing " + full_path)
@@ -540,7 +535,7 @@ def download_file():
         return response
     elif mode == 'zip':
         try:
-            dest_file = '{}.zip'.format(os.path.join(saq.TEMP_DIR, str(uuid.uuid4())))
+            dest_file = '{}.zip'.format(os.path.join(saq.TEMP_DIR, str(uuidlib.uuid4())))
             logging.debug("creating encrypted zip file {} for {}".format(dest_file, full_path))
             p = Popen(['zip', '-e', '--junk-paths', '-P', 'infected', dest_file, full_path])
             p.wait()
@@ -948,66 +943,6 @@ def assign_ownership():
 
     return redirect(url_for('analysis.manage'))
 
-@analysis.route('/remediate', methods=['POST'])
-@login_required
-def remediate():
-    # load all the alerts from the database we're going to process
-    alerts = []
-    alert_uuids = request.values['alert_uuids'].split(',')
-    session['checked'] = alert_uuids
-    for uuid in alert_uuids:
-        alerts.append(db.session.query(GUIAlert).filter_by(uuid=uuid.strip()).one())
-
-    # process them all at once
-    from saq.remediation import remediate_phish
-
-    messages = []
-
-    try:
-        messages = remediate_phish(alerts)
-    except Exception as e:
-        flash("unable to remediate phish: {}".format(str(e)))
-        report_exception()
-
-    # set the remediation time
-    for alert in alerts:
-        alert.removal_time = datetime.datetime.now()
-        alert.removal_user_id = current_user.id
-        db.session.add(alert)
-
-    db.session.commit()
-
-    for message in messages:
-        flash(message)
-
-    return redirect(url_for('analysis.manage'))
-
-@analysis.route('/unremediate', methods=['POST'])
-@login_required
-def unremediate():
-    # load all the alerts from the database we're going to process
-    alerts = []
-    alert_uuids = request.values['alert_uuids'].split(',')
-    session['checked'] = alert_uuids
-    for uuid in alert_uuids:
-        alerts.append(db.session.query(GUIAlert).filter_by(uuid=uuid.strip()).one())
-
-    # process them all at once
-    from saq.remediation import unremediate_phish
-
-    messages = []
-
-    try:
-        messages = unremediate_phish(alerts)
-    except Exception as e:
-        flash("unable to restore email: {}".format(str(e)))
-        report_exception()
-
-    for message in messages:
-        flash(message)
-
-    return redirect(url_for('analysis.manage'))
-
 @analysis.route('/new_alert', methods=['POST'])
 @login_required
 @use_db
@@ -1137,13 +1072,6 @@ def new_alert(db, c):
             except:
                 logging.error(f"unable to close file descriptor for {file_name}")
 
-@analysis.route('/new_malware_option', methods=['POST', 'GET'])
-@login_required
-def new_malware_option():
-    index = request.args['index']
-    malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
-    return render_template('analysis/new_malware_option.html', malware=malware, index=index)
-
 @analysis.route('/new_alert_observable', methods=['POST', 'GET'])
 @login_required
 def new_alert_observable():
@@ -1156,19 +1084,10 @@ def add_to_event():
     analysis_page = False
     event_id = request.form.get('event', None)
     event_name = request.form.get('event_name', None).strip()
-    event_type = request.form.get('event_type', None)
-    event_vector = request.form.get('event_vector', None)
-    event_risk_level = request.form.get('event_risk_level', None)
-    event_prevention = request.form.get('event_prevention', None)
     event_comment = request.form.get('event_comment', None)
-    event_status = request.form.get('event_status', None)
-    event_remediation = request.form.get('event_remediation', None)
     event_disposition = request.form.get('event_disposition', None)
-    campaign_id = request.form.get('campaign_id', None)
-    new_campaign = request.form.get('new_campaign', None)
-    company_ids = request.form.getlist('company', None)
-    event_time = request.form.get('event_time', None)
     alert_time = request.form.get('alert_time', None)
+    event_time = request.form.get('event_time', None)
     ownership_time = request.form.get('ownership_time', None)
     disposition_time = request.form.get('disposition_time', None)
     contain_time = request.form.get('contain_time', None)
@@ -1179,6 +1098,13 @@ def add_to_event():
     disposition_time = None if disposition_time in ['', 'None', None] else datetime.datetime.strptime(disposition_time, '%Y-%m-%d %H:%M:%S')
     contain_time = None if contain_time in ['', 'None', None] else datetime.datetime.strptime(contain_time, '%Y-%m-%d %H:%M:%S')
     remediation_time = None if remediation_time in ['', 'None', None] else datetime.datetime.strptime(remediation_time, '%Y-%m-%d %H:%M:%S')
+    event_status = EVENT_STATUS_DEFAULT
+    event_remediation = EVENT_REMEDIATION_DEFAULT
+    campaign_id = EVENT_CAMPAIGN_ID_DEFAULT
+    event_type = EVENT_TYPE_DEFAULT
+    event_vector = EVENT_VECTOR_DEFAULT
+    event_risk_level = EVENT_RISK_LEVEL_DEFAULT
+    event_prevention = EVENT_PREVENTION_DEFAULT
 
     # Enforce logical chronoglogy
     dates = [d for d in [event_time, alert_time, ownership_time, disposition_time, contain_time, remediation_time] if d is not None]
@@ -1193,32 +1119,23 @@ def add_to_event():
             return redirect(url_for('analysis.manage'))
 
     alert_uuids = []
-    if ("alert_uuids" in request.form):
+    if "alert_uuids" in request.form:
         alert_uuids = request.form['alert_uuids'].split(',')
-    new_event = False
+    if event_id == "NEW":
+        new_event = True
+    else:
+        new_event = False
 
     with get_db_connection() as dbm:
         c = dbm.cursor()
 
-        if event_id == "NEW":
-            new_event = True
-            if (campaign_id == "NEW"):
-                c.execute("""SELECT id FROM campaign WHERE name = %s""", (new_campaign))
-                if c.rowcount > 0:
-                    result = c.fetchone()
-                    campaign_id = result[0]
-                else:
-                    c.execute("""INSERT INTO campaign (name) VALUES (%s)""", (new_campaign))
-                    dbm.commit()
-                    c.execute("""SELECT LAST_INSERT_ID()""")
-                    result = c.fetchone()
-                    campaign_id = result[0]
+        if new_event:
 
             creation_date = datetime.datetime.now().strftime("%Y-%m-%d")
-            if (len(alert_uuids) > 0):
-                sql='SELECT insert_date FROM alerts WHERE uuid IN (%s) order by insert_date' 
-                in_p=', '.join(list(map(lambda x: '%s', alert_uuids)))
-                sql = sql % in_p
+            if len(alert_uuids) > 0:
+                sql = 'SELECT insert_date FROM alerts WHERE uuid IN (%s) order by insert_date'
+                in_p = ', '.join(list(map(lambda x: '%s', alert_uuids)))
+                sql %= in_p
                 c.execute(sql, alert_uuids)
                 result = c.fetchone()
                 creation_date = result[0].strftime("%Y-%m-%d")
@@ -1228,51 +1145,28 @@ def add_to_event():
                 result = c.fetchone()
                 event_id = result[0]
             else:
-                c.execute("""INSERT INTO events (creation_date, name, status, remediation, campaign_id, type, vector, risk_level, 
+                c.execute("""INSERT INTO events (uuid, creation_date, name, status, remediation, campaign_id, type, vector, risk_level, 
                 prevention_tool, comment, event_time, alert_time, ownership_time, disposition_time, 
-                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                        (creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_risk_level,
-                         event_prevention, event_comment, event_time, alert_time, ownership_time,
-                         disposition_time, contain_time, remediation_time))
+                contain_time, remediation_time) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (str(uuidlib.uuid4()), creation_date, event_name, event_status, event_remediation, campaign_id, event_type, event_vector, event_risk_level,
+                 event_prevention, event_comment, event_time, alert_time, ownership_time, disposition_time, contain_time,
+                 remediation_time))
+
                 dbm.commit()
                 c.execute("""SELECT LAST_INSERT_ID()""")
                 result = c.fetchone()
                 event_id = result[0]
 
-            mal_assigned = False
-            for key in request.form.keys():
-                if key.startswith("malware_selection_"):
-                    mal_assigned = True
-                    index = key[18:]
-                    mal_id = request.form.get("malware_selection_{}".format(index))
+                c.execute("""SELECT uuid FROM events WHERE id=%s""", event_id)
+                result = c.fetchone()
+                event_uuid = result[0]
 
-                    if mal_id == "NEW":
-                        mal_name = request.form.get("mal_name_{}".format(index))
-                        c.execute("""SELECT id FROM malware WHERE name = %s""", (mal_name))
-                        if c.rowcount > 0:
-                            result = c.fetchone()
-                            mal_id = result[0]
-                        else:
-                            c.execute("""INSERT INTO malware (name) VALUES (%s)""", (mal_name))
-                            dbm.commit()
-                            c.execute("""SELECT LAST_INSERT_ID()""")
-                            result = c.fetchone()
-                            mal_id = result[0]
-
-                        threats = request.form.getlist("threats_{}".format(index), None)
-                        for threat in threats:
-                            c.execute("""INSERT IGNORE INTO malware_threat_mapping (malware_id,type) VALUES (%s,%s)""", (mal_id, threat))
-                        dbm.commit()
-
-                    c.execute("""INSERT IGNORE INTO malware_mapping (event_id, malware_id) VALUES (%s, %s)""", (event_id, mal_id))
-                    dbm.commit()
-
-            if not mal_assigned:
-                c.execute("""INSERT IGNORE INTO malware_mapping (event_id, malware_id) VALUES (%s, %s)""", (event_id, 5))
-                dbm.commit()
+                # Create the event in the TIP
+                tip = tip_factory()
+                tip.create_event_in_tip(event_name, event_uuid, url_for('events.index', direct=event_id, _external=True))
 
         for uuid in alert_uuids:
-            c.execute("""SELECT id, company_id FROM alerts WHERE uuid = %s""", (uuid))
+            c.execute("""SELECT id, company_id FROM alerts WHERE uuid = %s""", uuid)
             result = c.fetchone()
             alert_id = result[0]
             company_id = result[1]
@@ -1281,11 +1175,13 @@ def add_to_event():
         dbm.commit()
 
         # generate wiki
-        c.execute("""SELECT creation_date, name FROM events WHERE id = %s""", (event_id))
+        c.execute("""SELECT creation_date, name, status FROM events WHERE id = %s""", event_id)
         result = c.fetchone()
         creation_date = result[0]
         event_name = result[1]
-        c.execute("""SELECT uuid, storage_dir FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE event_mapping.event_id = %s""", (event_id))
+        event_status = result[2]
+        c.execute("""SELECT uuid, storage_dir FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE 
+        event_mapping.event_id = %s""", event_id)
         rows = c.fetchall()
 
         alert_uuids = []
@@ -1294,10 +1190,20 @@ def add_to_event():
             alert_uuids.append(row[0])
             alert_paths.append(row[1])
 
-        if not new_event: 
-            c.execute("""SELECT disposition FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE event_mapping.event_id = %s ORDER BY disposition DESC""", (event_id))
+        if not new_event:
+            # Re-OPEN event?
+            if event_status != "OPEN":
+                ace_api.set_default_remote_host(saq.CONFIG['global']['node'])
+                ace_api.set_default_ssl_ca_path(saq.CONFIG['SSL']['ca_chain_path'])
+                ace_api.update_event_status(event_id, 'OPEN')
+
+            c.execute("""SELECT disposition FROM alerts JOIN event_mapping ON alerts.id = event_mapping.alert_id WHERE 
+            event_mapping.event_id = %s ORDER BY disposition DESC""", event_id)
             result = c.fetchone()
             event_disposition = result[0]
+
+            if not event_disposition:
+                event_disposition = saq.constants.DISPOSITION_DELIVERY
 
         if len(alert_uuids) > 0:
             try:
@@ -1308,7 +1214,7 @@ def add_to_event():
                 report_exception()
 
         wiki_name = "{} {}".format(creation_date.strftime("%Y%m%d"), event_name)
-        data = { "name": wiki_name, "alerts": alert_paths, "id": event_id }
+        data = {"name": wiki_name, "alerts": alert_paths, "id": event_id }
 
     if analysis_page:
         return redirect(url_for('analysis.index'))
@@ -1651,8 +1557,8 @@ def make_sort_instruction(sort_field, sort_direction):
 
 def _reset_filters():
     session['filters'] = {
-        'Disposition': [ None ],
-        'Owner': [ None, current_user.display_name ],
+        'Disposition': [ 'None' ],
+        'Owner': [ 'None', current_user.display_name ],
         'Queue': [ current_user.queue ],
     }
 
@@ -1661,12 +1567,22 @@ def reset_checked_alerts():
 
 def reset_sort_filter():
     session['sort_filter'] = 'Alert Date'
-    session['sort_filter_desc'] = True
+    if 'sla' not in session:
+        session['sort_filter_desc'] = True
 
 def reset_pagination():
     session['page_offset'] = 0
     if 'page_size' not in session:
         session['page_size'] = 50
+
+def apply_sla_filters():
+    # display all open alerts
+    if 'Owner' in session['filters']:
+        del session['filters']['Owner']
+    # put the oldest alert at the top
+    session['sort_filter_desc'] = False
+    # record that SLA has been applied to the session
+    session['sla'] = True
 
 @analysis.route('/set_sort_filter', methods=['GET', 'POST'])
 @login_required
@@ -1694,6 +1610,10 @@ def reset_filters():
     reset_pagination()
     reset_sort_filter()
     reset_checked_alerts()
+
+    if 'sla' in session:
+        # sla will trigger again, if needed
+        del session['sla']
 
     # return empy page
     return ('', 204)
@@ -1731,11 +1651,7 @@ def add_filter():
         session['filters'][name] = []
     values = new_filter['values']
     for v in values:
-        if isinstance(v, str):
-            value = None if v == 'None' else v
-            if value not in session['filters'][name]:
-                session['filters'][name].append(value)
-        elif not v in session['filters'][name]:
+        if v not in session['filters'][name]:
             session['filters'][name].append(v)
 
     # return empy page
@@ -1774,6 +1690,11 @@ def remove_filter_category():
     # return empy page
     return ('', 204)
 
+@analysis.route('/new_filter_option', methods=['POST', 'GET'])
+@login_required
+def new_filter_option():
+    return render_template('analysis/alert_filter_input.html', filters=getFilters(), session_filters={'Description': [ "" ]})
+
 @analysis.route('/set_page_offset', methods=['GET', 'POST'])
 @login_required
 def set_page_offset():
@@ -1811,6 +1732,23 @@ def set_owner():
 def hasFilter(name):
     return 'filters' in session and name in session['filters'] and len(session['filters'][name]) > 0
 
+def getFilters():
+    return {
+        'Alert Date': DateRangeFilter(GUIAlert.insert_date),
+        'Alert Type': SelectFilter(GUIAlert.alert_type),
+        'Description': TextFilter(GUIAlert.description),
+        'Disposition': MultiSelectFilter(GUIAlert.disposition, nullable=True, options=VALID_ALERT_DISPOSITIONS),
+        'Disposition By': SelectFilter(DispositionBy.display_name, nullable=True),
+        'Disposition Date': DateRangeFilter(GUIAlert.disposition_time),
+        'Event Date': DateRangeFilter(GUIAlert.event_time),
+        'Observable': TypeValueFilter(Observable.type, Observable.value, options=VALID_OBSERVABLE_TYPES),
+        'Owner': SelectFilter(Owner.display_name, nullable=True),
+        'Queue': SelectFilter(GUIAlert.queue),
+        'Remediated By': SelectFilter(RemediatedBy.display_name, nullable=True),
+        'Remediated Date': DateRangeFilter(GUIAlert.removal_time),
+        'Tag': AutoTextFilter(Tag.name),
+    }
+
 @analysis.route('/manage', methods=['GET', 'POST'])
 @login_required
 def manage():
@@ -1826,12 +1764,9 @@ def manage():
 
     # create alert view by joining required tables
     query = db.session.query(GUIAlert).with_labels()
-    Owner = aliased(User)
     query = query.outerjoin(Owner, GUIAlert.owner_id == Owner.id)
-    DispositionBy = aliased(User)
     if hasFilter('Disposition By'):
         query = query.outerjoin(DispositionBy, GUIAlert.disposition_user_id == DispositionBy.id)
-    RemediatedBy = aliased(User)
     if hasFilter('Remediated By'):
         query = query.outerjoin(RemediatedBy, GUIAlert.removal_user_id == RemediatedBy.id)
     if hasFilter('Tag'):
@@ -1839,22 +1774,27 @@ def manage():
     if hasFilter('Observable'):
         query = query.join(ObservableMapping, GUIAlert.id == ObservableMapping.alert_id).join(Observable, ObservableMapping.observable_id == Observable.id)
 
+    # we want to display alerts that are either approaching or exceeding SLA
+    sla_ids = [] # list of alert IDs that need to be displayed
+    if saq.GLOBAL_SLA_SETTINGS.enabled or any([s.enabled for s in saq.OTHER_SLA_SETTINGS]):
+        _query = db.session.query(GUIAlert).filter(GUIAlert.disposition == None)
+        for alert_type in saq.EXCLUDED_SLA_ALERT_TYPES:
+            _query = _query.filter(GUIAlert.alert_type != alert_type)
+        for alert in _query:
+            if alert.is_over_sla or alert.is_approaching_sla:
+                sla_ids.append(alert.id)
+
+    if sla_ids:
+        logging.info(f"{len(sla_ids)} alerts over or approaching SLA.")
+        if 'sla' not in session:
+            apply_sla_filters()
+    elif 'sla' in session:
+        # remove sla mode
+        del session['sla']
+
     # apply filters
-    filters = {
-        'Alert Date': DateRangeFilter(GUIAlert.insert_date),
-        'Description': TextFilter(GUIAlert.description),
-        'Disposition': MultiSelectFilter(GUIAlert.disposition, nullable=True, options=VALID_ALERT_DISPOSITIONS),
-        'Disposition By': SelectFilter(DispositionBy.display_name, nullable=True),
-        'Disposition Date': DateRangeFilter(GUIAlert.disposition_time),
-        'Event Date': DateRangeFilter(GUIAlert.event_time),
-        'Observable': TypeValueFilter(Observable.type, Observable.value, options=VALID_OBSERVABLE_TYPES),
-        'Owner': SelectFilter(Owner.display_name, nullable=True),
-        'Queue': SelectFilter(GUIAlert.queue),
-        'Remediated By': SelectFilter(RemediatedBy.display_name, nullable=True),
-        'Remediated Date': DateRangeFilter(GUIAlert.removal_time),
-        'Tag': AutoTextFilter(Tag.name),
-    }
-    for name in session['filters']:
+    filters = getFilters()
+    for name in session['filters']: 
         if session['filters'][name] and len(session['filters'][name]) > 0:
             query = filters[name].apply(query, session['filters'][name])
 
@@ -1916,19 +1856,6 @@ def manage():
                 alert_tags[alert_uuid] = []
             alert_tags[alert_uuid].append(tag)
 
-    # load alert remediations
-    # NOTE: We should have the alert class do this automatically
-    _alert_remediations = db.session.query(GUIAlert.uuid, Remediation.result, Remediation.key).\
-        join(Observable, Remediation.key == func.replace(Observable.value, '|', ':')).filter(Observable.type == 'email_delivery').\
-        join(ObservableMapping, ObservableMapping.observable_id == Observable.id).\
-        join(GUIAlert, GUIAlert.id == ObservableMapping.alert_id).\
-        filter(GUIAlert.id.in_([a.id for a in alerts if len(alerts) > 0])).order_by(Remediation.id.desc()).all()
-    alert_remediations = {k[0]: [] for k in _alert_remediations}
-    for k in _alert_remediations:
-        alert_remediations[k[0]].extend([{'result': k[1] if k[1] in ['removed', 'restored'] else 'Remediation failed: not cleaned',
-                                          'css_class': 'label-success' if k[1] in ['removed', 'restored'] else 'label-danger'}])
-
-
     # alert display timezone
     if current_user.timezone and pytz.timezone(current_user.timezone) != pytz.utc:
         for alert in alerts:
@@ -1942,17 +1869,16 @@ def manage():
 
         # filter
         filters=filters,
-        
+
         # alert data
         alerts=alerts,
         comments=comments,
         alert_tags=alert_tags,
-        alert_remediations=alert_remediations,
         display_disposition=not ('Disposition' in session['filters'] and len(session['filters']['Disposition']) == 1 and session['filters']['Disposition'][0] is None),
         total_alerts=total_alerts,
 
         # event data
-        open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all(),
+        open_events = db.session.query(Event).filter(or_(Event.status == 'OPEN', Event.status == 'COMPLETED')).order_by(Event.creation_date.desc()).all(),
         campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all(),
 
         # user data
@@ -1969,516 +1895,46 @@ def get_valid_alert_queues():
                 valid_alert_queues.append(row[0])
     return valid_alert_queues
 
-
-# begin helper functions for metrics
-def businessHourCycleTimes(df):
-    # return pd.Series(timedelta) of alert cycle times in business hours
-    business_hours = (datetime.time(6), datetime.time(18))
-    _bt = businesstime.BusinessTime(business_hours=business_hours)
-    
-    bh_cycle_time = []
-    for alert in df.itertuples():
-        open_hours = _bt.open_hours.seconds / 3600
-        btd = _bt.businesstimedelta(alert.insert_date, alert.disposition_time)
-        btd_hours = btd.seconds / 3600
-        bh_cycle_time.append(datetime.timedelta(hours=(btd.days * open_hours + btd_hours)))
-        
-    return pd.Series(data=bh_cycle_time)
-
-
-def alert_stats_for_month(df, business_hours=False):
-    # df = dataframe of all alerts during one month
-    # output: dataframe of alert cycle_time & quantity stats by disposition
-
-    df.set_index('disposition', inplace=True)
-    dispositions = df.index.get_level_values('disposition').unique()
-
-    dispo_data = {}
-    for dispo in dispositions:
-        if business_hours: # could just pass df or a copy of df - here a copy with just data needed
-            alert_cycle_times = businessHourCycleTimes(df.loc[[dispo],['disposition_time', 'insert_date']])
-        else:
-            alert_cycle_times = df.loc[dispo, 'disposition_time'] - df.loc[dispo, 'insert_date'] 
-
-        try:
-            dispo_data[dispo] = {
-                'Total' : alert_cycle_times.sum(),
-                'Cycle-Time' : alert_cycle_times.mean(),
-                'Min' : alert_cycle_times.min(),
-                'Max' : alert_cycle_times.max(),
-                'Stdev' : alert_cycle_times.std(),
-                'Quantity' : len(df.loc[dispo])
-            }
-        except AttributeError: # this occures when there was only ONE alert of this dispo type
-            dispo_data[dispo] = {
-                'Total' : alert_cycle_times,
-                'Cycle-Time' : alert_cycle_times,
-                'Min' : alert_cycle_times,
-                'Max' : alert_cycle_times,
-                'Stdev' : pd.Timedelta(datetime.timedelta()),
-                'Quantity' : 1
-            }
-
-    dispo_df = pd.DataFrame(data=dispo_data, columns=dispositions)
-        
-    return dispo_df
-
-
-def statistic_by_dispo(df, stat, business_hours=False):
-    # Input: 
-    #    df - dataframe of alerts with these columns: 
-    #        ['month', 'insert_date', 'disposition', 'disposition_time', 'owner_id', 'owner_time']
-    #    stat - a specific statistic we're interested in (Cycle-Time    Max Min Quantity    Stdev   Total)
-    #   business_hours - bool to tell us if we're calculating in Business hours or real time
-    # Output: List of dataframes, indexed by disposition, where each dataframe contains the
-    #         alert 'stat' statisics for each month
-    
-    months = df.index.get_level_values('month').unique()
-    #dispositions = list(df['disposition'].unique())
-    dispositions = [ 'FALSE_POSITIVE','GRAYWARE','POLICY_VIOLATION','RECONNAISSANCE','WEAPONIZATION','DELIVERY','EXPLOITATION','INSTALLATION','COMMAND_AND_CONTROL','EXFIL','DAMAGE' ]
-
-    stat_data = {}
-    for dispo in dispositions:
-        
-        #have to handle months where a specific disposition never happend
-        #converting timedelta objects to minutes for astetic and graphing purposes
-        fp = deliv = exp = c2 = damage = exfil = recon = wepon = gray = pv = instal = 0
-        month_data = {}
-
-        for month in months:
-            month_df = df.loc[month] # <- select the month
-            # 1 dispo type during month means DataFrame selection gives a Series
-            # alert_stats_for_month expects a DataFrame
-            if isinstance(month_df, pd.Series):
-                month_df = pd.DataFrame([month_df])
-
-            month_df = alert_stats_for_month(month_df, business_hours)
-
-            try:
-                value = month_df.at[stat, dispo]
-            except KeyError: # dispo didn't happen during the given month
-                value = None
-            if isinstance(value, datetime.timedelta): # convert to hours
-                value = value.total_seconds() / 60 / 60
-            month_data[month] = value
-            
-        stat_data[dispo] = month_data
-
-    stat_data_df = pd.DataFrame(data=stat_data)
-    if stat == 'Quantity':
-        stat_data_df.fillna(0, inplace=True)
-        stat_data_df = stat_data_df.astype(int)
-        stat_data_df.name = "Alert Quantities" 
-    else:
-        stat_data_df.fillna(0, inplace=True)
-        if business_hours:
-            stat_data_df.name = "Business Hour Alert " + stat
-        else:
-            stat_data_df.name = "Real Hour Alert " + stat
-
-    return stat_data_df
-
-
-def SliceAlertsByTimeCategory(df):
-    # this function evaluates the alerts in the given dataframe and then 
-    # places those alerts in new dataframes based on when the alert was created
-    # i.e., weekend, business hours, and week nights
-    
-    df.reset_index(0, inplace=True) # unsetting to better intertuple
-    # Cycle-Time Max Min Quantity Stdev Total
-     
-    weekend_indexes = []
-    bday_indexes = []
-    night_indexes = []
-    i=0
-    # month->insert_date    disposition disposition_time    owner_id    owner_time
-    for row in df.itertuples():
-
-        if row.insert_date.weekday() == 5: # Sat
-            # put into weekend bucket
-            weekend_indexes.append(i) 
-            
-        elif row.insert_date.weekday() == 6: # Sunday
-            # put into weekend bucket
-            weekend_indexes.append(i)
-            
-        elif row.insert_date.weekday() == 0: # Monday
-            #either weekend or weeknight bucket
-            if row.insert_date.time() < datetime.time(hour=6, minute=0, second=0):
-                night_indexes.append(i)
-            elif row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0):
-                night_indexes.append(i)
-            else: #put into Buisness hours bucket
-                bday_indexes.append(i)
-                
-        elif row.insert_date.weekday() == 1: #'Tue':
-            if ( row.insert_date.time() < datetime.time(hour=6, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0) ):
-                night_indexes.append(i)
-            else: # put into buisness hour bucket
-                bday_indexes.append(i)
-                
-        elif row.insert_date.weekday() == 2: #'Wed':
-            if ( row.insert_date.time() < datetime.time(hour=6, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0) ):
-                # put into weeknight bucket
-                night_indexes.append(i)
-            else: # put into buisness hour bucket
-                bday_indexes.append(i)
-                
-        elif row.insert_date.weekday() == 3: # Thurs
-            if ( row.insert_date.time() < datetime.time(hour=6, minute=0, second=0)
-                 or row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0) ):
-                # put into weeknight bucket
-                night_indexes.append(i)
-            else: # put into buisness hour bucket
-                bday_indexes.append(i)
-                
-        elif row.insert_date.weekday() == 4: #'Fri':
-            if row.insert_date.time() < datetime.time(hour=6, minute=0, second=0):
-                # put into weeknight bucket
-                night_indexes.append(i)
-            elif row.insert_date.time() >= datetime.time(hour=18, minute=0, second=0):
-                # put into weeknight or weekend bucket?
-                weekend_indexes.append(i)
-            else: # buisness hours - get first day remainder 
-                # buisness hour bucket
-                bday_indexes.append(i)
-        i+=1
-    weekend_df = df[df.index.isin(weekend_indexes)]
-    bday_df = df[df.index.isin(bday_indexes)]
-    nights_df = df[df.index.isin(night_indexes)]
-    if((len(weekend_df) + len(nights_df) + len(bday_df)) != len(df) ):
-        logging.error("Incorrect Alert count/Missing Alerts")
-    return weekend_df, nights_df, bday_df
-
-
-def Hours_of_Operation(df):
-    # df = dataframe of alerts -> SliceAlertsByTimeCategory
-    # output = df of alert-cycle-time averages and quantities,
-    #          for each month (across all dispositions), and respective to the hours
-    #          of operation by which alerts where created in
-    
-    months = df.index.get_level_values('month').unique()
-    
-    weekend, nights, bday = SliceAlertsByTimeCategory(df)
-    weekend.set_index('month', inplace=True)
-    nights.set_index('month', inplace=True)
-    bday.set_index('month', inplace=True)
-
-    bday_averages = []
-    weekend_averages = []
-    nights_averages = []
-    bday_quantities = []
-    weekend_quantities = []
-    nights_quantities = []
-    for month in months:
-        try:
-            bday_ct = bday.loc[month, 'disposition_time'] - bday.loc[month, 'insert_date']
-        except KeyError: # month not in index, or only one alert
-            bday_ct = pd.Series(data=pd.Timedelta(0))
-        try:
-            nights_ct = nights.loc[month, 'disposition_time'] - nights.loc[month, 'insert_date']
-        except KeyError: # month not in index 
-            nights_ct = pd.Series(data=pd.Timedelta(0))
-        try: 
-            weekend_ct = weekend.loc[month, 'disposition_time'] - weekend.loc[month, 'insert_date']
-        except KeyError:
-            weekend_ct = pd.Series(data=pd.Timedelta(0))
-
-        # handle case of single alert in a bucket for the month
-        if isinstance(bday_ct, pd.Timedelta):
-            bday_ct = pd.Series(data=bday_ct)
-        if isinstance(nights_ct, pd.Timedelta):
-            nights_ct = pd.Series(data=nights_ct)
-        if isinstance(weekend_ct, pd.Timedelta):
-            weekend_ct = pd.Series(data=weekend_ct)
-
-        bday_averages.append((bday_ct.mean().total_seconds() / 60) / 60)
-        nights_averages.append((nights_ct.mean().total_seconds() / 60) / 60)
-        weekend_averages.append((weekend_ct.mean().total_seconds() / 60) / 60)
-        
-        bday_quantities.append(len(bday_ct))
-        nights_quantities.append(len(nights_ct))
-        weekend_quantities.append(len(weekend_ct))
-        
-    data = {
-             ('Cycle-Time Averages', 'Bus Hrs'): bday_averages,
-             ('Cycle-Time Averages', 'Nights'): nights_averages,
-             ('Cycle-Time Averages', 'Weekend'): weekend_averages,
-             ('Quantities', 'Bus Hrs'): bday_quantities,
-             ('Quantities', 'Nights'): nights_quantities,
-             ('Quantities', 'Weekend'): weekend_quantities
-            }
-        
-    
-    new_df = pd.DataFrame(data, index=months)
-    new_df.name = "Hours of Operation"
-    return new_df
-
-
-def monthly_alert_SLAs(alerts):
-    # input - dataframe of alerts
-    
-    months = alerts.index.get_level_values('month').unique()
-    
-    quantities = []
-    bh_cycletime = []
-    total_cycletime = []
-    for month in months:
-        bh_alert_ct = businessHourCycleTimes(alerts.loc[[month],['disposition_time', 'insert_date']]) #alerts_BH.loc[month, 'disposition_time'] - alerts_BH.loc[month, 'insert_date']
-        alert_ct = alerts.loc[month, 'disposition_time'] - alerts.loc[month, 'insert_date'] 
-        quantities.append(len(alerts.loc[month]))
-        
-        if isinstance(bh_alert_ct, pd.Timedelta):
-            bh_alert_ct = pd.Series(data=bh_alert_ct)
-        if isinstance(alert_ct, pd.Timedelta):
-            alert_ct = pd.Series(data=alert_ct)
-        bh_cycletime.append(((bh_alert_ct.mean()).total_seconds() /60 ) /60)
-        total_cycletime.append(((alert_ct.mean()).total_seconds() /60 ) /60)
-    
-    data = {
-             'Business Hour cycle time': bh_cycletime,
-             'Total Cycle time': total_cycletime,
-             'Quantity': quantities
-           }
-
-    result = pd.DataFrame(data, index=months)
-    result.name = "Average Alert Cycle Times"
-    return result
-
-
-def add_email_alert_counts_per_event(events):
-
-    # given event id and company name ~ get alert count per company
-    alrt_cnt_company = """SELECT 
-        COUNT(DISTINCT event_mapping.alert_id) as 'alert_count' 
-        FROM event_mapping 
-        JOIN alerts 
-            ON alerts.id=event_mapping.alert_id 
-        LEFT JOIN company 
-            ON company.id=alerts.company_id 
-        WHERE 
-        event_mapping.event_id={} AND company.name='{}'"""
-
-    # given event id and company name ~ get count of emails based on 
-    # alerts with message_id observables and smart counting
-    msg_id_query = """SELECT
-                a.id, a.alert_type, o.value 
-            FROM
-                observables o
-                JOIN observable_mapping om ON om.observable_id = o.id
-                JOIN alerts a ON a.id = om.alert_id
-                JOIN event_mapping em ON em.alert_id=a.id
-                JOIN company c ON c.id = a.company_id
-            WHERE
-                o.type = 'message_id'
-                AND em.event_id={}
-                AND a.alert_type!='o365'
-                AND c.name = '{}'"""
-
-
-    email_counts = []
-    for event in events.itertuples():
-        if ',' in event.Company:
-            companies = event.Company.split(', ')
-            new_AlertCnt = emailCount = ""
-            for company in companies:
-                with get_db_connection() as db:
-                    companyAlerts = pd.read_sql_query(alrt_cnt_company.format(event.id, company),db)
-                    emailAlerts = pd.read_sql_query(msg_id_query.format(event.id, company),db)
-                new_AlertCnt += str(int(companyAlerts.alert_count.values))+","
-
-                # all mailbox alerts will be unique phish
-                mailbox_phish = emailAlerts.loc[emailAlerts.alert_type=='mailbox']
-                mailbox_phish_count = len(mailbox_phish)
-                unique_phish = list(set(mailbox_phish.value.values))
-                # remove mailbox alerts and leave any other alerts with a message_id observable
-                emailAlerts = emailAlerts[emailAlerts.alert_type!='mailbox']
-                for alert in emailAlerts.itertuples():
-                    if alert.value not in unique_phish:
-                        unique_phish.append(alert.value)
-                        mailbox_phish_count += 1
-                emailCount += str(mailbox_phish_count)+","
-
-            events.loc[events.id == event.id, '# Alerts'] = new_AlertCnt[:-1]
-            email_counts.append(emailCount[:-1])
-        else:
-            with get_db_connection() as db:
-                emailAlerts = pd.read_sql_query(msg_id_query.format(event.id, event.Company),db)
-                companyAlerts = pd.read_sql_query(alrt_cnt_company.format(event.id, event.Company),db)
-
-            alertCnt = int(companyAlerts.alert_count.values)
-            total_alerts = int(events.loc[events.id == event.id, '# Alerts'].values)
-            if alertCnt != total_alerts: # multi-company event, but user filtered by company
-                # update alert column to only alerts associated to the company
-                events.loc[events.id == event.id, '# Alerts'] = alertCnt
-
-            # all mailbox alerts will be unique phish
-            mailbox_phish = emailAlerts.loc[emailAlerts.alert_type=='mailbox']
-            mailbox_phish_count = len(mailbox_phish)
-            unique_phish = list(set(mailbox_phish.value.values))
-            # remove mailbox alerts and leave any other alerts with a message_id observable
-            emailAlerts = emailAlerts[emailAlerts.alert_type!='mailbox'] 
-            for alert in emailAlerts.itertuples():
-                if alert.value not in unique_phish:
-                    unique_phish.append(alert.value)
-                    mailbox_phish_count += 1
-            email_counts.append(mailbox_phish_count)
-            
-    events['# Emails'] = email_counts
-
-
-def generate_intel_tables(sip=True, crits=False):
-    if sip and crits:
-        logging.error("Can only use one intel source at a time.")
-        return False, False
-    if crits:
-        mongo_uri = saq.CONFIG.get("crits", "mongodb_uri")
-        mongo_host = mongo_uri[mongo_uri.rfind('://')+3:mongo_uri.rfind(':')]
-        mongo_port = int(mongo_uri[mongo_uri.rfind(':')+1:])
-        client = MongoClient(mongo_host, mongo_port)
-        crits = client.crits
-    elif sip:
-        sip_host = saq.CONFIG.get("sip", "remote_address")
-        api_key = saq.CONFIG.get("sip", "api_key")
-        sip = pysip.Client(sip_host, api_key, verify=False) 
-    else:
-        logging.warn("No intel source specified.")
-        return None, None
-
-    #+ amount of indicators per source
-    intel_sources = crits.source_access.distinct("name") if crits else None
-    if sip:
-        intel_sources = sip.get('/api/intel/source')
-        intel_sources = [s['value'] for s in intel_sources]
-    source_counts = {}
-    for source in intel_sources:
-        source_counts[source] = crits.indicators.find( { 'source.name': source }).count() if crits else None
-        source_counts[source] = sip.get('/indicators?sources={}&count'.format(source))['count'] if sip else source_counts[source]
-    source_cnt_df = pd.DataFrame.from_dict(source_counts, orient='index')
-    source_cnt_df.columns = ['count']
-    source_cnt_df.name = "Count of Indicators by Intel Sources"
-    source_cnt_df.sort_index(inplace=True)
-
-    # amount of indicators per status
-    indicator_statuses = crits.indicators.distinct("status") if crits else None
-    if sip:
-        indicator_statuses = sip.get('/api/indicators/status')
-        indicator_statuses = [s['value'] for s in indicator_statuses if s['value'] != 'FA']
-    status_counts = []
-    for status in indicator_statuses:
-        count = crits.indicators.find( { 'status': status }).count() if crits else None
-        count = sip.get('/indicators?status={}&count'.format(status))['count'] if sip else count
-        status_counts.append(count)
-    # put results in dataframe row
-    status_cnt_df = pd.DataFrame(data=[status_counts], columns=indicator_statuses)
-    status_cnt_df.name = "Count of Indicators by Status"
-    status_cnt_df.rename(index={0: "Count"}, inplace=True)
-
-    if crits:
-        client.close()
-    return source_cnt_df, status_cnt_df 
-
-
-def get_month_day_range(date):
-    """
-    For a date 'date' returns the start and end dateitime for the month of 'date'.
-
-    Month with 31 days:
-    >>> date = datetime(2011, 7, 31, 5, 27, 18)
-    >>> get_month_day_range(date)
-    (datetime.datetime(2011, 7, 1, 0, 0), datetime.datetime(2011, 7, 31, 23, 59, 59))
-
-    Month with 28 days:
-    >>> datetime(2011, 2, 15, 17, 8, 45)
-    >>> get_month_day_range(date)
-    (datetime.datetime(2011, 2, 1, 0, 0), datetime.datetime(2011, 2, 28, 23, 59, 59))
-    """
-    start_time = date.replace(day=1, hour=0, minute=0, second=0)
-    last_day = calendar.monthrange(date.year, date.month)[1]
-    end_time = date.replace(day=last_day, hour=23, minute=59, second=59)
-    return start_time, end_time
-
-
-def get_month_ranges(daterange_start, daterange_end):
-    """
-    Take whatever start and end datetime and return a dictionary where the keys are %Y%m
-    formatted and the values are tuples with start and end datetimes respective to the month (key).
-    """
-    month_ranges = {}
-    month = datetime.datetime.strftime(daterange_start, '%Y%m')
-    start_time, end_time = get_month_day_range(daterange_start)
-    if end_time >= daterange_end:
-        # range contained in month
-        month_ranges[month] = (daterange_start, daterange_end)
-        return month_ranges
-
-    if daterange_start != end_time: # edge case
-        month_ranges[month] = (daterange_start, end_time)
-    
-    while True:
-        # move to first second of next month
-        start_time = start_time + relativedelta(months=1)
-        start_time, end_time = get_month_day_range(start_time)
-        month = datetime.datetime.strftime(start_time, '%Y%m')
-
-        if end_time >= daterange_end:
-            # range contained in current month
-            if start_time != daterange_end: # edge case
-                month_ranges[month] = (start_time, daterange_end)
-            return month_ranges
-        else:
-            month_ranges[month] = (start_time, end_time)
-
-
-def get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=False, modified=False):
-    """
-    Use SIP to return a DataFrame table representing the status of all indicators created OR modified during
-    daterange and by the month (%Y%m) they were created in.i
-
-    :param datetime daterange_start: The datetime representing the start time of the daterange
-    :param datetime daterange_end: The datetime representing the end time of the daterange
-    :param bool created: If True, return table of created indicators
-    :param bool modified: If True, return table of modified indicators
-    :return: Pandas DataFrame table
-    """
-    sip_host = saq.CONFIG.get("sip", "remote_address")
-    api_key = saq.CONFIG.get("sip", "api_key")
-    sc = pysip.Client(sip_host, api_key, verify=False) 
-   
-    if created is modified: # they should never be the same
-        logging.warning("Created and Modfied flags both set to '{}'".format(created))
-        return False
-    table_type = "created" if created else "modified" 
-
-    statuses = sc.get('/api/indicators/status')
-    statuses = [s['value'] for s in statuses if s['value'] != 'FA']
-
-    status_by_date = {}
-    month_ranges = get_month_ranges(daterange_start, daterange_end)
-    for month, daterange in month_ranges.items():
-        status_counts = {}
-        for status in statuses:
-            status_counts[status] = sc.get('/indicators?status={0}&{1}_after={2}&{3}_before={4}&count'
-                                           .format(status, table_type, daterange[0], table_type, daterange[1]))['count']
-        status_by_date[month] = status_counts
-
-    status_by_month = pd.DataFrame.from_dict(status_by_date, orient='index')
-    status_by_month.name = "Count of Indicator Status by {} Month".format(table_type.capitalize())
-    return status_by_month
-
-
 @analysis.route('/metrics', methods=['GET', 'POST'])
 @login_required
 def metrics():
 
     if not saq.CONFIG['gui'].getboolean('display_metrics'):
-        # redirect to index
         return redirect(url_for('analysis.index'))
 
-    # object representations of the filters to define types and value verification routines
-    # this later gets augmented with the dynamic filters
+    try:
+        from ace_metrics.alerts import ( get_alerts_between_dates,
+                                        VALID_ALERT_STATS,
+                                        FRIENDLY_STAT_NAME_MAP,
+                                        statistics_by_month_by_dispo,
+                                        generate_hours_of_operation_summary_table,
+                                        generate_overall_summary_table,
+                                        define_business_time
+                                    )
+        from ace_metrics.alerts.users import get_all_users, generate_user_alert_stats
+        from ace_metrics.alerts.alert_types import ( all_alert_types,
+                                                    unique_alert_types_between_dates,
+                                                    count_quantites_by_alert_type,
+                                                    get_alerts_between_dates_by_type,
+                                                    generate_alert_type_stats
+                                                )
+
+        from ace_metrics.events import ( get_events_between_dates,
+                                        get_incidents_from_events,
+                                        add_email_alert_counts_per_event
+                                    )
+        from ace_metrics.helpers import get_companies, dataframes_to_xlsx_bytes, dataframes_to_archive_bytes_of_json_files, generate_html_plot
+    except ModuleNotFoundError:
+        flash("The ACE metrics library is not installed.")
+        return redirect(url_for('analysis.index'))
+
+    # get the list of users that have full access to all metrics
+    full_access_users = saq.CONFIG['gui'].get('full_metric_access')
+    if full_access_users:
+        full_access_users = [int(u_id) for u_id in full_access_users.split(',')]
+    else:
+        full_access_users = []
+
     filters = {
         FILTER_TXT_DATERANGE: SearchFilter('daterange', FILTER_TYPE_TEXT, '')
     }
@@ -2486,29 +1942,72 @@ def metrics():
     # initialize filter state (passed to the view to set up the form controls)
     filter_state = {filters[f].name: filters[f].state for f in filters}
 
-    target_companies = [] # of tuple(id, name)
-    with get_db_connection() as dbcon:
-        c = dbcon.cursor()
-        c.execute("SELECT `id`, `name` FROM company WHERE `name` != 'legacy' ORDER BY name")
-        for row in c:
-            target_companies.append(row)
+    # define dynamic defaults
+    users = {}
+    valid_alert_types = []
+    target_companies = {}
+    with get_db_connection() as db:
+        users = get_all_users(db)
+        target_companies = get_companies(db)
+        # NOTE: Some systems can have a very large number of historical alert_types.
+        # Limit the alert_type options to alert_types that exist, in the last 90 days.
+        # Use the CLI if you need to go back further.
+        daterange_end = datetime.datetime.now()
+        daterange_start = daterange_end - datetime.timedelta(days=90)
+        valid_alert_types = unique_alert_types_between_dates(daterange_start, daterange_end, db)
 
-    alert_df = dispo_stats_df = HOP_df = sla_df = incidents = events = pd.DataFrame()
-    months = query = company_name = company_id = daterange = post_bool = download_results = None
-    selected_companies = [] 
-    metric_actions = tables = []
+    # define static defaults
+    # NOTE: calculate the defaults over 7 days and return by default?
+    post_bool = False
+    daterange = False
+    business_hours = False
+    alert_overall_cycle_time_summary = False
+    hours_of_operation = False
+    alert_type_count_breakdown = False
+    selected_companies_map = {}
+    tables = []
+    html_plots = []
+    metric_results = []
+
+    # default business hours
+    # Use the SLA config section, for now.
+    time_zone = saq.CONFIG['SLA'].get('time_zone', 'US/Eastern')
+    sla_business_hours = saq.CONFIG['SLA'].get('business_hours', '6,18').split(',')
+    start_hour = int(sla_business_hours[0])
+    end_hour = int(sla_business_hours[1])
+    sla_business_hours = define_business_time(start_hour=start_hour,
+                                              end_hour=end_hour,
+                                              time_zone=time_zone)
+
     if request.method == "POST" and request.form['daterange']:
         post_bool = True
         daterange = request.form['daterange']
-        metric_actions = request.form.getlist('metric_actions')
 
-        company_ids = request.form.getlist('companies')
-        company_ids = [ int(x) for x in company_ids ]
-        company_dict = dict(target_companies)
-        selected_companies = [company_dict[int(cid)] for cid in company_ids ]
+        metric_alert_stats = request.form.getlist('metric_alert_stats')
+        alert_metric_targets = request.form.getlist('alert_metric_targets')
+        events_metric_targets = request.form.getlist('events_metric_targets')
+        export_results_to = request.form.getlist('export_results')
 
-        if 'download_results' in request.form:
-           download_results = True
+        selected_analysts = [int(uid) for uid in request.form.getlist('selected_analysts')]
+        selected_alert_types = request.form.getlist('selected_alert_types')
+        selected_companies = [ int(cid) for cid in request.form.getlist('companies') ]
+        for cid in selected_companies:
+            cid = int(cid)
+            selected_companies_map[cid] = target_companies[cid]
+
+        # independent alert tables
+        if 'alert_hours_of_operation' in request.form:
+            hours_of_operation = True
+        if 'alert_overall_cycle_time_summary' in request.form:
+            alert_overall_cycle_time_summary = True
+
+        # independent alert type tables
+        if 'alert_type_count_breakdown' in request.form:
+            alert_type_count_breakdown = True
+
+        # apply business hours before performing time calculations
+        if 'business_hours' in request.form:
+            business_hours = sla_business_hours
 
         try:
             daterange_start, daterange_end = daterange.split(' - ')
@@ -2518,182 +2017,158 @@ def metrics():
             flash("error parsing date range, using default 7 days: {0}".format(str(error)))
             daterange_end = datetime.datetime.now()
             daterange_start = daterange_end - datetime.timedelta(days=7)
+
+        # store alerts for reuse
+        alerts = None
+        for alert_target in alert_metric_targets:
+            if alert_target == 'alerts':
+                with get_db_connection() as db:
+                    alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
+
+                if hours_of_operation:
+                    hop_df = generate_hours_of_operation_summary_table(alerts.copy())
+                    metric_results.append({'table': hop_df, 'plot': None})
+                    tables.append(hop_df)
+
+                if alert_overall_cycle_time_summary:
+                    sla_df = generate_overall_summary_table(alerts.copy())
+                    metric_results.append({'table': sla_df, 'plot': None})
+                    tables.append(sla_df)
             
-        query = """SELECT DATE_FORMAT(insert_date, '%%Y%%m') AS month, insert_date, disposition,
-            disposition_time, owner_id, owner_time FROM alerts
-            WHERE insert_date BETWEEN %s AND %s AND alert_type!='faqueue'
-            AND alert_type!='dlp - internal threat' AND alert_type!='dlp-exit-alert' 
-            AND disposition IS NOT NULL {}{}"""
+                alert_stat_map = statistics_by_month_by_dispo(alerts, business_hours=business_hours)
+                for stat in metric_alert_stats:
+                    alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
+                    tables.append(alert_stat_map[stat])
+                    metric_results.append({'table': alert_stat_map[stat],
+                                           'plot': generate_html_plot(alert_stat_map[stat])})
 
-        query = query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company_id=%s' for x in company_ids]) +')' if company_ids else '')
+            if alert_target == 'alert_types':
+                with get_db_connection() as db:
+                    # only use alert types that occur duing the date range
+                    alert_types = unique_alert_types_between_dates(daterange_start,daterange_end, db)
+                    # XXX modify this function to accept a list of alert_types to generate stats for
+                    alert_type_map = get_alerts_between_dates_by_type(daterange_start,daterange_end, db, selected_companies=selected_companies)
 
-        with get_db_connection() as db:
-            params = [daterange_start.strftime('%Y-%m-%d %H:%M:%S'),
-                      daterange_end.strftime('%Y-%m-%d %H:%M:%S')]
-            params.extend(company_ids)
-            alert_df = pd.read_sql_query(query, db, params=params)
+                alert_type_stat_map = generate_alert_type_stats(alert_type_map, business_hours=business_hours)
 
-        # go ahead and drop the dispositions we don't care about
-        alert_df = alert_df[alert_df.disposition != 'UNKNOWN']
-        alert_df = alert_df[alert_df.disposition != 'IGNORE']
-        alert_df = alert_df[alert_df.disposition != 'REVIEWED']
+                if selected_alert_types:
+                    # narrow to any alert_type selections
+                    alert_types = [a_type for a_type in alert_types if a_type in selected_alert_types]
 
-        # First, alert quantities by disposition per month
-        alert_df.set_index('month', inplace=True)
-        months = alert_df.index.get_level_values('month').unique()
+                for alert_type in alert_types:
+                    for stat in metric_alert_stats:
+                        tables.append(alert_type_stat_map[alert_type][stat])
+                        metric_results.append({'table': alert_type_stat_map[alert_type][stat],
+                                                'plot': None})
 
-        # Legacy -- remove?
-        # if March 2015 alerts in our results then manually insert alert
-        # for https://wiki.local/display/integral/20150309+ctbCryptoLocker
-        # No alert was ever put into ACE for this event
-        if '201503' in months:
-            insert_date = datetime.datetime(year=2015, month=3, day=9, hour=10, minute=12, second=8)
-            #Alert Dwell Time was 4hr, 15mins according to wiki
-            disposition_time = insert_date + datetime.timedelta(hours=4, minutes=15)
-            ctbCryptoLocker = pd.DataFrame({ 'insert_date' : insert_date,
-                                             'disposition' : 'DAMAGE',
-                                             'disposition_time' : disposition_time,
-                                             'owner_id' : 4.0,
-                                             'owner_time' : insert_date},
-                                             index=['201503'])
-            alert_df = pd.concat([alert_df, ctbCryptoLocker])
+            if alert_target == 'users':
+                if alerts is None:
+                    with get_db_connection() as db:
+                        alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
 
-        # generate and store our tables
-        if 'alert_quan' in metric_actions:
-            dispo_stats_df = statistic_by_dispo(alert_df, 'Quantity', False)
-            if not dispo_stats_df.empty:
-                tables.append(dispo_stats_df)
-            # leaving this table here, for now
-            CT_stats_df = statistic_by_dispo(alert_df, 'Cycle-Time', True)
-            if not CT_stats_df.empty:
-                tables.append(CT_stats_df)
+                selected_users = users
+                user_ids = users.keys()
+                if selected_analysts:
+                    # narrow users to selected users
+                    user_ids = [user_id for user_id in user_ids if user_id in selected_analysts]
+                    # only generate what's needed
+                    selected_users = {}
+                    for user_id, user in users.items():
+                        if user_id in user_ids:
+                            selected_users[user_id] = user
 
-        if 'HoP' in metric_actions:
-            HOP_df = Hours_of_Operation(alert_df.copy())
-            if not HOP_df.empty:
-                tables.append(HOP_df)
+                all_user_stat_map = generate_user_alert_stats(alerts, selected_users, business_hours=business_hours)
+                for user_id in user_ids:
+                    for stat in metric_alert_stats:
+                        tables.append(all_user_stat_map[user_id][stat])
+                        metric_results.append({'table': all_user_stat_map[user_id][stat],
+                                                'plot': generate_html_plot(all_user_stat_map[user_id][stat])})
 
-        if 'cycle_time' in metric_actions:
-            sla_df = monthly_alert_SLAs(alert_df.copy())
-            if not sla_df.empty:
-                tables.append(sla_df)
+        for event_target in events_metric_targets:
+            # we will get the events no matter what
+            with get_db_connection() as db:
+                events = get_events_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
 
-        # Make incident and email event tables
-        event_query = """SELECT 
-                events.id, 
-                events.creation_date as 'Date', events.name as 'Event', 
-                GROUP_CONCAT(DISTINCT malware.name SEPARATOR ', ') as 'Malware', 
-                GROUP_CONCAT(DISTINCT IFNULL(malware_threat_mapping.type, 'UNKNOWN') SEPARATOR ', ') 
-                    as 'Threat', GROUP_CONCAT(DISTINCT alerts.disposition SEPARATOR ', ') as 'Disposition', 
-                events.vector as 'Delivery Vector', 
-                events.prevention_tool as 'Prevention', 
-                GROUP_CONCAT(DISTINCT company.name SEPARATOR ', ') as 'Company', 
-                count(DISTINCT event_mapping.alert_id) as '# Alerts' 
-            FROM events 
-                JOIN event_mapping 
-                    ON events.id=event_mapping.event_id 
-                JOIN malware_mapping 
-                    ON events.id=malware_mapping.event_id 
-                JOIN malware 
-                    ON malware.id=malware_mapping.malware_id 
-                JOIN company_mapping 
-                    ON events.id=company_mapping.event_id 
-                JOIN company 
-                    ON company.id=company_mapping.company_id 
-                LEFT JOIN malware_threat_mapping 
-                    ON malware.id=malware_threat_mapping.malware_id 
-                JOIN alerts 
-                    ON alerts.id=event_mapping.alert_id 
-            WHERE 
-                events.status='CLOSED' AND events.creation_date 
-                BETWEEN %s AND %s {}{}
-            GROUP BY events.name, events.creation_date, event_mapping.event_id 
-            ORDER BY events.creation_date"""
+            # by default, for gui, count emails
+            add_email_alert_counts_per_event(events, db)
 
-        event_query = event_query.format(' AND ' if company_ids else '', '( ' + ' OR '.join(['company.name=%s' for company in selected_companies]) +') ' if company_ids else '')
+            if event_target == 'events':
+                tables.append(events.drop(columns=['id']))
+                metric_results.append({'table': events, 'plot': None})
 
-        with get_db_connection() as db:
-            params = [daterange_start.strftime('%Y-%m-%d %H:%M:%S'),
-                      daterange_end.strftime('%Y-%m-%d %H:%M:%S')]
-            params.extend(selected_companies)
-            events = pd.read_sql_query(event_query, db, params=params)
-
-        events.set_index('Date', inplace=True)
-
-        # make incident table from events
-        if 'incidents' in metric_actions:
-            incidents = events[
-                (events.Disposition == 'INSTALLATION') | ( events.Disposition == 'EXPLOITATION') |
-                (events.Disposition == 'COMMAND_AND_CONTROL') | (events.Disposition == 'EXFIL') |
-                (events.Disposition == 'DAMAGE')]
-            incidents.drop(columns=['id'], inplace=True)
-            incidents.name = "Incidents"
-            if not incidents.empty:
+            if event_target == 'incidents':
+                incidents = get_incidents_from_events(events)
                 tables.append(incidents)
- 
-        # make email event table
-        if 'events' in metric_actions:
-            add_email_alert_counts_per_event(events) # events df  altered inplace
-            events.drop(columns=['id'], inplace=True)
-            # email_events = events[(events['Delivery Vector'] == 'corporate email')] 
-            # email_events.name = "Email Events"
-            events.name = "Events"
-            if not events.empty:
-                tables.append(events)
+                metric_results.append({'table': incidents, 'plot': None})
 
-        # generate SIP ;-) indicator intel tables
-        # XXX add support for using CRITS/SIP based on what ACE is configured to use
-        if 'indicator_intel' in metric_actions:
-            if not (saq.CONFIG.get("crits", "mongodb_uri") or
-                    (saq.CONFIG.get("sip", "remote_address") or saq.CONFIG.get("sip", "api_key"))):
-                flash("intel source not configured; skipping indicator stats table generation")
-            else:
-                try:
-                    indicator_source_table, indicator_status_table = generate_intel_tables()
-                    tables.append(indicator_source_table)
-                    tables.append(indicator_status_table)
-                except Exception as e:
-                    flash("Problem generating overall source and status indicator tables : {0}".format(str(e)))
-                # Count all created indicators during daterange by their status
-                try:
-                    created_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, created=True)
-                    if created_indicators is not False:
-                        tables.append(created_indicators)
-                except Exception as e:
-                    flash("Problem generating created indicator table: {0}".format(str(e)))
-                try:
-                    modified_indicators = get_created_OR_modified_indicators_during(daterange_start, daterange_end, modified=True)
-                    if modified_indicators is not False:
-                        tables.append(modified_indicators)
-                except Exception as e:
-                    flash("Problem generating modified indicator table: {0}".format(str(e)))
+        # Independent tables
+        if hours_of_operation:
+            if not business_hours:
+                # business hours requried
+                business_hours = sla_business_hours
 
-    if download_results:
-        if tables:
-            outBytes = io.BytesIO()
-            writer = pd.ExcelWriter(outBytes)
-            for table in tables:
-                table.to_excel(writer, table.name)
-            writer.close()
-            outBytes.seek(0)
-            filename = company_name+"_metrics.xlsx" if company_name else "ACE_metrics.xlsx"
-            output = make_response(outBytes.read())
-            output.headers["Content-Disposition"] = "attachment; filename="+filename
-            output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            return output
-        else:
-            flash("No results; .xlsx could not be generated")
+            if alerts is None:
+                with get_db_connection() as db:
+                    alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
+            hop_df = generate_hours_of_operation_summary_table(alerts, business_hours)
+            tables.append(hop_df)
+            metric_results.append({'table': hop_df, 'plot': None})
+
+        if alert_overall_cycle_time_summary:
+            if not business_hours:
+                # business hours requried
+                business_hours = sla_business_hours
+
+            if alerts is None:
+                with get_db_connection() as db:
+                    alerts = get_alerts_between_dates(daterange_start,daterange_end, db, selected_companies=selected_companies)
+            overall_ct_summary = generate_overall_summary_table(alerts, business_hours)
+            tables.append(overall_ct_summary)
+            metric_results.append({'table': overall_ct_summary, 'plot': None})
+
+        if alert_type_count_breakdown:
+            with get_db_connection() as db:
+                # TODO: implement company selection here
+                at_counts = count_quantites_by_alert_type(daterange_start,daterange_end, db)
+            tables.append(at_counts)
+            metric_results.append({'table': at_counts, 'plot': None})
+
+        if tables and export_results_to:
+            time_stamp = str(datetime.datetime.now().timestamp())
+            time_stamp = time_stamp[:time_stamp.rfind('.')]
+            filename = f"ACE_metrics_{time_stamp}"
+
+            for export_type in export_results_to:
+                if export_type == 'xlsx':
+                    filename += ".xlsx"
+                    filebytes = dataframes_to_xlsx_bytes(tables)
+                    output = make_response(filebytes)
+                    output.headers["Content-Disposition"] = "attachment; filename="+filename
+                    output.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    return output
+                if export_type == 'json':
+                    filename += ".tar.gz"
+                    filebytes = dataframes_to_archive_bytes_of_json_files(tables)
+                    output = make_response(filebytes)
+                    output.headers["Content-Disposition"] = "attachment; filename="+filename
+                    output.headers['Content-Type'] == 'application/x-gzip'
+                    return output
 
     return render_template(
         'analysis/metrics.html',
+        metric_results=metric_results,
         filter_state=filter_state,
+        valid_alert_stats=reversed(VALID_ALERT_STATS),
+        friendly_stat_name_map=FRIENDLY_STAT_NAME_MAP,
+        users=users,
+        valid_alert_types=valid_alert_types,
         target_companies=target_companies,
-        selected_companies=selected_companies,
+        selected_companies_map=selected_companies_map,
         tables=tables,
         post_bool=post_bool,
-        metric_actions=metric_actions,
+        current_user=current_user,
+        full_access_users=full_access_users,
         daterange=daterange)
-
 
 @analysis.route('/events', methods=['GET', 'POST'])
 @login_required
@@ -3123,7 +2598,12 @@ def index():
     analysis = alert  # by default it's the alert
 
     if module_path is not None and observable is not None:
-        analysis = observable.analysis[module_path]
+        if module_path == 'saq.analysis:ErrorAnalysis':
+            flash("Analysis object failed to load. Old code?")
+        elif module_path == 'saq.analysis:DeprecatedAnalysis':
+            flash("Analysis has been Deprecated.")
+        else:
+            analysis = observable.analysis[module_path]
 
     # load user comments for the alert
     try:
@@ -3140,40 +2620,11 @@ def index():
     special_tag_names = [tag for tag in saq.CONFIG['tags'].keys() if saq.CONFIG['tags'][tag] == 'special']
     alert_tags = [tag for tag in alert_tags if tag.name not in special_tag_names]
 
-    class DispositionHistory(collections.abc.MutableMapping):
-        def __init__(self, observable):
-            self.observable = observable
-            self.history = {} # key = disposition, value = count
-
-        def __getitem__(self, key):
-            return self.history[key]
-
-        def __setitem__(self, key, value):
-            # we skip the None key which corresponds to alerts that have not been dispositioned yet
-            if key is not None:
-                if key not in VALID_ALERT_DISPOSITIONS:
-                    raise ValueError(f"invalid disposition {key}")
-
-                self.history[key] = value
-
-        def __delitem__(self, key):
-            pass
-
-        def __iter__(self):
-            total = sum([self.history[disp] for disp in self.history.keys()])
-            dispositions = [disposition for disposition in VALID_ALERT_DISPOSITIONS if disposition in self.history]
-            dispositions = sorted(dispositions, key=lambda disposition: (self.history[disposition] / total) * 100.0, reverse=True)
-            for disposition in dispositions:
-                yield disposition, self.history[disposition], (self.history[disposition] / total) * 100.0
-
-        def __len__(self):
-            return len(self.history)
-
     # compute the display tree
     class TreeNode(object):
         def __init__(self, obj, parent=None):
             # unique ID that can be used in the GUI to track nodes
-            self.uuid = str(uuid.uuid4())
+            self.uuid = str(uuidlib.uuid4())
             # Analysis or Observable object
             self.obj = obj
             self.parent = parent
@@ -3209,69 +2660,6 @@ def index():
 
         def __str__(self):
             return "TreeNode({}, {}, {})".format(self.obj, self.reference_node, self.visible)
-
-        @property
-        def disposition_history(self):
-            """Returns a DispositionHistory object if self.obj is an Observable, None otherwise."""
-            if hasattr(self, '_disposition_history'):
-                return self._disposition_history
-
-            self._disposition_history = None
-            if not isinstance(self.obj, saq.analysis.Observable):
-                return None
-
-            if self.obj.whitelisted:
-                return None
-
-            if self.obj.type == F_FILE:
-                from saq.modules.file_analysis import FileHashAnalysis
-                for child in self.children:
-                    if isinstance(child.obj, FileHashAnalysis):
-                        for grandchild in child.children:
-                            if isinstance(grandchild.obj, saq.analysis.Observable) and grandchild.obj.type == F_SHA256:
-                                self._disposition_history = grandchild.disposition_history
-                                return self._disposition_history
-
-                return None
-
-            self._disposition_history = DispositionHistory(self.obj)
-
-            with get_db_connection() as db:
-                c = db.cursor()
-                c.execute("""
-SELECT 
-    a.disposition, COUNT(*) 
-FROM 
-    observables o JOIN observable_mapping om ON o.id = om.observable_id
-    JOIN alerts a ON om.alert_id = a.id
-WHERE 
-    o.type = %s AND 
-    o.md5 = UNHEX(%s) AND
-    a.alert_type != 'faqueue' AND
-    a.disposition != 'UNKNOWN'
-GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
-
-                for row in c:
-                    disposition, count = row
-                    self._disposition_history[disposition] = count
-
-            return self._disposition_history
-
-    def find_all_url_domains(analysis):
-        assert isinstance(analysis, saq.analysis.Analysis)
-        domains = {}
-        for observable in analysis.find_observables(lambda o: o.type == F_URL):
-            hostname = urlparse(observable.value).hostname
-            if hostname is None:
-                continue
-
-            if urlparse(observable.value).hostname not in domains:
-                domains[urlparse(observable.value).hostname] = 1
-            else:
-                domains[urlparse(observable.value).hostname] += 1
-
-        return domains
-
 
     def _recurse(current_node, node_tracker=None):
         assert isinstance(current_node, TreeNode)
@@ -3368,9 +2756,13 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
             _prune(display_tree)
             # root node is visible
             display_tree.visible = True
-            # and all observables in the root node
-            #for child in display_tree.children:
-                #child.visible = True
+
+            # if the show_root_observables config option is True then
+            # also all observables in the root node
+            if saq.CONFIG['gui'].getboolean('show_root_observables'):
+                for child in display_tree.children:
+                    child.visible = True
+
             _resolve_references(display_tree)
 
     try:
@@ -3381,92 +2773,41 @@ GROUP BY a.disposition""", (self.obj.type, self.obj.md5_hex))
         db.session.rollback()
         all_users = db.session.query(User).order_by('username').all()
 
-    open_events = db.session.query(Event).filter(Event.status == 'OPEN').order_by(Event.creation_date.desc()).all()
+    open_events = db.session.query(Event).filter(or_(Event.status == 'OPEN', Event.status == 'COMPLETED')).order_by(Event.creation_date.desc()).all()
     malware = db.session.query(Malware).order_by(Malware.name.asc()).all()
     companies = db.session.query(Company).order_by(Company.name.asc()).all()
     campaigns = db.session.query(Campaign).order_by(Campaign.name.asc()).all()
-
-    # get the remediation history for any message_ids in this alert
-    email_remediations = []
-    message_ids = [o.value for o in alert.get_observables_by_type(F_MESSAGE_ID)]
-    if message_ids:
-        for source in get_email_archive_sections():
-            email_remediations.extend(search_archive(source, message_ids,
-                                      excluded_emails=saq.CONFIG['remediation']['excluded_emails'].split(',')).values())
-
-    # get the remediation history for all RemediationTarget in this alert
-    remediation_history = []
-    query_keys = []
-    for remediation_target in alert.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
-        logging.info(f"MARKER: looking up {remediation_target}")
-        query_keys.append(remediation_target.remediation_key)
-
-    if len(query_keys) > 0:
-        remediation_history = saq.db.query(Remediation).filter(Remediation.key.in_(query_keys))\
-                                                       .order_by(Remediation.key, Remediation.insert_date.desc())\
-                                                       .all()
 
     # get list of domains that appear in the alert
     domains = find_all_url_domains(analysis)
     #domain_list = list(domains)
     domain_list = sorted(domains, key=lambda k: domains[k])
 
-    def _create_histogram_string(data):
-        """A convenience function that creates a graph in the form of a string.
+    domain_summary_str = create_histogram_string(domains)
 
-        :param dict data: A dictionary, where the values are integers representing a count of the keys.
-        :return: A graph in string form, pre-formatted for raw printing.
-        """
-        assert isinstance(data, dict)
-        for key in data.keys():
-            assert isinstance(data[key], int)
-        total_results = sum([value for value in data.values()])
-        txt = ""
-        # order keys for printing in order (purly ascetics)
-        ordered_keys = sorted(data, key=lambda k: data[k])
-        results = []
-        # longest_key used to calculate how many white spaces should be printed
-        # to make the graph columns line up with each other
-        longest_key = 0
-        for key in ordered_keys:
-            value = data[key]
-            longest_key = len(key) if len(key) > longest_key else longest_key
-            # IMPOSING LIMITATION: truncating keys to 95 chars, keeping longest key 5 chars longer
-            longest_key = 100 if longest_key > 100 else longest_key
-            percent = value / total_results * 100
-            results.append((key[:95], value, percent, u"\u25A0"*(int(percent/2))))
-        # two for loops are ugly, but allowed us to count the longest_key - 
-        # so we loop through again to print the text
-        for r in results:
-            txt += "%s%s: %5s - %5s%% %s\n" % (int(longest_key - len(r[0]))*' ', r[0] , r[1],
-                                               str(r[2])[:4], u"\u25A0"*(int(r[2]/2)))
-        return txt
-
-    domain_summary_str = _create_histogram_string(domains)
-
-    return render_template('analysis/index.html',
-                           alert=alert,
-                           alert_tags=alert_tags,
-                           observable=observable,
-                           analysis=analysis,
-                           ace_config=saq.CONFIG,
-                           User=User,
-                           db=db,
-                           current_time=datetime.datetime.now(),
-                           observable_types=VALID_OBSERVABLE_TYPES,
-                           display_tree=display_tree,
-                           prune_display_tree=session['prune'],
-                           open_events=open_events,
-                           malware=malware,
-                           companies=companies,
-                           campaigns=campaigns,
-                           all_users=all_users,
-                           disposition_css_mapping=DISPOSITION_CSS_MAPPING,
-                           domains=domains,
-                           domain_list=domain_list,
-                           domain_summary_str=domain_summary_str,
-                           email_remediations=email_remediations,
-                           remediation_history=remediation_history)
+    return render_template(
+        'analysis/index.html',
+        alert=alert,
+        alert_tags=alert_tags,
+        observable=observable,
+        analysis=analysis,
+        ace_config=saq.CONFIG,
+        User=User,
+        db=db,
+        current_time=datetime.datetime.now(),
+        observable_types=VALID_OBSERVABLE_TYPES,
+        display_tree=display_tree,
+        prune_display_tree=session['prune'],
+        open_events=open_events,
+        malware=malware,
+        companies=companies,
+        campaigns=campaigns,
+        all_users=all_users,
+        disposition_css_mapping=DISPOSITION_CSS_MAPPING,
+        domains=domains,
+        domain_list=domain_list,
+        domain_summary_str=domain_summary_str,
+    )
 
 @analysis.route('/file', methods=['GET'])
 @login_required
@@ -3535,7 +2876,7 @@ def upload_file():
         alert.details = {'user': current_user.username, 'comment': comment}
 
         # XXX database.Alert does not automatically create this
-        alert.uuid = str(uuid.uuid4())
+        alert.uuid = str(uuidlib.uuid4())
 
         # we use a temporary directory while we process the file
         alert.storage_dir = os.path.join(
@@ -3719,6 +3060,29 @@ def observable_action():
                 report_exception()
                 return "request failed - check logs", 500
 
+        elif action_id in [ACTION_SET_CBC_IOC_IGNORE, ACTION_SET_CBC_IOC_ACTIVE]:
+            from saq.carbon_black import CBC_API
+            from cbinterface.psc.intel import ignore_ioc, activate_ioc
+
+            if not CBC_API:
+                return "Unavailable", 400
+
+            try:
+                report_id, ioc_id = observable.value[len('cbc:'):].split('/', 1)
+                result = None
+                if action_id == ACTION_SET_CBC_IOC_IGNORE:
+                    result = ignore_ioc(CBC_API, report_id, ioc_id)
+                    if result:
+                        return "Ignored", 200
+                if action_id == ACTION_SET_CBC_IOC_ACTIVE:
+                    result = activate_ioc(CBC_API, report_id, ioc_id)
+                    if result:
+                        return "Activated", 200
+                return f"Unexpected Result: {result}", 400
+            except Exception as e:
+                logging.error(f"unable to execute cbc ioc update action: {e}")
+                return f"Error: {e}", 400
+
         elif action_id in [ ACTION_SET_SIP_INDICATOR_STATUS_ANALYZED, 
                             ACTION_SET_SIP_INDICATOR_STATUS_INFORMATIONAL,
                             ACTION_SET_SIP_INDICATOR_STATUS_NEW ]:
@@ -3748,28 +3112,39 @@ def observable_action():
             else:
                 return "File uploaded", 200
 
-        elif action_id == ACTION_URL_CRAWL:
+        elif action_id in [ACTION_URL_CRAWL, ACTION_FILE_RENDER]:
+            from saq.modules.url import CrawlphishAnalyzer
+            from saq.modules.render import RenderAnalyzer
+
             # make sure alert is locked before starting new analysis
             if alert.is_locked():
                 try:
-                    observable.add_directive(DIRECTIVE_CRAWL)
-                    logging.info("user {} added directive {} to {}".format(current_user, DIRECTIVE_CRAWL, observable))
+                    # crawlphish only works for URL observables, so we want to limit these actions to the URL observable action only
+                    if action_id == ACTION_URL_CRAWL:
+                        observable.add_directive(DIRECTIVE_CRAWL)
+                        observable.remove_analysis_exclusion(CrawlphishAnalyzer)
+                        logging.info(f"user {current_user} added directive {DIRECTIVE_CRAWL} to {observable}")
+
+                    # both URLs and files can be rendered, so we can do that in either case (ACTION_URL_CRAWL or ACTION_FILE_RENDER)
+
+                    observable.remove_analysis_exclusion(RenderAnalyzer)
+                    logging.info(f"user {current_user} removed analysis exclusion for RenderAnalyzer for {observable}")
 
                     alert.analysis_mode = ANALYSIS_MODE_CORRELATION
                     alert.sync()
 
                     add_workload(alert)
 
-                except:
-                    logging.error("unable to mark observable {} for crawl".format(observable))
+                except Exception as e:
+                    logging.error(f"unable to mark observable {observable} for crawl/render")
                     report_exception()
-                    return "Error: Crawl Request failed - Check logs", 500
+                    return "Error: Crawl/Render Request failed - Check logs", 500
 
                 else:
-                    return "URL crawl successfully requested.", 200
+                    return "URL crawl/render successfully requested.", 200
 
             else:
-                return "Alert wasn't locked for crawling, try again later", 500
+                return "Alert wasn't locked for crawl/render, try again later", 500
 
         return "invalid action_id", 500
 
@@ -3778,8 +3153,6 @@ def observable_action():
         return "Unable to load alert: {}".format(str(e)), 500
     finally:
         release_lock(alert.uuid, lock_uuid)
-
-    return "Action completed. ", 200
 
 @analysis.route('/mark_suspect', methods=['POST'])
 @login_required
@@ -3861,289 +3234,6 @@ def image():
     response.headers['Content-Type'] = _file.mime_type
     return response
 
-@analysis.route('/query_message_id', methods=['POST'])
-@login_required
-def query_message_ids():
-    # if we passed a JSON formatted list of alert_uuids then we compute the message_ids from that
-    if 'alert_uuids' in request.values:
-        alert_uuids = json.loads(request.values['alert_uuids'])
-        message_ids = []
-
-        with get_db_connection() as db:
-            c = db.cursor()
-            c.execute("""SELECT o.value FROM observables o JOIN observable_mapping om ON o.id = om.observable_id
-                         JOIN alerts a ON om.alert_id = a.id
-                         WHERE o.type = 'message_id' AND a.uuid IN ( {} )""".format(','.join(['%s' for _ in alert_uuids])),
-                     tuple(alert_uuids))
-
-            for row in c:
-                message_id = row[0].decode(errors='ignore')
-                message_ids.append(message_id)
-    else:
-        # otherwise we expect a JSON formatted list of message_ids
-        message_ids = json.loads(request.values['message_ids'])
-
-    import html
-    message_ids = [html.unescape(_) for _ in message_ids]
-
-    result = { }
-    for source in get_email_archive_sections():
-        result[source] = search_archive(source, message_ids, 
-                                        excluded_emails=saq.CONFIG['remediation']['excluded_emails'].split(','))
-
-        for archive_id in result[source].keys():
-            result[source][archive_id] = result[source][archive_id].json
-
-    response = make_response(json.dumps(result))
-    response.mimetype = 'application/json'
-    return response
-
-class EmailRemediationTarget(object):
-    def __init__(self, archive_id=None, message_id=None, recipient=None, company_id=None):
-        self.archive_id = archive_id
-        self.message_id = message_id
-        self.recipient = recipient
-        self.company_id = company_id
-        self.result_text = None
-        self.result_success = False
-
-    @property
-    def key(self):
-        return '{}:{}'.format(self.message_id, self.recipient)
-
-    @property
-    def json(self):
-        return { 
-            'archive_id': self.archive_id,
-            'message_id': self.message_id,
-            'recipient': self.recipient,
-            'company_id': self.company_id,
-            'result_text': self.result_text,
-            'result_success': self.result_success }
-
-#
-# XXX
-# remediation is a mess
-# it's gone through a bunch of iterations starting with some custom Lotus Notes nonsense
-# to what it is today
-#
-
-# the archive_id and config sections are encoded in the name of the form element
-# XXX probably a gross security flaw
-INPUT_CHECKBOX_REGEX = re.compile(r'^cb_archive_id_([0-9]+)_source_(.+)$')
-
-@analysis.route('/remediate_emails', methods=['POST'])
-@login_required
-def remediate_emails():
-
-    alert_uuids = []
-    if 'alert_uuids' in request.values:
-        alert_uuids = json.loads(request.values['alert_uuids'])
-
-    action = request.values['action']
-
-    # if this is set to True then we issue the request now and wait for the response
-    # if this is false then the remediation request is sent to the remediation system
-    do_it_now = request.values['do_it_now'] == 'true' # string representation of javascript boolean value true
-
-    assert action in [ 'restore', 'remove' ];
-
-    # generate our list of archive_ids from the list of checkboxes that were checked
-    archive_ids = { } # key = source (email_archive_blah) which corresponds to database_email_archive_blah
-    archive_company_id = { } # key = same as above, value = company_id for that email archive source
-    for key in request.values.keys():
-        if key.startswith('cb_archive_id_'):
-            m = INPUT_CHECKBOX_REGEX.match(key)
-            if m:
-                archive_id, source = m.groups()
-                section_key = f'database_{source}'
-                if section_key not in saq.CONFIG:
-                    logging.error(f"missing config section {section_key}")
-                    continue
-
-                if source not in archive_ids:
-                    archive_ids[source] = []
-                    # look up what company_id this email archive source is
-                    archive_company_id[source] = saq.CONFIG[section_key].getint('company_id', fallback=saq.COMPANY_ID)
-                    logging.debug(f"got company_id {archive_company_id[source]} for {source}")
-
-                archive_ids[source].append(m.group(1))
-
-    if not archive_ids:
-        logging.error("forgot to select one?")
-        return "missing selection", 500
-
-    targets = { } # key = archive_id
-
-    for db_name in archive_ids.keys():
-        with get_db_connection(db_name) as db:
-            c = db.cursor()
-            c.execute("""SELECT archive_id, field, value FROM archive_search 
-                         WHERE ( field = 'message_id' OR field = 'env_to' OR field = 'body_to' ) 
-                         AND archive_id IN ( {} )""".format(','.join(['%s' for _ in archive_ids[db_name]])), 
-                         tuple(archive_ids[db_name]))
-
-            for row in c:
-                archive_id, field, value = row
-                if archive_id not in targets:
-                    targets[archive_id] = EmailRemediationTarget(archive_id=archive_id, company_id=archive_company_id[db_name])
-
-                if field == 'message_id':
-                    targets[archive_id].message_id = value.decode(errors='ignore')
-
-                if field == 'env_to':
-                    targets[archive_id].recipient = value.decode(errors='ignore')
-
-                # use body_to field as recipient if there is no env_to field
-                if field == 'body_to' and targets[archive_id].recipient is None:
-                    targets[archive_id].recipient = value.decode(errors='ignore')
-
-    # targets acquired -- perform the remediation or restoration
-    params = [ ] # of tuples of ( message-id, email_address )
-    for target in targets.values():
-        params.append((target.message_id, target.recipient))
-
-    results = []
-
-    try:
-        if action == 'remove':
-            if not do_it_now:
-                for target in targets.values():
-                    try:
-
-                        res = request_remediation(REMEDIATION_TYPE_EMAIL,
-                                                    f'{target.message_id}:{target.recipient}',
-                                                  current_user.id,
-                                                  target.company_id)
-
-                        target.result_text = f"request remediation (id {res.id})"
-                        target.result_success = True
-
-                    except Exception as e:
-                        target.result_text = str(e)
-                        target.result_success = False
-            else:
-                res = execute_remediation(REMEDIATION_TYPE_EMAIL,
-                                          f'{target.message_id}:{target.recipient}',
-                                          current_user.id,
-                                          target.company_id)
-
-                target.result_text = f"remediation {res.result}"
-                target.result_success = True
-
-        elif action == 'restore':
-            if not do_it_now:
-                for target in targets.values():
-                    try:
-                        res = request_restoration(REMEDIATION_TYPE_EMAIL,
-                                                  f'{target.message_id}:{target.recipient}',
-                                                  current_user.id,
-                                                  target.company_id )
-
-                        target.result_text = f"request remediation (id {res.id})"
-                        target.result_success = True
-
-                    except Exception as e:
-                        target.result_text = str(e)
-                        target.result_success = False
-            else:
-                res = execute_restoration(REMEDIATION_TYPE_EMAIL,
-                                          f'{target.message_id}:{target.recipient}',
-                                          current_user.id,
-                                          target.company_id)
-
-                target.result_text = f"remediation {res.result}"
-                target.result_success = True
-
-    except Exception as e:
-        logging.error("unable to perform email remediation action {}: {}".format(action, e))
-        report_exception()
-        for target in targets.values():
-            target.result_text = str(e)
-            target.result_success = False
-
-    if do_it_now:
-        for result in results:
-            message_id, recipient, result_code, result_text = result
-            for target in targets.values():
-                if target.message_id == message_id and target.recipient == recipient:
-                    target.result_text = '({}) {}'.format(result_code, result_text)
-                    target.result_success = str(result_code) == '200'
-
-    # return JSON formatted results
-    for key in targets.keys():
-        targets[key] = targets[key].json
-    
-    from saq.analysis import _JSONEncoder
-    response = make_response(json.dumps(targets, cls=_JSONEncoder))
-    response.mimetype = 'application/json'
-    return response
-
-@analysis.route('/query_remediation_targets', methods=['POST'])
-@login_required
-def query_remediation_targets():
-    """Obtains a list of all the remediation targets for the given list of alert uuids."""
-    result = {} # key = remediation_key, value = dict (see below)
-    storage_dirs = saq.db.query(Alert.storage_dir).filter(Alert.uuid.in_(json.loads(request.values['alert_uuids']))).all()
-    saq.db.close()
-
-    for (storage_dir,) in storage_dirs:
-        root = saq.analysis.RootAnalysis(storage_dir=storage_dir)
-        try:
-            root.load()
-            for observable in root.find_observables(lambda o: isinstance(o, saq.remediation.RemediationTarget)):
-                result[observable.remediation_key.lower()] = {'type': observable.type,
-                                                              'remediation_type': observable.remediation_type,
-                                                              'value': observable.value,
-                                                              'remediation_key': observable.remediation_key,
-                                                              'history': [],
-                                                              'company_id': root.company_id}
-        except Exception as e:
-            logging.error(f"unable to load remediation target {root}: {e}")
-
-    for history in saq.db.query(Remediation).filter(Remediation.key.in_([key for key, _ in result.items()]))\
-                                        .order_by(Remediation.insert_date.desc()):
-        result[history.key.lower()]['history'].append(history.json)
-
-    from saq.analysis import _JSONEncoder
-    response = make_response(json.dumps(result, cls=_JSONEncoder))
-    response.mimetype = 'application/json'
-    return response
-
-@analysis.route('/remediate_targets', methods=['POST'])
-@login_required
-def remediate_targets():
-    json_request = json.loads(request.values['json_request'])
-
-    action = json_request['action']
-    targets = json_request['targets']
-    blocking = json_request['blocking']
-
-    result = []
-    for target in targets:
-        remediation_type = target['remediation_type']
-        remediation_key_b64 = target['remediation_key_b64']
-        remediation_key = base64.b64decode(remediation_key_b64).decode('utf8', errors='replace')
-        observable_type = target['observable_type']
-        observable_value_b64 = target['observable_value_b64']
-        observable_value = base64.b64decode(observable_value_b64).decode('utf8', errors='replace')
-        company_id = target['company_id']
-
-        logging.info(f"got request from {current_user.username} to remediate action {action} type {observable_type} value {observable_value} key {remediation_key} for company_id={company_id}")
-        
-        if blocking:
-            remediation_result = saq.remediation.execute(action, remediation_type, remediation_key, current_user.id, company_id)
-        else:
-            remediation_result = saq.remediation.request(action, remediation_type, remediation_key, current_user.id, company_id)
-
-        if remediation_result is not None:
-            result.append(remediation_result.json)
-
-    from saq.analysis import _JSONEncoder
-    response = make_response(json.dumps(result, cls=_JSONEncoder))
-    response.mimetype = 'application/json'
-    return response
-
 @analysis.route('/html_details', methods=['GET'])
 @login_required
 def html_details():
@@ -4161,3 +3251,98 @@ def html_details():
     response = make_response(alert.details[request.args['field']])
     response.mimtype = 'text/html'
     return response
+
+@analysis.route('/o365_file_download', methods=['GET'])
+@login_required
+def o365_file_download():
+    path = request.args['path'] if request.method == 'GET' else request.form['path']
+    c = saq.CONFIG['analysis_module_o365_file_analyzer']
+    s = requests.Session()
+    s.proxies = proxies()
+    s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'], c.get('client_credential'))
+    r = s.get(f"{c['base_uri']}{path}:/content", stream=True)
+    if r.status_code != requests.codes.ok:
+        return r.text, r.status_code
+    fname = path.split('/')[-1]
+    headers = {
+        "Content-Disposition": f'attachment; filename="{fname}"'
+    }
+    return Response(stream_with_context(r.iter_content(10*1024*1024)), headers=headers, content_type=r.headers['content-type'])
+
+def get_remediation_targets(alert_uuids):
+    # get all remediatable observables from the given alert uuids
+    query = db.session.query(Observable)
+    query = query.join(ObservableMapping, Observable.id == ObservableMapping.observable_id)
+    query = query.join(Alert, ObservableMapping.alert_id == Alert.id)
+    query = query.filter(Alert.uuid.in_(alert_uuids))
+    query = query.group_by(Observable.id)
+    observables = query.all()
+
+    # get remediation targets for each observable
+    targets = {}
+    for o in observables:
+        observable = create_observable(o.type, o.display_value)
+        if observable is None:
+            logging.info(f"invalid value {o.display_value} for observable type {o.type}")
+            continue
+        for target in observable.remediation_targets:
+            targets[target.id] = target
+
+    # return sorted list of targets
+    targets = list(targets.values())
+    targets.sort(key=lambda x: f"{x.type}|{x.key}")
+    return targets
+
+@analysis.route('/remediation_targets', methods=['POST', 'PUT', 'DELETE'])
+@login_required
+def remediation_targets():
+    # get request body
+    body = request.get_json()
+
+    # return rendered target selection table
+    if request.method == 'POST':
+        return render_template('analysis/remediation_targets.html', targets=get_remediation_targets(body['alert_uuids']))
+
+    # get action and log
+    action = 'remove' if request.method == 'DELETE' else 'restore'
+    logging.info(f"{action}ing {len(body['targets'])} targets")
+
+    # load targets
+    targets = [RemediationTarget(id=target) for target in body['targets']]
+
+    # queue targets for removal/restoration
+    for target in targets:
+        logging.info(f"target has {len(target.history)} historical remediations")
+        target.queue(action, current_user.id)
+
+    # wait until all remediations are complete or we run out of time
+    complete = False
+    quit_time = time.time() + saq.CONFIG['service_remediation'].getint('request_wait_time', fallback=10)
+    while not complete and time.time() < quit_time:
+        complete = True
+        for target in targets:
+            target.refresh()
+            logging.info(f"target remediation is {target.last_remediation}")
+            if target.processing:
+                complete = False
+                break
+        time.sleep(1)
+
+    # return rendered remediation results table
+    return render_template('analysis/remediation_results.html', targets=targets)
+
+@analysis.route('/<uuid>/event_name_candidate', methods=['GET'])
+@login_required
+def get_analysis_event_name_candidate(uuid):
+    from saq.util import storage_dir_from_uuid, workload_storage_dir
+
+    storage_dir = storage_dir_from_uuid(uuid)
+    if saq.CONFIG['service_engine']['work_dir'] and not os.path.isdir(storage_dir):
+        storage_dir = workload_storage_dir(uuid)
+
+    if not os.path.exists(storage_dir):
+        return ''
+
+    root = saq.analysis.RootAnalysis(storage_dir=storage_dir)
+    root.load()
+    return root.event_name_candidate

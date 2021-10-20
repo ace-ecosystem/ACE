@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block control_panel %}
+
+{% endblock %}
+
+{% block page_content %}
+    <div class="container-fluid">
+        <div class="row voffset10" style="margin-top:15px;">
+            <div class="col-md-11">
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="panel panel-default">
+                            <div class="panel-heading">
+                                <h4 class="panel-title">
+                                    <b>{{event.name}}</b>
+                                    <button class="btn btn-default btn-xs" type="button" id="copy_link_action_{{ unique_reference }}" title="Copy Link to Clipboard">
+                                        <span class="glyphicon glyphicon-link"></span>
+                                    </button>
+                                    <button class="btn btn-default btn-xs" type="button" onclick="edit_event('{{event.id}}')" title="Edit Event">
+                                        <span class="glyphicon glyphicon-pencil"></span>
+                                    </button>
+                                    <button class="btn btn-default btn-xs" type="button" onclick="create_event_in_tip('{{ event.id }}')" id="create_event_in_tip" title="Create Event in TIP">
+                                        <span class="glyphicon glyphicon-export"></span>
+                                    </button>
+                                    <script type="text/javascript">
+                                        $('#copy_link_action_{{unique_reference}}').on('click', function () {
+                                            // see app/static/js/ace.js
+                                            copy_to_clipboard("{{ event.name }}");
+                                            // let the user know it was copied by flashing it a bit
+                                            $('#copy_action_{{unique_reference}}').effect("pulsate", {times: 3}, 500);
+                                        });
+                                    </script>
+                                </h4>
+                            </div>
+                            <div id="collapseone" class="panel-collapse collapse in">
+                                <!-- main content area for the details of the event-based object -->
+                                <div class="panel-body">
+                                    <div class="panel panel-default">
+                                        {% include "events/event_summary.html" %}
+                                    </div>
+
+                                    <div class="panel panel-default">
+                                        {% include "events/alert_summary.html" %}
+                                    </div>
+
+                                    {% if emails %}
+                                        <div class="panel panel-default">
+                                            {% include "events/phish_email_information.html" %}
+                                        </div>
+
+                                        <div class="panel panel-default">
+                                            {% include "events/phish_headers.html" %}
+                                        </div>
+
+                                        <div class="panel panel-default">
+                                            {% include "events/phish_body.html" %}
+                                        </div>
+                                    {% endif %}
+
+                                    {% if screenshots %}
+                                        <div class="panel panel-default">
+                                            {% include "events/screenshots.html" %}
+                                        </div>
+                                    {% endif %}
+
+                                    {% if user_analysis %}
+                                        <div class="panel panel-default">
+                                            {% include "events/user_analysis.html" %}
+                                        </div>
+                                    {% endif %}
+
+                                    {% if url_histogram %}
+                                        <div class="panel panel-default">
+                                            {% include "events/url_domain_summary.html" %}
+                                        </div>
+                                    {% endif %}
+
+                                    {% if urls %}
+                                        <div class="panel panel-default">
+                                            {% include "events/url_summary.html" %}
+                                        </div>
+                                    {% endif %}
+
+                                    {% if iocs %}
+                                        <div class="panel panel-default">
+                                            {% include "events/iocs.html" %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/events.js') }}"></script>
+{% endblock %}

@@ -11,8 +11,9 @@ import csv
 from datetime import datetime
 
 import saq
+import saq.ldap
 from saq.analysis import Analysis, Observable
-from saq.modules import AnalysisModule, LDAPAnalysisModule, CarbonBlackAnalysisModule
+from saq.modules import AnalysisModule, CarbonBlackAnalysisModule
 from saq.constants import *
 
 import iptools
@@ -271,7 +272,7 @@ class NetBIOSAnalyzer(AnalysisModule):
                 fp.seek(0)
 
                 for line in fp:
-                    if re.match(r'^137/udp\s+open\s+netbios-ns$', line.decode(saq.DEFAULT_ENCODING)):
+                    if re.match(r'^137/udp\s{1,10}open\s{1,10}netbios-ns$', line.decode(saq.DEFAULT_ENCODING)):
                         logging.debug("{} responded to a netbios query".format(asset))
                         analysis.netbios_open = True
                         continue
@@ -305,6 +306,9 @@ class NetBIOSAnalyzer(AnalysisModule):
 
             if analysis.netbios_user is not None and analysis.netbios_user != '<unknown>':
                 analysis.add_observable(F_USER, analysis.netbios_user)
+
+            if analysis.netbios_mac is not None and analysis.netbios_mac != '<unknown>':
+                analysis.add_observable(F_MAC_ADDRESS, analysis.netbios_mac)
 
         return True
 
@@ -550,7 +554,7 @@ class ActiveDirectoryAnalysis(Analysis):
 
         return result
 
-class ActiveDirectoryAnalyzer(LDAPAnalysisModule):
+class ActiveDirectoryAnalyzer(AnalysisModule):
     
     @property
     def generated_analysis_type(self):
@@ -561,8 +565,7 @@ class ActiveDirectoryAnalyzer(LDAPAnalysisModule):
         return F_HOSTNAME
 
     def execute_analysis(self, hostname):
-
-        details = self.ldap_query_hostname(hostname.value)
+        details = saq.ldap.lookup_hostname(hostname.value)
         if details is None:
             logging.debug("no result received from ldap query for {}".format(hostname.value))
             return False
@@ -581,9 +584,6 @@ class ActiveDirectoryAnalyzer(LDAPAnalysisModule):
                 analysis.add_observable(F_USER, user)
 
         return True
-
-    def ldap_query_hostname(self, hostname):
-        return self.ldap_query("cn={}".format(hostname))
 
 class CarbonBlackAssetIdentAnalysis(Analysis):
     """What hosts have this IP address according to Carbon Black?"""
@@ -658,18 +658,6 @@ class CarbonBlackAssetIdentAnalyzer(CarbonBlackAnalysisModule):
             hostname = analysis.add_observable(F_HOSTNAME, hostname)
 
         return True
-
-# DEPRECATED
-class ProxyAnalysis(Analysis):
-    @property
-    def jinja_template_path(self):
-        return "analysis/bluecoat_proxy_requests.html"
-
-    def generate_summary(self):
-        if isinstance(self.details, list) and len(self.details) > 0:
-            return "Proxy Requests By Source ({0} events)".format(len(self.details))
-
-        return None
 
 _ASSET_HOSTNAME = 'hostname'
 _ASSET_DOMAIN = 'domain'

@@ -1,0 +1,24 @@
+{
+    "Attribute": {
+        "id": "1",
+        "event_id": "1",
+        "object_id": "0",
+        "object_relation": null,
+        "category": "Internal reference",
+        "type": "link",
+        "value1": "http://domain.com",
+        "value2": "",
+        "to_ids": false,
+        "uuid": "753fdc98-7f5a-4199-acd4-c171461e1de7",
+        "timestamp": "1599657962",
+        "distribution": "5",
+        "sharing_group_id": "0",
+        "comment": "ACE Event",
+        "deleted": false,
+        "disable_correlation": true,
+        "first_seen": null,
+        "last_seen": null,
+        "value": "http://domain.com"
+    },
+    "AttributeTag": []
+}

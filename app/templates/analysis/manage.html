@@ -9,9 +9,7 @@
             <button id="btn-take-ownership" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-lock"></span> Take Ownership</button>
             <button id="btn-assign-ownership-dialog" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#assign_ownership_modal" {%if not ace_config['gui'].getboolean('ownership') %}tabindex="-1" disabled{% endif %} ><span class="glyphicon glyphicon-user"></span> Assign Ownership</button>
             <button id="btn-show-add-tag" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#tag_modal" uuid=""><span class="glyphicon glyphicon-tags"></span> Add Tag(s)</button>
-            <!--<button id="btn-remediate-alerts" type="button" class="btn btn-default btn-sm" {%if not ace_config['gui'].getboolean('email_remediation') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-envelope"></span> Email Remediation</button>-->
-            <button id="btn-mass-remediation" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-remove"></span> Remediation</button>
-            <!--<button id="btn-unremediate-alerts" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-ok"></span> Un-Remediate Email(s)</button>-->
+            <button type="button" class="btn btn-default btn-sm" onclick="show_remediation_targets(get_all_checked_alerts())"><span class="glyphicon glyphicon-remove"></span> Remediation</button>
             <button id="btn-add-to-event" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#event_modal" {%if not ace_config['gui'].getboolean('event_management') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add To Event</button>
         </div>
     </div>
@@ -21,7 +19,7 @@
     <div class="row">
         <div class="col-md-12">
             Filters | 
-            <span class="label label-special" style="cursor:pointer" data-toggle="modal" data-target="#filter_modal">Add</span>
+            <span class="label label-special" style="cursor:pointer" data-toggle="modal" data-target="#filter_modal">Edit</span>
             <span class="label label-special" style="cursor:pointer" onmousedown='reset_filters()'>Reset</span> | 
             {% for name, values in session['filters'].items() %}
                 {% if values|length > 0 %}
@@ -54,14 +52,17 @@
                 <tbody>
                     {% for alert in alerts %}
                     {# we can use this ID to modify an alert row #}
-                    <tr id="alert_row_{{alert.uuid}}" >
+                    <tr id="alert_row_{{alert.uuid}}"
+                        {% if alert.is_over_sla %} class="danger"
+                        {% elif alert.is_approaching_sla %} class="warning"
+                        {% endif %}>
                         <td>
                             <button onclick="load_alert_observables('{{alert.uuid}}'); toggle_chevron('alert_row_dropdown_{{alert.uuid}}')" type="button" class="btn btn-default btn-xs"><span id="alert_row_dropdown_{{alert.uuid}}" class="glyphicon glyphicon-chevron-down"></span></button>
                         </td>
                         <td>
                             <label><input type="checkbox" name="detail_{{alert.uuid}}" {% if alert.uuid in session['checked'] %}checked{% endif %}></input></label>
                         </td>
-                        <td style="white-space: nowrap;" title="{{alert.insert_date}}">{{alert.display_insert_date}}</td>
+                        <td style="white-space: nowrap;" title="{{alert.insert_date}}" id="alert_date_{{ alert.uuid }}">{{alert.display_insert_date}}</td>
                         <td>
                             <img src="{{url_for('static', filename='images/alert_icons/{}.png'.format(alert.icon))}}">
                             <a href="{{ url_for('analysis.index', direct=alert.uuid) }}">({{alert.detection_count}}) {{alert.description}}</a>
@@ -80,10 +81,12 @@
                                     <span class="label {{tag.css_class}}" style="cursor:pointer" onmousedown="add_filter('Tag', ['{{tag.name}}'])">{{tag.name}}</span>
                                 {% endfor %}
                             {% endif %}
-                            {% if alert_remediations[alert.uuid]|length != 0 %}
-                                {% for remediation in alert_remediations[alert.uuid] %}
-                                <span class="label {{remediation['css_class']}}" style="cursor:pointer" >{{remediation['result']}}</span>
-                                {% endfor %}
+                            {% if alert.remediation_status == 'success' %}
+                                <span class="label label-success" style="cursor:pointer" >remediated</span>
+                            {% elif alert.remediation_status == 'failed' %}
+                                <span class="label label-danger" style="cursor:pointer" >remediation failed</span>
+                            {% elif alert.remediation_status == 'processing' %}
+                                <span class="label label-warning" style="cursor:pointer" >remediating</span>
                             {% endif %}
                             {% if comments[alert.uuid]|length != 0 %}
                                 {% for comment in comments[alert.uuid] %}
@@ -102,8 +105,11 @@
                             <span style="cursor:pointer" onmousedown='add_filter("Disposition", ["{{alert.disposition}}"])'>{{alert.disposition}}</span>
                         </td>
                         {% endif %}
-                        <td style="white-space: nowrap;">
-                            {{alert.status}}
+                        <td id="alert_status_{{ alert.uuid }}" style="white-space: nowrap;">
+                            {% if alert.is_over_sla %}Danger: {{alert.business_time_str}}
+                            {% elif alert.is_approaching_sla %}Warning: {{alert.business_time_str}}
+                            {% else %}{{alert.status}}
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -127,68 +133,22 @@
 <!-- filter dialog -->
 <div class="modal fade" id="filter_modal" tabindex="-1" role="dialog" aria-labelledby="filter_modal_label" aria-hidden="true">
     <form onsubmit="return apply_filter();">
-    <input type="hidden" id="nav_move" name="nav_move" value=""/>
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
-                <h4 class="modal-title" id="filter_modal_label">Add Filter</h4>
+                <h4 class="modal-title" id="filter_modal_label">Edit Filters</h4>
             </div>
-            <div class="modal-body">
-                <div class="row">
-                    <div class="col-xs-12">
-                        <div class="row">
-                            <div class="col-xs-4">
-                                <select class="form-control" id="filter_name" onChange="on_filter_changed(this)">
-                                {% for name in filters %}
-                                    <option value="{{name}}">{{name}}</option>
-                                {% endfor %}
-                                </select>
-                            </div>
-                            {% for name in filters %}
-                            <div class="col-xs-8" style="display:{% if loop.index == 1 %}block{% else %}none{% endif %}" name="filter_value_container" id="filter_value_container_{{name}}">
-                                {% if filters[name].__class__.__name__ == 'TextFilter' %}
-                                    <input type="text" class="form-control" name="filter_value_{{name}}" value=""/>
-                                {% elif filters[name].__class__.__name__ == 'Filter' %}
-                                    <input type="text" class="form-control" name="filter_value_{{name}}" value=""/>
-                                {% elif filters[name].__class__.__name__ == 'SelectFilter' or filters[name].__class__.__name__ == 'MultiSelectFilter' %}
-                                    <select class="form-control" name="filter_value_{{name}}" {% if filters[name].__class__.__name__ == 'MultiSelectFilter' %}size="20" multiple{% endif %}>
-                                    {% for option in filters[name].options %}
-                                        <option value="{{option}}" {% if loop.index == 1 %}SELECTED{% endif %}>{{option}}</option>
-                                    {% endfor %}
-                                    </select>
-                                {% elif filters[name].__class__.__name__ == 'DateRangeFilter' %}
-                                    <input type="text" class="form-control daterange" name="filter_value_{{name}}" value=""/>
-                                {% elif filters[name].__class__.__name__ == 'TypeValueFilter' %}
-                                    <div class="row">
-                                        <div class="col-xs-6">
-                                            <select class="form-control" name="filter_value_{{name}}">
-                                            {% for option in filters[name].options %}
-                                                <option value="{{option}}" {% if loop.index == 1 %}SELECTED{% endif %}>{{option}}</option>
-                                            {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="col-xs-6">
-                                            <input type="text" class="form-control" name="filter_value_{{name}}" value=""/>
-                                        </div>
-                                    </div>
-                                {% elif filters[name].__class__.__name__ == 'AutoTextFilter' %}
-                                    <input type="text" class="form-control" name="filter_value_{{name}}" oninput="toggle_options(this, 'filter_options_{{name}}')" autocomplete="off" value=""/>
-                                    <datalist id="filter_options_{{name}}">
-                                        {% for option in filters[name].options %}
-                                            <option value="{{option}}">
-                                        {% endfor %}
-                                    </datalist>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
+            <div class="modal-body" id="filter_modal_body">
+                {% with filters=filters, session_filters=session['filters'] %}
+                    {% include "analysis/alert_filter_input.html" %}
+                {% endwith %}
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-default" data-dismiss="modal">Nevermind</button>
-                <button type="submit" class="btn btn-primary" onmousedown='apply_filter()'>Apply</button>
+                <button type="button" class="btn btn-default" onmousedown='new_filter_option()'><span class="glyphicon glyphicon-plus-sign"></span> Add</button>
+                <button type="button" class="btn btn-default" onmousedown='removeElements("filter_row_")'><span class="glyphicon glyphicon-remove"></span> Clear</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Apply</button>
             </div>
         </div>
     </div>
