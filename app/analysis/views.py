@@ -3259,7 +3259,7 @@ def o365_file_download():
     c = saq.CONFIG['analysis_module_o365_file_analyzer']
     s = requests.Session()
     s.proxies = proxies()
-    s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'])
+    s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'], c.get('client_credential'))
     r = s.get(f"{c['base_uri']}{path}:/content", stream=True)
     if r.status_code != requests.codes.ok:
         return r.text, r.status_code
@@ -3282,12 +3282,15 @@ def get_remediation_targets(alert_uuids):
     targets = {}
     for o in observables:
         observable = create_observable(o.type, o.display_value)
+        if observable is None:
+            logging.info(f"invalid value {o.display_value} for observable type {o.type}")
+            continue
         for target in observable.remediation_targets:
             targets[target.id] = target
 
     # return sorted list of targets
     targets = list(targets.values())
-    targets.sort(key=lambda x: f"{x.type}|{x.value}")
+    targets.sort(key=lambda x: f"{x.type}|{x.key}")
     return targets
 
 @analysis.route('/remediation_targets', methods=['POST', 'PUT', 'DELETE'])
@@ -3300,25 +3303,33 @@ def remediation_targets():
     if request.method == 'POST':
         return render_template('analysis/remediation_targets.html', targets=get_remediation_targets(body['alert_uuids']))
 
-    # queue targets for removal/restoration
+    # get action and log
     action = 'remove' if request.method == 'DELETE' else 'restore'
-    logging.error(body['targets'])
-    for target in body['targets']:
-        RemediationTarget(id=target).queue(action, current_user.id)
+    logging.info(f"{action}ing {len(body['targets'])} targets")
+
+    # load targets
+    targets = [RemediationTarget(id=target) for target in body['targets']]
+
+    # queue targets for removal/restoration
+    for target in targets:
+        logging.info(f"target has {len(target.history)} historical remediations")
+        target.queue(action, current_user.id)
 
     # wait until all remediations are complete or we run out of time
     complete = False
     quit_time = time.time() + saq.CONFIG['service_remediation'].getint('request_wait_time', fallback=10)
     while not complete and time.time() < quit_time:
         complete = True
-        for target in body['targets']:
-            if RemediationTarget(id=target).processing:
+        for target in targets:
+            target.refresh()
+            logging.info(f"target remediation is {target.last_remediation}")
+            if target.processing:
                 complete = False
                 break
         time.sleep(1)
 
     # return rendered remediation results table
-    return render_template('analysis/remediation_results.html', targets=[RemediationTarget(id=target) for target in body['targets']])
+    return render_template('analysis/remediation_results.html', targets=targets)
 
 @analysis.route('/<uuid>/event_name_candidate', methods=['GET'])
 @login_required

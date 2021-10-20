@@ -410,6 +410,93 @@ clear_persistence_parser.add_argument('--dry-run', action='store_true', default=
 clear_persistence_parser.set_defaults(func=clear_persistence)
 
 # ============================================================================
+# microsoft api utilities
+#
+
+msapi_parser = subparsers.add_parser('msapi',
+    help="Interface with Microsoft API integrations.")
+msapi_sp = msapi_parser.add_subparsers(dest='msapi_cmd')
+
+graph_parser =  msapi_sp.add_parser('graph',
+    help="MS Graph API utilites")
+graph_sp = graph_parser.add_subparsers(dest='graph_cmd')
+
+def list_graph_resources(args):
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+    grc.load_resources()
+    for r in grc.resources:
+        print(r)
+
+    sys.exit(0)
+
+validate_resource_parser = graph_sp.add_parser('list-resources',
+    help="Validate graph resource configurations.")
+
+validate_resource_parser.set_defaults(func=list_graph_resources)
+
+def print_collection_accounts(args):
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+    grc.load_collection_accounts()
+    for account, value in grc.collection_accounts.items():
+        print(f"\t{account}: {value}")
+
+    sys.exit(0)
+
+print_collection_account_parser = graph_sp.add_parser('print-collection-accounts',
+    help="print configured collection accounts")
+print_collection_account_parser.set_defaults(func=print_collection_accounts)
+
+def get_resource(args):
+    from saq.graph_api import GraphAPI
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+
+    grc.load_resources()
+    if args.resource not in [r.name for r in grc.resources]:
+        logging.error(f"no configured resource by the name {args.resource}")
+        sys.exit(1)
+
+    resource = [r for r in grc.resources if r.name == args.resource][0]
+    logging.info(f"loaded the {resource.name} resource")
+
+    if not resource.ready:
+        print("Supply required arguments:")
+        for arg in resource.args['required']:
+            value = input(f"Set {arg}: ")
+            resource.set_argument(arg, value)
+        print("Change optional arugments, if you want:")
+        for arg in resource.args['optional']:
+            default = resource.args['optional'][arg]
+            value = input(f"Set {arg} [{default}]: ") or default
+            resource.set_argument(arg, value)
+
+    if not grc.build_graph_api_client_map():
+        logging.error("failed to get a graph api client.")
+        sys.exit(1)
+
+    graph_api_client = grc.graph_api_clients[resource.graph_account_name]
+    graph_api_client.initialize()
+
+    results = grc.execute_resource(graph_api_client, resource)
+    # NOTE, not handeling pagination here
+    if results:
+        print(json.dumps(results, indent=2, sort_keys=True))
+
+    sys.exit(0)
+
+graph_resource_parser = graph_sp.add_parser('get',
+    help="get a configured resource")
+graph_resource_parser.add_argument('resource', action='store',
+    help="the name of a configured resource")
+graph_resource_parser.set_defaults(func=get_resource)
+
+
+# ============================================================================
 # configuration settings
 #
 
@@ -1109,7 +1196,8 @@ correlate_parser.set_defaults(func=correlate)
 remediation_parser = subparsers.add_parser('remediation')
 remediation_sp = remediation_parser.add_subparsers(dest='remediation_cmd')
 
-def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None):
+def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None, print_json=False):
+    import json
     from saq.database import Remediation, User
     from sqlalchemy import or_
 
@@ -1134,18 +1222,31 @@ def print_remediation_status(id=None, type=None, status=None, key=None, user_id=
         query = query.filter(or_(User.username.ilike(f'%{user}%'), 
                                  User.display_name.ilike(f'%{user}%')))
 
-    for r in query.order_by(Remediation.insert_date.desc()):
-        print(f"insert_date: {r.insert_date} id:{r.id} type:{r.type} action:{r.action} "
-              f'user_id: {r.user_id} key: "{r.key}" result: "{r.result}" comment: "{r.comment}" '
-              f'successful: {r.successful} company_id: {r.company_id} lock: {r.lock} lock_time: {r.lock_time} '
-              f'status: {r.status}')
+    remediation_data = query.order_by(Remediation.insert_date.desc())
+    if not remediation_data.first():
+        print("No remediation data found.")
+        return None
+
+    if print_json:
+        print(json.dumps([r.json for r in remediation_data], default=str))
+        return True
+
+    _keys = remediation_data[0].json.keys()
+    for r in remediation_data:
+        _r_text = " -> "
+        _r_data = r.json
+        for k in _keys:
+            _r_text += f"{k}:{_r_data[k]} | "
+        print(_r_text)
 
 def remediation_status(args):
-    print_remediation_status(status=args.status,
+    print_remediation_status(id=args.id,
+                             status=args.status,
                              type=args.type,
                              key=args.key,
                              user=args.user,
-                             user_id=args.user_id)
+                             user_id=args.user_id,
+                             print_json=args.json)
     sys.exit(0)
 
 remediation_status_parser = remediation_sp.add_parser('status',
@@ -1160,52 +1261,77 @@ remediation_status_parser.add_argument('-u', '--user',
     help="Return results matching the given username or display name.")
 remediation_status_parser.add_argument('--user-id', type=int,
     help="Return results matching the given user_id.")
+remediation_status_parser.add_argument('-i', '--id', type=int,
+    help="Return results matching the given remediation id.")
+remediation_status_parser.add_argument('--json', default=False, action='store_true',
+    help="Return results as json.")
 remediation_status_parser.set_defaults(func=remediation_status)
 
 def execute_remediation(args):
     import saq
-    import saq.remediation
-    import saq.remediation.constants
+    from saq.remediation import RemediationTarget, load_all_remediators, remediate_target
 
-    target_function = saq.remediation.execute
-    if args.background:
-        target_function = saq.remediation.request
+    # load all remediators
+    remediators = load_all_remediators()
 
-    if args.remediation_action == 'remove':
-        action = saq.remediation.constants.REMEDIATION_ACTION_REMOVE
-    elif args.remediation_action == 'restore':
-        action = saq.remediation.constants.REMEDIATION_ACTION_RESTORE
-    else:
-        raise RuntimeError("invalid args.remediation_action ?? programming error dude")
-
+    # if no targets were passed, make space
     if not hasattr(args, 'targets'):
         args.targets = []
 
-    # are we reading a list of targets from a file?
+    # targets from a file
     if args.from_file:
         with open(args.from_file, 'r') as fp:
             for line in fp:
                 line = line.strip()
                 args.targets.append(line)
 
-    # are we reading a list of targets from stdin?
+    # targets from stdin
     if args.from_stdin:
         for line in sys.stdin:
             line = line.strip()
             args.targets.append(line)
 
-    for target in args.targets:
-        result = target_function(action,
-                                 args.type,
-                                 target,
-                                 saq.AUTOMATION_USER_ID,
-                                 saq.COMPANY_ID,
-                                 args.comment)
+    # load all targets
+    targets = [
+                 RemediationTarget(args.type,
+                                   _t,
+                                   action=args.remediation_action,
+                                   comment=args.comment)
+                 for _t in args.targets
+                ]
+
+    results = {}
+    for target in targets:
+        if len(target.history) > 0:
+            print(f" + Target '{target.key}' has {len(target.history)} historical remediations.")
 
         if args.background:
-            print(f"requested remediation (id {result.id})")
+            # Queue for the Remediation Service
+            target.queue()
+            continue
+
+        # record it, but do it now
+        remediate_target(remediators, target)
+
+
+    if args.wait:
+        request_wait_time = saq.CONFIG['service_remediation'].getint('request_wait_time', fallback=10)
+        quit_time = time.time() + request_wait_time
+        print(f" + waiting up to {request_wait_time} seconds for {len(targets)} targets to reach a completed state.")
+
+        for target in targets:
+            # refresh the remediation history
+            target.refresh()
+            while target.processing and time.time() < quit_time:
+                time.sleep(1)
+                target.refresh()
+
+    for target in targets:
+        target.refresh()
+        if args.background:
+            print(f" + Requested {target.last_remediation}")
         else:
-            print_remediation_status(id=result.id)
+            print(f" + Executed {target.last_remediation}")
 
     sys.exit(0)
 
@@ -1219,7 +1345,9 @@ def execute_email_remediation(args):
 def _add_remediation_common_arguments(_parser):
     _parser.add_argument('-b', '--background', action='store_true', default=False,
         help="Executes the action in the background.")
-    _parser.add_argument('-c', '--comment', default="command line manual request",
+    _parser.add_argument('-w', '--wait', action='store_true', default=False,
+        help="Wait until the remediaiton reaches a completed state OR a timeout occurs.")
+    _parser.add_argument('-c', '--comment', default="command line request",
         help="Adds the given comment to the remediation as useful note.")
     _parser.add_argument('--from-file', required=False, default=None,
         help="Read the list of targets, one per line, from the given file.")
@@ -1229,7 +1357,7 @@ def _add_remediation_common_arguments(_parser):
 def _add_remediation_type_value_arguments(_parser):
     _parser.add_argument('type',
         help="The type of thing you want to target.")
-    _parser.add_argument('target', nargs='*',
+    _parser.add_argument('targets', nargs='*',
         help="The thing or things you want to target.")
 
 remediation_remove_parser = remediation_sp.add_parser('remove',
