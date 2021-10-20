@@ -1,0 +1,58 @@
+{% for filter_name, values in session_filters.items() %}
+    {% for value in values %}
+        {% if filters[filter_name].__class__.__name__ != 'MultiSelectFilter' or loop.first %}
+            {% set unique_reference = generate_unique_reference() %}
+            <div id="filter_row_{{unique_reference}}" style="width:100%;padding-bottom:12px;">
+                <div style="float:left;width:150px;">
+                    <select class="form-control" name="filter_name" id="filter_{{unique_reference}}" onChange="on_filter_changed(this)">
+                    {% for name in filters %}
+                        <option value="{{name}}" {% if name == filter_name %}SELECTED{% endif %}>{{name}}</option>
+                    {% endfor %}
+                    </select>
+                </div>
+                <div style="float:right;width:25px;">
+                    <span class="close" onmousedown="removeElement('filter_row_{{unique_reference}}')">&times;</span>
+                </div>
+                {% for name in filters %}
+                <div style="overflow:auto;padding-left:4px;display:{% if name == filter_name %}block{% else %}none{% endif %}" name="filter_{{unique_reference}}_value_container" id="filter_{{unique_reference}}_value_container_{{name}}">
+                    {% if filters[name].__class__.__name__ == 'Filter' or filters[name].__class__.__name__ == 'TextFilter' %}
+                        <input type="text" class="form-control" name="filter_{{unique_reference}}_value_{{name}}" value="{% if name == filter_name %}{{value}}{% endif %}"/>
+                    {% elif filters[name].__class__.__name__ == 'SelectFilter' %}
+                        <select class="form-control" name="filter_{{unique_reference}}_value_{{name}}">
+                        {% for option in filters[name].options %}
+                            <option value="{{option}}" {% if (name == filter_name and option == value) or (name != filter_name and loop.first) %}SELECTED{% endif %}>{{option}}</option>
+                        {% endfor %}
+                        </select>
+                    {% elif filters[name].__class__.__name__ == 'MultiSelectFilter' %}
+                        <select class="form-control" name="filter_{{unique_reference}}_value_{{name}}" size="{% if filters[name].options|length > 20 %}20{% else %}{{filters[name].options|length}}{% endif %}" multiple>
+                        {% for option in filters[name].options %}
+                            <option value="{{option}}" {% if (name == filter_name and option in values) or (name != filter_name and loop.first) %}SELECTED{% endif %}>{{option}}</option>
+                        {% endfor %}
+                        </select>
+                    {% elif filters[name].__class__.__name__ == 'DateRangeFilter' %}
+                        <input type="text" class="form-control daterange" name="filter_{{unique_reference}}_value_{{name}}" value="{% if name == filter_name %}{{value}}{% endif %}"/>
+                    {% elif filters[name].__class__.__name__ == 'TypeValueFilter' %}
+                        <div style="float:left;width:50%;padding-right:3px;">
+                            <select class="form-control" name="filter_{{unique_reference}}_value_{{name}}">
+                            {% for option in filters[name].options %}
+                                <option value="{{option}}" {% if (name == filter_name and option == value[0]) or (name != filter_name and loop.first) %}SELECTED{% endif %}>{{option}}</option>
+                            {% endfor %}
+                            </select>
+                        </div>
+                        <div style="overflow:auto;">
+                            <input type="text" class="form-control" name="filter_{{unique_reference}}_value_{{name}}" value="{% if name == filter_name %}{{value[1]}}{% endif %}"/>
+                        </div>
+                    {% elif filters[name].__class__.__name__ == 'AutoTextFilter' %}
+                        <input type="text" class="form-control" name="filter_{{unique_reference}}_value_{{name}}" oninput="toggle_options(this, 'filter_options_{{name}}')" autocomplete="off" value="{% if name == filter_name %}{{value}}{% endif %}"/>
+                        <datalist id="filter_options_{{name}}">
+                            {% for option in filters[name].options %}
+                                <option value="{{option}}">
+                            {% endfor %}
+                        </datalist>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endfor %}
+{% endfor %}

@@ -76,6 +76,8 @@ class BasicTestAnalyzer(AnalysisModule):
             return self.execute_analysis_8(test)
         elif test.value == 'test_worker_death':
             return self.execute_analysis_worker_death(test)
+        elif test.value == 'test_worker_timeout':
+            return self.execute_analysis_worker_timeout(test)
         elif test.value.startswith('test_action_counter'):
             return self.execute_analysis_test_action_counter(test)
         elif test.value == 'test_add_file':
@@ -138,6 +140,13 @@ class BasicTestAnalyzer(AnalysisModule):
     def execute_analysis_worker_death(self, test):
         logging.info("execute_worker_death")
         os._exit(1)
+
+    def execute_analysis_worker_timeout(self, test):
+        logging.info("execute_worker_timeout")
+
+        # CPU spin should cause Worker parent to kill it
+        while True:
+            pass
 
     def execute_analysis_test_add_file(self, test):
         analysis = self.create_analysis(test)

@@ -1,0 +1,12 @@
+{
+    "Tag": {
+        "id": "2",
+        "name": "phish",
+        "colour": "#ff0000",
+        "exportable": true,
+        "org_id": "0",
+        "user_id": "0",
+        "hide_tag": false,
+        "numerical_value": null
+    }
+}

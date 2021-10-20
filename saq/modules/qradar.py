@@ -2,18 +2,15 @@
 
 import datetime
 import logging
+from operator import itemgetter
 
 import pytz
 
 import saq
-from saq.error import report_exception
-from saq.analysis import Analysis, Observable
-from saq.modules import AnalysisModule
 from saq.constants import *
-from saq.util import abs_path, create_timedelta
+from saq.modules.api_analysis import BaseAPIAnalysis, BaseAPIAnalyzer
 from saq.qradar import QRadarAPIClient
-from urllib.parse import urlparse
-from operator import itemgetter
+
 
 #
 # Requirements for QRadar queries
@@ -27,227 +24,62 @@ from operator import itemgetter
 # <O_STOP> is replaced by the ending time range
 #
 
-KEY_QUERY = 'query'
-KEY_QUERY_RESULTS = 'query_results'
-KEY_QUERY_ERROR = 'query_error'
-KEY_QUERY_SUMMARY = 'query_summary'
-KEY_QUESTION = 'question'
 
-class QRadarAPIAnalysis(Analysis):
-    def initialize_details(self):
-        self.details = {
-            KEY_QUERY: None,
-            KEY_QUERY_RESULTS: None,
-            KEY_QUERY_ERROR: None,
-            KEY_QUESTION: None,
-            KEY_QUERY_SUMMARY: None,
-        }
+class QRadarAPIAnalysis(BaseAPIAnalysis):
+    pass
 
-    @property
-    def query(self):
-        """Returns the AQL query that was executed."""
-        return self.details[KEY_QUERY]
 
-    @query.setter
-    def query(self, value):
-        self.details[KEY_QUERY] = value
+class QRadarAPIAnalyzer(BaseAPIAnalyzer):
+    """Base Module to make Analysis Modules performing correlational QRadar queries.
 
-    @property
-    def query_results(self):
-        """Returns the JSON result of the query if successful."""
-        return self.details[KEY_QUERY_RESULTS]
+       This class should be overridden for each individual QRadar query.
 
-    @query_results.setter
-    def query_results(self, value):
-        self.details[KEY_QUERY_RESULTS] = value
-
-    @property
-    def query_error(self):
-        """Returns the error message returned by QRadar if there was one."""
-        return self.details[KEY_QUERY_ERROR]
-
-    @query_error.setter
-    def query_error(self, value):
-        self.details[KEY_QUERY_ERROR] = value
-
-    @property
-    def question(self):
-        """Returns the question configuration item for this query."""
-        return self.details[KEY_QUESTION]
-
-    @question.setter
-    def question(self, value):
-        self.details[KEY_QUESTION] = value
-
-    @property
-    def query_summary(self):
-        """Returns the summary configuration item for this query."""
-        return self.details[KEY_QUERY_SUMMARY]
-
-    @query_summary.setter
-    def query_summary(self, value):
-        self.details[KEY_QUERY_SUMMARY] = value
-
-    def generate_summary(self):
-        result = f'{self.query_summary}: '
-        if self.query_error is not None:
-            result += f'ERROR: {self.query_error}'
-            return result
-        elif self.query_results is not None:
-            if len(self.query_results['events']) == 0:
-                return None
-
-            result += f'({len(self.query_results["events"])} results)'
-            return result
-        else:
-            return self.query_summary + " (no results or error??)"
-
-class QRadarAPIAnalyzer(AnalysisModule):
-    def verify_environment(self):
-        self.verify_config_exists('question')
-        self.verify_config_exists('summary')
-        if 'aql' not in self.config and 'aql_path' not in self.config:
-            raise RuntimeError(f"module {self} missing aql or aql_path settings in configuration")
-        if 'aql_path' in self.config:
-            self.verify_path_exists(abs_path(self.config['aql_path']))
-
-    @property
-    def generated_analysis_type(self):
-        return QRadarAPIAnalysis
-
-    def process_qradar_event(self, analysis, observable, event, event_time):
-        """Called for each event processed by the module. Can be overridden by subclasses."""
-        pass
-
-    def process_qradar_field_mapping(self, analysis, event, event_time, observable, event_field):
-        """Called each time an observable is created from the observable-field mapping. 
-           Can be overridden by subclasses."""
-        pass
-
-    def filter_observable_value(self, event_field, observable_type, observable_value):
-        """Called for each observable value added to analysis. 
-           Returns the observable value to add to the analysis.
-           By default, the observable_value is returned as-is."""
-        return observable_value
-
-    def process_finalize(self, analysis, observable):
-        """Called after all events have completed processing."""
-        pass
-
+       Attributes (in addition to parent class attrs):
+           time_event_field: str containing specification of what field should be useed as the event time.
+                                by default disabled, in which case the observables are non-temporal
+           time_event_field_format: str containing the format of the time can also be specified in strptime syntax
+                                    the special value TIMESTAMP indicates a unix timestamp (this is the default)
+                                    the special value TIMESTAMP_MILLISECONDS indicates a unix timestamp in milliseconds
+       """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # the API class we use to communicate with QRadar
         # this can also be a unit testing class
-        self.api_class = QRadarAPIClient
-        if 'api_class' in kwargs:
-            self.api_class = kwargs['api_class']
+        self.api_class = kwargs.get('api_class') or QRadarAPIClient
 
-        # load the AQL query for this instance
-        if 'aql' in self.config:
-            self.aql_query = self.config['aql']
-        elif 'aql_path' in self.config:
-            with open(abs_path(self.config['aql_path']), 'r') as fp:
-                self.aql_query = fp.read()
-        else:
-            raise RuntimeError(f"module {self} missing aql or aql_path settings in configuration")
-
-        # each query can specify it's own range
-        # the wide range is used if the observable does not have a time
-        if 'wide_duration_before' in self.config:
-            self.wide_duration_before = create_timedelta(self.config['wide_duration_before'])
-        else:
-            self.wide_duration_before = create_timedelta(saq.CONFIG['qradar']['wide_duration_before'])
-
-        if 'wide_duration_after' in self.config:
-            self.wide_duration_after = create_timedelta(self.config['wide_duration_after'])
-        else:
-            self.wide_duration_after = create_timedelta(saq.CONFIG['qradar']['wide_duration_after'])
-
-        # the narrow range is used if the observable has a time
-        if 'narrow_duration_before' in self.config:
-            self.narrow_duration_before = create_timedelta(self.config['narrow_duration_before'])
-        else:
-            self.narrow_duration_before = create_timedelta(saq.CONFIG['qradar']['narrow_duration_before'])
-
-        if 'narrow_duration_after' in self.config:
-            self.narrow_duration_after = create_timedelta(self.config['narrow_duration_after'])
-        else:
-            self.narrow_duration_after = create_timedelta(saq.CONFIG['qradar']['narrow_duration_after'])
-
-        # load the observable mapping for this query
-        # NOTE that the keys (event field names) are case sensitive
-        self.observable_mapping = {} # key = event field name, value = observable_type
-        for key in self.config.keys():
-            if key.startswith('map_'):
-                event_field, observable_type = [_.strip() for _ in self.config[key].split('=', 2)]
-                #if observable_type not in VALID_OBSERVABLE_TYPES:
-                    #logging.error(f"invalid observable type specified for observable mapping "
-                                  #f"{key} in {self}: {observable_type}")
-                    #continue
-
-                self.observable_mapping[event_field] = observable_type
-
-        # the configuration can specify what field should be used as the event time
-        # by default this is disabled, in which case the observables are non-termporal
         self.time_event_field = self.config.get('time_event_field', None)
-
-        # the format of the time can also be specified in strptime syntax
-        # the special value TIMESTAMP indicates a unix timestamp (this is the default)
-        # the special value TIMESTAMP_MILLISECONDS indicates a unix timestamp in milliseconds
         self.time_event_field_format = self.config.get('time_event_field_format', 'TIMESTAMP')
 
-        # are we delaying QRadar correlational queries?
-        self.correlation_delay = None
-        if 'correlation_delay' in saq.CONFIG['qradar']:
-            self.correlation_delay = create_timedelta(saq.CONFIG['qradar']['correlation_delay'])
+    @property
+    def generated_analysis_type(self):
+        return QRadarAPIAnalysis
 
-    def execute_analysis(self, observable):
-        analysis = observable.get_analysis(self.generated_analysis_type, instance=self.instance)
-
-        if analysis is None:
-            analysis = self.create_analysis(observable)
-            analysis.question = self.config['question']
-            analysis.query_summary = self.config['summary']
-
-            if self.correlation_delay is not None:
-                return self.delay_analysis(observable, analysis, seconds=self.correlation_delay.total_seconds())
-        
-        client = self.api_class(saq.CONFIG['qradar']['url'], 
-                                saq.CONFIG['qradar']['token'])
-
-        # interpolate the observable value as needed
-        target_query = self.aql_query.replace('<O_TYPE>', observable.type)\
-                                     .replace('<O_VALUE>', observable.value) # TODO property escape stuff
-
-        # figure out the start and stop time
-        source_event_time = self.root.event_time_datetime
-        # if we are going off of the event time, then we use the wide duration
-        start_time = source_event_time - self.wide_duration_before
-        stop_time = source_event_time + self.wide_duration_after
-
-        if observable.time is not None:
-            source_event_time = observable.time
-            start_time = source_event_time - self.narrow_duration_before
-            stop_time = source_event_time + self.narrow_duration_after
-        
+    def fill_target_query_timespec(self, start_time, stop_time):
         start_time_str = start_time.strftime('%Y-%m-%d %H:%M %z')
         stop_time_str = stop_time.strftime('%Y-%m-%d %H:%M %z')
 
-        target_query = target_query.replace('<O_START>', start_time_str)\
-                                   .replace('<O_STOP>', stop_time_str)
+        self.target_query = self.target_query.replace('<O_START>', start_time_str) \
+            .replace('<O_STOP>', stop_time_str)
+
+    def execute_query(self):
+        client = self.api_class(saq.CONFIG[self.api]['url'],
+                                saq.CONFIG[self.api]['token'])
 
         try:
-            logging.info(f"executing qradar query: {target_query}")
-            analysis.query_results = client.execute_aql_query(target_query, 
-                                                              continue_check_callback=lambda x: not self.engine.shutdown)
+            logging.info(f"executing query: {self.target_query}")
+            query_results = client.execute_aql_query(self.target_query, continue_check_callback=lambda x: not self.engine.shutdown)
         except Exception as e:
-            analysis.query_error = str(e)
-            return True
+            query_results = str(e)
 
-        # map results to observables
-        for event in analysis.query_results['events']:
-            #
+        return query_results
+
+    def process_qradar_event(self, analysis, observable, event, event_time):
+        """Called for each event processed by the module. Can be overridden by subclasses."""
+        pass
+
+    def process_query_results(self, query_results, analysis, observable):
+        for event in query_results['events']:
             # the time of the event is always going to be in the deviceTimeFormatted field (see above)
             # 2019-10-29 19:50:38.592 -0400
 
@@ -260,33 +92,19 @@ class QRadarAPIAnalyzer(AnalysisModule):
                 event_time = None
 
             self.process_qradar_event(analysis, observable, event, event_time)
+            self.extract_result_observables(analysis, event, observable, event_time)
 
-            for event_field in event.keys():
-                if event[event_field] is None:
-                    continue
-
-                # do we have this field mapped?
-                if event_field in self.observable_mapping:
-                    observable = analysis.add_observable(self.observable_mapping[event_field], 
-                                                         self.filter_observable_value(event_field, 
-                                                                                      self.observable_mapping[event_field], 
-                                                                                      event[event_field]), 
-                                                         o_time=event_time)
-
-                self.process_qradar_field_mapping(analysis, event, event_time, observable, event_field)
-
-        self.process_finalize(analysis, observable)
-        return True
 
 KEY_METHOD_MAP = 'method_map'
 KEY_CATEGORIES = 'categories'
+
 
 class QRadarProxyDomainMethodAnalysis(QRadarAPIAnalysis):
     def initialize_details(self, *args, **kwargs):
         super().initialize_details(*args, **kwargs)
         self.details.update({
-            KEY_METHOD_MAP: {}, # key = http method, value = [(count, set of policies)]
-            KEY_CATEGORIES: [], # list of categories
+                KEY_METHOD_MAP: {},  # key = http method, value = [(count, set of policies)]
+                KEY_CATEGORIES: [],  # list of categories
         })
 
     @property
@@ -317,6 +135,7 @@ class QRadarProxyDomainMethodAnalysis(QRadarAPIAnalysis):
 
         else:
             return result + "No activity was observed."
+
 
 class QRadarProxyDomainMethodAnalyzer(QRadarAPIAnalyzer):
     def verify_environment(self):
@@ -363,20 +182,22 @@ class QRadarProxyDomainMethodAnalyzer(QRadarAPIAnalyzer):
         if event[self.field_request_method] not in analysis.method_map:
             analysis.method_map[event[self.field_request_method]] = []
 
-        analysis.method_map[event[self.field_request_method]].append([int(event[self.field_count]), 
+        analysis.method_map[event[self.field_request_method]].append([int(event[self.field_count]),
                                                                       event[self.field_applied_policy]])
         if event[self.field_url_category] not in analysis.categories:
             analysis.categories.append(event[self.field_url_category])
 
+
 KEY_TOTAL = 'total'
 KEY_USER_ACTIVITY_MAP = 'user_activity_map'
+
 
 class QRadarProxyDomainTrafficAnalysis(QRadarAPIAnalysis):
     def initialize_details(self, *args, **kwargs):
         super().initialize_details(*args, **kwargs)
         self.details.update({
-            KEY_TOTAL: 0,
-            KEY_USER_ACTIVITY_MAP: {}, # key = user, value = [successful http method]
+                KEY_TOTAL:             0,
+                KEY_USER_ACTIVITY_MAP: {},  # key = user, value = [successful http method]
         })
 
     @property
@@ -402,6 +223,7 @@ class QRadarProxyDomainTrafficAnalysis(QRadarAPIAnalysis):
             return f"{result}All user activity was BLOCKED."
         else:
             return f"{result}No activity was observed."
+
 
 class QRadarProxyDomainTrafficAnalyzer(QRadarAPIAnalyzer):
     def verify_environment(self):
@@ -462,9 +284,9 @@ class QRadarProxyDomainTrafficAnalyzer(QRadarAPIAnalyzer):
                                              f"{event[self.field_request_method]} to suspect domain {observable.value}")
 
                 # then let's get the PCAP
-                ipv4_conversation = analysis.add_observable(F_IPV4_CONVERSATION, 
-                                    create_ipv4_conversation(event['sourceip'], event['destinationip']),
-                                    o_time=event_time)
+                ipv4_conversation = analysis.add_observable(F_IPV4_CONVERSATION,
+                                                            create_ipv4_conversation(event['sourceip'], event['destinationip']),
+                                                            o_time=event_time)
 
                 if ipv4_conversation:
                     ipv4_conversation.add_directive(DIRECTIVE_EXTRACT_PCAP)

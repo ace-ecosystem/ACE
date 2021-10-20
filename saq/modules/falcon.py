@@ -197,11 +197,11 @@ class FalconHostIdentificationAnalyzer(AnalysisModule):
             if observable.value != F_IPV4:
                 external_ipv4 = analysis.add_observable(F_IPV4, result['external_ip'])
                 if external_ipv4:
-                    external_ipv4.add_tag('external')
+                    external_ipv4.add_tag('falcon:external_ip')
                     external_ipv4.exclude_analysis(self)
                 local_ipv4 = analysis.add_observable(F_IPV4, result['local_ip'])
                 if local_ipv4:
-                    local_ipv4.add_tag('local')
+                    local_ipv4.add_tag('falcon:local_ip')
                     local_ipv4.exclude_analysis(self)
 
         return True

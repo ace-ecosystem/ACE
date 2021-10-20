@@ -4,14 +4,43 @@
 # installs and configures SSL certificates for ACE
 #
 
+RESET=""
+INSTANCE_TYPE="DEVELOPMENT"
+while getopts "rt:" opt
+do
+    case ${opt} in
+        r)
+            RESET="Y"
+            ;;
+        t)
+            INSTANCE_TYPE="$OPTARG"
+            ;;
+        *)
+            echo "invalid command line option ${opt}"
+            exit 1
+            ;;
+    esac
+done
+
 cd "$SAQ_HOME" || { echo "cannot cd to $SAQ_HOME"; exit 1; }
 
-if [ -e ssl/root/ca/openssl.cnf ]
+# have we already created the certificates?
+if [ -z "$RESET" -a -e ssl/ca-chain.cert.pem -a -e ssl/ace.cert.pem -a -e ssl/ace.key.pem ]
 then
-    # TODO fix this
-    echo "already installed openssl certificates"
+    echo "already installed ssl certificates"
+    echo "run with -r to reset the ssl certificates"
     exit 0
 fi
+
+(
+    # this wipes out any existing certificate data
+    cd ssl && \
+    rm ace.cert.pem ace.key.pem ca-chain.cert.pem && \
+    cd root/ca && \
+    rm -rf certs crl newcerts private index* serial* openssl.cnf && \
+    cd intermediate && \
+    rm -rf certs crl csr newcerts private ace.openssl.cnf crlnumber index* serial* openssl.cnf
+)
 
 mkdir -p ssl/root/ca/intermediate
 sed -e "s;SAQ_HOME;$SAQ_HOME;g" ssl/root/ca/openssl.template.cnf > ssl/root/ca/openssl.cnf
@@ -86,7 +115,7 @@ chmod 400 ssl/root/ca/.intermediate_ca.pwd
     cd ssl/root/ca && \
     cp intermediate/openssl.cnf intermediate/ace.openssl.cnf && \
     echo 'DNS.1 = localhost' >> intermediate/ace.openssl.cnf && \
-    echo "DNS.2 = ace" >> intermediate/ace.openssl.cnf && \ 
+    echo "DNS.2 = ace" >> intermediate/ace.openssl.cnf && \
     echo "DNS.3 = ace-http" >> intermediate/ace.openssl.cnf && \
     echo "DNS.4 = ace-db" >> intermediate/ace.openssl.cnf && \
     echo "DNS.5 = ace-dev" >> intermediate/ace.openssl.cnf && \

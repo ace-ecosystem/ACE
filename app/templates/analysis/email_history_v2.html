@@ -18,6 +18,10 @@
             <td>Archive</td>
             <td>{{email.archive_path}} <button id="file_download_{{email.md5}}" type="button" class="btn btn-default btn-xs"><span class="glyphicon glyphicon-download-alt"></span></button></td>
         </tr>
+        <tr>
+            <td>Message ID</td>
+            <td>{{email['message_id']}}</td>
+        </tr>
         {% for index in range(email['attachment_count'] | int) %}
         <tr>
             <td colspan="2">{{email['attachment_names_mv'][index]}} ({{email['attachment_types_mv'][index]}})
