@@ -27,7 +27,7 @@ RESOURCE = 'resource'
 OBSERVABLE_MAP = 'observable_mapping'
 ARGUMENT_HELP = 'argument_help'
 TUNE = 'tune'
-ACCEPTED_ANALYSIS_MODES = ['analysis', 'correlation']
+ACCEPTED_ANALYSIS_MODES = ['analysis', 'correlation', 'msgraph']
 REQUIRED_RESOURCE_SECTIONS = [OVERVIEW, ARGUMENTS, RESOURCE, OBSERVABLE_MAP]
 SECTION_ARGUMENTS = {'required': ['required'],
                       'optional': ['optional']}
@@ -108,7 +108,6 @@ class GraphResource():
         self.observable_map = resource_config[OBSERVABLE_MAP] or {}
         self.temporal_fields = resource_config['temporal_fields'] if resource_config.has_section('temporal_fields') else {}
         self.persistent_time_field = resource_config[OVERVIEW]['persistent_time_field']
-        # supporting negative and positive tuning
         self.tune_list = []
         if resource_config.has_section(TUNE):
             for key in resource_config[TUNE].keys():
@@ -332,9 +331,13 @@ class GraphResourceCollector(Collector):
         logging.info(f"getting {resource.name} events via '{url}'")
 
         response = api_client.request(url, method='get', proxies=saq.proxy.proxies())
-        if response.status_code != 200:
-            error = response.json()['error']
-            logging.error(f"got {response.status_code} getting {resource.name}: {error['code']} : {error['message']}")
+        result = response.json()
+        if response.status_code > 250:
+            if 'error' in result:
+                error = result['error']
+                logging.error(f"got {response.status_code} getting {resource.name}: {error['code']} : {error['message']}")
+            else:
+                logging.error(f"got {response.status_code} getting {resource.name}: {response.text}")
             return False
 
         results = response.json()
@@ -359,6 +362,16 @@ class GraphResourceCollector(Collector):
                 event_time = dateutil.parser.parse(event["eventDateTime"])
             else:
                 event_time = dateutil.parser.parse(event[resource.persistent_time_field])
+
+            if 'description' in event:
+                # regex for IPv4
+                import re
+                ipv4s = re.findall(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', event['description'])
+                if ipv4s and isinstance(ipv4s, list):
+                    for _ip in ipv4s:
+                        observables.append({'type': F_IPV4,
+                                            'value': _ip,
+                                            'time': event_time})
 
             try:
                 # for keeping track so duplicates don't get added.
@@ -468,8 +481,16 @@ class GraphResourceCollector(Collector):
                 logging.error(f"skipping graph resource collection for {resource.name}: missing required arguments")
                 continue
 
+            logging.info(f"loading graph api for {resource.graph_account_name} account.")
             api_client = self.graph_api_clients[resource.graph_account_name]
             api_client.initialize()
+
+            # company ID
+            company_id = [c['id'] for c in saq.NODE_COMPANIES if c['name'] == resource.graph_account_name]
+            if len(company_id) == 1:
+                company_id = company_id[0]
+            else:
+                company_id = saq.CONFIG['global'].getint('company_id')
 
             logging.info(f"executing graph resource collection for {resource.name}")
             results = self.execute_resource(api_client, resource)
@@ -539,6 +560,19 @@ class GraphResourceCollector(Collector):
                     group_events = [_e for _e in events if _e[resource.group_by] == group_value]
 
                     event_submissions[group_value] = _context_organization(group_events)
+        
+            elif events and "userStates" in events[0]:
+                # group by UPN
+                unique_user_events = {}
+                for e in events:
+                    for user_state in e["userStates"]:
+                        if user_state["userPrincipalName"] not in unique_user_events:
+                            unique_user_events[user_state["userPrincipalName"]] = []
+                        unique_user_events[user_state["userPrincipalName"]].append(e)
+
+                for upn, upn_events in unique_user_events.items():
+                    event_submissions[upn] = _context_organization(upn_events)
+
             else:
                 event_submissions[resource.name] = events
 
@@ -546,8 +580,15 @@ class GraphResourceCollector(Collector):
                 if isinstance(submission_data, dict):
                     # the event data has been grouped
 
+                    ms_event_title_summary = ""
+                    if 'title' in submission_data['events'][0]:
+                        unique_event_titles = list(set([_e['title'] for _e in submission_data['events']]))
+                        ms_event_title_summary = f"{unique_event_titles[0]} - " if len(unique_event_titles) == 1 else f"{len(unique_event_titles)} unique events - "
+                        if ms_event_title_summary == submission_name:
+                            ms_event_title_summary = ""
+
                     submission = Submission(
-                        description = f"MS Graph Resource: {resource.name} - {submission_name} ({len(submission_data['events'])})",
+                        description = f"Microsoft: {resource.name} - {ms_event_title_summary}{submission_name} ({len(submission_data['events'])})",
                         analysis_mode = resource.analysis_mode,
                         tool = 'msgraph',
                         # XXX Does this tool instance make sense?
@@ -555,6 +596,7 @@ class GraphResourceCollector(Collector):
                         type = f"{ANALYSIS_TYPE_GRAPH_RESOURCE} - {resource.name.replace(' ', '_').lower()}",
                         event_time = submission_data['event_time'],
                         details = submission_data,
+                        company_id = company_id,
                         observables = self.parse_events_for_observables(resource, submission_data['events']),
                         tags = [],
                         files = [],
@@ -573,7 +615,7 @@ class GraphResourceCollector(Collector):
                             # use the time field we know about for this resource
                             event_time = dateutil.parser.parse(event[resource.persistent_time_field])
                         submission = Submission(
-                            description = f"MS Graph Resource: {resource.name} (1)",
+                            description = f"Microsoft: {resource.name} (1)",
                             analysis_mode = resource.analysis_mode,
                             tool = 'msgraph',
                             # XXX Does this tool instance make sense?
@@ -586,6 +628,7 @@ class GraphResourceCollector(Collector):
                                         'provider_descriptions': event['description'] if 'description' in event else "No description was provided for this event.",
                                         'event_uuids': [event['id']]
                                         },
+                            company_id = company_id,
                             observables = self.parse_events_for_observables(resource, event),
                             tags = [],
                             files = [],
