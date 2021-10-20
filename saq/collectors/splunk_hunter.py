@@ -9,7 +9,7 @@ import logging
 import os, os.path
 
 import saq
-from saq.splunk import SplunkQueryObject
+from saq.splunk import extract_event_timestamp, SplunkQueryObject
 from saq.collectors.query_hunter import QueryHunt
 from saq.util import *
 
@@ -31,29 +31,15 @@ class SplunkHunt(QueryHunt):
         self.splunk_config = self.manager.config.get('splunk_config', 'splunk')
         
         self.tool_instance = saq.CONFIG[self.splunk_config]['uri']
+        self.timezone = saq.CONFIG[self.splunk_config]['timezone']
 
         # splunk app/user context
         self.namespace_user = '-' # defaults to wildcards
         self.namespace_app = '-'
 
-    def extract_event_timestamp(self, event):
-        if '_time' not in event:
-            logging.warning(f"splunk event missing _time field for {self}")
-            return local_time()
-
-        m = re.match(r'^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})\.[0-9]{3}[-+][0-9]{2}:[0-9]{2}$', event['_time'])
-        if not m:
-            logging.error(f"_time field does not match expected format: {event['_time']} for {self}")
-            return local_time()
-        else:
-            # reformat this time for ACE
-            return datetime.datetime.strptime('{0}-{1}-{2} {3}:{4}:{5}'.format(
-                m.group(1),
-                m.group(2),
-                m.group(3),
-                m.group(4),
-                m.group(5),
-                m.group(6)), '%Y-%m-%d %H:%M:%S')
+    def extract_event_timestamp(self, event, timezone=None):
+        timezone = self.timezone if timezone is None else timezone
+        return extract_event_timestamp(self, event, timezone=timezone)
 
     def formatted_query(self):
         return self.query.replace('{time_spec}', self.time_spec)
@@ -105,8 +91,10 @@ class SplunkHunt(QueryHunt):
             self.namespace_user = section_rule['splunk_user_context']
 
     def execute_query(self, start_time, end_time, unit_test_query_results=None):
-        earliest = start_time.strftime('%m/%d/%Y:%H:%M:%S')
-        latest = end_time.strftime('%m/%d/%Y:%H:%M:%S')
+        tz = pytz.timezone(self.timezone)
+
+        earliest = start_time.astimezone(tz).strftime('%m/%d/%Y:%H:%M:%S')
+        latest = end_time.astimezone(tz).strftime('%m/%d/%Y:%H:%M:%S')
 
         if self.use_index_time:
             self.time_spec = f'_index_earliest = {earliest} _index_latest = {latest}'

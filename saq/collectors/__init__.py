@@ -5,7 +5,9 @@
 #
 
 import importlib
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
+import hashlib
 import io
 import json
 import logging
@@ -29,6 +31,7 @@ from saq.database import (
         ALERT
 )
 
+from saq.constants import *
 from saq.error import report_exception
 from saq.persistence import Persistable
 from saq.service import ACEService
@@ -546,31 +549,30 @@ ORDER BY
                     logging.info("{} got submission result {} for {}".format(self, submission_result, submission))
                     submission_success = True
                 except Exception as e:
-                    log_function = logging.warning
+                    log_function = logging.error
                     if not self.full_delivery:
                         log_function = logging.warning
                     else:
                         if not isinstance(e, urllib3.exceptions.MaxRetryError) \
-                        and not isinstance(e, urllib3.exceptions.NewConnectionError) \
-                        and not isinstance(e, requests.exceptions.ConnectionError):
+                                and not isinstance(e, urllib3.exceptions.NewConnectionError) \
+                                and not isinstance(e, requests.exceptions.ConnectionError):
                             # if it's not a connection issue then report it
-                            #report_exception()
-                            pass
+                            report_exception()
 
                     log_function("unable to submit work item {} to {} via group {}: {}".format(
-                                 submission, target, self, e))
+                            submission, target, self, e))
 
                     # if we are in full delivery mode then we need to try this one again later
                     if self.full_delivery and (isinstance(e, urllib3.exceptions.MaxRetryError) \
-                                          or isinstance(e, urllib3.exceptions.NewConnectionError) \
-                                          or isinstance(e, requests.exceptions.ConnectionError)):
+                                               or isinstance(e, urllib3.exceptions.NewConnectionError) \
+                                               or isinstance(e, requests.exceptions.ConnectionError)):
                         continue
 
                     # otherwise we consider it a failure
                     submission_failed = True
                     execute_with_retry(db, c, """UPDATE work_distribution SET status = 'ERROR' 
                                                  WHERE group_id = %s AND work_id = %s""",
-                                      (self.group_id, work_id), commit=True)
+                                       (self.group_id, work_id), commit=True)
             
             # if we skipped it or we sent it, then we're done with it
             if not submission_failed:
@@ -668,6 +670,9 @@ class Collector(ACEService, Persistable):
         # optional thread a subclass can use (by overriding the extended_collection functions)
         self.extended_collection_thread = None
 
+        # when was the persistent data last cleared
+        self.persistent_clear_time = time.time()
+
         # how often to collect, defaults to 1 second
         # NOTE there is no wait if something was previously collected
         self.collection_frequency = collection_frequency
@@ -702,11 +707,19 @@ class Collector(ACEService, Persistable):
         """Called automatically at the end of initialize_environment."""
         pass
 
-    def queue_submission(self, submission):
+    def queue_submission(self, submission, key=None):
         """Adds the given Submission object to the queue."""
         assert isinstance(submission, Submission)
-        self.prepare_submission_files(submission)
-        self.submission_list.put(submission)
+        submit = True
+        if key is not None:
+            key_hash = hashlib.md5(key.encode("utf-8")).hexdigest()
+            if self.persistent_data_exists(key_hash):
+                submit = False
+            self.save_persistent_key(key_hash)
+
+        if submit:
+            self.prepare_submission_files(submission)
+            self.submission_list.put(submission)
 
     # 
     # ACEService implementation
@@ -1114,6 +1127,12 @@ LIMIT 100""", (self.workload_type_id,))
                 return
 
             try:
+                # delete expired persistent data every so often
+                if time.time() - self.persistent_clear_time > self.service_config.getint("persistence_clear_seconds", 60):
+                    expiration_timedelta = timedelta(seconds=self.service_config.getint("persistence_expiration_seconds", 24*60*60))
+                    unmodified_expiration_timedelta = timedelta(seconds=self.service_config.getint("persistence_unmodified_expiration_seconds", 4*60*60))
+                    self.delete_expired_persistent_keys(expiration_timedelta, unmodified_expiration_timedelta)
+                    self.persistent_clear_time = time.time()
                 wait_seconds = target()
                 if wait_seconds is None:
                     wait_seconds = 1

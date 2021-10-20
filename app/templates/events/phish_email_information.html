@@ -1,0 +1,31 @@
+<div class="panel-heading">
+    <h3 class="panel-title">Phish Email Information</h3>
+</div>
+<div class="panel-body" style="overflow: scroll;">
+    <table class="table table-bordered table-condensed">
+        <tr>
+            <th>URL</th>
+            <th>Time</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Subject</th>
+            <th>Attachments</th>
+            <th>CC</th>
+            <th>Reply-To</th>
+            <th>Message-ID</th>
+        </tr>
+        {% for email in emails %}
+        <tr>
+            <td><a target="_blank" href="{{ url_for('analysis.index', direct=email.alert_uuid) }}">Alert</a></td>
+            <td>{{ email.received_time }}</td>
+            <td>{{ email.mail_from_address }}</td>
+            <td>{{ ', '.join(email.mail_to_addresses) }}</td>
+            <td>{% if email.decoded_subject %}{{ email.decoded_subject }}{% endif %}</td>
+            <td>{{ ', '.join(email.attachment_names) }}</td>
+            <td>{{ ', '.join(email.cc) }}</td>
+            <td>{% if email.reply_to_address %}{{ email.reply_to_address }}{% endif %}</td>
+            <td>{{ email.message_id }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>

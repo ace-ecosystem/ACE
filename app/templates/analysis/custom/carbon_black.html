@@ -1,0 +1,17 @@
+{% extends "analysis/alert.html" %}
+{% block alert_details %}
+<div class="panel panel-default">
+    <div class="panel-heading">CBC Alert Summary <a role="button" data-toggle="collapse" data-target="#collapse_cb_summary" aria-expanded="true" aria-controls="collapse_cb_summary">(hide/show)</a></div>
+    <div class="panel-body" id="collapse_cb_summary">
+        {% for alert in analysis.details %}
+        <div class="well">{% if 'weblink' in alert %}<a target="_blank" href="{{alert['weblink']}}" title="Go to alert in Carbon Black GUI."><span class="glyphicon glyphicon-link"></span></a> - {% endif %} {{alert['create_time']}} - <b>{{alert['process_name']}} <span style="color: #008000">{{alert['reason']}}</span></b> - <span style="color: #0000FF">host <b>{{alert['device_name']}}</b></span> - <span style="color: #FF0000">user <b>{{alert['device_username']}}</b></div>
+        {% endfor %}
+    </div>
+</div>
+<div class="panel panel-default">
+    <div class="panel-heading">CBC Raw Alert Details <a role="button" data-toggle="collapse" data-target="#collapse_cb_details" aria-expanded="true" aria-controls="collapse_cb_details">(hide/show)</a></div>
+    <div class="panel-body collapse" id="collapse_cb_details">
+        <pre>{{analysis.jinja_details | pprint}}</pre>
+    </div>
+</div>
+{% endblock %}

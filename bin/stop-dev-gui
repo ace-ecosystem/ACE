@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+cd $SAQ_HOME
+
+if [ -e data/var/daemon/gui.pid ]
+then
+    kill -TERM $(cat data/var/daemon/gui.pid)
+    rm data/var/daemon/gui.pid
+    exit 0
+else
+    echo "ERROR: missing data/var/daemon/gui.pid (not running?)"
+    exit 1
+fi

@@ -39,8 +39,9 @@ class VTHashFileDownloaderAnalysis(Analysis):
         }
 
     def generate_summary(self):
-        if self.details is not None:
+        if self.details[KEY_DOWNLOADED]:
             return 'File Downloaded from VirusTotal'
+
         return None
 
 class VTHashFileDownloader(AnalysisModule):
@@ -374,7 +375,7 @@ class VirusTotalURLAnalysis(Analysis):
         }
 
     def generate_summary(self):
-        if self.details is not None:
+        if self.details:
             if 'positives' in self.details and 'total' in self.details:
                 return f"VT Analysis - {self.details['positives']}/{self.details['total']}"
             elif 'verbose_msg' in self.details:
@@ -450,8 +451,9 @@ class VirusTotalIPAnalysis(Analysis):
         }
 
     def generate_summary(self):
-        if self.details is not None:
+        if self.details:
             return f"VT Analysis - Related to {len(self.details.get('detected_urls', []))} URLs"
+
         return None
 
 class VirusTotalIPAnalyzer(AnalysisModule):

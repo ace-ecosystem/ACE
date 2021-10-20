@@ -17,10 +17,10 @@ import xml.etree.ElementTree as ET
 import saq
 
 from saq import graph_api
-from saq.analysis import Analysis, Observable, MODULE_PATH
+from saq.analysis import Analysis, Observable, MODULE_PATH, SPLIT_MODULE_PATH
+
 from saq.constants import *
 from saq.error import report_exception
-import saq.ldap
 from saq.network_semaphore import NetworkSemaphoreClient
 from saq.splunk import SplunkQueryObject
 from saq.util import create_timedelta, parse_event_time, create_directory, atomic_open
@@ -126,6 +126,9 @@ class AnalysisModule(object):
 
         # automation limit settings control how many times an analysis module runs automatically during correlation
         self.automation_limit = self.config.getint('automation_limit', fallback=None)
+
+        # control how long execution is allowed to take (in seconds) before the parent process kills it
+        self.maximum_analysis_time = self.config.getint('maximum_analysis_time', fallback=saq.CONFIG['global'].getint('maximum_analysis_time'))
 
     @property
     def is_grouped_by_time(self):
@@ -788,6 +791,7 @@ class AnalysisModule(object):
 
         if isinstance(obj, Observable):
             if self.analysis_covered(obj):
+                logging.debug(f"{obj} is already covered by another {self} analysis")
                 return False
 
         # try to load analysis from cache first

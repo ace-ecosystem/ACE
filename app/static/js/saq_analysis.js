@@ -45,6 +45,30 @@ $(document).ready(function() {
         $("#event-form").append('<input type="hidden" name="alert_uuids" value="' + current_alert_uuid + '" />');
     });
 
+    $("#btn-save-to-event").click(function(e) {
+        $("#event-form").append('<input type="hidden" name="alert_uuids" value="' + current_alert_uuid + '" />');
+        $("#event_disposition").val($("input[name='disposition']:checked").val());
+
+        let comment_value = $("textarea[name='comment']").val()
+
+        if(comment_value !== "") {
+            $.ajax({
+                dataType: "html",
+                type: "post",
+                url: 'add_comment',
+                traditional: true,
+                data: {
+                    uuids: current_alert_uuid,
+                    comment: comment_value,
+                    redirect: ''
+                },
+                error: function (jqXHR, textStatus, errorThrown) {
+                    alert(jqXHR.responseText);
+                }
+            });
+        }
+    });
+
     //$('#btn-stats').click(function(e) {
         //e.preventDefault();
         /*var panel = $.jsPanel({
@@ -72,11 +96,6 @@ $(document).ready(function() {
     $("#btn-toggle-prune").click(function(e) {
         $('#toggle-prune-form').submit();
     });
-
-    $("#btn-remediate-alerts").click(function(e) {
-        remediate_emails([current_alert_uuid], null);
-    });
-    
 
     // pull this out of the disposition form
     current_alert_uuid = $("#alert_uuid").prop("value");

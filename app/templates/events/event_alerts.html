@@ -1,0 +1,25 @@
+<table class="table table-bordered table-condensed">
+    <tr>
+        <th></th>
+        <th><span>Date</span></th>
+        <th><span>(Priority) Alert</span></th>
+        <th><span>Owner</span></th>
+        <th><span>Disposition</span></th>
+        <th><span>Status</span></th>
+    </tr>
+    {% for alert in alerts %}
+    <tr>
+        <td class="event-cell"><label><input type="checkbox" name="detail_{{event.id}}_{{alert.id}}" {% if event.id|string() + "_" + alert.id|string() in checked %}checked{% endif %}></input></label></td>
+        <td style="white-space: nowrap;">{{alert.insert_date}}</td>
+        <td>
+            <a target="_blank" href="{{ url_for('analysis.index', direct=alert.uuid) }}">({{alert.priority}}) {{alert.description}}</a>
+            {% for tag in alert_tags[alert.uuid] %}
+              {% if tag.display %}<span class="label {{tag.style}}">{{tag.name}}</span>{% endif %}
+            {% endfor %}
+        </td>
+        <td>{{alert.owner}}</td>
+        <td>{{alert.disposition}}</td>
+        <td>{{alert.status}}</td>
+    </tr>
+    {% endfor %}
+</table>

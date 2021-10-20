@@ -1,0 +1,491 @@
+{
+	"info": {
+		"_postman_id": "db393c24-6c71-4523-b0b6-7ea96cfaad88",
+		"name": "ControllerAPI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Happy Path URL 🤗",
+			"item": [
+				{
+					"name": "Create Job",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "1514c088-99e8-4df3-b9f0-8555249b9d5c",
+								"exec": [
+									"pm.test(\"Successful Job Creation\", function () {",
+									"    pm.response.to.have.status(201);",
+									"    var jsonData = pm.response.json();",
+									"    pm.collectionVariables.set(\"job_id\", jsonData[\"id\"]);",
+									"    postman.setNextRequest(\"Get Job\");",
+									"});",
+									"",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content_type\": \"url\",\n  \"content\": \"https://www.york.ac.uk/teaching/cws/wws/webpage4.html\",\n  \"output_type\": \"redis\",\n  \"output_name\": \"2pic.png\",\n  \"width\": 1024,\n  \"height\": 1024\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{api_root}}/job/",
+							"host": [
+								"{{api_root}}"
+							],
+							"path": [
+								"job",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Job",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "5264b02d-9828-4d7e-8282-e60ed36e2e8a",
+								"exec": [
+									"pm.test(\"Get Job Post Creation\", function () {",
+									"    pm.response.to.have.status(202);",
+									"    var jsonData = pm.response.json();",
+									"    status = jsonData[\"status\"];",
+									"    console.log(status);",
+									"    switch (status) {",
+									"        case 'complete':",
+									"            // Check base64 data",
+									"            base64Data = jsonData[\"data\"];",
+									"            pm.expect(base64Data).not.equal(null);",
+									"            pm.expect(base64Data).not.equal(undefined);",
+									"            pm.expect(base64Data.length).not.equal(0);",
+									"            console.log(base64Data);",
+									"            postman.setNextRequest(\"Delete Job\");",
+									"            break;",
+									"        case 'failed':",
+									"            // Shouldn't happen, fail the test",
+									"            success = false;",
+									"            pm.expect(success).equal(true);",
+									"            // clean up the job",
+									"            postman.setNextRequest(\"Delete Job\");",
+									"            break;",
+									"        default:",
+									"            // Continue polling until job has finished",
+									"            postman.setNextRequest(\"Get Job\");",
+									"            break;",
+									"    }",
+									"    setTimeout(function(){}, [500]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_root}}/job/{{job_id}}",
+							"host": [
+								"{{api_root}}"
+							],
+							"path": [
+								"job",
+								"{{job_id}}"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "Happy Path HTML 🤗",
+			"item": [
+				{
+					"name": "Create Job",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "3c5d56fe-1359-42b3-976e-44e78bcd0e34",
+								"exec": [
+									"pm.test(\"Successful Job Creation\", function () {",
+									"    pm.response.to.have.status(201);",
+									"    var jsonData = pm.response.json();",
+									"    pm.collectionVariables.set(\"job_id\", jsonData[\"id\"]);",
+									"    postman.setNextRequest(\"Get Job\");",
+									"});",
+									"",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content_type\": \"html\",\n  \"content\": \"\\n\\n\\u003cHMTL\\u003e\\n\\u003cHEAD\\u003e\\n\\u003cTITLE\\u003ewebpage4\\u003c/TITLE\\u003e\\n\\u003c/HEAD\\u003e\\n\\u003cBODY BGCOLOR=\\\"FFFFFf\\\" LINK=\\\"006666\\\" ALINK=\\\"8B4513\\\" VLINK=\\\"006666\\\"\\u003e\\n\\u003cTABLE WIDTH=\\\"75%\\\" ALIGN=\\\"center\\\"\\u003e\\n\\u003cTR\\u003e\\n\\u003cTD\\u003e\\n\\u003cDIV ALIGN=\\\"center\\\"\\u003e\\u003cIMG SRC=\\\"textasimage.gif\\\" ALT=\\\"THE WORD IMAGES\\\"\\u003e\\u003c/DIV\\u003e\\n\\n\\u003cP\\u003e \\u0026nbsp; \\u003c/P\\u003e\\n\\u003cDIV ALIGN=\\\"justify\\\"\\u003e\\n\\nThe third characteristic of web page writing is the blurring of boundaries between words and images. The technology of the web encourages this: in work devised for the screen it is nearly as easy, and as inexpensive, to insert an image instead of written text. For instance, the title of this page - 'IMAGES' - is a simple image prepared in Photoshop (view 'SOURCE' to check this out). \\u003c/P\\u003e\\n\\n\\u003cP\\u003e\\n\\n\\n\\n\\u003cP\\u003eThis lesson introduces you to working with images - a huge topic in itself. I offer some suggestions for obtaining images, show you how to insert an image in a web page, and how to make a hyperlink from that image. \\u003c/P\\u003e\\n\\n\\u003cH4\\u003eOBTAINING IMAGES\\u003c/H4\\u003e\\n\\n\\u003cP\\u003eThere are three main ways to get hold of images for use in web pages.\\n\\u003cOL\\u003e\\n\\u003cLI\\u003eUse an image from the clip art packages offered with systems such as Microsoft Works.\\u003c/LI\\u003e\\n\\u003cLI\\u003eTake images from the web. This is remarkably easy:\\u003c/LI\\u003e\\n\\u003cUL\\u003e\\n\\t\\u003cLI\\u003eIf you see an image you like on a web page, move your mouse over the image. \\u003c/LI\\u003e\\n\\t\\u003cLI\\u003eRight click your mouse, and select 'Save picture as'\\u003c/LI\\u003e. (Try this with the title image at the top of the page). \\n\\t\\u003cLI\\u003eSave the file: it is best if you create a New Folder called something like IMAGES, and place this folder in your WEBPAGES folder. The saving is very similar to the process involved in saving a Word or WordPerfect file; the main difference is that you will notice the file is called 'something.jpg' (or jpeg) or 'something.gif'. You can change the name (the 'something' of the file designation) but you must retain the format extension (ie jpg/jpeg or gif).\\u003c/LI\\u003e\\u003cBR\\u003e\\nCOPYRIGHT: Though few people are likely to be concerned about you taking an image for personal use, you must always respect the artists right over their work, as you would for work offered in books and journals. For master's essays, which are not published work, it is acceptable to use images without asking for permission SO LONG AS YOU SUPPLY A FULL REFERENCE. For Master's dissertations, and especially for PhD work, the area is more complex and the issues of copyright are still being resolved. If in doubt, write to the web designer and ask for permission. \\n\\u003c/UL\\u003e\\n\\u003cLI\\u003eCreate your own.\\u003c/LI\\u003e\\n\\u003cUL\\u003e\\n\\t\\u003cLI\\u003eUse any image-manipultaing software.\\u003cBR\\u003e\\nThis area of graphics manipulation is obviously a huge area in its own right, and beyond the scope of the course. However, due in part to the popularity of digital photography basic image manipulation software is widely available and easy to use: if you have computer you might well have something bundled in with your computer software. Simple programmes can obtained most months from the 'free' CDs on computer magazines (\\u003cI\\u003e.Net\\u003c/I\\u003e is one of the best, but check out the others too). You can also download many free programmes - try finding what you need though a GOOGLE search. Of course, you can only use this new material if you have your own computer, as you cannot install new programmes on to the University system.\\u003c/LI\\u003e\\n\\t\\n\\t\\u003cLI\\u003eScanners can be very useful. Scan in your image at no more than 150 dpi (dots per inch), though I use 70 dpi for preference. If you do it denser than this the image will take a l-o-n-g t-i-m-e t-o d-o-w-n-l-o-a-d when you open your webpage. You can use photos, published images, and bits and pieces (lace material, crumpled paper, 3D objects ...)  \\u003cBR\\u003e\\nDon't forget to save the image as a gif or jpg file (ie save it in that formant \\u003cB\\u003eand\\u003c/B\\u003e give it the appropraite suffix). \\u003c/LI\\u003e\\u003c/OL\\u003e\\n\\n\\n\\u003cP\\u003e \\u0026nbsp; \\u003c/P\\u003e\\n\\u003cH4\\u003eINSERTING IMAGES\\u003c/H4\\u003e\\n\\n\\u003cP\\u003eThe tag used is:\\n\\u003cP\\u003e \\u003c IMG SRC=image.jpg \\u003e or \\u003c IMG SRC=image.gif \\u003e\\u003c/DIV\\u003e\\n\\n\\n\\u003cH4\\u003eMaking your inserted image look good\\u003c/H4\\u003e\\n\\n\\u003cP\\u003e You can place your image \\\"left\\\" or \\\"right\\\" on the page by using a modifying tag like so:\\n\\u003cP\\u003e\\u003c IMG SRC=image.jpg ALIGN=\\\"right\\\" \\u003e\\n\\n\\u003cP\\u003eWhen an image is aligned \\\"left\\\" or \\\"right\\\" written text will wrap around the image. You can add space between words and image by adding the attributes VSPACE (for vertical space)and HSPACE (for horizontal!)\\n\\u003cP\\u003e\\u003c IMG SRC=image.jpg ALIGN=\\\"right\\\" VSPACE=\\\"5\\\" HSPACE=\\\"2\\\"\\u003e\\n\\n\\n\\n\\u003cP\\u003e \\u0026nbsp; \\u003c/P\\u003e\\n\\n\\n\\u003cP\\u003e \\u0026nbsp; \\u003c/P\\u003e\\n\\n\\u003cP\\u003e \\u0026nbsp; \\u003c/P\\u003e\\n\\u003cP\\u003e \\u0026nbsp; \\u003c/P\\u003e\\n\\n\\u003cH4\\u003eMAKING LINKS FROM IMAGES\\u003c/H4\\u003e\\n\\u003cA HREF=\\\"/inst/cws/ \\\" TARGET=\\\"_BLANK\\\"\\u003e\\u003cIMG SRC=\\\"toofar.gif\\\" ALT=\\\"feminist cartoon\\\" ALIGN=\\\"left\\\" VSPACE=\\\"5\\\" HSPACE=\\\"25\\\"\\u003e\\u003c/A\\u003e\\n\\u003cP\\u003e This is done in exactly the same way as linking text files, by using the \\u003c A \\u003e tag. \\n\\u003cP\\u003e\\nThe basic code for inserting the image to the left is:\\n\\n\\u003cP\\u003e\\u003c A HREF=\\\"http://www.york.ac.uk/inst/cws/ \\\" \\u003e\\u003cBR\\u003e\\u003c IMG SRC=\\\"toofar.gif\\\"  ALIGN=\\\"left\\\"\\u003e\\u003c /A\\u003e\\n\\n\\u003cP\\u003e the url after \\u003c A HREF    \\u003e is the name of the destination site (in this case the CWS home page)\\n\\u003cp\\u003e'too far.gif' is the name I gave to the linking image - the cartoon.\\n\\n\\u003cP\\u003e If I had wanted to remove the default border from the cartoon linking image I could have added \\\"BORDER=\\\"0\\\" inside the \\u003c A \\u003e tag.\\n\\n\\u003cP\\u003e\\u0026nbsp;\\u003c/P\\u003e\\n\\n\\u003cH4\\u003eEXERCISE\\u003c/H4\\u003e\\n\\n\\u003cUL\\u003e\\n\\u003cLI\\u003e Surf the web and pick up a few images as instructed above. Save them in your IMAGES folder. \\n\\u003cLI\\u003e Insert an image in one of your web pages with some text.  Move the image around: Align it 'left' or 'right' and look to see what happens. Try adjusting the 'V' (vertical) and 'H'(horizontal) properties. Add and remove the image border. \\n\\u003cLI\\u003eWhen you are happy with the format of the page, make a link from the image to another web page.\\n\\u003c/UL\\u003e\\n\\n\\u003cP\\u003e \\u0026nbsp; \\u003c/P\\u003e\\n\\u003cP\\u003elinks:\\u003cBR\\u003e\\nlesson one: \\u003cA HREF=\\\"webpage1.html\\\"\\u003e\\u003cU\\u003eA Simple Web Page\\u003c/U\\u003e\\u003c/A\\u003e \\u0026nbsp; \\u0026nbsp; lesson two: \\u003cA HREF=\\\"webpage2.html\\\"\\u003e\\u003cU\\u003eSimple Formatting\\u003c/U\\u003e\\u003c/A\\u003e\\n\\u003cBR\\u003elesson three: \\u003cA HREF=\\\"webpage3.html\\\"\\u003e\\u003cU\\u003eLinking Web Texts\\u003c/U\\u003e\\u003c/A\\u003e\\u003c/P\\u003e\\n\\u003cP\\u003e\\u003cA HREF=\\\"col3.html\\\"\\u003eback to wws index\\u003c/A\\u003e \\u003c/P\\u003e\\n\\u003c/P\\u003e\\n  \\n\\u003c/DIV\\u003e\\n\\n\\n\\u003c/TD\\u003e\\n\\u003c/TR\\u003e\\n\\u003c/TABLE\\u003e\\n\\u003c/BODY\\u003e\\n\\u003c/HTML\\u003e\\n\\n\\n\\n\\n\\n\\n\\n\",\n  \"output_type\": \"redis\",\n  \"output_name\": \"2pic.png\",\n  \"width\": 1024,\n  \"height\": 1024\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{api_root}}/job/",
+							"host": [
+								"{{api_root}}"
+							],
+							"path": [
+								"job",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Job",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "76c0d9c2-2966-4a32-949e-72c224e5ebe7",
+								"exec": [
+									"pm.test(\"Get Job Post Creation\", function () {",
+									"    pm.response.to.have.status(202);",
+									"    var jsonData = pm.response.json();",
+									"    status = jsonData[\"status\"];",
+									"    console.log(status);",
+									"    switch (status) {",
+									"        case 'complete':",
+									"            // Check base64 data",
+									"            base64Data = jsonData[\"data\"];",
+									"            pm.expect(base64Data).not.equal(null);",
+									"            pm.expect(base64Data).not.equal(undefined);",
+									"            pm.expect(base64Data.length).not.equal(0);",
+									"            console.log(base64Data);",
+									"            postman.setNextRequest(\"Delete Job\");",
+									"            break;",
+									"        case 'failed':",
+									"            // Shouldn't happen, fail the test",
+									"            success = false;",
+									"            pm.expect(success).equal(true);",
+									"            // clean up the job",
+									"            postman.setNextRequest(\"Delete Job\");",
+									"            break;",
+									"        default:",
+									"            // Continue polling until job has finished",
+									"            postman.setNextRequest(\"Get Job\");",
+									"            break;",
+									"    }",
+									"    setTimeout(function(){}, [500]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_root}}/job/{{job_id}}",
+							"host": [
+								"{{api_root}}"
+							],
+							"path": [
+								"job",
+								"{{job_id}}"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"id": "202ae7cd-d075-4fb9-aacd-0792edd7c957",
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"id": "10e7f083-cae2-462b-b7b9-d9cc7e37dd39",
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "Sad Path 😢",
+			"item": [
+				{
+					"name": "Create Job Invalid",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "39efb7f7-3884-4c3e-8090-ea57522f3bcd",
+								"exec": [
+									"pm.test(\"Create Job Invalid\", function () {",
+									"    pm.response.to.have.status(422);",
+									"    var jsonData = pm.response.json();",
+									"    detail = jsonData[\"detail\"][0][\"type\"];",
+									"    pm.expect(detail).equal(\"type_error.enum\");",
+									"    postman.setNextRequest(\"Get Job Invalid\");",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"name": "Content-Type",
+								"type": "text",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content_type\": \"url\",\n  \"content\": \"https://www.google.com\",\n  \"output_type\": \"invalid\",\n  \"width\": 0,\n  \"height\": 0\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{api_root}}/job/",
+							"host": [
+								"{{api_root}}"
+							],
+							"path": [
+								"job",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Job Invalid",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "d79bbd52-e5f6-4214-9290-ee2494f2c139",
+								"exec": [
+									"pm.test(\"Get Job Invalid\", function () {",
+									"    pm.response.to.have.status(404);",
+									"    var jsonData = pm.response.json();",
+									"    detail = jsonData[\"detail\"];",
+									"    pm.expect(detail).equal(\"Not Found\");",
+									"    postman.setNextRequest(\"Delete Job Invalid\");",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_root}}/job/a8098c1a-f86e-11da-bd1a-00112444be11",
+							"host": [
+								"{{api_root}}"
+							],
+							"path": [
+								"job",
+								"a8098c1a-f86e-11da-bd1a-00112444be11"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"id": "8a46f18c-2b02-4008-a681-300d01e4b3ca",
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"id": "2c13bce1-4438-4b81-bf0a-cd871391d63e",
+						"type": "text/javascript",
+						"exec": [
+							""
+						]
+					}
+				}
+			],
+			"protocolProfileBehavior": {}
+		},
+		{
+			"name": "Misc",
+			"item": [
+				{
+					"name": "Ping heartbeat",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "83db950d-d488-41aa-a36d-cffc1470cb4a",
+								"exec": [
+									"pm.test(\"Heartbeat Response\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    postman.setNextRequest(\"Ping heartbeat trailing slash\")",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_root}}/ping",
+							"host": [
+								"{{api_root}}"
+							],
+							"path": [
+								"ping"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ping heartbeat trailing slash",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"id": "3d51ba98-3eb5-439d-bcf8-d599de867ca7",
+								"exec": [
+									"pm.test(\"Heartbeat Response Redirect\", function () {",
+									"    pm.response.to.have.status(200);",
+									"    postman.setNextRequest(null)",
+									"});",
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_root}}/ping/",
+							"host": [
+								"{{api_root}}"
+							],
+							"path": [
+								"ping",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"protocolProfileBehavior": {}
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "d1207c0f-2e3f-4ab9-bd1d-62c9716262ed",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "d3c35c84-6af1-4a3e-96e6-bc52d61ea9ae",
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"id": "15c23832-a27b-45c9-baa9-80eb397695b9",
+			"key": "api_root",
+			"value": "https://127.0.0.1:8443"
+		},
+		{
+			"id": "e2619380-98a1-4595-a4ac-41cabb82dbb6",
+			"key": "job_id",
+			"value": ""
+		}
+	],
+	"protocolProfileBehavior": {}
+}

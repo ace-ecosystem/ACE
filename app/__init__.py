@@ -3,6 +3,7 @@
 import base64
 import logging
 import time
+import urllib.parse
 
 import saq
 
@@ -70,6 +71,9 @@ def create_app():
 
     from .analysis import analysis as analysis_blueprint
     app.register_blueprint(analysis_blueprint)
+
+    from .events import events as events_blueprint
+    app.register_blueprint(events_blueprint)
     
     #from .cloudphish import cloudphish as cloudphish_blueprint
     #app.register_blueprint(cloudphish_blueprint)
@@ -84,6 +88,9 @@ def create_app():
     def s64encode(s):
         return base64.b64encode(s.encode('utf8', errors='replace')).decode('ascii')
 
+    def b64escape(s):
+        return base64.b64encode(urllib.parse.quote(s.encode('utf8', errors='replace')).encode('ascii')).decode('ascii')
+
     def b64decode_wrapper(s):
         # sometimes base64 encoded data that tools send do not have the correct padding
         # this deals with that without breaking anything
@@ -97,6 +104,7 @@ def create_app():
     app.jinja_env.filters['b64encode'] = base64.b64encode
     app.jinja_env.filters['s64decode'] = s64decode
     app.jinja_env.filters['s64encode'] = s64encode
+    app.jinja_env.filters['b64escape'] = b64escape
     app.jinja_env.filters['hexdump'] = hexdump
 
     # add the "do" template command

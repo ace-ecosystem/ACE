@@ -253,24 +253,7 @@ class TestCase(CloudphishTestCase, ACEModuleTestCase):
         root = create_root_analysis(analysis_mode=ANALYSIS_MODE_ANALYSIS)
         root.initialize_storage()
         url = root.add_observable(F_URL, 'mailto:john@smith.com')
-        url.add_directive(DIRECTIVE_CRAWL)
-        root.save()
-        root.schedule()
-
-        engine = TestEngine(analysis_pools={ANALYSIS_MODE_ANALYSIS: 1,
-                                            ANALYSIS_MODE_CLOUDPHISH: 1}, 
-                            local_analysis_modes=[ANALYSIS_MODE_ANALYSIS,
-                                                  ANALYSIS_MODE_CLOUDPHISH])
-
-        engine.enable_module('analysis_module_cloudphish', ANALYSIS_MODE_ANALYSIS)
-        engine.enable_module('analysis_module_cloudphish_request_analyzer', ANALYSIS_MODE_CLOUDPHISH)
-        engine.enable_module('analysis_module_crawlphish', ANALYSIS_MODE_CLOUDPHISH)
-
-        engine.controlled_stop()
-        engine.start()
-        engine.wait()
-
-        self.assertEquals(log_count('is not a supported scheme for cloudphish'), 1)
+        self.assertIsNone(url)
 
     def test_submit_invalid_url(self):
         root = create_root_analysis(analysis_mode=ANALYSIS_MODE_ANALYSIS)
@@ -405,7 +388,7 @@ class TestCase(CloudphishTestCase, ACEModuleTestCase):
         root = create_root_analysis(analysis_mode=ANALYSIS_MODE_ANALYSIS)
         root.initialize_storage()
         url_1 = root.add_observable(F_URL, TEST_URL)
-        url_2 = root.add_observable(F_URL, 'http://invalid_domain.local/some/path')
+        url_2 = root.add_observable(F_URL, 'http://some-url.com/some/path')
         root.save()
         root.schedule()
 

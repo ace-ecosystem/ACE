@@ -1,45 +1,62 @@
-# vim: sw=4:ts=4:et
-
 import json
 import re
 import logging
-from ldap3 import Server, Connection, SIMPLE, SYNC, SUBTREE, ALL, ALL_ATTRIBUTES
+from ldap3.core import exceptions
+from ldap3.utils.conv import escape_filter_chars
+from ldap3 import Server, Connection, SIMPLE, RESTARTABLE, SUBTREE, ALL, ALL_ATTRIBUTES
 import saq
+import saq.email
 
-def query(query):
-    enabled = saq.CONFIG.getboolean('ldap', 'enabled')
-    server = saq.CONFIG.get('ldap', 'ldap_server')
-    port = saq.CONFIG.getint('ldap', 'ldap_port') or 389
-    user = saq.CONFIG.get('ldap', 'ldap_bind_user')
-    password = saq.CONFIG.get('ldap', 'ldap_bind_password')
-    base_dn = saq.CONFIG.get('ldap', 'ldap_base_dn')
+connection = None
+def connect():
+    global connection
+    connection = Connection(
+        Server(
+            saq.CONFIG['ldap']['ldap_server'],
+            port = saq.CONFIG['ldap'].getint('ldap_port', fallback=389), 
+            get_info = ALL,
+        ),
+        auto_bind = True,
+        client_strategy = RESTARTABLE,
+        user = saq.CONFIG['ldap']['ldap_bind_user'],
+        password = saq.CONFIG['ldap']['ldap_bind_password'],
+        authentication = SIMPLE,
+        check_names = True,
+    )
 
-    if not enabled:
-        return []
-
+def search(query):
+    if connection is None:
+        connect()
     try:
-        logging.debug(f"connecting to ldap server {server} on port {port}")
-        with Connection(Server(server, port=port, get_info=ALL), auto_bind=True, client_strategy=SYNC, user=user, password=password, authentication=SIMPLE, check_names=True) as c:
-            logging.debug(f"running ldap query ({query})")
-            c.search(base_dn, f"({query})", SUBTREE, attributes=ALL_ATTRIBUTES)
+        connection.search(saq.CONFIG['ldap']['ldap_base_dn'], query, SUBTREE, attributes=ALL_ATTRIBUTES)
+    except exceptions.LDAPInvalidFilterError as e:
+        logging.error(f"problem searching ldap with '{query}' : {e}")
+        return {}
+    return json.loads(connection.response_to_json())['entries'] # XXX hack to have strings instead of lists of bytes for attributes
 
-            # convert result to json
-            response = json.loads(c.response_to_json())
-            result = c.result
-
-            if len(response['entries']) > 0:
-                return response['entries']
-            return []
-
-    except Exception as e:
-        logging.warning(f"ldap query failed {query}: {e}")
+# return list of entires that match a given email address
+def lookup_email_address(email_address):
+    # don't look up external emails
+    if not saq.email.is_local_email_domain(email_address):
         return []
 
-def lookup_email_address(email_address):
-    m = re.match(r'^<?([^>]+)>?$', email_address.strip())
-    email = m.group(1)
-    if saq.CONFIG.getboolean('ldap', 'on_prem_lookup_enabled', fallback=False):
-        name, domain = email.split('@', 1)
-        internal = f"{name}@{saq.CONFIG['ldap']['on_prem_lookup_domain']}"
-        return saq.ldap.query(f"|(mail={email})(mail={internal})")
-    return saq.ldap.query(f"mail={email}")
+    # lookup the user for an email by name so that it will match various internal domains
+    email = saq.email.normalize_email_address(email_address)
+    name, domain = email.split('@', 1)
+    name = escape_filter_chars(name)
+    return search(f"(mail={name}@*)")
+
+# lookup a user by cn and return the attributes including manager cn
+def lookup_user(user):
+    user = escape_filter_chars(user)
+    entries = search(f"(cn={user})")
+    if len(entries) == 0:
+        return None
+    attributes = entries[0]['attributes']
+    if 'manager' in attributes:
+        m = re.match(r'CN=([^,]+)', attributes['manager'])
+        attributes['manager_cn'] = m.group(1)
+    return attributes
+
+def lookup_hostname(hostname):
+    return lookup_user(hostname)

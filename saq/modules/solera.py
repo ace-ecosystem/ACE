@@ -78,10 +78,6 @@ class SoleraPcapExtractionAnalyzer(AnalysisModule):
     def generated_analysis_type(self):
         return SoleraPcapExtractionAnalysis
 
-    @property
-    def valid_observable_types(self):
-        return [ F_IPV4, F_IPV4_CONVERSATION, F_IPV4_FULL_CONVERSATION ]
-
     def execute_analysis(self, observable):
         analysis = self.create_analysis(observable)
     

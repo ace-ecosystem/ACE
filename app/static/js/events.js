@@ -1,3 +1,33 @@
+function add_indicators_to_event_in_tip(event_id) {
+    $.ajax({
+        dataType: "html",
+        url: 'add_indicators_to_event_in_tip',
+        data: { event_id: event_id },
+        method: "POST",
+        success: function(data, textStatus, jqXHR) {
+            alert("Added indicators to event in TIP");
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus + " - " + errorThrown);
+        }
+    });
+}
+
+function create_event_in_tip(event_id) {
+    $.ajax({
+        dataType: "html",
+        url: 'create_event_in_tip',
+        data: { event_id: event_id },
+        method: "POST",
+        success: function(data, textStatus, jqXHR) {
+            alert("Created event in TIP");
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus + " - " + errorThrown);
+        }
+    });
+}
+
 function load_event_alerts(event_id) {
     // have we already loaded this?
     var existing_dom_element = $("#event_alerts_" + event_id);
@@ -8,7 +38,7 @@ function load_event_alerts(event_id) {
 
     $.ajax({
         dataType: "html",
-        url: 'event_alerts',
+        url: 'manage_event_summary',
         data: { event_id: event_id },
         success: function(data, textStatus, jqXHR) {
             $('#event_row_' + event_id).after(data);

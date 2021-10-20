@@ -61,10 +61,15 @@ class EWSCollectionBaseConfiguration(object):
         self.target_mailbox = None
         self.frequency = 60
         self.delete_emails = False
+        self.save_unmatched_remotely = False
+        self.save_unmatched_locally = False
         self.always_alert = False
+        self.add_email_to_alert = False
         self.alert_prefix = None
         self.folders = []
-        # exchangelib defaults to making requests for 100 emails at a time. 
+        self.unmatched_ews_folder = None
+        self.save_local_dir = None
+        # exchangelib defaults to making requests for 100 emails at a time.
         # If emails are large, those requests can time out. To request fewer,
         # add a `page_size` item to your collector config in saq.ews.ini
         self.page_size = 100
@@ -81,7 +86,10 @@ class EWSCollectionBaseConfiguration(object):
         self.target_mailbox = saq.CONFIG[section]['target_mailbox']
         self.frequency = saq.CONFIG[section].getint('frequency', fallback=60)
         self.delete_emails = saq.CONFIG[section].getboolean('delete_emails', fallback=False)
+        self.save_unmatched_remotely = saq.CONFIG[section].getboolean('save_unmatched_remotely', fallback=False)
+        self.save_unmatched_locally = saq.CONFIG[section].getboolean('save_unmatched_locally', fallback=False)
         self.always_alert = saq.CONFIG[section].getboolean('always_alert', fallback=False)
+        self.add_email_to_alert = saq.CONFIG[section].getboolean('add_email_to_alert', fallback=False)
         self.alert_prefix = saq.CONFIG[section]['alert_prefix']
         if 'page_size' in saq.CONFIG[section]:
             self.page_size = int(saq.CONFIG[section]['page_size'])
@@ -97,9 +105,44 @@ class EWSCollectionBaseConfiguration(object):
             logging.error(f"no folder configuration options found for {self.target_mailbox} "
                           f"in configuration section {section}")
 
+        if self.save_unmatched_remotely:
+            self.unmatched_ews_folder = saq.CONFIG[section]['unmatched_ews_folder'] or None
+            if not self.unmatched_ews_folder:
+                logging.error("move_unmatched emails enabled but no unmatched_ews_folder was provided!")
+
+        if self.save_unmatched_locally:
+            self.save_local_dir = os.path.join(saq.DATA_DIR, 'review', 'ews_unmatched')
+            if not os.path.isdir(self.save_local_dir):
+                try:
+                    logging.debug("creating required directory {}".format(self.save_local_dir))
+                    os.makedirs(self.save_local_dir)
+                except Exception as e:
+                    if not os.path.isdir(self.save_local_dir):
+                        logging.error("unable to create required directory {} for {}: {}".format(self.save_local_dir, self, e))
+                        raise e
+
     @property
     def tracking_db_path(self):
         return os.path.join(self.collector.persistence_dir, f'{self.target_mailbox}@{self.server}.db')
+
+    @staticmethod
+    def load_folder(folder, account, *args, **kwargs):
+        path_parts = [_.strip() for _ in folder.split('/')]
+        root = path_parts.pop(0)
+
+        _account = kwargs.get('account_object') or account
+
+        try:
+            target_folder = getattr(_account, root)
+        except AttributeError:
+            public_folders_root = _account.public_folders_root
+            target_folder = public_folders_root / root
+        # print(target_folder.tree())
+
+        for path_part in path_parts:
+            target_folder = target_folder / path_part
+
+        return target_folder
 
     def start(self):
         self.execution_thread = threading.Thread(target=self.run, name=f'EWS Collection {type(self).__name__}')
@@ -163,22 +206,12 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
         _account_class = kwargs.get('account_class') or Account  # Account class connects to exchange.
         account = _account_class(self.target_mailbox, config=config, autodiscover=False, access_type=DELEGATE) # TODO autodiscover, access_type should be configurable
 
+        unmatched_ews_folder = None
+        if self.save_unmatched_remotely:
+            unmatched_ews_folder = self.load_folder(self.unmatched_ews_folder, account, *args, **kwargs)
+
         for folder in self.folders:
-            path_parts = [_.strip() for _ in folder.split('/')]
-            root = path_parts.pop(0)
-
-            _account = kwargs.get('account_object') or account
-
-            try:
-                target_folder = getattr(_account, root)
-            except AttributeError:
-                public_folders_root = _account.public_folders_root
-                target_folder = public_folders_root / root
-            # print(target_folder.tree())
-
-            for path_part in path_parts:
-                target_folder = target_folder / path_part
-
+            target_folder = self.load_folder(folder, account, *args, **kwargs)
             target_folder.refresh()
 
             logging.info(f"checking for emails in {self.target_mailbox} target {folder}")
@@ -199,6 +232,7 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
 
                 total_count += 1
 
+                message_matched = False
                 try:
                     # if we're not deleting emails then we need to make sure we keep track of which ones we've already processed
                     if not self.delete_emails:
@@ -211,14 +245,43 @@ CREATE INDEX IF NOT EXISTS idx_insert_date ON ews_tracking(insert_date)""")
                                               #message.id, message.message_id, self.target_mailbox, self.server))
                                 already_processed_count += 1
                                 continue
-                        
+
                     # otherwise process the email message (subclasses deal with the site logic)
-                    self.email_received(message)
+                    message_matched = self.email_received(message)
 
                 except Exception as e:
                     logging.error(f"unable to process email: {e}")
                     report_exception()
                     error_count += 1
+
+                if not message_matched:
+                    if self.save_unmatched_locally:
+                        path = os.path.join(self.save_local_dir, f'msg_{message.message_id}.eml')
+                        logging.debug(f"ews_collector didn't match message; writing email to {path}")
+                        try:
+                            with open(path, 'wb') as f:
+                                f.write(message.mime_content)
+                        except Exception as e:
+                            logging.debug(f"unable to write {path} as bytes because {e}, attempting as string")
+                            with open(path, 'w') as f:
+                                f.write(message.mime_content)
+
+                    if self.save_unmatched_remotely:
+                        # copy emails if we're also deleting
+                        if self.delete_emails:
+                            try:
+                                logging.debug(f"ews_collector didn't match message; copying message {message.id} remotely")
+                                message.copy(to_folder=unmatched_ews_folder)
+                            except Exception as e:
+                                logging.error(f"unable to copy message: {e}")
+
+                        # so we don't try to delete an email that's already been moved
+                        elif not self.delete_emails:
+                            try:
+                                logging.debug(f"ews_collector didn't match message; moving message {message.id} remotely")
+                                message.move(to_folder=unmatched_ews_folder)
+                            except Exception as e:
+                                logging.error(f"unable to move message: {e}")
 
                 if self.delete_emails:
                     try:

@@ -408,7 +408,10 @@ def initialize(
                 if 'SAQ_ENC' in os.environ:
                     logging.debug("reading encryption password from environment variable")
                     ENCRYPTION_PASSWORD_PLAINTEXT = os.environ['SAQ_ENC']
-                    del os.environ['SAQ_ENC']
+                    # Leave the SAQ_ENC variable in place if we are in the dev container environment.
+                    # This fixes the ability to load encrypted passwords when the container first starts up.
+                    if saq.CONFIG['global']['instance_type'] != 'DEV':
+                        del os.environ['SAQ_ENC']
                 else:
                     logging.debug("reading encryption password from ecs")
                     ENCRYPTION_PASSWORD_PLAINTEXT = saq.crypto.read_ecs()
@@ -602,7 +605,13 @@ def initialize(
         DAEMON_MODE = args.daemon
 
     # make sure we've got the automation user set up
-    #initialize_automation_user()
+    try:
+        initialize_automation_user()
+    except Exception as e:
+        # XXX why does the following happen with the flask app, but only some of the time?
+        # XXX No application found. Either work inside a view function or push an application context. See http://flask-sqlalchemy.pocoo.org/contexts/.
+        # XXX Also, this: Timeout when reading response headers from daemon process 'ace': /opt/ace/api.wsgi
+        logging.error(f"problem initializing automation user: {e}")
 
     # initialize other systems
     #initialize_message_system()

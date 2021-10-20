@@ -120,6 +120,10 @@ class CrawlphishURLFilter(object):
         whitelisted_fqdn = []
         whitelisted_cidr = []
 
+        if not os.path.exists(self.whitelist_path):
+            logging.debug("whitelist {} does not exist".format(self.whitelist_path))
+            return
+
         try:
             with open(self.whitelist_path, 'r') as fp:
                 for line in fp:
@@ -169,6 +173,10 @@ class CrawlphishURLFilter(object):
         blacklisted_fqdn = []
         blacklisted_cidr = []
 
+        if not os.path.exists(self.blacklist_path):
+            logging.debug("blacklist {} does not exist".format(self.blacklist_path))
+            return
+
         try:
             with open(self.blacklist_path, 'r') as fp:
                 for line in fp:
@@ -200,6 +208,10 @@ class CrawlphishURLFilter(object):
     def load_path_regexes(self):
         logging.debug("loading path regexes from {}".format(self.regex_path))
         path_regexes = []
+
+        if not os.path.exists(self.regex_path):
+            logging.debug("path regexes {} does not exist".format(self.regex_path))
+            return
 
         try:
             with open(self.regex_path, 'r') as fp:

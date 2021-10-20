@@ -62,10 +62,6 @@ then
         saq.test_util \
         saq.test_locks \
         saq.test_graph_api \
-        saq.remediation.test \
-        saq.remediation.mail.test \
-        saq.remediation.mail.ews.test \
-        saq.remediation.mail.graph.test \
         saq.persistence.test \
         saq.engine.test \
         saq.modules.test_alerts \
@@ -78,6 +74,7 @@ then
         saq.modules.test_http \
         saq.modules.test_intel \
         saq.modules.test_url \
+        saq.modules.test_render \
         saq.observables.test \
         aceapi.analysis.test \
         aceapi.engine.test \

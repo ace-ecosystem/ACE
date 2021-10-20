@@ -126,6 +126,24 @@ class ObservableActionUploadToCrits(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/upload_to_crits.html'
         self.icon = 'cloud-upload'
 
+class ObservableActionSetCBC_IOC_StatusActive(ObservableAction):
+    """Action to set the status of a CBC IOC to Active."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_SET_CBC_IOC_ACTIVE
+        self.description = "Set CBC IOC status to Active"
+        self.jinja_action_path = 'analysis/observable_actions/set_cbc_ioc_status.html'
+        self.icon = 'thumbs-up'
+
+class ObservableActionSetCBC_IOC_StatusIgnore(ObservableAction):
+    """Action to set the status of a CBC IOC to Ignore."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_SET_CBC_IOC_IGNORE
+        self.description = "Set CBC IOC status to Ignore"
+        self.jinja_action_path = 'analysis/observable_actions/set_cbc_ioc_status.html'
+        self.icon = 'remove'
+
 class ObservableActionSetSIPIndicatorStatus_Analyzed(ObservableAction):
     """Action to set the status of a SIP indicator to Analyzed."""
     def __init__(self, *args, **kwargs):
@@ -162,15 +180,6 @@ class ObservableActionClearCloudphishAlert(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/clear_cloudphish_alert.html'
         self.icon = 'thumbs-down'
         self.display = saq.CONFIG.getboolean('gui', 'clear_cloudphish_alert', fallback=True)
-
-class ObservableActionRemediateEmail(ObservableAction):
-    """Action to remediate a given email (referenced by message-id)."""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name = ACTION_REMEDIATE_EMAIL
-        self.description = "Remediate Email"
-        self.jinja_action_path = 'analysis/observable_actions/remediate_email.html'
-        self.icon = 'remove'
 
 class ObservableActionDownloadFile(ObservableAction):
     def __init__(self, *args, **kwargs):
@@ -276,6 +285,14 @@ class ObservableActionViewInExabeamSession(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/view_in_exabeam_session.html'
         self.icon = 'chevron-right'
 
+class ObservableActionDownloadO365File(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_O365_FILE_DOWNLOAD
+        self.description = "Download"
+        self.jinja_action_path = 'analysis/observable_actions/o365_file_download.html'
+        self.icon = 'chevron-right'
+
 class ObservableActionViewInVx(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -308,26 +325,18 @@ class ObservableActionUnWhitelist(ObservableAction):
         self.jinja_action_path = 'analysis/observable_actions/un_whitelist.html'
         self.icon = 'remove'
 
-class ObservableActionRemediate(ObservableAction):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name = ACTION_REMEDIATE
-        self.description = "Remediate"
-        self.jinja_action_path = 'analysis/observable_actions/remediate.html'
-        self.icon = 'remove-circle'
-
-class ObservableActionRestore(ObservableAction):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name = ACTION_RESTORE
-        self.description = "Undo Remediation"
-        self.jinja_action_path = 'analysis/observable_actions/restore.html'
-        self.icon = 'ok-circle'
-
 class ObservableActionUrlCrawl(ObservableAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name = ACTION_URL_CRAWL
-        self.description = "Grab HTML content of URL"
+        self.description = "Download & render screenshot of URL content"
         self.jinja_action_path = 'analysis/observable_actions/url_crawl.html'
         self.icon = 'download-alt'
+
+class ObservableActionFileRender(ObservableAction):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name = ACTION_FILE_RENDER
+        self.description = "Attempt to render screenshot of HTML"
+        self.jinja_action_path = 'analysis/observable_actions/file_render.html'
+        self.icon = 'camera'
