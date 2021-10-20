@@ -16,6 +16,7 @@ import xml.etree.ElementTree as ET
 
 import saq
 
+from saq import graph_api
 from saq.analysis import Analysis, Observable, MODULE_PATH, SPLIT_MODULE_PATH
 from saq.constants import *
 from saq.error import report_exception
@@ -993,6 +994,161 @@ class TagAnalysisModule(AnalysisModule):
 
     def is_excluded(self, observable):
         return False 
+
+class GraphAnalysisModule(AnalysisModule):
+    """An analysis module that uses MS Graph."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Collection accounts for supporting role based access environments
+        self.collection_accounts = {}
+
+        # Name of default graph collection account
+        self.default_collection_account_name = 'default'
+
+        # For storing the loaded graph api objects
+        self.graph_api_clients = {}
+
+    def load_collection_accounts(self):
+        for section_name in saq.CONFIG.keys():
+            if not section_name.startswith('graph_collection_account'):
+                continue
+
+            account_name = None
+            if section_name == 'graph_collection_account':
+                account_name = self.default_collection_account_name
+            else:
+                if not section_name.startswith('graph_collection_account_'):
+                    continue
+                account_name = section_name[len('graph_collection_account_'):]
+
+            self.collection_accounts[account_name] = saq.CONFIG[section_name]
+
+    def build_graph_api_client_map(self):
+        if not self.collection_accounts:
+            self.load_collection_accounts()
+        if not self.collection_accounts:
+            logging.error(f"no graph collection accounts detected")
+            return None
+
+        for account, _config in self.collection_accounts.items():
+            self.graph_api_clients[account] = graph_api.GraphAPI(_config, proxies=saq.proxy.proxies())
+
+    def get_api(self, account_name):
+        if not self.graph_api_clients:
+            self.build_graph_api_client_map()
+        if not self.graph_api_clients:
+            logging.error(f"unable to load any graph api clients")
+            return None
+        if account_name is None:
+            # XXX if company_id in map, use name
+            company_name = [c['name'] for c in saq.NODE_COMPANIES if c['id'] == self.root.company_id]
+            if company_name:
+                account_name = company_name[0]
+        if account_name not in self.graph_api_clients.keys():
+            logging.debug(f"{account_name} not found in graph api client map. using 'default'.")
+            account_name = self.default_collection_account_name
+
+        return self.graph_api_clients[account_name]
+
+    def execute_request(self, api: graph_api.GraphAPI, url: str, method='get', params={}, data={}, **kwargs):
+        response = api.request(url, method=method, proxies=saq.proxy.proxies(), params=params, data=json.dumps(data))
+        if response.status_code == 401:
+            error = response.json()['error']
+            logging.warning(f"authentication failed: {error['message']}")
+            # try again with a fresh token
+            api.get_token()
+            response = api.request(url, method=method, proxies=saq.proxy.proxies(), params=params, data=json.dumps(data))
+        if response.status_code != 200:
+            error = response.json()['error']
+            logging.warning(f"got {response.status_code} getting {url}: {error['code']} : {error['message']}")
+            return False
+
+        return response
+
+    def execute_and_get_all(self, api: graph_api.GraphAPI, url: str, params={}, data={}, **kwargs):
+        """Execute and method='get' all values accross all pages if there are values.
+           NOTE this will return an empty list even if the api call fails.
+        """
+        values = []
+        response = self.execute_request(api, url, params=params, data=data, **kwargs)
+        if not response:
+            return values
+        results = response.json()
+        if 'value' not in results:
+            return values
+        values = results['value']
+        # get any and all paged content
+        if '@odata.nextLink' in results:
+            url = results['@odata.nextLink']
+            while url is not None:
+                response = self.execute_request(api, url, **kwargs)
+                if not response:
+                    break
+                results = response.json()
+                if 'value' in results and results['value']:
+                    values.extend(results['value'])
+                if '@odata.nextLink' in results:
+                    url = results['@odata.nextLink']
+                else:
+                    url = None
+
+        return values
+
+class LDAPAnalysisModule(AnalysisModule):
+    """An analysis module that uses LDAP."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # some additional parameters for Tivoli queries
+        self.tivoli_ldap_enabled = saq.CONFIG.getboolean('ldap', 'tivoli_enabled')
+        self.tivoli_server = saq.CONFIG.get('ldap', 'tivoli_server')
+        self.tivoli_ldap_port = saq.CONFIG.getint('ldap', 'tivoli_ldap_port')
+        self.tivoli_bind_user = saq.CONFIG.get('ldap', 'tivoli_bind_user')
+        self.tivoli_bind_password = saq.CONFIG.get('ldap', 'ldap_bind_password')
+        self.tivoli_base_dn = saq.CONFIG.get('ldap', 'tivoli_base_dn')
+
+    def ldap_query(self, query):
+        entries = saq.ldap.query(query)
+        if len(entries) > 0:
+            return entries[0]['attributes']
+        return None
+
+    def tivoli_ldap_query(self, query):
+
+        if not self.tivoli_ldap_enabled:
+            return None
+
+        from ldap3 import Server, Connection, SIMPLE, SYNC, ASYNC, SUBTREE, ALL, ALL_ATTRIBUTES
+        import json
+
+        try:
+            logging.debug("connecting to tivoli ldap server {} on port {}".format(self.tivoli_server, self.tivoli_ldap_port))
+            with Connection(
+                Server(self.tivoli_server, port = self.tivoli_ldap_port , get_info = ALL),
+                auto_bind = False,
+                client_strategy = SYNC,
+                user=self.tivoli_bind_user,
+                password=self.tivoli_bind_password,
+                authentication=SIMPLE,
+                check_names=True) as c:
+
+                logging.debug("running tivoli ldap query for ({})".format(query))
+                c.search(self.tivoli_base_dn, '({})'.format(query), SUBTREE, attributes = ALL_ATTRIBUTES)
+
+                # a little hack to move the result into json
+                response = json.loads(c.response_to_json())
+                result = c.result
+
+                if len(response['entries']) < 1:
+                    return None
+
+                # XXX not sure about the 0 here, I guess only if we only looking for one thing at a time
+                return response['entries'][0]['attributes']
+
+        except Exception as e:
+            logging.warning("failed tivoli ldap query {}: {}".format(query, e))
+            return None
 
 def splunktime_to_datetime(splunk_time):
     """Convert a splunk time in 2015-02-19T09:50:49.000-05:00 format to a datetime object."""

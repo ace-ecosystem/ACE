@@ -1,0 +1,207 @@
+
+<div class="row">
+<div class="column col-md-8">
+<table class="table table-bordered table-condensed">
+    {% if 'user' in analysis.details %}
+        {% if 'employeeId' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Employee ID</td>
+            <td class="col-md-10">{{analysis.details['user']['employeeId']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'displayName' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Name</td>
+            <td class="col-md-10">{{analysis.details['user']['displayName']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'lastPasswordChangeDateTime' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Last Password Change</td>
+            <td class="col-md-10">{{analysis.details['user']['lastPasswordChangeDateTime']}} (UTC)</td>
+        </tr>
+        {% endif %}
+        {% if 'mail' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Email</td>
+            <td class="col-md-10"><a href="mailto:{{analysis.details['user']['mail']}}">{{analysis.details['user']['mail']}}</a></td>
+        </tr>
+        {% endif %}
+        {% if 'userPrincipalName' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">userPrincipalName</td>
+            <td class="col-md-10">{{analysis.details['user']['userPrincipalName']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'companyName' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Company</td>
+            <td class="col-md-10">{{analysis.details['user']['companyName']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'department' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Department</td>
+            <td class="col-md-10">{{analysis.details['user']['department']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'jobTitle' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Job Title</td>
+            <td class="col-md-10">{{analysis.details['user']['jobTitle']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'streetAddress' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Address</td>
+            <td class="col-md-10">{{analysis.details['user']['streetAddress']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'city' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">City</td>
+            <td class="col-md-10">{{analysis.details['user']['city']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'state' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">State/Province</td>
+            <td class="col-md-10">{{analysis.details['user']['state']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'country' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Country</td>
+            <td class="col-md-10">{{analysis.details['user']['country']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'mobilePhone' in analysis.details['user'] and analysis.details['user']['mobilePhone'] %}
+        <tr>
+            <td class="col-md-2">Phone</td>
+            <td class="col-md-10">{{analysis.details['user']['mobilePhone']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'hireDate' in analysis.details['user'] and analysis.details['user']['hireDate'] != "0001-01-01T00:00:00Z" %}
+        <tr>
+            <td class="col-md-2">Hire Date</td>
+            <td class="col-md-10">{{analysis.details['user']['hireDate']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'preferredLanguage' in analysis.details['user'] %}
+        <tr>
+            <td class="col-md-2">Preferred Language Code</td>
+            <td class="col-md-10">{{analysis.details['user']['preferredLanguage']}}</td>
+        </tr>
+        {% endif %}
+    {% endif %}
+    {% if 'manager' in analysis.details and analysis.details['manager'] %}
+        {% if 'displayName' in analysis.details['manager'] %}
+        <tr>
+            <td class="col-md-2">Manager</td>
+            <td class="col-md-10">{{analysis.details['manager']['displayName']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'mail' in analysis.details['manager'] %}
+        <tr>
+            <td class="col-md-2">Manager Email</td>
+            <td class="col-md-10"><a href="mailto:{{analysis.details['manager']['mail']}}">{{analysis.details['manager']['mail']}}</a></td>
+        </tr>
+        {% endif %}
+        {% if 'mobilePhone' in analysis.details['manager'] and analysis.details['manager']['mobilePhone'] %}
+        <tr>
+            <td class="col-md-2">Manager Phone</td>
+            <td class="col-md-10">{{analysis.details['manager']['mobilePhone']}}</td>
+        </tr>
+        {% endif %}
+        {% if 'jobTitle' in analysis.details['manager'] %}
+        <tr>
+            <td class="col-md-2">Manager Job Title</td>
+            <td class="col-md-10">{{analysis.details['manager']['jobTitle']}}</td>
+        </tr>
+        {% endif %}
+    {% endif %}
+</table>
+</div>
+<div class="column col-md-4">
+    {% if 'encoded_profile_photo' in analysis.details and  analysis.details['encoded_profile_photo'] %}
+        <img src="data:image/jpeg;base64,{{ analysis.details['encoded_profile_photo'] | safe }}">
+    {% endif %}
+</div>
+</div>
+
+<p><b>Direct Reports</b></p>
+{% if 'directReports' in analysis.details and 'value' in analysis.details['directReports'] and analysis.details['directReports']['value'] %}
+<table class="table table-bordered table-condensed">
+    <tr>
+        <th>Name</th>
+        <th>Job Title</th>
+        <th>Office Location</th>
+        <th>userPrincipalName</th>
+    </tr>
+    {% for direct_report in analysis.details['directReports']['value'] %} 
+    <tr>
+        <td>{{ direct_report['displayName'] }}</td>
+        <td>{{ direct_report['jobTitle'] }}</td>
+        <td>{{ direct_report['officeLocation'] }}</td>
+        <td>{{ direct_report['userPrincipalName'] }}</td>      
+    </tr>
+    {% endfor %}  
+</table>
+{% endif %}
+
+<p><b>Group & Directory Role Membership</b></p>
+{% if 'groups' in analysis.details and analysis.details['groups'] %}
+<table class="table table-bordered table-condensed">
+    <tr>
+        <th>Group/Role</th>
+        <th>Description</th>
+        <th>Domain</th>
+    </tr>
+    {% for group in analysis.details['groups'] %}
+ 
+    <tr {% if "admin" in group['displayName'].lower() 
+            or ( group['description'] and "admin" in group['description'].lower() ) 
+            or group["@odata.type"] == "#microsoft.graph.directoryRole"
+        %}style='background-color:#FFFFB0;'{% endif %}>
+        <td>{{ group['displayName'] }}</td>
+        <td>{{ group['description'] }}</td>
+        <td>
+        {% if group["@odata.type"] == "#microsoft.graph.directoryRole" %}
+            <b><i>Azure AD Admin</i></b>
+        {% else %} {# should be "#microsoft.graph.group" == group["@odata.type"] #}
+            {{ group['onPremisesDomainName'] }}
+        {% endif %}
+        </td>
+        
+    </tr>
+    {% endfor %}
+    
+</table>
+{% endif %}
+
+<p><b>Teams Memberships</b></p>
+{% if 'teams' in analysis.details and 'value' in analysis.details['teams'] %}
+<table class="table table-bordered table-condensed">
+    <tr>
+        <th>Team Name</th>
+        <th>Description</th>
+    </tr>
+    {% for team in analysis.details['teams']['value'] %}
+ 
+    <tr>
+        <td>{{ team['displayName'] }}</td>
+        <td>{{ team['description'] }}</td>
+    </tr>
+    {% endfor %}
+    
+</table>
+{% endif %}
+
+<div class="panel panel-default" style="width: 80%">
+<div class="panel-heading">
+    <h3 class="panel-title">Raw Details <a role="button" data-toggle="collapse" data-target="#collapse_raw_upn_details" aria-expanded="true" aria-controls="collapse_raw_upn_details">(hide/show)</a></h3>
+    </div>
+    <div class="well raw-log panel-body collapse" id="collapse_raw_upn_details" style="word-break:break-all; -webkit-text-size-adjust: 110%">
+        <pre>{{ analysis.details | pprint}}</pre>
+    </div>
+</div>
