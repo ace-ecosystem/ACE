@@ -14,7 +14,6 @@ from saq.error import report_exception
 from saq.analysis import Analysis, Observable
 from saq.modules import AnalysisModule, LDAPAnalysisModule, GraphAnalysisModule
 from saq.util import create_timedelta, local_time, is_ipv4
-
 from saq.constants import *
 import saq.ldap
 import saq.util
@@ -441,9 +440,10 @@ class UserSignInHistoryAnalyzer(GraphAnalysisModule):
         # ips
         unique_ips = list(set([si['ipAddress'] for si in events if si.get('ipAddress')]))
         analysis.details['unique_ipaddr'] = unique_ips
-        for ip in unique_ips:
-            if is_ipv4(ip):
-                analysis.add_observable(F_IPV4, ip)
+        # XXX not adding these, can make the alerts "noisy" looking
+        #for ip in unique_ips:
+        #    if is_ipv4(ip):
+        #        analysis.add_observable(F_IPV4, ip)
             # else we need to add an F_IPV6
 
         # apps

@@ -15,9 +15,9 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 
 import saq
-from saq import graph_api
-from saq.analysis import Analysis, Observable, MODULE_PATH
 
+from saq import graph_api
+from saq.analysis import Analysis, Observable, MODULE_PATH, SPLIT_MODULE_PATH
 from saq.constants import *
 from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
@@ -995,7 +995,6 @@ class TagAnalysisModule(AnalysisModule):
     def is_excluded(self, observable):
         return False 
 
-
 class GraphAnalysisModule(AnalysisModule):
     """An analysis module that uses MS Graph."""
     def __init__(self, *args, **kwargs):
@@ -1042,10 +1041,13 @@ class GraphAnalysisModule(AnalysisModule):
             logging.error(f"unable to load any graph api clients")
             return None
         if account_name is None:
-            account_name = self.default_collection_account_name
+            # XXX if company_id in map, use name
+            company_name = [c['name'] for c in saq.NODE_COMPANIES if c['id'] == self.root.company_id]
+            if company_name:
+                account_name = company_name[0]
         if account_name not in self.graph_api_clients.keys():
-            logging.error(f"{account_name} not found in graph api client map")
-            return None
+            logging.debug(f"{account_name} not found in graph api client map. using 'default'.")
+            account_name = self.default_collection_account_name
 
         return self.graph_api_clients[account_name]
 
@@ -1059,7 +1061,7 @@ class GraphAnalysisModule(AnalysisModule):
             response = api.request(url, method=method, proxies=saq.proxy.proxies(), params=params, data=json.dumps(data))
         if response.status_code != 200:
             error = response.json()['error']
-            logging.error(f"got {response.status_code} getting {url}: {error['code']} : {error['message']}")
+            logging.warning(f"got {response.status_code} getting {url}: {error['code']} : {error['message']}")
             return False
 
         return response
@@ -1148,10 +1150,6 @@ class LDAPAnalysisModule(AnalysisModule):
             logging.warning("failed tivoli ldap query {}: {}".format(query, e))
             return None
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 61a98a02fa40591c04deef51e7750fd295abc234
 def splunktime_to_datetime(splunk_time):
     """Convert a splunk time in 2015-02-19T09:50:49.000-05:00 format to a datetime object."""
     assert isinstance(splunk_time, str)
