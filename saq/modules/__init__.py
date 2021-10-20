@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 import saq
 from saq import graph_api
 from saq.analysis import Analysis, Observable, MODULE_PATH
+
 from saq.constants import *
 from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
@@ -1147,7 +1148,10 @@ class LDAPAnalysisModule(AnalysisModule):
             logging.warning("failed tivoli ldap query {}: {}".format(query, e))
             return None
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 61a98a02fa40591c04deef51e7750fd295abc234
 def splunktime_to_datetime(splunk_time):
     """Convert a splunk time in 2015-02-19T09:50:49.000-05:00 format to a datetime object."""
     assert isinstance(splunk_time, str)

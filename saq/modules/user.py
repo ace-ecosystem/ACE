@@ -14,6 +14,7 @@ from saq.error import report_exception
 from saq.analysis import Analysis, Observable
 from saq.modules import AnalysisModule, LDAPAnalysisModule, GraphAnalysisModule
 from saq.util import create_timedelta, local_time, is_ipv4
+
 from saq.constants import *
 import saq.ldap
 import saq.util
