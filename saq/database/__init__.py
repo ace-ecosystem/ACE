@@ -2289,12 +2289,11 @@ class Remediation(Base):
             'result': self.result,
             'comment': self.comment,
             'successful': self.successful,
-            'company_id': self.company_id,
             'status': self.status,
         }
 
     def __str__(self):
-        return f"Remediation: {self.action} - {self.type} - {self.status} - {self.key} - {self.result}"
+        return f"Remediation #{self.id}: {self.action} - {self.type} - {self.status} - {self.key}"
 
 
 class Message(Base):
@@ -2698,7 +2697,6 @@ def initialize_database():
         close_all_sessions()
 
 def initialize_automation_user():
-    # get the id of the ace automation account
     try:
         #import pymysql
         #pymysql.connections.DEBUG = True
