@@ -139,6 +139,7 @@ class GglsblAnalyzer(AnalysisModule):
                 for tag in analysis.details['match_tags']:
                     observable.add_tag(tag.replace('_',' ').lower())
                 observable.add_detection_point("URL has matches on Google Safe Browsing List")
+                observable.add_directive(DIRECTIVE_CRAWL)
                 return True
             else:
                 return False
@@ -734,6 +735,7 @@ class CrawlphishAnalyzer(AnalysisModule):
         if not self._initialized:
             # used to decide what URLs to actually crawl
             self.url_filter = CrawlphishURLFilter()
+            self.url_filter.load()
 
             # a whitelist of sites we'll always crawl
             self.watch_file(self.url_filter.whitelist_path, self.url_filter.load_whitelist)

@@ -605,7 +605,6 @@ def initialize(
         DAEMON_MODE = args.daemon
 
     # make sure we've got the automation user set up
-
     try:
         initialize_automation_user()
     except Exception as e:
@@ -613,7 +612,6 @@ def initialize(
         # XXX No application found. Either work inside a view function or push an application context. See http://flask-sqlalchemy.pocoo.org/contexts/.
         # XXX Also, this: Timeout when reading response headers from daemon process 'ace': /opt/ace/api.wsgi
         logging.error(f"problem initializing automation user: {e}")
-
 
     # initialize other systems
     #initialize_message_system()

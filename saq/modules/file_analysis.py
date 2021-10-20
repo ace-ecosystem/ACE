@@ -2128,6 +2128,7 @@ class PDFAnalyzer(AnalysisModule):
         pdfparser_output_file = '{}.pdfparser'.format(local_file_path)
 
         # run pdf parser
+        stderr = None
         with open(pdfparser_output_file, 'wb') as fp:
             p = Popen(['python3', self.pdfparser_path,
             '-f', '-w', '-v', '-c', '--debug', local_file_path], stdout=fp, stderr=PIPE)
@@ -2135,10 +2136,9 @@ class PDFAnalyzer(AnalysisModule):
                 _, stderr = p.communicate(timeout=10)
             except TimeoutExpired as e:
                 logging.warning("pdfparser timed out on {}".format(local_file_path))
-                #p.kill()
-                _, stderr = p.communicate()
+                p.kill()
 
-        if len(stderr) > 0:
+        if stderr is not None and len(stderr) > 0:
             logging.warning("pdfparser returned errors for {}".format(local_file_path))
 
         # add the output file as a new file to scan

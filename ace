@@ -1356,234 +1356,24 @@ message_system_parser.set_defaults(func=message_system)
 # Section for Metrics / Analytics / Statistics
 #
 
-from metrics.cli import build_metric_parser, stdout_like
-from metrics.alerts import ( get_alerts_between_dates,
-                             VALID_ALERT_STATS, 
-                             FRIENDLY_STAT_NAME_MAP,
-                             statistics_by_month_by_dispo,
-                             generate_hours_of_operation_summary_table,
-                             generate_overall_summary_table,
-                             define_business_time
-                            )
-from metrics.alerts.users import get_all_users, generate_user_alert_stats
-from metrics.alerts.alert_types import ( unique_alert_types_between_dates,
-                                         count_quantites_by_alert_type,
-                                         get_alerts_between_dates_by_type,
-                                         generate_alert_type_stats,
-                                         all_alert_types
-                                        )
+try:
+    from ace_metrics.cli import build_metric_parser, execute_metric_arguments
 
-from metrics.events import ( get_events_between_dates,
-                             get_incidents_from_events,
-                             add_email_alert_counts_per_event
-                            )
+    metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
+    build_metric_parser(metrics_parser)
 
-from metrics.helpers import ( get_companies,
-                              dataframes_to_archive_bytes_of_json_files,
-                              dataframes_to_xlsx_bytes
-                            )
+    def metrics(args):
+        """Interface with the ace_metrics lib."""
 
-metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
-build_metric_parser(metrics_parser)
+        from saq.database import get_db_connection
 
-def metrics(args):
-    """Interface with the metric library."""
-    import pandas as pd
-    from saq.database import get_db_connection
-
-    # store tables for printing or writing
-    tables = []
-
-    if args.companies:
-        valid_companies = []
         with get_db_connection() as db:
-            valid_companies = list(get_companies(db).values())
- 
-        for company in args.companies:
-            if company not in valid_companies:
-                logging.warning(f"{company} is not a valid company: {valid_companies}")
-                args.companies.remove(company)
-        if not args.companies:
-            sys.exit(0)
+            return execute_metric_arguments(db, args)
 
-    if args.business_hours:
-        bh_settings = args.business_hours.split(',')
-        if not bh_settings:
-            logging.error(f"invalid business hour format: {args.business_hours}")
-            sys.exit(1)
-        start_hour = int(bh_settings[0])
-        end_hour = int(bh_settings[1])
-        time_zone = bh_settings[2]
-        # NOTE: holidays remain default
-        args.business_hours = define_business_time(start_hour, end_hour, time_zone)
+    metrics_parser.set_defaults(func=metrics)
 
-    if args.metric_target == 'events':
-        with get_db_connection() as db:
-            start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
-            end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
-            events = get_events_between_dates(start_date, end_date, db, selected_companies=args.companies)
-            if args.count_emails:
-                add_email_alert_counts_per_event(events, db)
-
-        if args.incidents or args.incidents_only:
-            incidents = get_incidents_from_events(events)
-            tables.append(incidents)
-
-        if not args.incidents_only:
-            events.drop(columns=['id'], inplace=True)
-            tables.append(events)
-
-    if args.metric_target == 'alerts':
-        # The intention is to only get data that's needed while
-        # allowing the user to express the widest range of possible options.
-
-        users = {}
-        user_ids = []
-        if args.alert_metric_target == 'users':
-            with get_db_connection() as db:
-                users = get_all_users(db)
-
-            if args.list_users:
-                analysts = pd.DataFrame.from_dict(users, orient='index')
-                analysts.name = "Users"
-                tables.append(analysts)
-
-            if args.users:
-                # only use specified users
-                for username in args.users:
-                    user_ids.extend([user_id for user_id, user in users.items() if username == user['username']])
-            else:
-                user_ids = [user_id for user_id in users.keys()]
-
-        if args.alert_metric_target == 'types':
-            if args.overall_count_breakdown:
-                with get_db_connection() as db:
-                    start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
-                    end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
-                    at_counts = count_quantites_by_alert_type(start_date, end_date, db)
-                    tables.append(at_counts)
-
-            # does the user want specific alert_type statistics?
-            at_arg_stats = [sarg[len('alert_type_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('alert_type_stat_') and value is True]
-
-            if args.list_alert_types or args.all_at_stats or at_arg_stats:
-                with get_db_connection() as db:
-                    start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
-                    end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
-                    alert_types = unique_alert_types_between_dates(start_date, end_date, db)
-
-                if args.list_alert_types:
-                    print(f"Alert Types between '{args.start_datetime}' and '{args.end_datetime}':")
-                    [print(f"\t{at}") for at in alert_types]
-                    print()
-                    print("All Alert Types:")
-                    [print(f"\t{at}") for at in all_alert_types(db)]
-
-                if args.types:
-                    # only use specified alert types
-                    alert_types = [at for at in alert_types if at in args.types]
-
-                if args.all_at_stats or at_arg_stats:
-                    with get_db_connection() as db:
-                        start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
-                        end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
-                        alert_type_map = get_alerts_between_dates_by_type(start_date, end_date, db, selected_companies=args.companies)
-
-                    alert_type_stat_map = generate_alert_type_stats(alert_type_map, business_hours=args.business_hours)
-
-                    for alert_type in alert_types:
-                        if args.all_at_stats:
-                            for stat in VALID_ALERT_STATS:
-                                tables.append(alert_type_stat_map[alert_type][stat])
-                        else:
-                            for stat in at_arg_stats:
-                                tables.append(alert_type_stat_map[alert_type][stat])
-
-        # does the user want specific alert statistics?
-        alert_arg_stats = [sarg[len('alert_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('alert_stat_') and value is True]
-
-        # only get alert data if we really needs it
-        if args.alert_metric_target == 'users' or alert_arg_stats \
-          or args.all_alert_stats or args.hours_of_operation or args.average_alert_cycletime_summary:
-            with get_db_connection() as db:
-                start_date = datetime.datetime.strptime(args.start_datetime, '%Y-%m-%d %H:%M:%S')
-                end_date = datetime.datetime.strptime(args.end_datetime, '%Y-%m-%d %H:%M:%S')
-                alerts = get_alerts_between_dates(start_date, end_date, db, selected_companies=args.companies)
-
-        if args.alert_metric_target == 'users':
-            all_user_stat_map = generate_user_alert_stats(alerts, users, business_hours=args.business_hours)
-
-            for user_id in user_ids:
-                if args.all_user_stats:
-                    for stat in VALID_ALERT_STATS:
-                        tables.append(all_user_stat_map[user_id][stat])
-                else:
-                    user_arg_stats = [sarg[len('user_stat_'):] for sarg, value in vars(args).items() if sarg.startswith('user_stat_') and value is True]
-                    for stat in user_arg_stats:
-                        tables.append(all_user_stat_map[user_id][stat])
-
-        if alert_arg_stats or args.all_alert_stats:
-            alert_stat_map = statistics_by_month_by_dispo(alerts, business_hours=args.business_hours)
-
-            if args.all_alert_stats:
-                for stat in VALID_ALERT_STATS:
-                    alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
-                    tables.append(alert_stat_map[stat])
-            else:
-                for stat in alert_arg_stats:
-                    alert_stat_map[stat].name = FRIENDLY_STAT_NAME_MAP[stat]
-                    tables.append(alert_stat_map[stat])
-
-        if args.hours_of_operation:
-            if not args.business_hours:
-                # business hours are required
-                args.business_hours = define_business_time()
-            hop_df = generate_hours_of_operation_summary_table(alerts.copy(), args.business_hours)
-            if args.fileout_format:
-                tables.append(hop_df)
-            else:
-                stdout_like(hop_df, format=args.stdout_format)
-
-
-        if args.average_alert_cycletime_summary:
-            if not args.business_hours:
-                # business hours are required
-                args.business_hours = define_business_time()
-            sla_df = generate_overall_summary_table(alerts.copy(), args.business_hours)
-            if args.fileout_format:
-                tables.append(sla_df)
-            else:
-                stdout_like(sla_df, format=args.stdout_format)
-
-    # output
-    if args.fileout_format and tables:
-        time_stamp = str(datetime.datetime.now().timestamp())
-        time_stamp = time_stamp[:time_stamp.rfind('.')]
-        filename = f"ACE_metrics_{time_stamp}"
-
-        if args.fileout_format == 'xls':
-            if args.filename:
-                filename = args.filename
-            else:
-                filename += ".xlsx"
-            with open(filename, 'wb') as fp:
-                fp.write(dataframes_to_xlsx_bytes(tables))
-            if os.path.exists(filename):
-                print(f" + wrote {filename}")
-        if args.fileout_format == 'json':
-            if args.filename:
-                filename = args.filename
-            else:
-                filename += ".tar.gz"
-            with open(filename, 'wb') as fp:
-                fp.write(dataframes_to_archive_bytes_of_json_files(tables))
-            if os.path.exists(filename):
-                print(f" + wrote {filename}")
-    else:
-        for table in tables:
-            stdout_like(table, format=args.stdout_format)
-
-metrics_parser.set_defaults(func=metrics)
+except ModuleNotFoundError:
+    pass
 
 
 # ============================================================================
@@ -3007,6 +2797,10 @@ update_organization_parsers = subparsers.add_parser('update-organization',
     help="Updates the files used by the UserTaggingAnalyzer module.")
 update_organization_parsers.set_defaults(func=update_organization)
 
+# ============================================================================
+# ip-inspector utilities
+#
+
 def update_maxmind_databases(args):
     from saq import proxy
     from ip_inspector import maxmind
@@ -3026,6 +2820,28 @@ update_maxmind_parser = subparsers.add_parser('update-maxmind-databases',
 update_maxmind_parser.add_argument('--license-key', action='store', default=None,
     help="Manually supply a license key.")
 update_maxmind_parser.set_defaults(func=update_maxmind_databases)
+
+from ip_inspector.cli import build_parser
+
+ip_inspector_parser = subparsers.add_parser("ip-inspector", help="ACE's IP Inspector environment.")
+build_parser(ip_inspector_parser)
+
+def ipinspector(args):
+    """Interface with the ip_inspector lib."""
+    from saq import proxy
+    from ip_inspector.cli import execute
+
+    config = saq.CONFIG['analysis_module_ip_inspector']
+    use_proxy = config.getboolean('use_proxy')
+    if use_proxy:
+        proxies = proxy.proxies()
+        os.environ['https_proxy'] = proxies['https']
+        os.environ['http_proxy'] = proxies['http']
+
+    return execute(args)
+
+ip_inspector_parser.set_defaults(func=ipinspector)
+
 
 # TODO move this into integration
 def update_crits_cache(args):

@@ -1,9 +1,4 @@
 <p><b>Process Details</b></p>
-{% if 'segment_count' in analysis.details %}
-	{% if analysis.details['segment_count'] > ace_config['carbon_black'].getint('segment_limit') %}
-	    <h6> {{ ace_config['carbon_black'].getint('segment_limit') }} out of {{ analysis.details['segment_count'] }} process segments stored.</h6>
-	{% endif %}
-{% endif %}
 <div class="row">
     <div class="col-md-12">
         <!-- by default we just pretty-print the json -->
@@ -14,14 +9,14 @@
 
 <div id="accordion" role="tablist" aria-multiselectable="true">
 
-  {% if 'parent' not in analysis.details %}
+  {% if not analysis.details %}
       An error was encountered that prevented analysis details from being completed.
   {% else %}
   <div class="card">
     <div class="card-header" role="tab" id="headingAncestry">
       <h5 class="mb-0">
         <a data-toggle="collapse" data-parent="#accordion" href="#collapseAncestry">
-          Ancestry Details (Parent and Grandparent)
+          Ancestry Details
         </a>
       </h5>
     </div>
@@ -29,41 +24,19 @@
       <div class="card-block">
         <table class="table table-bordered table-condensed">
           <tr>
-            <td class="col-md-2">Grand Parent Process Name</td>
-            <td class="col-md-10">{{analysis.details['parent']['parent_name']}}</td>
-          </tr>
-          <tr>
-            <td class="col-md-2">Grand Parent GUID</td>
-            <td class="col-md-10">{{analysis.details['parent']['parent_id']}}</td>
-          </tr>
-        </table>
-        <table class="table table-bordered table-condensed">
-          <tr>
             <td class="col-md-2">Parent Process Name</td>
-            <td class="col-md-10">{{analysis.details['parent']['process_name']}}</td>
-          </tr>
-          <tr>
-            <td class="col-md-2">Parent Start Time</td>
-            <td class="col-md-10">{{analysis.details['parent']['start']}}</td>
-          </tr>
-          <tr>
-            <td class="col-md-2">Parent Command line</td>
-            <td class="col-md-10">{{analysis.details['parent']['cmdline']}}</td>
-          </tr>
-          <tr>
-            <td class="col-md-2">Parent Process MD5</td>
-            <td class="col-md-10">{{analysis.details['parent']['process_md5']}}</td>
+            <td class="col-md-10">{{analysis.details['process_name']}}</td>
           </tr>
           <tr>
             <td class="col-md-2">Parent GUID</td>
-            <td class="col-md-10">{{analysis.details['parent']['id']}}</td>
+            <td class="col-md-10">{{analysis.details['parent_id']}}</td>
           </tr>
         </table>
-	<div class="row">
+	      <div class="row">
           <div class="col-md-12">
             {% block alert_proc_ancestry %} <pre>{{ analysis.details['process_ancestry'] }}</pre> {% endblock %}
-	  </div>
-	</div>
+	        </div>
+	      </div>
       </div>
     </div>
   </div>
@@ -77,49 +50,40 @@
       </h5>
     </div>
     <div id="collapseProcessTree" class="collapse" role="tabpanel" aria-labelledby="headingOne">
-      <!--div class="card-block">
-        <ul>
-          {% for depth, proc in analysis.details['process_tree'] %}
-            {% for n in range(depth) %}
-                <ul>
-            {% endfor %}
-            <li>{{proc}}</li>
-            {% for n in range(depth) %}
-                </ul>
-            {% endfor %}
-          {% endfor %}
-        </ul>
-      </div-->
       <div class="row">
           <div class="col-md-12">
-            {% block alert_proc_tree %} <pre>{{ analysis.details['process_tree_str'] }}</pre> {% endblock %}
+            {% block alert_proc_tree %} <pre>{{ analysis.details['process_tree'] }}</pre> {% endblock %}
           </div>
         </div>
     </div>
   </div>
 
+  <h6>Captured events for {{ analysis.details['captured_segments']|length }} out of {{ analysis.details['all_segments']|length }} process segments.</h6>
   <div class="card">
     <div class="card-header" role="tab" id="headingTwo">
       <h5 class="mb-0">
         <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseFileMods" aria-expanded="false" aria-controls="collapseFileMods">
-		File Modifications (Captured: {{analysis.details['filemods']|length}} / Total Reported: {{analysis.details['filemod_count']}})
+		File Modifications (Total Reported: {{analysis.details['filemod_count']}})
         </a>
       </h5>
     </div>
     <div id="collapseFileMods" class="collapse" role="tabpanel" aria-labelledby="headingTwo">
       <div class="card-block">
         {% if analysis.details['filemod_count'] > 0 %}
+          {% for segment_id,segment in analysis.details['captured_segments'].items() %}
+          <p>segment: {{segment_id}} has {{segment['filemods']|length}} filemods</p>
           <table class="table table-bordered table-condensed">
-            {% for fm in analysis.details['filemods'] %}
+            {% for fm in segment['filemods'] %}
                 {% if fm['type'] != "CreatedFile" %}
-                  <tr>
-                    <td class="col-md-2">{{fm.timestamp}}</td>
-                    <td class="col-md-1">{{fm.type}}</td>
-                    <td class="col-md-9">{{fm.path}}</td>
-                  </tr>
+                <tr>
+                  <td class="col-md-2">{{fm['timestamp']}}</td>
+                  <td class="col-md-1">{{fm['type']}}</td>
+                  <td class="col-md-9">{{fm['path']}}</td>
+                </tr>
                 {% endif %}
             {% endfor %}
           </table>
+          {% endfor %}
         {% else %}
           This process performed zero file modifications.
         {% endif %}
@@ -131,15 +95,17 @@
     <div class="card-header" role="tab" id="headingTwo">
       <h5 class="mb-0">
         <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseNetconns" aria-expanded="false" aria-controls="collapseFileMods">
-		Network Connections (Captured: {{analysis.details['netconns']|length}} / Total Reported: {{analysis.details['netconn_count']}})
+		Network Connections (Total Reported: {{analysis.details['netconn_count']}})
         </a>
       </h5>
     </div>
     <div id="collapseNetconns" class="collapse" role="tabpanel" aria-labelledby="headingTwo">
       <div class="card-block">
         {% if analysis.details['netconn_count'] > 0 %}
+          {% for segment_id,segment in analysis.details['captured_segments'].items() %}
+          <p>segment: {{segment_id}} has {{segment['netconns']|length}} netconns</p>
           <table class="table table-bordered table-condensed">
-            {% for nc in analysis.details['netconns'] %}
+            {% for nc in segment['netconns'] %}
               <tr>
                 <td class="col-md-2">{{nc.timestamp}}</td>
                 <td class="col-md-1">{{nc.direction}}</td>
@@ -149,6 +115,7 @@
               </tr>
             {% endfor %}
           </table>
+          {% endfor %}
         {% else %}
           This process performed zero network connections.
         {% endif %}
@@ -160,15 +127,17 @@
     <div class="card-header" role="tab" id="headingFour">
       <h5 class="mb-0">
         <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseRegMods" aria-expanded="false" aria-controls="collapseRegMods">
-		Registry Modifications (Captured: {{analysis.details['regmods']|length}}  / Total Reported: {{analysis.details['regmod_count']}})
+		Registry Modifications (Total Reported: {{analysis.details['regmod_count']}})
         </a>
       </h5>
     </div> 
     <div id="collapseRegMods" class="collapse" role="tabpanel">
       <div class="card-block">
         {% if analysis.details['regmod_count'] > 0 %}
+          {% for segment_id,segment in analysis.details['captured_segments'].items() %}
+          <p>segment: {{segment_id}} has {{segment['regmods']|length}} regmods</p>
           <table class="table table-bordered table-condensed">
-            {% for rm in analysis.details['regmods'] %}
+            {% for rm in segment['regmods'] %}
               <tr>
                 <td class="col-md-2">{{rm.timestamp}}</td>
                 <td class="col-md-1">{{rm.type}}</td>
@@ -176,6 +145,7 @@
               </tr>
             {% endfor %}
           </table>
+          {% endfor %}
         {% else %}
           This process performed zero registry modifications.
         {% endif %}
@@ -187,24 +157,27 @@
     <div class="card-header" role="tab" id="headingFour">
       <h5 class="mb-0">
         <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseUnModLoads" aria-expanded="false" aria-controls="collapseUnModLoads">
-          Unsigned ModLoads (Captured: {{ analysis.details.unsigned_modloads | length}})
+          ModLoads (Total Reported: {{analysis.details['modload_count']}})
         </a>
       </h5>
     </div> 
     <div id="collapseUnModLoads" class="collapse" role="tabpanel">
       <div class="card-block">
-        {% if analysis.details['unsigned_modloads'] | count > 0 %}
+        {% if analysis.details['modload_count'] > 0 %}
+          {% for segment_id,segment in analysis.details['captured_segments'].items() %}
+          <p>segment: {{segment_id}} has {{segment['modloads']|length}} modloads</p>
           <table class="table table-bordered table-condensed">
-            {% for um in analysis.details['unsigned_modloads'] %}
+            {% for ml in segment['modloads'] %}
               <tr>
-                <td class="col-md-2">{{um.timestamp}}</td>
-                <td class="col-md-2">md5: {{um.md5}}</td>
-                <td class="col-md-8">{{um.path}}</td>
+                <td class="col-md-2">{{ml.timestamp}}</td>
+                <td class="col-md-2">md5: {{ml.md5}}</td>
+                <td class="col-md-8">{{ml.path}}</td>
               </tr>
             {% endfor %}
           </table>
+          {% endfor %}
         {% else %}
-          This process loaded zero unsigned moduals.
+          This process loaded zero modloads.
         {% endif %}
       </div>
     </div>
@@ -214,7 +187,7 @@
     <div class="card-header" role="tab" id="headingFour">
       <h5 class="mb-0">
         <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseCrossProcs" aria-expanded="false" aria-controls="collapseCrossProcs">
-		Crossprocs (Captured: {{analysis.details['crossprocs']|length}} / Total Reported: {{ analysis.details.crossproc_count }})
+		Crossprocs (Total Reported: {{analysis.details['crossproc_count']}})
         </a>
       </h5>
     </div> 
@@ -238,20 +211,21 @@
       <div class="row">
           <div class="col-md-12">
             {% block alert_cproc %}
-	    {% for cp in analysis.details['crossprocs'] %}
-	      <pre>
-	        Timestamp: {{cp['timestamp']}}
-		Type: {{cp['type']}}
-		Source Path: {{cp['source_path']}} (md5: {{cp['source_md5']}})
-		Target Path: {{cp['target_path']}} (md5: {{cp['target_md5']}})
-                Source Process GUID: {{cp['source_proc_guid']}}
-		Target Process GUID: {{cp['target_proc_guid']}}
-		Source Web Link: {{cp['source_web_link']}}
-		Target Web Link: {{cp['target_web_link']}}
-		Privileges: {{cp['privileges']}}
-	      </pre>
-	    {% endfor %}
-	    {% endblock %}
+            {% for segment_id,segment in analysis.details['captured_segments'].items() %}
+              <p>segment: {{segment_id}} has {{segment['crossprocs']|length}} crossprocs</p>
+              {% for cp in segment['crossprocs'] %}
+                <pre>
+                  Timestamp: {{cp['timestamp']}}
+                  Type: {{cp['type']}}
+                  Source Path: {{cp['source_path']}} (md5: {{cp['source_md5']}})
+                  Target Path: {{cp['target_path']}} (md5: {{cp['target_md5']}})
+                  Source Process GUID: {{cp['source_procguid']}}
+                  Target Process GUID: {{cp['target_procguid']}}
+                  Privileges: {{cp['privileges']}}
+                </pre>
+              {% endfor %}
+            {% endfor %}
+	        {% endblock %}
           </div>
         </div>
       </div>

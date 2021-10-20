@@ -8,7 +8,7 @@ MarkupSafe
 Pandas
 Pillow
 PyMySQL
-SQLAlchemy>=1.3.0
+SQLAlchemy==1.3.18
 Werkzeug==0.16.0
 WTForms
 beautifulsoup4
@@ -29,8 +29,6 @@ mkdocs-awesome-pages-plugin
 msoffice_decrypt
 olefile
 oletools
-openpyxl
-pandas==1.1.1
 pcodedmp
 pip
 plyara==2.0.3
@@ -75,3 +73,6 @@ tabulate
 fakeredis
 distorm3
 requests-mock
+flare-capa
+pytenable
+ip_inspector>=0.1.10
