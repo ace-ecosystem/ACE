@@ -18,7 +18,7 @@
         <button id="btn-add-observable" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#add_observable_modal" {% if alert.is_locked() or not ace_config['gui'].getboolean('add_observable') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add Observable</button>
         <button type="button" name="btn-show-add-tags" class="btn btn-default btn-sm" data-toggle="modal" data-target="#tag_modal"><span class="glyphicon glyphicon-tags"></span> Add Tag(s)</button>
         <!--<button id="btn-analyze_alert" type="button" class="btn btn-default btn-sm" {% if alert.is_locked() or not ace_config['gui'].getboolean('analyze_alert') %}disabled{% endif %}><span class="glyphicon glyphicon-lock"></span> Re-Analyze</button>-->
-        <button id="btn-remediation" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-remove"></span> Remediation</button>
+        <button type="button" class="btn btn-default btn-sm" onclick="show_remediation_targets(['{{alert.uuid}}'])"><span class="glyphicon glyphicon-remove"></span> Remediation</button>
         <button id="btn-add-to-event" type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#event_modal" {%if not ace_config['gui'].getboolean('event_management') %}tabindex="-1" disabled{% endif %}><span class="glyphicon glyphicon-plus-sign"></span> Add To Event</button>
     </form>
 </div>
@@ -37,7 +37,7 @@
 {% block page_content %}
 <div class="container-fluid">
     <!-- main content area -->
-    <!-- ======================
+    <!-- 
         | content        | tags|
     -->
     <div class="row voffset10" style="margin-top:15px;">
@@ -172,6 +172,7 @@
         <input type="hidden" id="frm-observable-filter-value" name="search_observable_value" value="">
         <input type="hidden" id="frm-observable-filter-type" name="search_observable_type" value="">
     </form>
+
 </div>
 
 <form id="analyze-alert-form" action="{{url_for('analysis.analyze_alert')}}" method="POST">

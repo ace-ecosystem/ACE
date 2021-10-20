@@ -16,6 +16,7 @@ from saq.modules import AnalysisModule, LDAPAnalysisModule, GraphAnalysisModule
 from saq.util import create_timedelta, local_time, is_ipv4
 from saq.constants import *
 import saq.ldap
+import saq.util
 
 class UserTagAnalysis(Analysis):
     def initialize_details(self):
@@ -76,7 +77,7 @@ class EmailAddressAnalysis(Analysis):
             return f"Email Analysis - {desc}"
         return None
 
-class EmailAddressAnalyzer(LDAPAnalysisModule):
+class EmailAddressAnalyzer(AnalysisModule):
     @property
     def generated_analysis_type(self):
         return EmailAddressAnalysis
@@ -88,17 +89,13 @@ class EmailAddressAnalyzer(LDAPAnalysisModule):
     def execute_analysis(self, email_address):
         analysis = self.create_analysis(email_address)
         analysis.details = saq.ldap.lookup_email_address(email_address.value)
-
-        # add user observables for each user id found
+        if len(analysis.details) == 0:
+            return False
         for entry in analysis.details:
             if 'attributes' not in entry or 'cn' not in entry['attributes']:
                 continue
             analysis.add_observable(F_USER, entry['attributes']['cn'])
-
-        # return true if user was found, false otherwise
-        if len(analysis.details) > 0:
-            return True
-        return False
+        return True
 
 class UserAnalysis(Analysis):
     """What is the contact information for this user?  What is their position?  Who do they work for?"""
@@ -117,22 +114,14 @@ class UserAnalysis(Analysis):
         if not self.details['ldap']:
             return None
 
-        if 'uid' in self.details['ldap']:
-            return "User Analysis (Tivoli) - {} - {} - {}".format(
-                self.details['ldap']['cn'] if 'cn' in self.details['ldap'] else '',
-                self.details['ldap']['companyName'] if 'companyName' in self.details['ldap'] else '',
-                self.details['ldap']['orgLevel4'] if 'orgLevel4' in self.details['ldap'] else '')
-
-        return "User Analysis - {} - {} - {} - {}".format(
+        return "User Analysis - {} - {} - {} - {} - {}".format(
             self.details['ldap']['displayName'] if 'displayName' in self.details['ldap'] else '',
             self.details['ldap']['company'] if 'company' in self.details['ldap'] else '',
             self.details['ldap']['l'] if 'l' in self.details['ldap'] else '',
+            self.details['ldap']['division'] if 'division' in self.details['ldap'] else '',
             self.details['ldap']['title'] if 'title' in self.details['ldap'] else '')
 
-    #def always_visible(self):
-        #return True
-
-class UserAnalyzer(LDAPAnalysisModule):
+class UserAnalyzer(AnalysisModule):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tag_mappings = {}
@@ -148,27 +137,18 @@ class UserAnalyzer(LDAPAnalysisModule):
     def valid_observable_types(self):
         return F_USER
 
-    def _ldap_query_user(self, username):
-        results = self.ldap_query("cn={}*".format(username))
-        if results is not None and 'manager' in results:
-            for name_value_pair in results['manager'].split(','):
-                (name, value) = name_value_pair.split('=', 2)
-                if name == 'CN':
-                    results['manager_cn'] = value
-        return results
-
     def execute_analysis(self, user):
         analysis = self.create_analysis(user)
         analysis.details = {}
-        analysis.details['ldap'] = self._ldap_query_user(user.value)
+        analysis.details['ldap'] = saq.ldap.lookup_user(user.value)
         if analysis.details['ldap'] is None:
             logging.error(f"Failed to fetch ldap info for {user.value}")
             return False
 
         # get manager info and determine if user is executive
-        top_user = saq.CONFIG['ldap_executives']['top_user']
+        top_user = saq.CONFIG['ldap']['top_user']
         if 'manager_cn' in analysis.details['ldap'] and analysis.details['ldap']['manager_cn'] is not None:
-            analysis.details['manager_ldap'] = self._ldap_query_user(analysis.details['ldap']['manager_cn'])
+            analysis.details['manager_ldap'] = saq.ldap.lookup_user(analysis.details['ldap']['manager_cn'])
             if analysis.details['manager_ldap'] is None:
                 logging.error(f"Failed to fetch manger ldap info for {user.value}")
             elif 'manager_cn' in analysis.details['manager_ldap'] and analysis.details['manager_ldap']['manager_cn'] is not None:

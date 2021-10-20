@@ -15,13 +15,41 @@ from saq.extractors import RESULT_MESSAGE_NOT_FOUND, RESULT_MESSAGE_FOUND
 from saq import proxy
 import time
 
+class GraphCredentialCombinationError(Exception):
+    """Used when client credentials supplied incorrectly.
+    """
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return "Error: %s" % self.value
+
 class GraphApiAuth(requests.auth.AuthBase):
-    def __init__(self, client_id, tenant_id, thumbprint, private_key_path, auth_url="https://login.microsoftonline.com", scope="https://graph.microsoft.com/.default"):
+    """Graph API authentication helper.
+
+    This class will automatically refresh authentication tokens when they expire.
+    Supports certificate and client/application secret authentication.
+    If using a certificate, you must pass the `thumbprint` and the path to the
+    private key file.
+    If using a client/application secret, pass the secret as a string via
+    `client_credential`. A passed `client_credential` will take preference.
+    """
+    def __init__(self,
+                 client_id: str,
+                 tenant_id: str,
+                 thumbprint: str=None,
+                 private_key_path: str=None,
+                 client_credential: str=None,
+                 auth_url: str="https://login.microsoftonline.com",
+                 scope: str="https://graph.microsoft.com/.default"):
+
         authority = f"{auth_url}/{tenant_id}"
-        with open(private_key_path) as f:
-            private_key = f.read()
-        client_credential = { "thumbprint": thumbprint, "private_key": private_key }
-        self.client_app = msal.ConfidentialClientApplication(client_id, authority=authority, client_credential=client_credential, timeout=5)
+        if client_credential is None:
+            if not thumbprint or not private_key_path:
+                raise GraphCredentialCombinationError("Must supply thumbprint and private_key_path OR client_credential.")
+            with open(private_key_path) as f:
+                private_key = f.read()
+            client_credential = { "thumbprint": thumbprint, "private_key": private_key }
+        self.client_app = msal.ConfidentialClientApplication(client_id, authority=authority, client_credential=client_credential, timeout=5, proxies=proxy.proxies())
         self.scope = scope
         self.token = None
         self.token_expiration_time = 0

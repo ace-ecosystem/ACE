@@ -41,6 +41,7 @@ F_DLP_INCIDENT = 'dlp_incident'
 F_EMAIL_ADDRESS = 'email_address'
 F_EMAIL_CONVERSATION = 'email_conversation'
 F_EMAIL_DELIVERY = 'email_delivery'
+F_EMAIL_SUBJECT = 'email_subject'
 F_EXABEAM_SESSION = 'exabeam_session'
 F_EXTERNAL_UID = 'external_uid'
 F_FILE = 'file'
@@ -58,8 +59,10 @@ F_IPV4_FULL_CONVERSATION = 'ipv4_full_conversation'
 F_MAC_ADDRESS = 'mac_address'
 F_MD5 = 'md5'
 F_MESSAGE_ID = 'message_id'
+F_O365_FILE = 'o365_file'
 F_PCAP = 'pcap'
 F_PROCESS_GUID = 'process_guid'
+F_CBC_PROCESS_GUID = 'cbc_process_guid'
 F_SHA1 = 'sha1'
 F_SHA256 = 'sha256'
 F_SNORT_SIGNATURE = 'snort_sig'
@@ -78,6 +81,7 @@ OBSERVABLE_DESCRIPTIONS = {
     F_EMAIL_ADDRESS: 'email address',
     F_EMAIL_CONVERSATION: 'a conversation between a source email address (MAIL FROM) and a destination email address (RCPT TO)',
     F_EMAIL_DELIVERY: 'a delivery of a an email to a target mailbox',
+    F_EMAIL_SUBJECT: 'the subject of an email',
     F_EXABEAM_SESSION: 'id of an exabeam session',
     F_EXTERNAL_UID: 'unique identifier for something that is stored in an external tool. Format: tool_name:uid',
     F_FILE: 'path to an attached file',
@@ -95,8 +99,10 @@ OBSERVABLE_DESCRIPTIONS = {
     F_MAC_ADDRESS: 'network card mac address',
     F_MD5: 'MD5 hash',
     F_MESSAGE_ID: 'email Message-ID',
+    F_O365_FILE: 'graph api path to a file in o365',
     F_PCAP: 'path to a pcap formatted file *** DEPRECATED (use F_FILE instead)',
-    F_PROCESS_GUID: 'CarbonBlack global process identifier',
+    F_PROCESS_GUID: 'Carbon Black Response global process identifier',
+    F_CBC_PROCESS_GUID: 'Carbon Black Cloud process identifier',
     F_SHA1: 'SHA1 hash',
     F_SHA256: 'SHA256 hash',
     F_SNORT_SIGNATURE: 'snort signature ID',
@@ -116,6 +122,7 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_EMAIL_ADDRESS,
     F_EMAIL_CONVERSATION,
     F_EMAIL_DELIVERY,
+    F_EMAIL_SUBJECT,
     F_EXABEAM_SESSION,
     F_EXTERNAL_UID,
     F_FILE,
@@ -133,8 +140,10 @@ VALID_OBSERVABLE_TYPES = sorted([
     F_MAC_ADDRESS,
     F_MD5,
     F_MESSAGE_ID,
+    F_O365_FILE,
     F_PCAP,
     F_PROCESS_GUID,
+    F_CBC_PROCESS_GUID,
     F_SHA1,
     F_SHA256,
     F_SNORT_SIGNATURE,
@@ -225,7 +234,7 @@ DISPOSITION_INSIDER_DATA_EXFIL = 'INSIDER_DATA_EXFIL'
 # disposition to label mapping
 # each disposition has a specific CSS class assigned to it
 DISPOSITION_CSS_MAPPING = {
-    None: 'default', # when no disposition has been set yet
+    None: 'special', # when no disposition has been set yet
     DISPOSITION_FALSE_POSITIVE: 'success',
     DISPOSITION_IGNORE: 'default',
     DISPOSITION_UNKNOWN: 'info',
@@ -312,6 +321,7 @@ DISPOSITION_RANK = {
 DIRECTIVE_ARCHIVE = 'archive'
 DIRECTIVE_COLLECT_FILE = 'collect_file'
 DIRECTIVE_CRAWL = 'crawl'
+DIRECTIVE_CRAWL_EXTRACTED_URLS = 'crawl_extracted_urls'
 DIRECTIVE_DELAY = 'delay'
 DIRECTIVE_EXCLUDE_ALL = 'exclude_all'
 DIRECTIVE_EXTRACT_EMAIL = 'extract_email'
@@ -334,6 +344,7 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_ARCHIVE: 'archive the file',
     DIRECTIVE_COLLECT_FILE: 'collect the file from the remote endpoint',
     DIRECTIVE_CRAWL: 'crawl the URL',
+    DIRECTIVE_CRAWL_EXTRACTED_URLS: 'crawl all extracted URLs',
     DIRECTIVE_DELAY: 'instructs various analysis modules to delay the analysis',
     DIRECTIVE_EXCLUDE_ALL: 'instructs ACE to NOT analyze this observable at all',
     DIRECTIVE_EXTRACT_EMAIL: 'extract email from exchange or o365',
@@ -353,10 +364,12 @@ DIRECTIVE_DESCRIPTIONS = {
     DIRECTIVE_WHITELISTED: 'indicates this observable was whitelisted, causing the entire analysis to also become whitelisted',
 }
 
+# NOTE this really isn't used any more
 VALID_DIRECTIVES = [
     DIRECTIVE_ARCHIVE,
     DIRECTIVE_COLLECT_FILE,
     DIRECTIVE_CRAWL,
+    DIRECTIVE_CRAWL_EXTRACTED_URLS,
     DIRECTIVE_DELAY,
     DIRECTIVE_EXCLUDE_ALL,
     DIRECTIVE_EXTRACT_EMAIL,
@@ -374,6 +387,7 @@ VALID_DIRECTIVES = [
     DIRECTIVE_TRACKED,
     DIRECTIVE_WHITELISTED,
 ]
+
 
 def is_valid_directive(directive):
     return directive in VALID_DIRECTIVES
@@ -431,6 +445,7 @@ ACTION_CLEAR_CLOUDPHISH_ALERT = 'clear_cloudphish_alert'
 ACTION_COLLECT_FILE = 'collect_file'
 ACTION_DLP_INCIDENT_VIEW_DLP = 'dlp_incident_view_dlp'
 ACTION_EXABEAM_SESSION_VIEW_EXABEAM = 'exabeam_session_view_exabeam'
+ACTION_O365_FILE_DOWNLOAD = 'o365_file_download'
 ACTION_USER_VIEW_EXABEAM = 'user_view_exabeam'
 ACTION_FILE_DOWNLOAD = 'file_download'
 ACTION_FILE_DOWNLOAD_AS_ZIP = 'file_download_as_zip'
@@ -446,6 +461,8 @@ ACTION_FILE_VIEW_VX = 'file_view_vx'
 ACTION_REMEDIATE = 'remediate'
 ACTION_REMEDIATE_EMAIL = 'remediate_email'
 ACTION_RESTORE = 'restore'
+ACTION_SET_CBC_IOC_ACTIVE = 'cbc_ioc_active'
+ACTION_SET_CBC_IOC_IGNORE = 'cbc_ioc_ignore'
 ACTION_SET_SIP_INDICATOR_STATUS_ANALYZED = 'sip_status_analyzed'
 ACTION_SET_SIP_INDICATOR_STATUS_INFORMATIONAL = 'sip_status_informational'
 ACTION_SET_SIP_INDICATOR_STATUS_NEW = 'sip_status_new'
@@ -454,6 +471,7 @@ ACTION_UN_WHITELIST = 'un_whitelist'
 ACTION_UPLOAD_TO_CRITS = 'upload_crits'
 ACTION_WHITELIST = 'whitelist'
 ACTION_URL_CRAWL = 'crawl'
+ACTION_FILE_RENDER = 'file'
 
 # recorded metrics
 METRIC_THREAD_COUNT = 'thread_count'
@@ -518,6 +536,9 @@ ANALYSIS_TYPE_FALCON = 'falcon'
 ANALYSIS_TYPE_FIREEYE = 'fireeye'
 ANALYSIS_TYPE_QRADAR_OFFENSE = 'qradar_offense'
 ANALYSIS_TYPE_BRICATA = 'bricata'
+ANALYSIS_TYPE_GRAPH_RESOURCE = 'graph - resource'
+ANALYSIS_TYPE_O365 = 'o365'
+ANALYSIS_TYPE_CARBON_BLACK = 'carbon_black'
 
 # supported intelligence databases
 INTEL_DB_SIP = 'sip'
@@ -525,3 +546,41 @@ INTEL_DB_CRITS = 'crits'
 
 # alert queues
 QUEUE_DEFAULT = 'default'
+
+# redis databases
+REDIS_DB_SNORT = 1
+
+EVENT_TYPE_DEFAULT = 'phish'
+EVENT_VECTOR_DEFAULT = 'corporate email'
+EVENT_RISK_LEVEL_DEFAULT = '1'
+EVENT_PREVENTION_DEFAULT = 'response team'
+EVENT_STATUS_DEFAULT = 'OPEN'
+EVENT_REMEDIATION_DEFAULT = 'not remediated'
+EVENT_CAMPAIGN_ID_DEFAULT = '1'
+
+# --- Indicators
+I_DOMAIN = 'domain'
+I_EMAIL_ATTACHMENT_NAME = 'email_attachment_name'
+I_EMAIL_CC_ADDRESS = 'email_cc_address'
+I_EMAIL_FROM_ADDRESS = 'email_from_address'
+I_EMAIL_FROM_ADDRESS_DOMAIN = 'email_from_address_domain'
+I_EMAIL_MESSAGE_ID = 'email_message_id'
+I_EMAIL_SUBJECT = 'email_subject'
+I_EMAIL_TO_ADDRESS = 'email_to_address'
+I_EMAIL_X_AUTH_ID = 'email_x_auth_id'
+I_EMAIL_X_MAILER = 'email_x_mailer'
+I_EMAIL_X_ORIGINAL_SENDER = 'email_x_original_sender'
+I_EMAIL_X_ORIGINATING_IP = 'email_x_originating_ip'
+I_EMAIL_REPLY_TO = 'email_reply_to_address'
+I_EMAIL_RETURN_PATH = 'email_return_path_address'
+I_EMAIL_X_SENDER = 'email_x_sender_address'
+I_EMAIL_X_SENDER_ID = 'email_x_sender_id_address'
+I_EMAIL_X_SENDER_IP = 'email_x_sender_ip'
+I_FILE_NAME = 'filename'
+I_IP_DEST = 'ip_dest'
+I_IP_SOURCE = 'ip_src'
+I_MD5 = 'md5'
+I_SHA1 = 'sha1'
+I_SHA256 = 'sha256'
+I_URI_PATH = 'uri_path'
+I_URL = 'url'

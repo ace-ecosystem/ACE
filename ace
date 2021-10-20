@@ -156,15 +156,12 @@ def execute_hunt(args):
 
     if isinstance(hunt, QueryHunt):
         start_time = datetime.datetime.strptime(args.start_time, '%m/%d/%Y:%H:%M:%S')
-        if args.timezone is not None:
-            start_time = pytz.timezone(args.timezone).localize(start_time)
-        else:
-            start_time = pytz.utc.localize(start_time)
-
         end_time = datetime.datetime.strptime(args.end_time, '%m/%d/%Y:%H:%M:%S')
         if args.timezone is not None:
+            start_time = pytz.timezone(args.timezone).localize(start_time)
             end_time = pytz.timezone(args.timezone).localize(end_time)
         else:
+            start_time = pytz.utc.localize(start_time)
             end_time = pytz.utc.localize(end_time)
 
         exec_kwargs['start_time'] = start_time
@@ -411,6 +408,93 @@ clear_persistence_parser.add_argument('--dry-run', action='store_true', default=
     help="Do no commit the changes, only report how many would be cleared out.")
     
 clear_persistence_parser.set_defaults(func=clear_persistence)
+
+# ============================================================================
+# microsoft api utilities
+#
+
+msapi_parser = subparsers.add_parser('msapi',
+    help="Interface with Microsoft API integrations.")
+msapi_sp = msapi_parser.add_subparsers(dest='msapi_cmd')
+
+graph_parser =  msapi_sp.add_parser('graph',
+    help="MS Graph API utilites")
+graph_sp = graph_parser.add_subparsers(dest='graph_cmd')
+
+def list_graph_resources(args):
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+    grc.load_resources()
+    for r in grc.resources:
+        print(r)
+
+    sys.exit(0)
+
+validate_resource_parser = graph_sp.add_parser('list-resources',
+    help="Validate graph resource configurations.")
+
+validate_resource_parser.set_defaults(func=list_graph_resources)
+
+def print_collection_accounts(args):
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+    grc.load_collection_accounts()
+    for account, value in grc.collection_accounts.items():
+        print(f"\t{account}: {value}")
+
+    sys.exit(0)
+
+print_collection_account_parser = graph_sp.add_parser('print-collection-accounts',
+    help="print configured collection accounts")
+print_collection_account_parser.set_defaults(func=print_collection_accounts)
+
+def get_resource(args):
+    from saq.graph_api import GraphAPI
+    from saq.collectors import graph_collections
+
+    grc = graph_collections.GraphResourceCollector()
+
+    grc.load_resources()
+    if args.resource not in [r.name for r in grc.resources]:
+        logging.error(f"no configured resource by the name {args.resource}")
+        sys.exit(1)
+
+    resource = [r for r in grc.resources if r.name == args.resource][0]
+    logging.info(f"loaded the {resource.name} resource")
+
+    if not resource.ready:
+        print("Supply required arguments:")
+        for arg in resource.args['required']:
+            value = input(f"Set {arg}: ")
+            resource.set_argument(arg, value)
+        print("Change optional arugments, if you want:")
+        for arg in resource.args['optional']:
+            default = resource.args['optional'][arg]
+            value = input(f"Set {arg} [{default}]: ") or default
+            resource.set_argument(arg, value)
+
+    if not grc.build_graph_api_client_map():
+        logging.error("failed to get a graph api client.")
+        sys.exit(1)
+
+    graph_api_client = grc.graph_api_clients[resource.graph_account_name]
+    graph_api_client.initialize()
+
+    results = grc.execute_resource(graph_api_client, resource)
+    # NOTE, not handeling pagination here
+    if results:
+        print(json.dumps(results, indent=2, sort_keys=True))
+
+    sys.exit(0)
+
+graph_resource_parser = graph_sp.add_parser('get',
+    help="get a configured resource")
+graph_resource_parser.add_argument('resource', action='store',
+    help="the name of a configured resource")
+graph_resource_parser.set_defaults(func=get_resource)
+
 
 # ============================================================================
 # configuration settings
@@ -1112,7 +1196,8 @@ correlate_parser.set_defaults(func=correlate)
 remediation_parser = subparsers.add_parser('remediation')
 remediation_sp = remediation_parser.add_subparsers(dest='remediation_cmd')
 
-def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None):
+def print_remediation_status(id=None, type=None, status=None, key=None, user_id=None, user=None, print_json=False):
+    import json
     from saq.database import Remediation, User
     from sqlalchemy import or_
 
@@ -1137,18 +1222,31 @@ def print_remediation_status(id=None, type=None, status=None, key=None, user_id=
         query = query.filter(or_(User.username.ilike(f'%{user}%'), 
                                  User.display_name.ilike(f'%{user}%')))
 
-    for r in query.order_by(Remediation.insert_date.desc()):
-        print(f"insert_date: {r.insert_date} id:{r.id} type:{r.type} action:{r.action} "
-              f'user_id: {r.user_id} key: "{r.key}" result: "{r.result}" comment: "{r.comment}" '
-              f'successful: {r.successful} company_id: {r.company_id} lock: {r.lock} lock_time: {r.lock_time} '
-              f'status: {r.status}')
+    remediation_data = query.order_by(Remediation.insert_date.desc())
+    if not remediation_data.first():
+        print("No remediation data found.")
+        return None
+
+    if print_json:
+        print(json.dumps([r.json for r in remediation_data], default=str))
+        return True
+
+    _keys = remediation_data[0].json.keys()
+    for r in remediation_data:
+        _r_text = " -> "
+        _r_data = r.json
+        for k in _keys:
+            _r_text += f"{k}:{_r_data[k]} | "
+        print(_r_text)
 
 def remediation_status(args):
-    print_remediation_status(status=args.status,
+    print_remediation_status(id=args.id,
+                             status=args.status,
                              type=args.type,
                              key=args.key,
                              user=args.user,
-                             user_id=args.user_id)
+                             user_id=args.user_id,
+                             print_json=args.json)
     sys.exit(0)
 
 remediation_status_parser = remediation_sp.add_parser('status',
@@ -1163,52 +1261,77 @@ remediation_status_parser.add_argument('-u', '--user',
     help="Return results matching the given username or display name.")
 remediation_status_parser.add_argument('--user-id', type=int,
     help="Return results matching the given user_id.")
+remediation_status_parser.add_argument('-i', '--id', type=int,
+    help="Return results matching the given remediation id.")
+remediation_status_parser.add_argument('--json', default=False, action='store_true',
+    help="Return results as json.")
 remediation_status_parser.set_defaults(func=remediation_status)
 
 def execute_remediation(args):
     import saq
-    import saq.remediation
-    import saq.remediation.constants
+    from saq.remediation import RemediationTarget, load_all_remediators, remediate_target
 
-    target_function = saq.remediation.execute
-    if args.background:
-        target_function = saq.remediation.request
+    # load all remediators
+    remediators = load_all_remediators()
 
-    if args.remediation_action == 'remove':
-        action = saq.remediation.constants.REMEDIATION_ACTION_REMOVE
-    elif args.remediation_action == 'restore':
-        action = saq.remediation.constants.REMEDIATION_ACTION_RESTORE
-    else:
-        raise RuntimeError("invalid args.remediation_action ?? programming error dude")
-
+    # if no targets were passed, make space
     if not hasattr(args, 'targets'):
         args.targets = []
 
-    # are we reading a list of targets from a file?
+    # targets from a file
     if args.from_file:
         with open(args.from_file, 'r') as fp:
             for line in fp:
                 line = line.strip()
                 args.targets.append(line)
 
-    # are we reading a list of targets from stdin?
+    # targets from stdin
     if args.from_stdin:
         for line in sys.stdin:
             line = line.strip()
             args.targets.append(line)
 
-    for target in args.targets:
-        result = target_function(action,
-                                 args.type,
-                                 target,
-                                 saq.AUTOMATION_USER_ID,
-                                 saq.COMPANY_ID,
-                                 args.comment)
+    # load all targets
+    targets = [
+                 RemediationTarget(args.type,
+                                   _t,
+                                   action=args.remediation_action,
+                                   comment=args.comment)
+                 for _t in args.targets
+                ]
+
+    results = {}
+    for target in targets:
+        if len(target.history) > 0:
+            print(f" + Target '{target.key}' has {len(target.history)} historical remediations.")
 
         if args.background:
-            print(f"requested remediation (id {result.id})")
+            # Queue for the Remediation Service
+            target.queue()
+            continue
+
+        # record it, but do it now
+        remediate_target(remediators, target)
+
+
+    if args.wait:
+        request_wait_time = saq.CONFIG['service_remediation'].getint('request_wait_time', fallback=10)
+        quit_time = time.time() + request_wait_time
+        print(f" + waiting up to {request_wait_time} seconds for {len(targets)} targets to reach a completed state.")
+
+        for target in targets:
+            # refresh the remediation history
+            target.refresh()
+            while target.processing and time.time() < quit_time:
+                time.sleep(1)
+                target.refresh()
+
+    for target in targets:
+        target.refresh()
+        if args.background:
+            print(f" + Requested {target.last_remediation}")
         else:
-            print_remediation_status(id=result.id)
+            print(f" + Executed {target.last_remediation}")
 
     sys.exit(0)
 
@@ -1222,7 +1345,9 @@ def execute_email_remediation(args):
 def _add_remediation_common_arguments(_parser):
     _parser.add_argument('-b', '--background', action='store_true', default=False,
         help="Executes the action in the background.")
-    _parser.add_argument('-c', '--comment', default="command line manual request",
+    _parser.add_argument('-w', '--wait', action='store_true', default=False,
+        help="Wait until the remediaiton reaches a completed state OR a timeout occurs.")
+    _parser.add_argument('-c', '--comment', default="command line request",
         help="Adds the given comment to the remediation as useful note.")
     _parser.add_argument('--from-file', required=False, default=None,
         help="Read the list of targets, one per line, from the given file.")
@@ -1232,7 +1357,7 @@ def _add_remediation_common_arguments(_parser):
 def _add_remediation_type_value_arguments(_parser):
     _parser.add_argument('type',
         help="The type of thing you want to target.")
-    _parser.add_argument('target', nargs='*',
+    _parser.add_argument('targets', nargs='*',
         help="The thing or things you want to target.")
 
 remediation_remove_parser = remediation_sp.add_parser('remove',
@@ -1315,16 +1440,47 @@ message_system_parser.set_defaults(func=message_system)
 
 
 # ============================================================================
+# Section for Metrics / Analytics / Statistics
+#
+
+try:
+    from ace_metrics.cli import build_metric_parser, execute_metric_arguments
+
+    metrics_parser = subparsers.add_parser("metrics", help="ace ecosystem metrics")
+    build_metric_parser(metrics_parser)
+
+    def metrics(args):
+        """Interface with the ace_metrics lib."""
+
+        from saq.database import get_db_connection
+
+        with get_db_connection() as db:
+            return execute_metric_arguments(db, args)
+
+    metrics_parser.set_defaults(func=metrics)
+
+except ModuleNotFoundError:
+    pass
+
+
+# ============================================================================
 # start GUI (non-apache version)
 #
 
 def start_gui(args):
     import saq
     from app import create_app, db
-    from app.models import User
-    from flask_script import Manager, Shell
+    from werkzeug.serving import run_simple
+    from werkzeug.wsgi import DispatcherMiddleware
+    from flask import Flask
 
     app = create_app()
+    app.config['DEBUG'] = True
+    app.config['APPLICATION_ROOT'] = '/ace'
+    app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+        app.config['APPLICATION_ROOT']: app,
+    })
+
     # add the "do" template command
     app.jinja_env.add_extension('jinja2.ext.do')
 
@@ -1333,9 +1489,9 @@ def start_gui(args):
             print(rule)
         sys.exit(0)
 
-    app.run(saq.CONFIG.get('gui', 'listen_address'), debug=True, port=saq.CONFIG.getint('gui', 'listen_port'), 
-        ssl_context=(saq.CONFIG.get('gui', 'ssl_cert'), saq.CONFIG.get('gui', 'ssl_key')),
-        use_reloader=True)
+    run_simple(saq.CONFIG.get('gui', 'listen_address'), saq.CONFIG.getint('gui', 'listen_port'), app,
+               ssl_context=(saq.CONFIG.get('gui', 'ssl_cert'), saq.CONFIG.get('gui', 'ssl_key')),
+               use_reloader=True)
 
 # start-gui
 start_gui_parser = subparsers.add_parser('start-gui',
@@ -1352,7 +1508,7 @@ start_gui_parser.set_defaults(func=start_gui)
 
 def start_api(args):
     import saq
-    from api import create_app
+    from aceapi import create_app
 
     app = create_app(testing=True)
     from werkzeug.serving import run_simple
@@ -1360,7 +1516,7 @@ def start_api(args):
     from flask import Flask, url_for
     app.config['DEBUG'] = True
     app.config['APPLICATION_ROOT'] = '/api'
-    application = DispatcherMiddleware(Flask('dummy_app'), {
+    app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
         app.config['APPLICATION_ROOT']: app,
     })
 
@@ -1369,7 +1525,7 @@ def start_api(args):
             print(rule)
         sys.exit(0)
 
-    run_simple(saq.CONFIG.get('api', 'listen_address'), saq.CONFIG.getint('api', 'listen_port'), application,
+    run_simple(saq.CONFIG.get('api', 'listen_address'), saq.CONFIG.getint('api', 'listen_port'), app,
                ssl_context=(saq.CONFIG.get('api', 'ssl_cert'), saq.CONFIG.get('api', 'ssl_key')),
                use_reloader=False)
 
@@ -1518,6 +1674,12 @@ def modify_user(args):
         if args.display_name:
             c.execute("""UPDATE users SET display_name = %s WHERE id = %s""", ( args.display_name, user_id ))
 
+        if args.enable:
+            c.execute("""UPDATE users SET enabled = True WHERE id = %s""", ( user_id ))
+
+        if args.disable:
+            c.execute("""UPDATE users SET enabled = False WHERE id = %s""", ( user_id ))
+
         db.commit()
 
     logging.info("modified user {0}".format(u.username))
@@ -1530,6 +1692,8 @@ modify_user_parser.add_argument('-p', '--password', action='store_true', dest='p
 modify_user_parser.add_argument('-z', '--timezone', required=False, default=None, help="The timezone the user is in. Defaults to UTC.")
 modify_user_parser.add_argument('-q', '--default_queue', required=False, default=None, help="Change the default queue the user is assigned to.")
 modify_user_parser.add_argument('-n', '--display-name', required=False, default=None, help="Change the user's display name.")
+modify_user_parser.add_argument('--enable', action='store_true', required=False, default=None, help="Enable the user.")
+modify_user_parser.add_argument('--disable', action='store_true', required=False, default=None, help="Disable the user.")
 modify_user_parser.set_defaults(func=modify_user)
 
 # XXX DEPRECATED
@@ -1564,13 +1728,14 @@ delete_user_parser.set_defaults(func=delete_user)
 def list_users(args):
     import saq
     from saq.database import User
-    print("{:<6}{:<15}{:<25}{:<40}{}".format('Id', 'User', 'Name', 'Queue', 'TZ'))
+    print("{:<6}{:<15}{:<25}{:<40}{:<25}{}".format('Id', 'User', 'Name', 'Queue', 'Enabled', 'TZ'))
     for user in saq.db.query(User).order_by(User.username):
-        print("{:<6}{:<15}{:<25}{:<40}{}".format(
+        print("{:<6}{:<15}{:<25}{:<40}{:<25}{}".format(
               user.id, 
               user.username, 
               '' if user.display_name is None else user.display_name, 
               user.queue,
+              'True' if user.enabled else 'False',
               user.timezone))
 
     sys.exit(0)
@@ -2525,7 +2690,12 @@ def remediate_emails(args):
     from saq.remediation.mail import get_remediation_targets, create_email_remediation_key
 
     # get a user-id to execute remediation
-    user_id = saq.db.query(User).filter(User.username == args.user_name).one().id
+    user = saq.db.query(User).filter(User.username == args.user_name).first()
+    if user is None:
+        sys.stderr.write(f"invalid user {args.user_name}\n")
+        sys.exit(1)
+
+    user_id = user.id
 
     # clean input
     if args.from_stdin:
@@ -2565,8 +2735,8 @@ remediate_email_parser.add_argument('-m', '--message-id-only', required=False, d
     help="Assume all parameters are message-ids. Use email archive database to determine recipients automatically.")
 remediate_email_parser.add_argument('-c', '--comment', required=False, default=None,
     help="An optional comment to add to the remediation.")
-remediate_email_parser.add_argument('-u', '--user-name', required=False,
-    help="The username to execute the remediation as. Defaults to the current user name.")
+remediate_email_parser.add_argument('-u', '--user-name', required=False, default='ace',
+    help="The username to execute the remediation as. Defaults to the automation (ace) user.")
 remediate_email_parser.add_argument('targets', nargs='*',
     help="One or more message-ids to remediate. You can also specify --from-stdin.")
 remediate_email_parser.set_defaults(func=remediate_emails)
@@ -2714,6 +2884,10 @@ update_organization_parsers = subparsers.add_parser('update-organization',
     help="Updates the files used by the UserTaggingAnalyzer module.")
 update_organization_parsers.set_defaults(func=update_organization)
 
+# ============================================================================
+# ip-inspector utilities
+#
+
 def update_maxmind_databases(args):
     from saq import proxy
     from ip_inspector import maxmind
@@ -2733,6 +2907,28 @@ update_maxmind_parser = subparsers.add_parser('update-maxmind-databases',
 update_maxmind_parser.add_argument('--license-key', action='store', default=None,
     help="Manually supply a license key.")
 update_maxmind_parser.set_defaults(func=update_maxmind_databases)
+
+from ip_inspector.cli import build_parser
+
+ip_inspector_parser = subparsers.add_parser("ip-inspector", help="ACE's IP Inspector environment.")
+build_parser(ip_inspector_parser)
+
+def ipinspector(args):
+    """Interface with the ip_inspector lib."""
+    from saq import proxy
+    from ip_inspector.cli import execute
+
+    config = saq.CONFIG['analysis_module_ip_inspector']
+    use_proxy = config.getboolean('use_proxy')
+    if use_proxy:
+        proxies = proxy.proxies()
+        os.environ['https_proxy'] = proxies['https']
+        os.environ['http_proxy'] = proxies['http']
+
+    return execute(args)
+
+ip_inspector_parser.set_defaults(func=ipinspector)
+
 
 # TODO move this into integration
 def update_crits_cache(args):

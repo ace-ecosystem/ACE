@@ -1,0 +1,7 @@
+{% autoescape false %}
+<script type="text/javascript">
+$('#action_{{action.name}}_{{unique_reference}}').on('click', function() {
+    window.open("{{url_for('analysis.o365_file_download', path=_observable.value)}}");
+});
+</script>
+{% endautoescape %}
