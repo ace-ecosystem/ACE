@@ -232,6 +232,12 @@ class Worker(object):
     def wait(self):
         while True:
             logging.info("waiting for {}...".format(self.process))
+            self.process.join(60)
+            if self.process.is_alive():
+                self.process.kill()
+
+            return
+            """
             self.process.join(5)
             if not self.process.is_alive():
                 return
@@ -239,6 +245,7 @@ class Worker(object):
             # if we are in a controlled shutdown then the wait could take a while
             if not CURRENT_ENGINE.controlled_shutdown:
                 logging.warning("process {} not stopping".format(self.process))
+            """
 
     def check(self):
         """Makes sure the process is running and restarts it if it is not.
@@ -265,7 +272,7 @@ class Worker(object):
         # is the process running?
         while self.process is not None and self.process.is_alive():
             # is it taking too long to analyze something?
-            if self.last_analysis_start_time is not None:
+            if self.last_analysis_start_time and self.last_analysis_start_time is not None:
                 if datetime.datetime.now() >= self.last_analysis_module_timeout:
                     logging.error(f"analysis module {self.last_analysis_module} "
                                   f"timed out analyzing {self.last_work_target} "
@@ -361,6 +368,7 @@ analysis_module = {self.last_analysis_module}
                 os.close(self.process.sentinel)
         else:
             try:
+                self.process.join(0)
                 self.process.close()
             except Exception as e:
                 logging.error(f"unable to close process: {e}")
@@ -680,7 +688,8 @@ def load_module(section):
     try:
         _module = importlib.import_module(module_name)
     except Exception as e:
-        logging.error("unable to import module {}: {}".format(module_name, e))
+        class_name = saq.CONFIG[section]['class']
+        logging.error(f"unable to import section({section}) module {module_name} class {class_name}: {e}")
         report_exception()
         return None
 
