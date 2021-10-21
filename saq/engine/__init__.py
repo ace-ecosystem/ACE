@@ -368,7 +368,7 @@ analysis_module = {self.last_analysis_module}
                 os.close(self.process.sentinel)
         else:
             try:
-                self.process.join(0)
+                self.process.join(10)
                 self.process.close()
             except Exception as e:
                 logging.error(f"unable to close process: {e}")
