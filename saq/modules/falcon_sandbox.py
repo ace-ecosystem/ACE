@@ -3,6 +3,7 @@
 import base64
 import csv
 import datetime
+import gzip
 import hashlib
 import io
 import json
@@ -25,7 +26,7 @@ from saq.error import report_exception
 from saq.falcon_sandbox import *
 from saq.modules import AnalysisModule
 from saq.modules.file_analysis import FileHashAnalysis
-from saq.modules.sandbox import SandboxAnalysisModule
+from saq.modules.sandbox import *
 from saq.util import *
 
 KEY_JSON_PATH = 'json_path' # <-- the actual report
@@ -43,6 +44,7 @@ KEY_FAIL_DATE = 'fail_date'
 #KEY_VXSTREAM_THREAT_LEVEL = 'vxstream_threat_level'
 #KEY_OVERALL_VERDICT = 'verdict'
 KEY_REPORT_SUMMARY = 'report_summary'
+KEY_REPORT = 'report'
 KEY_ENHANCED_REPORT_SUMMARY = 'enhanced_report_summary'
 KEY_SUBMISSION_RESULT = 'submission_result'
 KEY_ERROR_MESSAGE = 'error_message'
@@ -69,6 +71,7 @@ class FalconSandboxAnalysis(Analysis):
             KEY_SANDBOX_LINK: None,
             KEY_JOB_ID: None,
             KEY_REPORT_SUMMARY: None,
+            KEY_REPORT: None,
             KEY_ENHANCED_REPORT_SUMMARY: None,
             KEY_SUBMISSION_RESULT: None,
             KEY_ERROR_MESSAGE: None,
@@ -120,6 +123,15 @@ class FalconSandboxAnalysis(Analysis):
     @report_summary.setter
     def report_summary(self, value):
         self.details[KEY_REPORT_SUMMARY] = value
+        self.set_modified()
+
+    @property
+    def report(self):
+        return self.details_property(KEY_REPORT)
+
+    @report.setter
+    def report(self, value):
+        self.details[KEY_REPORT] = value
         self.set_modified()
 
     @property
@@ -366,6 +378,8 @@ class FalconSandboxAnalyzer(SandboxAnalysisModule):
         if not hash_analysis:
             logging.debug(f"did not get FileHashAnalysis for {target}")
             return False
+
+        path = os.path.join(self.root.storage_dir, target.value)
             
         # has this file already been submitted?
         result = self.vx.search_hash(target.sha256_hash)
@@ -378,7 +392,379 @@ class FalconSandboxAnalyzer(SandboxAnalysisModule):
             analysis = self.create_analysis(target)
             # the results of the search seem to match the results of the report summary
             analysis.report_summary = json_result[0]
-            return True # we're done here -- the actual analysis details will come from the analysis of the hash
+
+            # Download the full sandbox report
+            result = self.vx.download_full_report(json_result[0]['job_id'], target.sha256_hash)
+            result.raise_for_status()
+            full_report = json.loads(gzip.decompress(result.content)) if result else {}
+
+            # Parse out the interesting bits from the report
+            if full_report:
+                sandbox_report = GenericSandboxReport()
+                sandbox_report.filename = os.path.basename(os.path.normpath(path))
+
+                # MD5
+                try:
+                    sandbox_report.md5 = full_report['analysis']['general']['digests']['md5']
+                    md5 = analysis.add_observable(F_MD5, sandbox_report.md5)
+                    if md5:
+                        md5.add_tag('falcon_sandbox_sample')
+                        analysis.add_ioc(I_MD5, sandbox_report.md5, tags=['falcon_sandbox_sample'])
+                except:
+                    logging.error('Unable to parse Falcon Sandbox md5')
+
+                # SHA1
+                try:
+                    sandbox_report.sha1 = full_report['analysis']['general']['digests']['sha1']
+                    sha1 = analysis.add_observable(F_SHA1, sandbox_report.sha1)
+                    if sha1:
+                        sha1.add_tag('falcon_sandbox_sample')
+                        analysis.add_ioc(I_SHA1, sandbox_report.sha1, tags=['falcon_sandbox_sample'])
+                except:
+                    logging.error('Unable to parse Falcon Sandbox sha1')
+
+                # SHA256
+                try:
+                    sandbox_report.sha256 = full_report['analysis']['general']['digests']['sha256']
+                    sha256 = analysis.add_observable(F_SHA256, sandbox_report.sha256)
+                    if sha256:
+                        sha256.add_tag('falcon_sandbox_sample')
+                        analysis.add_ioc(I_SHA256, sandbox_report.sha256, tags=['falcon_sandbox_sample'])
+
+                    sandbox_report.sandbox_urls.add('{}/sample/{}?environmentId={}'.format(
+                        saq.CONFIG['falcon_sandbox']['gui_baseuri'].strip('/'),
+                        sandbox_report.sha256,
+                        saq.CONFIG['falcon_sandbox']['environmentid']
+                    ))
+                except:
+                    logging.error('Unable to parse Falcon Sandbox sha256')
+
+                # SHA512
+                try:
+                    sandbox_report.sha512 = full_report['analysis']['general']['digests']['sha512']
+                except:
+                    logging.error('Unable to parse Falcon Sandbox md5')
+
+                # Contacted Hosts
+                try:
+                    contacted_hosts_json = full_report['analysis']['runtime']['network']['hosts']['host']
+                except KeyError:
+                    contacted_hosts_json = []
+                    logging.exception('Unable to parse Falcon Sandbox contacted hosts')
+                except TypeError:
+                    contacted_hosts_json = []
+
+                if isinstance(contacted_hosts_json, dict):
+                    contacted_hosts_json = [contacted_hosts_json]
+
+                for host in contacted_hosts_json:
+                    h = ContactedHost()
+
+                    try:
+                        h.ip = host['address']
+                        ipv4 = analysis.add_observable(F_IPV4, h.ip)
+                        if ipv4:
+                            ipv4.add_tag('contacted_host')
+                            analysis.add_ioc(I_IP_DEST, h.ip, tags=['contacted_host'])
+                    except:
+                        pass
+
+                    try:
+                        h.port = host['port']
+                    except:
+                        pass
+
+                    try:
+                        h.protocol = host['protocol']
+                    except:
+                        pass
+
+                    try:
+                        h.location = f'{host["country"]} (ASN: {host["asn"]} - {host["as_owner"]})'
+                    except:
+                        pass
+
+                    sandbox_report.contacted_hosts.append(h)
+
+                # DNS Requests
+                try:
+                    dns_requests_json = full_report['analysis']['runtime']['network']['domains']['domain']
+                except KeyError:
+                    dns_requests_json = []
+                    logging.exception('Unable to parse Falcon Sandbox DNS requests')
+                except TypeError:
+                    dns_requests_json = []
+
+                if isinstance(dns_requests_json, dict):
+                    dns_requests_json = [dns_requests_json]
+                elif isinstance(dns_requests_json, str):
+                    dns_requests_json = [dns_requests_json]
+
+                for dns_request in dns_requests_json:
+                    r = DnsRequest()
+
+                    try:
+                        r.request = dns_request['db']
+                        dns = analysis.add_observable(F_FQDN, r.request)
+                        if dns:
+                            dns.add_tag('dns_request')
+                            analysis.add_ioc(I_DOMAIN, r.request, tags=['dns_request'])
+                    except:
+                        pass
+
+                    try:
+                        r.answer = dns_request['address']
+                        dns_answer = analysis.add_observable(F_IPV4, r.answer)
+                        if dns_answer:
+                            dns_answer.add_tag('dns_answer')
+                            analysis.add_ioc(I_IP_DEST, r.answer, tags=['dns_answer'])
+                    except:
+                        pass
+
+                    sandbox_report.dns_requests.append(r)
+
+                # Dropped Files
+                try:
+                    dropped_files_json = full_report['analysis']['runtime']['dropped']['file']
+                except KeyError:
+                    dropped_files_json = []
+                    logging.exception('Unable to parse Falcon Sandbox dropped files')
+                except TypeError:
+                    dropped_files_json = []
+
+                if isinstance(dropped_files_json, dict):
+                    dropped_files_json = [dropped_files_json]
+
+                for file in dropped_files_json:
+                    f = DroppedFile()
+
+                    try:
+                        f.filename = file['filename']
+                    except:
+                        pass
+
+                    try:
+                        f.path = file['vmpath']
+                    except:
+                        pass
+
+                    try:
+                        f.size = file['filesize']
+                    except:
+                        pass
+
+                    try:
+                        f.type = file['filetype']
+                    except:
+                        pass
+
+                    try:
+                        f.md5 = file['md5']
+                        md5 = analysis.add_observable(F_MD5, f.md5)
+                        if md5:
+                            md5.add_tag('dropped_file')
+                            analysis.add_ioc(I_MD5, f.md5, tags=['dropped_file'])
+                    except:
+                        pass
+
+                    try:
+                        f.sha1 = file['sha1']
+                        analysis.add_ioc(I_SHA1, f.sha1, tags=['dropped_file'])
+                    except:
+                        pass
+
+                    try:
+                        f.sha256 = file['sha256']
+                        analysis.add_ioc(I_SHA256, f.sha256, tags=['dropped_file'])
+                    except:
+                        pass
+
+                    try:
+                        f.sha512 = file['sha512']
+                    except:
+                        pass
+
+                    sandbox_report.dropped_files.append(f)
+
+                # HTTP Requests
+                try:
+                    http_requests_json = full_report['analysis']['runtime']['network']['httprequests']['request']
+                except KeyError:
+                    http_requests_json = []
+                    logging.exception('Unable to parse Falcon Sandbox HTTP requests')
+                except TypeError:
+                    http_requests_json = []
+
+                if isinstance(http_requests_json, dict):
+                    http_requests_json = [http_requests_json]
+
+                for request in http_requests_json:
+                    r = HttpRequest()
+
+                    try:
+                        r.host = request['host']
+                    except:
+                        pass
+
+                    try:
+                        r.port = request['dest_port']
+                    except:
+                        pass
+
+                    try:
+                        r.uri = request['request_url']
+                    except:
+                        pass
+
+                    try:
+                        r.method = request['request_method']
+                    except:
+                        pass
+
+                    try:
+                        r.user_agent = request['useragent']
+                    except:
+                        pass
+
+                    if r.url:
+                        http = analysis.add_observable(F_URL, r.url)
+                        if http:
+                            http.add_tag('http_request')
+                            analysis.iocs.add_url_iocs(r.url, tags=['http_request'])
+
+                    sandbox_report.http_requests.append(r)
+
+                # Processes
+                try:
+                    processes_json = full_report['analysis']['runtime']['targets']['target']
+                except KeyError:
+                    processes_json = []
+                    logging.exception('Unable to parse Falcon Sandbox processes')
+                except TypeError:
+                    processes_json = []
+
+                if isinstance(processes_json, dict):
+                    processes_json = [processes_json]
+
+                for process in processes_json:
+                    p = Process()
+
+                    try:
+                        p.command = f'{process["name"]} {process["commandline"]}'
+                    except:
+                        pass
+
+                    try:
+                        p.pid = process['pid']
+                    except:
+                        pass
+
+                    try:
+                        p.parent_pid = process['parentpid']
+                    except:
+                        pass
+                    sandbox_report.processes.append(p)
+
+                    # Process tree URLs
+                    for process_url in p.urls:
+                        url = analysis.add_observable(F_URL, process_url)
+                        if url:
+                            url.add_tag('process_tree_url')
+                            analysis.iocs.add_url_iocs(process_url, tags=['process_tree_url'])
+
+                    # Mutexes
+                    try:
+                        mutexes = process['mutants']['mutant']
+                    except:
+                        mutexes = []
+
+                    if isinstance(mutexes, dict):
+                        mutexes = [mutexes]
+
+                    for mutex in mutexes:
+                        try:
+                            sandbox_report.mutexes.add(mutex['db'])
+                        except:
+                            pass
+
+                # Strings URLs
+                try:
+                    strings = full_report['analysis']['final']['strings']['string']
+                except KeyError:
+                    strings = []
+                    logging.exception('Unable to parse Falcon Sandbox processes')
+                except TypeError:
+                    strings = []
+
+                if isinstance(strings, dict):
+                    strings = [strings]
+
+                for string in strings:
+                    try:
+                        sandbox_report.strings_urls |= find_urls(string['db'])
+                    except:
+                        pass
+
+                # Suricata alerts
+                try:
+                    suricata_alerts_json = full_report['analysis']['runtime']['network']['suricata_alerts']['alert']
+                except:
+                    suricata_alerts_json = []
+
+                if isinstance(suricata_alerts_json, dict):
+                    suricata_alerts_json = [suricata_alerts_json]
+
+                for suricata_alert in suricata_alerts_json:
+                    try:
+                        sandbox_report.suricata_alerts.add(suricata_alert['action']['db'])
+                    except:
+                        pass
+
+                falcon_dir = f'{path}.falcon'
+                if not os.path.isdir(falcon_dir):
+                    os.mkdir(falcon_dir)
+
+                # Add the full report as a file observable
+                full_report_path = os.path.join(falcon_dir, 'report.json')
+                with open(full_report_path, 'w') as f:
+                    json.dump(full_report, f)
+
+                analysis.add_observable(F_FILE, os.path.relpath(full_report_path, start=self.root.storage_dir))
+
+                # Add the parsed report as a file observable
+                parsed_report_path = os.path.join(falcon_dir, 'parsed_report.json')
+                with open(parsed_report_path, 'w') as f:
+                    json.dump(sandbox_report.json, f)
+
+                analysis.add_observable(F_FILE, os.path.relpath(parsed_report_path, start=self.root.storage_dir))
+
+                # Add the dropped file paths as a file observable
+                if sandbox_report.dropped_files:
+                    file_file_path = os.path.join(falcon_dir, 'report.windows_filepath')
+                    with open(file_file_path, 'w') as file_file:
+                        file_file.writelines(sorted([f'{f.path}\n' for f in sandbox_report.dropped_files]))
+
+                    analysis.add_observable(F_FILE, os.path.relpath(file_file_path, start=self.root.storage_dir))
+
+                # Add the mutexes as a file observable
+                if sandbox_report.mutexes:
+                    mutex_file_path = os.path.join(falcon_dir, 'report.windows_mutex')
+                    with open(mutex_file_path, 'w') as mutex_file:
+                        mutex_file.writelines(sorted([f'{mutex}\n' for mutex in sandbox_report.mutexes]))
+
+                    analysis.add_observable(F_FILE, os.path.relpath(mutex_file_path, start=self.root.storage_dir))
+
+                # Add the registry keys as a file observable
+                if sandbox_report.registry_keys:
+                    reg_file_path = os.path.join(falcon_dir, 'report.windows_registry')
+                    with open(reg_file_path, 'w') as reg_file:
+                        reg_file.writelines(sorted([f'{reg}\n' for reg in sandbox_report.registry_keys]))
+
+                    analysis.add_observable(F_FILE, os.path.relpath(reg_file_path, start=self.root.storage_dir))
+
+                analysis.report = sandbox_report.json
+
+                return True  # we're done here -- the actual analysis details will come from the analysis of the hash
 
         # does this file even exist?
         local_path = os.path.join(self.root.storage_dir, target.value)

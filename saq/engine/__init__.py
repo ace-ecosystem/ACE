@@ -26,6 +26,7 @@ from multiprocessing import Process, Queue, Semaphore, Event, Pipe, cpu_count, a
 from operator import attrgetter
 from queue import PriorityQueue, Empty, Full
 from subprocess import Popen, PIPE
+from typing import Optional
 
 import saq
 import saq.analysis
@@ -59,17 +60,19 @@ CURRENT_ENGINE = None
 STATE_PRE_ANALYSIS_EXECUTED = 'pre_analysis_executed'
 STATE_POST_ANALYSIS_EXECUTED = 'post_analysis_executed'
 
-def translate_node(node: str) -> str:
+def translate_node(node: str, node_translations: Optional[dict[str, str]] = None) -> str:
     """Return the correct node taking node transaction into account."""
-    for key in saq.CONFIG['node_translation'].keys():
-        src, target = saq.CONFIG['node_translation'][key].split(',')
+    if not node_translations:
+        node_translations = saq.CONFIG['node_translation']
+
+    for key in node_translations.keys():
+        src, target = node_translations[key].split(',')
         if node == src:
             logging.debug("translating node {} to {}".format(node, target))
             return target
 
     logging.debug(f"no translation for {node}")
     return node
-
 
 class AnalysisTimeoutError(RuntimeError):
     pass
@@ -256,7 +259,8 @@ class Worker(object):
         # clean up zombies
         if self.process:
             self.process.join(0)
-            logging.debug(f"process {self.process.pid} exitcode = {self.process.exitcode}")
+            if self.process.exitcode:
+                logging.debug(f"process {self.process.pid} exitcode = {self.process.exitcode}")
 
         # is the process running?
         while self.process is not None and self.process.is_alive():
@@ -346,14 +350,25 @@ analysis_module = {self.last_analysis_module}
             finally:
                 break
 
-        try:
-            # XXX Python 3.6.9 has a file desc leak here
-            fcntl.fcntl(self.process.sentinel, fcntl.F_GETFD)
-        except:
-            pass
+        if sys.version_info < (3, 9):
+            try:
+                # XXX Python 3.6.9 has a file desc leak here
+                fcntl.fcntl(self.process.sentinel, fcntl.F_GETFD)
+            except:
+                pass
+            else:
+                logging.debug("fixing pipe leak")
+                os.close(self.process.sentinel)
         else:
-            logging.debug("fixing pipe leak")
-            os.close(self.process.sentinel)
+            try:
+                self.process.close()
+            except Exception as e:
+                logging.error(f"unable to close process: {e}")
+                report_exception()
+                try:
+                    os.close(self.process.sentinel)
+                except:
+                    pass
 
         self._clear_target_tracking()
         self.start()
@@ -2118,8 +2133,9 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
 
         # if self.root is not set at this point then something went wrong
         if self.root is None:
-            logging.warning(f"unless to process work item {work_item} (self.root was None)")
+            logging.warning(f"unable to process work item {work_item} (self.root was None)")
             self.stop_root_lock_manager()
+            self.clear_work_target(work_item)
             return 
 
         logging.debug("analyzing {} in analysis_mode {}".format(self.root, self.root.analysis_mode))
@@ -3025,7 +3041,7 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                                 # if we did not generate any analysis then the dependency has failed 
                                 # (which might be OK) -- move on to analyze source target again
                                 if not output_analysis:
-                                    logging.info("analysis module {} did not generate analysis to resolve dep {}".format(
+                                    logging.debug("analysis module {} did not generate analysis to resolve dep {}".format(
                                                   analysis_module, work_item.dependency))
 
                                     work_item.dependency.set_status_failed('analysis not generated')
@@ -3083,7 +3099,20 @@ LIMIT 16""".format(where_clause=where_clause), tuple(params))
                         analysis_module, work_item, self.root, e))
 
                     if not isinstance(e, AnalysisFailedException):
-                        report_exception()
+                        error_report_path = report_exception()
+
+                        # were we analyzing a file when we encountered this exception?
+                        if error_report_path \
+                        and work_item.observable is not None \
+                        and work_item.observable.type == F_FILE \
+                        and saq.CONFIG['service_engine'].getboolean('copy_file_on_error'):
+                                
+                            target_dir = f'{error_report_path}.files'
+                            try:
+                                os.makedirs(target_dir, exist_ok=True)
+                                shutil.copy(os.path.join(self.root.storage_dir, work_item.observable.value), target_dir)
+                            except Exception as copy_error:
+                                logging.error(f"unable to copy files to {target_dir}: {copy_error}")
 
                     if work_item.dependency:
                         work_item.dependency.set_status_failed('error: {}'.format(e))

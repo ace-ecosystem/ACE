@@ -308,6 +308,13 @@ def remediate_target(remediators: List[Remediator], target: Union[RemediationTar
             logging.error(f"unable to return db session: {e}")
             report_exception()
 
+    def stop_remediation(self):
+        for h in self.history:
+            if h.status != 'COMPLETED':
+                h.status = 'COMPLETED'
+                h.successful = False
+        saq.db.commit()
+
 class RemediationService(ACEService):
     def __init__(self, *args, **kwargs):
         super().__init__(service_config=saq.CONFIG['service_remediation'], *args, **kwargs)

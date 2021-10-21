@@ -142,4 +142,4 @@ class BroSMTPStreamCollector(Collector):
                 except Exception as e:
                     logging.error(f"unable to remove {stream_file_path}: {e}")
 
-        return 0 # don't wait to look again
+        return 1

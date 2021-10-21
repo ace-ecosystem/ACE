@@ -36,7 +36,7 @@ CREATE TABLE `alerts` (
   `alert_type` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
   `description` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci DEFAULT NULL,
   `priority` int(11) NOT NULL DEFAULT '0',
-  `disposition` enum('FALSE_POSITIVE','IGNORE','UNKNOWN','REVIEWED','GRAYWARE','POLICY_VIOLATION','RECONNAISSANCE','WEAPONIZATION','DELIVERY','EXPLOITATION','INSTALLATION','COMMAND_AND_CONTROL','EXFIL','DAMAGE','INSIDER_DATA_CONTROL','INSIDER_DATA_EXFIL') DEFAULT NULL,
+  `disposition` enum('FALSE_POSITIVE','IGNORE','UNKNOWN','REVIEWED','GRAYWARE','POLICY_VIOLATION','RECONNAISSANCE','WEAPONIZATION','DELIVERY','EXPLOITATION','INSTALLATION','COMMAND_AND_CONTROL','EXFIL','DAMAGE','INSIDER_DATA_CONTROL','INSIDER_DATA_EXFIL', 'APPROVED_BUSINESS', 'APPROVED_PERSONAL') DEFAULT NULL,
   `disposition_user_id` int(11) DEFAULT NULL,
   `disposition_time` timestamp NULL DEFAULT NULL,
   `owner_id` int(11) DEFAULT NULL,
@@ -279,7 +279,7 @@ CREATE TABLE `events` (
   `risk_level` enum('1','2','3') NOT NULL,
   `prevention_tool` enum('response team','ips','fw','proxy','antivirus','email filter','application whitelisting','user') NOT NULL,
   `remediation` enum('not remediated','cleaned with antivirus','cleaned manually','reimaged','credentials reset','removed from mailbox','network block','NA') NOT NULL,
-  `status` enum('OPEN','CLOSED','IGNORE','COMPLETED') NOT NULL,
+  `status` enum('OPEN','CLOSED','IGNORE','INTERNAL COLLECTION') NOT NULL,
   `comment` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci,
   `campaign_id` int(11) NOT NULL,
   `event_time` datetime DEFAULT NULL,
@@ -666,7 +666,7 @@ CREATE TABLE `users` (
   `timezone` varchar(512) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci DEFAULT NULL COMMENT 'The timezone this user is in. Dates and times will appear in this timezone in the GUI.',
   `display_name` varchar(45) DEFAULT NULL COMMENT 'The display name of the user. This may be different than the username. This is used in the GUI.',
   `queue` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL DEFAULT 'default',
-  `enabled` BOOLEAN NOT NULL DEFAULT True AFTER `queue`,
+  `enabled` BOOLEAN NOT NULL DEFAULT True,
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`,`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
@@ -745,3 +745,19 @@ CREATE TABLE `workload` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2020-06-08 12:37:30
+
+DROP TABLE IF EXISTS `settings`;
+CREATE TABLE `settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `parent_id` int(11) NULL DEFAULT NULL,
+  `default_parent_id` int(11) NULL DEFAULT NULL,
+  `key` varchar(60) NOT NULL,
+  `type` varchar(40) NOT NULL DEFAULT 'String',
+  `value` text NULL DEFAULT NULL,
+  `tooltip` text NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `setting_id` (`parent_id`,`key`),
+  UNIQUE KEY `map_default_child` (`default_parent_id`),
+  FOREIGN KEY (`parent_id`) REFERENCES `settings` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (`default_parent_id`) REFERENCES `settings` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

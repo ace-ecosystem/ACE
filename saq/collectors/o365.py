@@ -74,6 +74,7 @@ class o365_Security_Collector(Collector):
         base_url = kwargs.get('url', 'https://graph.microsoft.com/v1.0/')
         ext = kwargs.get('extension', 'security/alerts')
         request_url = f'{base_url}{ext}'
+        logging.info(f'Submitting Request to {request_url}')
 
         #Odata parameters to alter the request. Not applicable to all api's
         _odata_url = '?'

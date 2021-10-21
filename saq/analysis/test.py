@@ -296,13 +296,6 @@ class RootAnalysisTestCase(ACEBasicTestCase):
         root = create_root_analysis()
         assert len(root.iocs) == 0
 
-        saq.CONFIG['tip']['enabled'] = 'no'
         root.add_ioc(I_EMAIL_FROM_ADDRESS, 'badguy@evil.com', tags=['from_address'])
         assert len(root.iocs) == 1
         assert root.iocs[0].type == I_EMAIL_FROM_ADDRESS
-
-        saq.CONFIG['tip']['enabled'] = 'misp'
-        root = create_root_analysis()
-        root.add_ioc(I_EMAIL_FROM_ADDRESS, 'badguy2@evil.com', tags=['from_address'])
-        assert len(root.iocs) == 1
-        assert root.iocs[0].type == 'email-src'

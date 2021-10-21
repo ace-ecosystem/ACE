@@ -5,7 +5,6 @@ Flask-SQLAlchemy==2.4.1
 Flask-Script==2.0.6
 Flask-WTF==0.14.2
 MarkupSafe
-Pandas
 Pillow
 PyMySQL
 SQLAlchemy==1.3.18
@@ -29,14 +28,16 @@ mkdocs-awesome-pages-plugin
 msoffice_decrypt
 olefile
 oletools
+openpyxl
 pcodedmp
 pip
-plyara==2.0.3
+plyara
 psutil 
 pyasn1 
 pylint
 pymisp==2.4.130
 pymongo==2.8
+pyodbc
 pysip
 pysocks
 pytest
@@ -55,9 +56,9 @@ setuptools_git
 six
 tld
 tzlocal
-urlfinderlib==0.15.1
+urlfinderlib==0.15.4
 vxstreamlib
-yara_scanner==1.0.15
+yara_scanner
 python-whois
 gglsbl-rest-client
 argcomplete==1.10.0
@@ -73,6 +74,9 @@ tabulate
 fakeredis
 distorm3
 requests-mock
+python-rapidjson
+certifi
 flare-capa
 pytenable
 ip_inspector>=0.1.10
+

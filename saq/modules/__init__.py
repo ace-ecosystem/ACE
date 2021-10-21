@@ -23,6 +23,7 @@ from saq.error import report_exception
 from saq.network_semaphore import NetworkSemaphoreClient
 from saq.splunk import SplunkQueryObject
 from saq.util import create_timedelta, parse_event_time, create_directory, atomic_open
+import saq.settings
 
 
 import pytz
@@ -801,6 +802,7 @@ class AnalysisModule(object):
             if final_analysis:
                 analysis_result = self.execute_final_analysis(obj)
             else:
+                saq.settings.load()
                 analysis_result = self.execute_analysis(obj)
 
             # cache analysis if enabled

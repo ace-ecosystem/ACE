@@ -1,0 +1,171 @@
+<div class="panel-heading">
+    <h3 class="panel-title" data-toc-text="Sandbox Analysis">Sandbox Analysis <a role="button" data-toggle="collapse" data-target="#collapseSandboxAnalysis" aria-expanded="true" aria-controls="collapseSandboxAnalysis">(hide/show)</a></h3>
+</div>
+<div class="panel-body collapse in" id="collapseSandboxAnalysis" style="overflow: scroll;">
+    {% for sandbox_report in sandbox_reports %}
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h4 class="panel-title">{{ sandbox_report['filename'] }} <a role="button" data-toggle="collapse" data-target="#collapse{{ sandbox_report['md5'] }}" aria-expanded="true" aria-controls="collapse{{ sandbox_report['md5'] }}">(hide/show)</a></h4>
+            </div>
+            <div class="panel-body collapse in" id="collapse{{ sandbox_report['md5'] }}" style="overflow: scroll;">
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        <h5 class="panel-title">Sandbox URLs <a role="button" data-toggle="collapse" data-target="#collapse{{ sandbox_report['md5'] }}sandboxurls" aria-expanded="true" aria-controls="collapse{{ sandbox_report['md5'] }}sandboxurls">(hide/show)</a></h5>
+                    </div>
+                    <div class="panel-body collapse in" id="collapse{{ sandbox_report['md5'] }}sandboxurls" style="overflow: scroll;">
+                        <ul>
+                            {% for sandbox_url in sandbox_report['sandbox_urls'] %}
+                                <li><a href="{{ sandbox_url }}" target="_blank">
+                                    {% if 'falcon' in sandbox_url.lower() %}
+                                        Falcon
+                                    {% elif 'wildfire' in sandbox_url.lower() %}
+                                        Wildfire
+                                    {% else %}
+                                        {{ sandbox_url }}
+                                    {% endif %}
+                                </a></li>
+                            {% endfor %}
+                            {% if sandbox_report['sha256'] %}
+                                <li><a href="https://www.virustotal.com/gui/file/{{ sandbox_report['sha256'] }}/detection" target="_blank">VirusTotal</a></li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+                {% if sandbox_report['contacted_hosts'] %}
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h5 class="panel-title">Contacted Hosts <a role="button" data-toggle="collapse" data-target="#collapse{{ sandbox_report['md5'] }}hosts" aria-expanded="true" aria-controls="collapse{{ sandbox_report['md5'] }}hosts">(hide/show)</a></h5>
+                        </div>
+                        <div class="panel-body collapse in" id="collapse{{ sandbox_report['md5'] }}hosts" style="overflow: scroll;">
+                            <table class="table table-bordered table-condensed">
+                                <tr>
+                                    <th>Address</th>
+                                    <th>Port</th>
+                                    <th>Protocol</th>
+                                    <th>Location</th>
+                                    <th>Associated Domains</th>
+                                </tr>
+                                {% for contacted_host in sandbox_report['contacted_hosts'] %}
+                                    <tr>
+                                        <td>{{ contacted_host['ip'] }}</td>
+                                        <td>{{ contacted_host['port'] }}</td>
+                                        <td>{{ contacted_host['protocol'] }}</td>
+                                        <td>{{ contacted_host['location'] }}</td>
+                                        <td>{{ ', '.join(contacted_host['associated_domains']) }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    </div>
+                {% endif %}
+                {% if sandbox_report['dns_requests'] %}
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h5 class="panel-title">DNS Requests <a role="button" data-toggle="collapse" data-target="#collapse{{ sandbox_report['md5'] }}dns" aria-expanded="true" aria-controls="collapse{{ sandbox_report['md5'] }}dns">(hide/show)</a></h5>
+                        </div>
+                        <div class="panel-body collapse in" id="collapse{{ sandbox_report['md5'] }}dns" style="overflow: scroll;">
+                            <table class="table table-bordered table-condensed">
+                                <tr>
+                                    <th>Request</th>
+                                    <th>Type</th>
+                                    <th>Answer</th>
+                                    <th>Answer Type</th>
+                                </tr>
+                                {% for dns_request in sandbox_report['dns_requests'] %}
+                                    <tr>
+                                        <td>{{ dns_request['request'] }}</td>
+                                        <td>{{ dns_request['type'] }}</td>
+                                        <td>{{ dns_request['answer'] }}</td>
+                                        <td>{{ dns_request['answer_type'] }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    </div>
+                {% endif %}
+                {% if sandbox_report['dropped_files'] %}
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h5 class="panel-title">Dropped Files <a role="button" data-toggle="collapse" data-target="#collapse{{ sandbox_report['md5'] }}dropped" aria-expanded="true" aria-controls="collapse{{ sandbox_report['md5'] }}dropped">(hide/show)</a></h5>
+                        </div>
+                        <div class="panel-body collapse in" id="collapse{{ sandbox_report['md5'] }}dropped" style="overflow: scroll;">
+                            <table class="table table-bordered table-condensed">
+                                <tr>
+                                    <th>VT</th>
+                                    <th>Filename</th>
+                                    <th>Path</th>
+                                    <th>Size</th>
+                                    <th>Type</th>
+                                    <th>MD5</th>
+                                    <th>SHA256</th>
+                                </tr>
+                                {% for dropped_file in sandbox_report['dropped_files'] %}
+                                    <tr>
+                                        <td>
+                                            {% if dropped_file['sha256'] %}
+                                                <a href="https://www.virustotal.com/gui/file/{{ dropped_file['sha256'] }}/detection" target="_blank">Link</a>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ dropped_file['filename'] }}</td>
+                                        <td>{{ dropped_file['path'] }}</td>
+                                        <td>{{ dropped_file['size'] }}</td>
+                                        <td>{{ dropped_file['type'] }}</td>
+                                        <td>{{ dropped_file['md5'] }}</td>
+                                        <td>{{ dropped_file['sha256'] }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    </div>
+                {% endif %}
+                {% if sandbox_report['http_requests'] %}
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h5 class="panel-title">HTTP Requests <a role="button" data-toggle="collapse" data-target="#collapse{{ sandbox_report['md5'] }}http" aria-expanded="true" aria-controls="collapse{{ sandbox_report['md5'] }}http">(hide/show)</a></h5>
+                        </div>
+                        <div class="panel-body collapse in" id="collapse{{ sandbox_report['md5'] }}http" style="overflow: scroll;">
+                            <table class="table table-bordered table-condensed">
+                                <tr>
+                                    <th>Method</th>
+                                    <th>Host</th>
+                                    <th>Port</th>
+                                    <th>URI</th>
+                                    <th>User-Agent</th>
+                                </tr>
+                                {% for http_request in sandbox_report['http_requests'] %}
+                                    <tr>
+                                        <td>{{ http_request['method'] }}</td>
+                                        <td>{{ http_request['host'] }}</td>
+                                        <td>{{ http_request['port'] }}</td>
+                                        <td>{{ http_request['uri'] }}</td>
+                                        <td>{{ http_request['user_agent'] }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </div>
+                    </div>
+                {% endif %}
+                {% if sandbox_report['mutexes'] %}
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h5 class="panel-title">Mutexes <a role="button" data-toggle="collapse" data-target="#collapse{{ sandbox_report['md5'] }}mutexes" aria-expanded="true" aria-controls="collapse{{ sandbox_report['md5'] }}mutexes">(hide/show)</a></h5>
+                        </div>
+                        <div class="panel-body collapse in" id="collapse{{ sandbox_report['md5'] }}mutexes" style="overflow: scroll;">
+                            <pre>{% for mutex in sandbox_report['mutexes'] %}{{ mutex + '\n' }}{% endfor %}</pre>
+                        </div>
+                    </div>
+                {% endif %}
+                {% if sandbox_report['process_trees'] %}
+                    <div class="panel panel-default">
+                        <div class="panel-heading">
+                            <h5 class="panel-title">Process Trees <a role="button" data-toggle="collapse" data-target="#collapse{{ sandbox_report['md5'] }}trees" aria-expanded="true" aria-controls="collapse{{ sandbox_report['md5'] }}trees">(hide/show)</a></h5>
+                        </div>
+                        <div class="panel-body collapse in" id="collapse{{ sandbox_report['md5'] }}trees" style="overflow: scroll;">
+                            <pre>{% for process_tree in sandbox_report['process_trees'] %}{{ process_tree + '\n\n' }}{% endfor %}{% for process_tree_decoded in sandbox_report['process_trees_decoded'] %}{{ process_tree_decoded + '\n\n' }}{% endfor %}</pre>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+</div>

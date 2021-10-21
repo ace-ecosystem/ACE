@@ -61,17 +61,15 @@ def test_indicatorlist_append():
 
 
 @pytest.mark.unit
-def test_indicatorlist_url_iocs():
-    tip = tip_factory()
-
+def test_indicatorlist_url_iocs(tip_misp):
     indicators = IndicatorList()
     indicators.add_url_iocs('http://www.test.com/index.html')
 
     expected_iocs = [
-        Indicator(tip.ioc_type_mappings[I_URL], 'http://www.test.com/index.html'),
-        Indicator(tip.ioc_type_mappings[I_DOMAIN], 'www.test.com'),
-        Indicator(tip.ioc_type_mappings[I_DOMAIN], 'test.com'),
-        Indicator(tip.ioc_type_mappings[I_URI_PATH], '/index.html')
+        Indicator(tip_misp.ioc_type_mappings[I_URL], 'http://www.test.com/index.html'),
+        Indicator(tip_misp.ioc_type_mappings[I_DOMAIN], 'www.test.com'),
+        Indicator(tip_misp.ioc_type_mappings[I_DOMAIN], 'test.com'),
+        Indicator(tip_misp.ioc_type_mappings[I_URI_PATH], '/index.html')
     ]
 
     assert set(indicators) == set(expected_iocs)

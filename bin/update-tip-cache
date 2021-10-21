@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+cd ${SAQ_HOME:=/opt/ace} && source load_environment && ./ace update-tip-cache

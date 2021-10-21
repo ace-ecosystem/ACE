@@ -49,3 +49,11 @@ function remove_remediation_targets() {
     remediation_targets("DELETE", {targets: targets}, '#remediation-body');
     return false; // prevents form from submitting
 }
+
+function stop_remediation() {
+    $('#remediation-body').html('stopping remediation...');
+    $('#remediation-selection-modal').modal('hide');
+    $('#remediation-modal').modal('show');
+    targets = get_remediation_targets();
+    remediation_targets("PATCH", {targets: targets}, '#remediation-body');
+}

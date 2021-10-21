@@ -134,7 +134,7 @@ class RenderAnalyzer(AnalysisModule):
         if content_type == 'html':
             file_path = os.path.join(self.root.storage_dir, observable.value)
             try:
-                with open(file_path) as fp:
+                with open(file_path, errors='ignore') as fp:
                     content = fp.read()
             except Exception as e:
                 logging.error(f'Could not load HTML content for {observable.value} to request rendering: {e}')

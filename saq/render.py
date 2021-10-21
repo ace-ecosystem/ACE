@@ -151,7 +151,8 @@ class RenderControllerClient(BaseRenderClient):
                 return True
 
             if self.status == 'failed':
-                raise SystemError(f"Render job {self.id} failed; renderer failed to acquire screenshot")
+                logging.info(f"Render job {self.id} failed; renderer failed to acquire screenshot")
+                return True
 
             return False
 
@@ -160,10 +161,13 @@ class RenderControllerClient(BaseRenderClient):
             raise
 
     def get_output_data(self, **kwargs):
+        if self.status == 'failed':
+            return None
+
         request_method = kwargs.get('request_method') or requests.get
 
         if request_method is None:
-            logging.error("method passed to graph api is not valid for requests library")
+            logging.error("method passed to render module is not valid for requests library")
 
         try:
             r = request_method(f"{self.uri}/job/{self.id}", verify=self.verify, cert=self.client_cert, auth=self.auth_token)

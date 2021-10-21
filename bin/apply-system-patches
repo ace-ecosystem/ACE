@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#
+
+cd ${SAQ_HOME:=/opt/ace} || { echo "unable to cd to $SAQ_HOME"; exit 1; }
+
+# set $prefix and $options
+source bin/mysql_common.sh
+
+cat updates/system/patch.list | while read patch_name
+do
+    if [ -z "$patch_name" ]
+    then
+        continue
+    fi
+
+    # have we already installed this patch?
+    result=$($prefix mysql $options --database ace --batch --raw -s -e "SELECT \`value\` FROM \`config\` WHERE \`key\` = 'patch-$patch_name'")
+    if [ ! -z "$result" ]
+    then
+        echo "patch $patch_name already installed"
+        continue
+    fi
+
+    if [ ! -x "$patch_name" ]
+    then
+        echo "ERROR: $patch_name is not executable"
+        continue
+    fi
+
+    echo "installing patch $patch_name"
+    $patch_name > $patch_name.stdout 2> $patch_name.stderr || {
+        echo "unable to install $patch_name (command returned error result $?)"
+        continue
+    }
+
+    $prefix mysql $options --database=ace -e "INSERT INTO \`config\` ( \`key\`, \`value\` ) VALUES ( 'patch-$patch_name', 'installed' )"
+done

@@ -268,6 +268,36 @@
 </div>
 {% endif %}
 
+{% if tip_indicator_summaries %}
+<div class="panel panel-default">
+    <div class="panel-heading">Indicator Summary <a role="button" data-toggle="collapse" data-target="#collapseIndicatorSummary" aria-expanded="true" aria-controls="collapseIndicatorSummary">(hide/show)</a></div>
+    <div class="panel-body collapse in" id="collapseIndicatorSummary" style="overflow: scroll;">
+        <table class="table table-bordered table-condensed">
+            <tr>
+                <th>Type</th>
+                <th>Value</th>
+                <th>Indicator Tags</th>
+                <th>Event Tags</th>
+                <th>TIP Events</th>
+            </tr>
+            {% for summary in tip_indicator_summaries %}
+            <tr>
+                <td>{{ summary['type'] }}</td>
+                <td><pre style="all: unset; font-family: monospace">{{ summary['value'] }}</pre></td>
+                <td>{{ ', '.join(summary['indicator_tags']) }}</td>
+                <td>{{ ', '.join(summary['event_tags']) }}</td>
+                <td>
+                    {% for tip_event_url in summary['tip_event_urls'] %}
+                        <a href="{{ tip_event_url }}" target="_blank">{{ tip.name }}</a>&nbsp;
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+{% endif %}
+
 <div class="panel panel-default">
     <div class="panel-heading">
         <h3 class="panel-title">

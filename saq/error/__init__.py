@@ -18,7 +18,7 @@ import saq
 def report_exception():
     import saq.engine
 
-    _, reported_exception, _ = sys.exc_info()
+    exc_type, reported_exception, tb = sys.exc_info()
 
     # spit it out to stdout first
     if saq.DUMP_TRACEBACKS:
@@ -44,33 +44,28 @@ def report_exception():
             fp.write("EXCEPTION\n")
             fp.write(str(reported_exception))
             fp.write("\n\nSTACK TRACE\n")
-            fp.write(traceback.format_exc())
+
+            from saq.error.formatter import ExceptionFormatter
+            formatter = ExceptionFormatter()
+            stack_trace, final_source = formatter.format_traceback(tb)
+
+            fp.write(stack_trace)
+            fp.write("\n\nEXCEPTION SOURCE\n")
+            fp.write(final_source)
+            fp.write("\n")
+
+        if saq.CONFIG['service_engine'].getboolean('copy_analysis_on_error'):
+            if saq.engine.CURRENT_ENGINE and saq.engine.CURRENT_ENGINE.root:
+                if os.path.isdir(saq.engine.CURRENT_ENGINE.root.storage_dir):
+                    analysis_dir = '{}.ace'.format(error_report_path)
+                    try:
+                        shutil.copytree(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir)
+                        logging.warning("copied analysis from {} to {} for review".format(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir))
+                    except Exception as e:
+                        logging.error("unable to copy from {} to {}: {}".format(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir, e))
 
         return error_report_path
 
-        if saq.engine.CURRENT_ENGINE and saq.engine.CURRENT_ENGINE.root:
-            if os.path.isdir(saq.engine.CURRENT_ENGINE.root.storage_dir):
-                analysis_dir = '{}.ace'.format(error_report_path)
-                try:
-                    shutil.copytree(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir)
-                    logging.warning("copied analysis from {} to {} for review".format(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir))
-                except Exception as e:
-                    logging.error("unable to copy from {} to {}: {}".format(saq.engine.CURRENT_ENGINE.root.storage_dir, analysis_dir, e))
-
-        # do we send an email?
-        #email_addresses = [x.strip() for x in saq.CONFIG['global']['error_reporting_email'].split(',') if x.strip() != '']
-        #if len(email_addresses) > 0:
-            #try:
-                #email_message = 'From: {0}\r\nTo: {1}\r\nSubject: {2}\r\n\r\n{3}'.format(
-                    #saq.CONFIG['smtp']['mail_from'],
-                    #', '.join(email_addresses), 
-                    #'ACE Exception Reported',
-                    #str(reported_exception) + '\n\n' + traceback.format_exc())
-                #server = smtplib.SMTP(saq.CONFIG['smtp']['server'])
-                #server.sendmail(saq.CONFIG['smtp']['mail_from'], email_addresses, email_message)
-                #server.quit()
-            #except Exception as e:
-                #logging.error("unable to send email: {0}".format(str(e)))
-
     except Exception as e:
         logging.error("uncaught exception we reporting an exception: {}".format(e))
+        return None

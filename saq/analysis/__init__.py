@@ -3284,8 +3284,9 @@ class RootAnalysis(Analysis):
 
         try:
             with open(self.json_path, 'r') as fp:
-                self.json = json.load(fp)
+                json_str = fp.read()
 
+            self.json = json.loads(json_str)
             _track_reads()
 
             # translate the json into runtime objects
@@ -3683,7 +3684,7 @@ class RootAnalysis(Analysis):
         return result
 
     @property
-    def all_iocs(self) -> list:
+    def all_iocs(self) -> IndicatorList:
         iocs = IndicatorList()
 
         for analysis in self.all_analysis:
@@ -3691,6 +3692,11 @@ class RootAnalysis(Analysis):
                 iocs.append(ioc)
 
         return iocs
+
+    @property
+    def all_ioc_tip_summaries(self) -> List[dict]:
+        summaries = self.tip.get_indicator_summaries_from_cache([i.json for i in self.all_iocs])
+        return sorted(summaries, key=lambda x: (x['type'], x['value']))
 
     def get_analysis_by_type(self, a_type):
         """Returns the list of all Analysis of a given type()."""

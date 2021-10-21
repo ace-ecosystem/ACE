@@ -79,6 +79,9 @@ class FalconSandbox(object):
             'User-Agent': 'Falcon Sandbox'
         }
 
+    def download_full_report(self, job_id: str, _hash: str):
+        return self.session.get(f'{self.url}/report/{job_id}/report/json', **self.requests_kwargs)
+
     def search_hash(self, _hash: str):
         return self.session.post(f'{self.url}/search/hash', data={'hash': _hash}, **self.requests_kwargs)
 

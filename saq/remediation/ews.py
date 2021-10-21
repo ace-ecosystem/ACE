@@ -2,7 +2,7 @@ from requests.auth import HTTPBasicAuth
 from requests_ntlm import HttpNtlmAuth
 import saq
 from saq.email import is_local_email_domain
-from saq.phishfry import Phishfry, ErrorNonExistentMailbox, ErrorNonExistentMessage, ErrorUnsupportedMailboxType
+from saq.phishfry import Phishfry, ErrorNonExistentMailbox, ErrorNonExistentMessage, ErrorUnsupportedMailboxType, ErrorAccessDenied
 from saq.proxy import proxies
 from saq.remediation import Remediator, RemediationDelay, RemediationFailure, RemediationSuccess, RemediationIgnore
 
@@ -34,6 +34,10 @@ class EmailRemediator(Remediator):
         try:
             self.phishfry.remove(recipient, message_id)
 
+        # fail if access denied
+        except ErrorAccessDenied as e:
+            return RemediationFailure(e.message)
+
         # consider non existent mailbox success
         except ErrorNonExistentMailbox as e:
             return RemediationSuccess(e.message)
@@ -59,6 +63,10 @@ class EmailRemediator(Remediator):
         # attempt to restore the message
         try:
             self.phishfry.restore(recipient, message_id)
+
+        # fail if access denied
+        except ErrorAccessDenied as e:
+            return RemediationFailure(e.message)
 
         # ignore non existent mailboxes
         except ErrorNonExistentMailbox as e:

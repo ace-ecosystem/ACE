@@ -152,10 +152,11 @@ class TestRenderControllerClient:
         render = saq.render.RenderControllerClient()
         render.id = MOCK_JOB_ID
         with render:
-            with pytest.raises(SystemError):
-                render.watch(request_method=mock_request)
+            render.watch(request_method=mock_request)
+            output_data = render.get_output_data(request_method=mock_request)
 
         assert render.status == 'failed'
+        assert output_data is None
 
     @pytest.mark.unit
     def test_get_output_data(self):

@@ -1039,7 +1039,8 @@ class TestCase(ACEModuleTestCase):
         self.assertEquals(set([_.value for _ in file_observables]),
                           set(['email.rfc822.unknown_text_plain_000',
                                'email.rfc822.unknown_text_html_000',
-                               'email.rfc822.headers']))
+                               'email.rfc822.headers',
+                               'email.rfc822.combined']))
 
         for file_observable in file_observables:
             if file_observable.value == 'email.rfc822.unknown_text_plain_000':
@@ -1116,7 +1117,8 @@ class TestCase(ACEModuleTestCase):
         self.assertEquals(set([_.value for _ in file_observables]),
                           set(['email.rfc822.unknown_text_plain_000',
                                'email.rfc822.unknown_text_html_000',
-                               'email.rfc822.headers']))
+                               'email.rfc822.headers',
+                               'email.rfc822.combined']))
 
         for file_observable in file_observables:
             if file_observable.value == 'email.rfc822.unknown_text_plain_000':
@@ -1273,6 +1275,42 @@ class TestCase(ACEModuleTestCase):
         self.assertIsNotNone(file_observable)
         email_analysis = file_observable.get_analysis(EmailAnalysis)
         self.assertFalse(email_analysis)
+
+    def test_automated_msoffice_decryption(self):
+        root = create_root_analysis()
+        root.initialize_storage()
+        decrypt(os.path.join('test_data', 'encrypted', 'encrypted_msoffice.email.rfc822.e'), 
+                os.path.join(root.storage_dir, 'encrypted_msoffice.email.rfc822'),
+                password='ace')
+        file_observable = root.add_observable(F_FILE, 'encrypted_msoffice.email.rfc822')
+        root.save()
+        root.schedule()
+
+        engine = TestEngine()
+        engine.enable_module('analysis_module_file_type', 'test_groups')
+        engine.enable_module('analysis_module_email_analyzer', 'test_groups')
+        engine.enable_module('analysis_module_msoffice_encryption_analyzer', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+        
+        root.load()
+
+        from saq.modules.email import EmailAnalysis
+        file_observable = root.get_observable(file_observable.id)
+        self.assertIsNotNone(file_observable)
+        # make sure we extracted the encrypted office document
+        email_analysis = file_observable.get_analysis(EmailAnalysis)
+        file_observable = email_analysis.find_observable(lambda o: o.type == F_FILE and o.value == 'info_3805.xls')
+        self.assertIsNotNone(file_observable)
+        # make sure we analyzed it
+        from saq.modules.email import MSOfficeEncryptionAnalysis
+        msoffice_analysis = file_observable.get_analysis(MSOfficeEncryptionAnalysis)
+        self.assertIsNotNone(msoffice_analysis)
+        # make sure we got the right password
+        self.assertEquals(msoffice_analysis.password, '709384')
+        # and that we decrypted it
+        self.assertIsNotNone(msoffice_analysis.find_observable(lambda o: o.type == F_FILE and o.value == 'info_3805.xls.decrypted'))
 
     # XXX move this to the site-specific test
     @unittest.skip

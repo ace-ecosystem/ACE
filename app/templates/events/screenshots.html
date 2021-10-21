@@ -1,7 +1,7 @@
 <div class="panel-heading">
-    <h3 class="panel-title">Screenshots</h3>
+    <h3 class="panel-title" data-toc-text="Screenshots">Screenshots <a role="button" data-toggle="collapse" data-target="#collapseScreenshots" aria-expanded="true" aria-controls="collapseScreenshots">(hide/show)</a></h3>
 </div>
-<div class="panel-body">
+<div class="panel-body collapse in" id="collapseScreenshots">
     {% for screenshot in screenshots %}
     <img width="{{screenshot['scaled_width']}}" height="{{screenshot['scaled_height']}}" src="{{ url_for('analysis.image', alert_uuid=screenshot['alert_id'], observable_uuid=screenshot['observable_id']) }}" class="img-thumbnail" />
     {% endfor %}

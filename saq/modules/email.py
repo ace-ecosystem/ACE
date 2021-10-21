@@ -22,6 +22,7 @@ import saq
 from saq.analysis import Analysis, Observable, recurse_tree, search_down
 from saq.brocess import query_brocess_by_email_conversation, query_brocess_by_source_email
 from saq.constants import *
+from saq.cracking import generate_wordlist
 from saq.crypto import encrypt, decrypt
 from saq.database import get_db_connection, execute_with_retry, Alert, use_db
 from saq.email import (
@@ -35,12 +36,14 @@ from saq.email import (
 from saq.error import report_exception
 from saq.modules import AnalysisModule, SplunkAnalysisModule, AnalysisModule
 from saq.modules.util import get_email
-from saq.process_server import Popen, PIPE
+from saq.process_server import Popen, PIPE, DEVNULL
 from saq.util import get_observable_analysis_path
 from saq.whitelist import BrotexWhitelist, WHITELIST_TYPE_SMTP_FROM, WHITELIST_TYPE_SMTP_TO
 
 import dateutil
+import msoffcrypto
 import pytz
+
 from msoffice_decrypt import MSOfficeDecryptor, UnsupportedAlgorithm
 from html2text import html2text
 
@@ -103,12 +106,10 @@ RE_EMAIL_RECEIVED_DATE = re.compile(r';\s?(.+)$')
 
 MAILBOX_ALERT_PREFIX = 'ACE Mailbox Scanner Detection -'
 
-
 def get_address_list(email_obj, header_name):
     header = email_obj.get_all(header_name, [])
     addresses = email.utils.getaddresses(header)
     return [x[1] for x in addresses]
-
 
 def get_received_time(received_header):
     m = RE_EMAIL_RECEIVED_DATE.search(received_header, re.M)
@@ -1204,7 +1205,15 @@ class EmailAnalysis(Analysis):
             if 'rfc822.unknown_' not in os.path.basename(_file.value):
                 continue
 
-            # we always skip this one
+            # if all we have is a single text_plain file then that is the body of the email
+            plain_text_files = list(filter(lambda o: o.type == F_FILE and 'unknown_text_plain' in os.path.basename(o.value), self.observables))
+            html_files = list(filter(lambda o: o.type == F_FILE and 'unknown_text_html' in os.path.basename(o.value), self.observables))
+
+            if len(plain_text_files) == 1 and len(html_files) == 0:
+                self._body = plain_text_files[0]
+                return self._body
+
+            # otherwise we always skip this one first
             if '.rfc822.unknown_text_plain_000' in _file.value:
                 continue
 
@@ -1477,7 +1486,9 @@ class EmailAnalyzer(AnalysisModule):
 
         if 'from' in target_email:
             email_details[KEY_FROM] = decode_rfc2822(target_email['from'])
-            email_details[KEY_FROM_ADDRESS] = get_address_list(target_email, 'from')[0]
+            from_address = get_address_list(target_email, 'from')
+            if len(from_address):
+                email_details[KEY_FROM_ADDRESS] = from_address[0]
 
             address = normalize_email_address(email_details[KEY_FROM])
             if address:
@@ -1884,10 +1895,11 @@ class EmailAnalyzer(AnalysisModule):
         analysis.email = email_details
 
         # create a file with just the header information and scan that separately
+        headers_path = None
         if KEY_HEADERS in email_details:
             headers_path = os.path.join(self.root.storage_dir, '{}.headers'.format(_file.value))
             if os.path.exists(headers_path):
-                logging.warning("headers file {} already exists".format(headers_path))
+                logging.debug("headers file {} already exists".format(headers_path))
             else:
                 with open(headers_path, 'w') as fp:
                     fp.write('\n'.join(['{}: {}'.format(h[0], h[1]) for h in email_details[KEY_HEADERS]]))
@@ -1898,6 +1910,39 @@ class EmailAnalyzer(AnalysisModule):
                 # we don't want to analyze this with the email analyzer
                 if headers_file: 
                     headers_file.exclude_analysis(self)
+
+        # combine the header and the decoded parts of the email into a single buffer for scanning with yara
+        # we only combine the un-named html and text parts, not additional attachements
+        if headers_path:
+            combined_path = os.path.join(self.root.storage_dir, '{}.combined'.format(_file.value))
+            if os.path.exists(combined_path):
+                logging.debug(f"combined path {combined_path} already exists")
+            else:
+                # copy the headers over first
+                shutil.copy(headers_path, combined_path)
+                with open(combined_path, 'ab') as fp:
+                    fp.write(b'\n\n')
+
+                    # copy each attachment in the order it was seen in the email if it has 'unknown_' in the name
+                    for size, type, name, sha256 in attachments:
+                        if 'unknown_' in name:
+                            attachment_path = os.path.join(self.root.storage_dir, name)
+                            try:
+                                with open(attachment_path, 'rb') as fp_in:
+                                    shutil.copyfileobj(fp_in, fp)
+
+                                fp.write(b'\n\n')
+
+                            except Exception as e:
+                                logging.error(f"unable to copy {attachment_path} to {combined_path}: {e}")
+                                report_exception()
+
+                    combined_file = analysis.add_observable(F_FILE, os.path.relpath(
+                                                            combined_path, start=self.root.storage_dir))
+
+                    # we don't want to analyze this with the email analyzer
+                    if combined_file: 
+                        combined_file.exclude_analysis(self)
 
         # are we renaming the root analysis?
         if _file.has_directive(DIRECTIVE_RENAME_ANALYSIS):
@@ -3762,8 +3807,8 @@ class MSOfficeEncryptionAnalysis(Analysis):
         if self.details is None:
             return None
 
-        if self.encryption_info is None:
-            return None
+        #if self.encryption_info is None:
+            #return None
 
         result = "MSOffice Encryption Analysis"
         if self.error:
@@ -3806,6 +3851,10 @@ class MSOfficeEncryptionAnalyzer(AnalysisModule):
     def list_limit(self):
         return self.config.getint('list_limit')
 
+    @property
+    def john_bin_path(self):
+        return self.config.get('john_bin_path')
+
     def execute_analysis(self, _file):
         # does this file exist as an attachment?
         local_file_path = os.path.join(self.root.storage_dir, _file.value)
@@ -3814,62 +3863,89 @@ class MSOfficeEncryptionAnalyzer(AnalysisModule):
 
         # is this an encrypted OLE document?
         try:
-            output_file = '{}.decrypted'.format(local_file_path)
-            decryptor = MSOfficeDecryptor(local_file_path, output_file)
-            if not decryptor.is_decryptable:
-                return False
-
-            analysis = self.create_analysis(_file)
+            with open(local_file_path, 'rb') as office_fp:
+                office_file = msoffcrypto.OfficeFile(office_fp)
+                if not office_file.is_encrypted():
+                    return False
 
             _file.add_tag('encrypted_msoffice')
-            analysis.encryption_info = decryptor.encryption_info._asdict() # it's a named tuple
+            analysis = self.create_analysis(_file)
 
-            # first try the default password of VelvetSweatshop
+            # extract the hash for cracking
+            p = Popen(['python3', os.path.join(self.john_bin_path, 'office2john.py'), local_file_path], stdout=PIPE, stderr=PIPE)
+            stdout, stderr = p.communicate()
+
+            # did we get the hash?
+            if not stdout:
+                analysis.error = f"office2john.py failed: {stderr.decode()}"
+                return True
+
+            hash_file = f'{local_file_path}.hash'
+            with open(hash_file, 'wb') as fp:
+                fp.write(stdout)
+
+            # OK then we've found an office document that is encrypted
+            # we'll try to find the passwords by looking at the plain text and html of the email, if they exist
+            email = search_down(_file, lambda obj: isinstance(obj, EmailAnalysis) and obj.email is not None)
+            if email is None:
+                logging.info("encrypted word document {} found but no associated email was found".format(_file.value))
+                analysis.error = "no associated email detected"
+                return True
+
+            analysis.email = True
+
+            # email needs to have a body
+            if not email.body:
+                logging.info("encrypted word document {} found but no associated email body was found".format(_file.value))
+                analysis.error = "found email but email does not have body"
+                return True
+
+            # convert html to text
+            with open(os.path.join(self.root.storage_dir, email.body.value), 'r', errors='ignore') as fp:
+                logging.debug("parsing {} for html".format(email.body.value))
+                analysis.email_body = html2text(fp.read())[:self.byte_limit]
+
+            analysis.word_list = generate_wordlist(text_content=analysis.email_body,
+                                                   range_low=self.range_low,
+                                                   range_high=self.range_high,
+                                                   byte_limit=self.byte_limit,
+                                                   list_limit=self.list_limit)
+
+            # always first try the default password of VelvetSweatshop
             # see https://isc.sans.edu/diary/rss/23774 
-            analysis.password = decryptor.guess()
+            analysis.word_list.insert(0, 'VelvetSweatshop')
+
+            wordlist_path = f'{local_file_path}.wordlist'
+            with open(wordlist_path, 'w') as fp:
+                for word in analysis.word_list:
+                    fp.write(f'{word}\n')
+
+            # crack it with john the ripper
+            p = Popen([os.path.join(self.john_bin_path, 'john'), f'--wordlist={wordlist_path}', hash_file], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+            stdout, stderr = p.communicate()
+
+            p = Popen([os.path.join(self.john_bin_path, 'john'), f'--show', hash_file], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+            stdout, stderr = p.communicate()
+
+            analysis.password = None
+            for line in stdout.decode().split('\n'):
+                if line.startswith(_file.value):
+                    analysis.password = line[len(_file.value) + 1:]
 
             if not analysis.password:
+                analysis.error("could not crack password")
+                return True
 
-                # OK then we've found an office document that is encrypted
-                # we'll try to find the passwords by looking at the plain text and html of the email, if they exist
-                email = search_down(_file, lambda obj: isinstance(obj, EmailAnalysis) and obj.email is not None)
-                if email is None:
-                    logging.info("encrypted word document {} found but no associated email was found".format(_file.value))
-                    return False
+            # got the password!
+            output_file = '{}.decrypted'.format(local_file_path)
+            with open(local_file_path, 'rb') as office_fp:
+                office_file = msoffcrypto.OfficeFile(office_fp)
+                office_file.load_key(password=analysis.password)
+                with open(output_file, 'wb') as decrypted_fp:
+                    office_file.decrypt(decrypted_fp)
 
-                analysis.email = True
+            #analysis.encryption_info = decryptor.encryption_info._asdict() # it's a named tuple
 
-                # email needs to have a body
-                if not email.body:
-                    logging.info("encrypted word document {} found but no associated email body was found".format(_file.value))
-                    return False
-
-                # convert html to text
-                with open(os.path.join(self.root.storage_dir, email.body.value), 'r', errors='ignore') as fp:
-                    logging.debug("parsing {} for html".format(email.body.value))
-                    analysis.email_body = html2text(fp.read())[:self.byte_limit]
-
-                analysis.word_list = decryptor.find_password(text_content=analysis.email_body,
-                                                             range_low=self.range_low,
-                                                             range_high=self.range_high,
-                                                             byte_limit=self.byte_limit,
-                                                             list_limit=self.list_limit)
-                                                              
-                if len(analysis.word_list) == 0:
-                    logging.info("could not generate a word list from {}".format(email.body.value))
-                    return False
-
-                # now try to guess
-                logging.info("guessing {} passwords for {}".format(len(analysis.word_list), _file.value))
-                analysis.password = decryptor.guess(analysis.word_list)
-
-                if not analysis.password:
-                    logging.info("unable to guess password for {}".format(_file.value))
-                    return False
-
-            # decrypt the file
-            decryptor.decrypt(analysis.password)
-            
             # add the decrypted file for analysis
             decrypted_file = analysis.add_observable(F_FILE, os.path.relpath(output_file, start=self.root.storage_dir))
             if decrypted_file:
@@ -3878,10 +3954,10 @@ class MSOfficeEncryptionAnalyzer(AnalysisModule):
 
             return True
 
-        except UnsupportedAlgorithm as e:
-            analysis.error = str(e)
-            return True
         except Exception as e:
-            logging.debug("decryption for {} failed: {}".format(_file.value, e))
-            #report_exception()
+            # expected condition if it's not an office document
+            if str(e) != 'Unsupported file format':
+                logging.error("decryption for {} failed: {}".format(_file.value, e))
+                #report_exception()
+
             return False

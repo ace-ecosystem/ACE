@@ -32,7 +32,7 @@ from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
 from operator import attrgetter
 from subprocess import Popen, PIPE, DEVNULL
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote as url_encode
 from sandboxapi.falcon import FalconAPI
 
 import requests
@@ -1623,7 +1623,6 @@ def reset_filters():
 def set_filters():
     # reset page options
     reset_pagination()
-    reset_sort_filter()
     reset_checked_alerts()
 
     # get filters
@@ -1637,7 +1636,6 @@ def set_filters():
 @login_required
 def add_filter():
     # reset page options
-    reset_sort_filter()
     reset_pagination()
     reset_checked_alerts()
     if 'filters' not in session:
@@ -1661,7 +1659,6 @@ def add_filter():
 @login_required
 def remove_filter():
     # reset page options
-    reset_sort_filter()
     reset_pagination()
     reset_checked_alerts()
 
@@ -1678,7 +1675,6 @@ def remove_filter():
 @login_required
 def remove_filter_category():
     # reset page options
-    reset_sort_filter()
     reset_pagination()
     reset_checked_alerts()
 
@@ -2710,12 +2706,13 @@ def index():
                 #_has_tags = len(current_path[index].obj.tags) > 0
                 _always_visible = current_path[index].obj.always_visible()
                 #_high_fp_freq = current_path[index].obj.has_tag('high_fp_frequency')
+                _critical_analysis = current_path[index].obj.has_tag('critical_analysis')
 
                 # 5/18/2020 - jdavison - changing how this works -- will refactor these out once these changes are approved
                 _has_tags = False
                 _high_fp_freq = False
 
-                if _has_detection_points or _has_tags or _always_visible:
+                if _has_detection_points or _has_tags or _always_visible or _critical_analysis:
                     # if we have tags but no detection points and we also have the high_fp_freq tag then we hide that
                     if _high_fp_freq and not ( _has_detection_points or _always_visible ):
                         index += 1
@@ -2807,6 +2804,8 @@ def index():
         domains=domains,
         domain_list=domain_list,
         domain_summary_str=domain_summary_str,
+        tip=tip_factory(),
+        tip_indicator_summaries=alert.all_ioc_tip_summaries
     )
 
 @analysis.route('/file', methods=['GET'])
@@ -3261,11 +3260,13 @@ def o365_file_download():
     s.proxies = proxies()
     s.auth = GraphApiAuth(c['client_id'], c['tenant_id'], c['thumbprint'], c['private_key'], c.get('client_credential'))
     r = s.get(f"{c['base_uri']}{path}:/content", stream=True)
+    if r.status_code == requests.codes.not_found:
+        return 'File does not exist', r.status_code
     if r.status_code != requests.codes.ok:
         return r.text, r.status_code
-    fname = path.split('/')[-1]
+    fname = url_encode(path.split('/')[-1])
     headers = {
-        "Content-Disposition": f'attachment; filename="{fname}"'
+        "Content-Disposition": f"attachment; filename*=UTF-8''{fname}"
     }
     return Response(stream_with_context(r.iter_content(10*1024*1024)), headers=headers, content_type=r.headers['content-type'])
 
@@ -3293,7 +3294,7 @@ def get_remediation_targets(alert_uuids):
     targets.sort(key=lambda x: f"{x.type}|{x.key}")
     return targets
 
-@analysis.route('/remediation_targets', methods=['POST', 'PUT', 'DELETE'])
+@analysis.route('/remediation_targets', methods=['POST', 'PUT', 'DELETE', 'PATCH'])
 @login_required
 def remediation_targets():
     # get request body
@@ -3303,15 +3304,16 @@ def remediation_targets():
     if request.method == 'POST':
         return render_template('analysis/remediation_targets.html', targets=get_remediation_targets(body['alert_uuids']))
 
-    # get action and log
-    action = 'remove' if request.method == 'DELETE' else 'restore'
-    logging.info(f"{action}ing {len(body['targets'])} targets")
-
-    # load targets
-    targets = [RemediationTarget(id=target) for target in body['targets']]
+    if request.method == 'PATCH':
+        for target in body['targets']:
+            RemediationTarget(id=target).stop_remediation()
+        return 'remediation stopped', 200
 
     # queue targets for removal/restoration
-    for target in targets:
+    action = 'remove' if request.method == 'DELETE' else 'restore'
+    logging.info(f"{action}ing {len(body['targets'])} targets")
+    for target_id in body['targets']:
+        target = RemediationTarget(id=target_id)
         logging.info(f"target has {len(target.history)} historical remediations")
         target.queue(action, current_user.id)
 

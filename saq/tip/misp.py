@@ -1,7 +1,9 @@
+import json
 import logging
 
 from pymisp.api import PyMISP, MISPAttribute, MISPEvent, MISPTag
 from typing import List, Union
+from urllib.parse import urljoin
 
 import saq
 
@@ -42,6 +44,7 @@ class MISP(TIP):
             I_URL: 'url'
         }
 
+        self.name = 'MISP'
         self.misp_url = saq.CONFIG['misp']['url']
         self.api_key = saq.CONFIG['misp']['api_key']
         self._pymisp_client = None
@@ -52,6 +55,12 @@ class MISP(TIP):
             self._pymisp_client = PyMISP(self.misp_url, self.api_key)
 
         return self._pymisp_client
+
+    def _get_event_cache_key(self, event: dict) -> str:
+        return f'event:{event["uuid"]}'
+
+    def _get_indicator_cache_key(self, indicator: dict) -> str:
+        return f'indicator:{indicator["type"]}:{indicator["value"]}'
 
     def ace_event_exists_in_tip(self, ace_event_uuid: str) -> bool:
         result = self.pymisp_client.get_event(ace_event_uuid)
@@ -116,6 +125,43 @@ class MISP(TIP):
 
         return False
 
-    def indicator_exists_in_tip(self, indicator_type: str, indicator_value: str) -> bool:
-        result = self.pymisp_client.search('attributes', type_attribute=indicator_type, value=indicator_value)
-        return 'Attribute' in result and len(result['Attribute']) >= 1
+    def event_url(self, event_id: str) -> str:
+        return urljoin(self.misp_url, f'/events/view/{event_id}')
+
+    def get_all_events_from_tip(self) -> List[dict]:
+        result = self.pymisp_client.events()
+        return result if 'errors' not in result else []
+
+    def get_all_indicators_from_tip(self, enabled: bool = True, modified_after_timestamp: int = 0) -> List[dict]:
+        result = self.pymisp_client.search(controller='attributes', to_ids=enabled, timestamp=modified_after_timestamp)
+        return result['Attribute'] if 'Attribute' in result else []
+
+    def get_indicator_summaries_from_cache(self, indicators: List[dict]) -> List[dict]:
+        summaries = []
+        for cache_hit in self.find_indicators(indicators):
+            summary = {
+                'type': cache_hit[0]['type'],
+                'value': cache_hit[0]['value'],
+                'event_tags': set(),
+                'indicator_tags': set(),
+                'tip_event_urls': set()
+            }
+
+            for indicator in cache_hit:
+                cached_event = self.find_event(indicator['Event']['uuid'])
+                if cached_event:
+                    summary['tip_event_urls'].add(self.event_url(cached_event['id']))
+
+                    if 'EventTag' in cached_event:
+                        summary['event_tags'] |= {tag['Tag']['name'] for tag in cached_event['EventTag']}
+
+                if 'Tag' in indicator:
+                    summary['indicator_tags'] |= {tag['name'] for tag in indicator['Tag']}
+
+            summary['event_tags'] = sorted(list(summary['event_tags']))
+            summary['indicator_tags'] = sorted(list(summary['indicator_tags']))
+            summary['tip_event_urls'] = sorted(list(summary['tip_event_urls']))
+
+            summaries.append(summary)
+
+        return summaries

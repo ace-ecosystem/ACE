@@ -1,6 +1,5 @@
 import pytest
 
-from saq.tip import MISP
 from tests.saq.requests import mock_site
 
 
@@ -29,10 +28,3 @@ def pymisp_client(datadir, requests_mock):
     mock_site(requests_mock, datadir, site_map)
 
     yield
-
-
-@pytest.fixture(scope='function')
-def tip():
-    tip = MISP()
-    tip.misp_url = 'https://misp'
-    return tip

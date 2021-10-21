@@ -1,6 +1,7 @@
 <div class="panel-heading">
-    <h3 class="panel-title">Alert Summary <button id="btn-remove-alerts" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-remove"></span> Remove Alert(s)</button></h3>
+    <h3 class="panel-title" data-toc-text="Alert Summary">Alert Summary <button id="btn-remove-alerts" type="button" class="btn btn-default btn-sm"><span class="glyphicon glyphicon-remove"></span> Remove Alert(s)</button>
+    <a role="button" data-toggle="collapse" data-target="#collapseAlertSummary" aria-expanded="true" aria-controls="collapseAlertSummary">(hide/show)</a></h3>
 </div>
-<div class="panel-body">
+<div class="panel-body collapse in" id="collapseAlertSummary">
     {% include "events/event_alerts.html" %}
 </div>

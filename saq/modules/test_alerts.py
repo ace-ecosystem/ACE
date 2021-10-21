@@ -165,7 +165,7 @@ class TestCase(ACEModuleTestCase):
         # 4) ace detects the disposition and stops analyzing the alert
         # 5) ace picks up the alert in ANALYSIS_MODE_DISPOSITIONED mode
 
-        saq.CONFIG['service_engine']['alert_disposition_check_frequency'] = '1'
+        saq.CONFIG['service_engine']['alert_disposition_check_frequency'] = '0' # check every time
         
         # create an analysis that turns into an alert
         root = create_root_analysis(analysis_mode='test_single')
@@ -178,8 +178,8 @@ class TestCase(ACEModuleTestCase):
         engine = TestEngine(pool_size_limit=1, local_analysis_modes=['test_single', ANALYSIS_MODE_CORRELATION])
         engine.enable_alerting()
         engine.enable_module('analysis_module_basic_test', ['test_single', ANALYSIS_MODE_CORRELATION])
-        engine.enable_module('analysis_module_low_priority', ANALYSIS_MODE_CORRELATION)
-        engine.enable_module('analysis_module_pause', ANALYSIS_MODE_CORRELATION)
+        engine.enable_module('analysis_module_low_priority', ANALYSIS_MODE_CORRELATION) # low will run after pause ensuring a check of disposition during analysis
+        engine.enable_module('analysis_module_pause', ANALYSIS_MODE_CORRELATION) # we'll set the disposition during the pause
         engine.start()
 
         # wait until we're processing the alert

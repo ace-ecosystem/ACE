@@ -11,6 +11,7 @@ import html
 
 from subprocess import Popen, PIPE
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+from urlfinderlib import find_urls
 from urlfinderlib import is_url
 
 import saq
@@ -71,9 +72,6 @@ class CaselessObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if not isinstance(self.value, str):
-            raise ObservableValueError("invalid type {}".format(type(self.value)))
-
     # see https://stackoverflow.com/a/29247821
     def normalize_caseless(self, value):
         if value is None:
@@ -88,13 +86,16 @@ class IPv4Observable(Observable):
 
     def __init__(self, *args, **kwargs):
         super().__init__(F_IPV4, *args, **kwargs)
-        self.value = self.value.strip()
 
+    @Observable.value.setter
+    def value(self, new_value):
         # type check the value
         try:
-            ipaddress.IPv4Address(self.value)
+            ipaddress.IPv4Address(new_value)
         except Exception as e:
-            raise ObservableValueError("{} is not a valid ipv4 address".format(self.value))
+            raise ObservableValueError(f"{new_value} is not a valid ipv4 address")
+
+        self._value = new_value.strip()
     
     @property
     def jinja_available_actions(self):
@@ -106,7 +107,7 @@ class IPv4Observable(Observable):
         return result
 
     def is_managed(self):
-        """Returns True if this IP address is listed as part of a managed network, False otherwide."""
+        """Returns True if this IP address is listed as part of a managed network, False otherwise."""
         # see [network_configuration]
         # these are initialized in the global initialization function
         for cidr in saq.MANAGED_NETWORKS:
@@ -131,9 +132,18 @@ class IPv4Observable(Observable):
 
 class IPv4ConversationObservable(Observable):
     def __init__(self, *args, **kwargs):
+        self._source = None
+        self._dest = None
         super().__init__(F_IPV4_CONVERSATION, *args, **kwargs)
-        self.value = self.value.strip()
-        self._source, self._dest = parse_ipv4_conversation(self.value)
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
+        parsed_ipv4_conversation = parse_ipv4_conversation(self.value)
+        if len(parsed_ipv4_conversation) == 2:
+            self._source, self._dest = parsed_ipv4_conversation
+        else:
+            raise ObservableValueError(f"invalid IPv4 Convo: {new_value}")
         
     @property
     def source(self):
@@ -146,9 +156,20 @@ class IPv4ConversationObservable(Observable):
 class IPv4FullConversationObservable(Observable):
     
     def __init__(self, *args, **kwargs):
+        self._source = None
+        self._source_port = None
+        self._dest = None 
+        self._dest_port = None
         super().__init__(F_IPV4_FULL_CONVERSATION, *args, **kwargs)
-        self.value = self.value.strip()
-        self._source, self._source_port, self._dest, self._dest_port = parse_ipv4_full_conversation(self.value)
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
+        parsed_ipv4_full_conversation = parse_ipv4_full_conversation(self.value)
+        if len(parsed_ipv4_full_conversation) == 4:
+            self._source, self._source_port, self._dest, self._dest_port = parsed_ipv4_full_conversation
+        else:
+            raise ObservableValueError(f"invalid IPv4 Full Convo: {new_value}")
 
     @property
     def source(self):
@@ -169,7 +190,10 @@ class IPv4FullConversationObservable(Observable):
 class FQDNObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_FQDN, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @CaselessObservable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -191,17 +215,26 @@ class FQDNObservable(CaselessObservable):
 class HostnameObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_HOSTNAME, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @CaselessObservable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
 class AssetObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_ASSET, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @CaselessObservable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
 class UserObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_USER, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @CaselessObservable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -211,14 +244,21 @@ class UserObservable(CaselessObservable):
         result.extend(super().jinja_available_actions)
         return result
 
+
+PROTECTED_URLS = ['egnyte.com', 'fireeye.com', 'safelinks.protection.outlook.com', 'dropbox.com', 'drive.google.com', '.sharepoint.com',
+                  'proofpoint.com']
+
+
 class URLObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_URL, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
         # Extract URL from known protected URLs, if necessary
-        if any(url in self.value for url in ['egnyte.com', 'fireeye.com', 'safelinks.protection.outlook.com', 'dropbox.com',
-                                             'drive.google.com', '.sharepoint.com']):
+        if any(url in self.value for url in PROTECTED_URLS):
             self.sanitize_protected_urls()
 
         # Use urlfinderlib to make sure this is a valid URL before creating the observable
@@ -330,8 +370,24 @@ class URLObservable(Observable):
             extracted_url = 'https://drive.google.com/uc?authuser=0&id={}&export=download'.format(google_id)
             logging.info("translated google drive url {} to {}".format(self.value, extracted_url))
 
+        if parsed_url.netloc.lower().endswith('.proofpoint.com'):
+            extracted_url_set = find_urls(self.value)
+            if extracted_url_set:
+                # loop through all extrected URLs to remove any nested protected URLs
+                for possible_url in extracted_url_set.copy():
+                    if any(url in possible_url for url in PROTECTED_URLS):
+                        extracted_url_set.remove(possible_url)
+
+                # make sure that the set still has URLs in it
+                if extracted_url_set:
+                    extracted_url = extracted_url_set.pop()
+
         # Add additional simple protected URL sanitizaitons here
         # If sanitization requires redirect/additional analysis, add to saq.modules.url.ProtectedURLAnalyzer
+
+        # return junk if this a malformed protected URL/proofpoint entaglement so we don't add it as an observable
+        if not extracted_url and 'proofpoint.com' in self.value:
+            extracted_url = 'NOT_A_URL'
 
         if extracted_url:
             self.value = extracted_url
@@ -345,12 +401,6 @@ class FileObservable(Observable):
     KEY_MIME_TYPE = 'mime_type'
 
     def __init__(self, *args, **kwargs):
-        super().__init__(F_FILE, *args, **kwargs)
-
-        # do not allow empty file names
-        if self.value == '':
-            raise ObservableValueError("empty file name")
-
         self._md5_hash = None
         self._sha1_hash = None
         self._sha256_hash = None
@@ -360,8 +410,18 @@ class FileObservable(Observable):
         self._scaled_width = None
         self._scaled_height = None
 
+        super().__init__(F_FILE, *args, **kwargs)
+
         # some directives are inherited by children
         self.add_event_listener(EVENT_RELATIONSHIP_ADDED, self.handle_relationship_added)
+
+    @Observable.value.setter
+    def value(self, new_value):
+        # do not allow empty file names
+        if not new_value:
+            raise ObservableValueError("empty file name")
+
+        self._value = new_value
 
     #
     # in ACE the value of the F_FILE observable is the relative path to the content (inside the storage directory)
@@ -665,6 +725,10 @@ class FileNameObservable(CaselessObservable):
 class FileLocationObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_FILE_LOCATION, *args, **kwargs)
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value
         self._hostname, self._full_path = parse_file_location(self.value)
 
     @property
@@ -688,14 +752,15 @@ class FileLocationObservable(Observable):
 class EmailAddressObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_ADDRESS, *args, **kwargs)
-        self.value = self.value.strip()
 
+    @Observable.value.setter
+    def value(self, new_value):
         # normalize email addresses
-        normalized = normalize_email_address(self.value)
+        normalized = normalize_email_address(new_value)
         if not normalized:
-            logging.warning("unable to normalize email address {}".format(self.value))
+            logging.warning(f"unable to normalize email address {new_value}")
         else:
-            self.value = normalized
+            self._value = normalized
 
     @property
     def jinja_available_actions(self):
@@ -706,10 +771,13 @@ class EmailAddressObservable(CaselessObservable):
 class EmailDeliveryObservable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_DELIVERY, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
         self.message_id, self.email_address = parse_email_delivery(self.value)
         self.message_id = normalize_message_id(self.message_id)
-        self.value = create_email_delivery(self.message_id, self.email_address)
+        self._value = create_email_delivery(self.message_id, self.email_address)
 
     @property
     def jinja_template_path(self):
@@ -722,7 +790,10 @@ class EmailDeliveryObservable(CaselessObservable):
 class EmailSubjectObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_EMAIL_SUBJECT, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -731,7 +802,10 @@ class EmailSubjectObservable(Observable):
 class YaraRuleObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_YARA_RULE, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
     @property
     def jinja_available_actions(self):
@@ -739,10 +813,13 @@ class YaraRuleObservable(Observable):
 
 class IndicatorObservable(Observable):
     def __init__(self, *args, **kwargs):
-        super().__init__(F_INDICATOR, *args, **kwargs)
-        self.value = self.value.strip()
         self._sip_details = None
         self._cbc_ioc_details = None
+        super().__init__(F_INDICATOR, *args, **kwargs)
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
     @property
     def jinja_template_path(self):
@@ -786,7 +863,6 @@ class IndicatorObservable(Observable):
         except Exception as e:
             logging.error(f"unable to obtain SIP indicator details for {self.value}: {e}")
             return None
-
 
     @property
     def sip_status(self):
@@ -837,7 +913,12 @@ class IndicatorObservable(Observable):
 class MD5Observable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_MD5, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @CaselessObservable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
+        if self.value.count('0') == len(self.value):
+            raise ObservableValueError(f"invalid MD5 {self.value}")
 
     @property
     def jinja_available_actions(self):
@@ -848,7 +929,12 @@ class MD5Observable(CaselessObservable):
 class SHA1Observable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SHA1, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @CaselessObservable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
+        if self.value.count('0') == len(self.value):
+            raise ObservableValueError(f"invalid SHA1 {self.value}")
 
     @property
     def jinja_available_actions(self):
@@ -856,10 +942,15 @@ class SHA1Observable(CaselessObservable):
         result.extend(super().jinja_available_actions)
         return result
 
-class SHA256Observable(Observable):
+class SHA256Observable(CaselessObservable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_SHA256, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @CaselessObservable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
+        if self.value.count('0') == len(self.value):
+            raise ObservableValueError(f"invalid SHA256 {self.value}")
 
     @property
     def jinja_template_path(self):
@@ -873,8 +964,13 @@ class SHA256Observable(Observable):
 
 class EmailConversationObservable(Observable):
     def __init__(self, *args, **kwargs):
+        self._mail_from = None
+        self._rcpt_to = None
         super().__init__(F_EMAIL_CONVERSATION, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
         self._mail_from, self._rcpt_to = parse_email_conversation(self.value)
 
     @property
@@ -891,10 +987,13 @@ class EmailConversationObservable(Observable):
 
 class SnortSignatureObservable(Observable):
     def __init__(self, *args, **kwargs):
-        super().__init__(F_SNORT_SIGNATURE, *args, **kwargs)
-        self.value = self.value.strip()
         self.signature_id = None
         self.rev = None
+        super().__init__(F_SNORT_SIGNATURE, *args, **kwargs)
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
         _ = self.value.split(':')
         if len(_) == 3:
@@ -905,8 +1004,10 @@ class SnortSignatureObservable(Observable):
 class MessageIDObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_MESSAGE_ID, *args, **kwargs)
-        self.value = self.value.strip()
-        self.value = normalize_message_id(self.value)
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = normalize_message_id(new_value.strip())
 
     @property
     def remediation_targets(self):
@@ -941,12 +1042,20 @@ class MessageIDObservable(Observable):
 class ProcessGUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_PROCESS_GUID, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
 class ExternalUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
+        self._tool = None
+        self._uid = None
         super().__init__(F_EXTERNAL_UID, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
         self._tool, self._uid = self.value.split(':', 1)
 
     @property
@@ -1000,7 +1109,10 @@ class O365FileObservable(Observable):
 class FireEyeUUIDObservable(Observable): 
     def __init__(self, *args, **kwargs): 
         super().__init__(F_FIREEYE_UUID, *args, **kwargs)
-        self.value = self.value.strip()
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
 class TestObservable(Observable):
     __test__ = False # tell pytest this is not a test class
@@ -1022,11 +1134,15 @@ class MacAddressObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_MAC_ADDRESS, *args, **kwargs)
 
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value
+
         # try to deal with the various formats of mac addresses
         # some separate with different characters and some don't separate at all
-        m = RE_MAC.match(self.value)
+        m = RE_MAC.match(new_value)
         if m is None:
-            raise ObservableValueError(f"{self.value} does not parse as a mac address")
+            raise ObservableValueError(f"{new_value} does not parse as a mac address")
 
         self.mac_parts = m.groups()
 

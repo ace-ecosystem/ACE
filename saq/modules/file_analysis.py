@@ -32,10 +32,12 @@ from tld import get_tld
 from urlfinderlib import find_urls
 
 import saq
+import yara
 import yara_scanner
 
-from saq.analysis import Analysis, Observable, RootAnalysis
+from saq.analysis import Analysis, Observable, RootAnalysis, _JSONEncoder
 from saq.constants import *
+from saq.crypto import encrypt
 from saq.error import report_exception
 from saq.modules import AnalysisModule
 from saq.process_server import Popen, PIPE, DEVNULL, TimeoutExpired
@@ -2328,6 +2330,16 @@ class YaraScanner_v3_4(AnalysisModule):
         return self.config.getboolean('save_scan_failures')
 
     @property
+    def save_qa_scan_results(self):
+        """Returns True if we should save the results of yara rules in QA mode into self.qa_dir."""
+        return self.config.getboolean('save_qa_scan_results')
+
+    @property
+    def qa_dir(self):
+        """Relative directory of the directory to store QA mode matches."""
+        return os.path.join(saq.DATA_DIR, self.config['qa_dir'])
+
+    @property
     def generated_analysis_type(self):
         return YaraScanResults_v3_4
 
@@ -2474,27 +2486,52 @@ class YaraScanner_v3_4(AnalysisModule):
                 for match_result in analysis.details:
                     if 'modifiers' in match_result['meta']:
                         modifier_no_alert = False
+                        modifier_qa = False
+
                         modifiers = [x.strip() for x in match_result['meta']['modifiers'].split(',')]
                         logging.debug("yara rule {} has modifiers {}".format(match_result['rule'], ','.join(modifiers)))
+
                         for modifier in modifiers:
+                            if modifier == 'qa':
+                                modifier_qa = True
+                                modifier_no_alert = True
+                                no_alert_rules.add(match_result['rule'])
+
+                                logging.info(f"yara rule {match_result['rule']} matched {_file.value} in QA mode")
+
+                                if self.save_qa_scan_results:
+                                    try:
+                                        target_dir = os.path.join(self.qa_dir, match_result['rule'])
+                                        os.makedirs(target_dir, exist_ok=True)
+                                        target_file = os.path.join(target_dir, _file.md5_hash)
+                                        if not os.path.exists(target_file):
+                                            shutil.copy(local_file_path, target_file)
+                                            with open(f'{target_file}.json', 'w') as fp:
+                                                json.dump(match_result, fp, cls=_JSONEncoder)
+                                            logging.info(f"saved file {target_file} for QA review")
+                                    except Exception as e:
+                                        logging.error(f"unable to save results for QA mode match: {e}")
+
+                                continue
+
                             if modifier == 'no_alert':
                                 modifier_no_alert = True
                                 no_alert_rules.add(match_result['rule'])
                                 continue
 
-                            if modifier.startswith('directive'):
-                                key, modifier_directive = modifier.split('=', 1)
-                                #if modifier_directive not in VALID_DIRECTIVES:
-                                    #logging.warning("yara rule {} attempts to add invalid directive {}".format(match_result['rule'], modifier_directive))
-                                #else:
-                                logging.debug("assigned directive {} to {} by modifiers on yara rule {}".format(
-                                              modifier_directive, _file, match_result['rule']))
-                                _file.add_directive(modifier_directive)
+                        # if we're running a rule in QA mode then we don't want to apply any other directives
+                        if not modifier_qa:
+                            for modifier in modifiers:
+                                if modifier.startswith('directive'):
+                                    key, modifier_directive = modifier.split('=', 1)
+                                    #if modifier_directive not in VALID_DIRECTIVES:
+                                        #logging.warning("yara rule {} attempts to add invalid directive {}".format(match_result['rule'], modifier_directive))
+                                    #else:
+                                    logging.debug("assigned directive {} to {} by modifiers on yara rule {}".format(
+                                                  modifier_directive, _file, match_result['rule']))
+                                    _file.add_directive(modifier_directive)
 
-                                continue
-
-                            logging.warning("unknown modifier {} used in rule {}".format(modifier, match_result['rule']))
-                            continue
+                                    continue
 
                         # did at least one rule NOT have the no_alert modifier?
                         if not modifier_no_alert:
@@ -3510,18 +3547,19 @@ class URLExtractionAnalyzer(AnalysisModule):
         with open(local_file_path, 'rb') as fp:
             extracted_urls = find_urls(fp.read(), base_url=base_url)
             logging.debug("extracted {} urls from {}".format(len(extracted_urls), local_file_path))
-            if len(extracted_urls) > self.max_extracted_urls:
-                extracted_urls = list(extracted_urls)
-                extracted_urls = set(extracted_urls[:self.max_extracted_urls])
-                logging.debug("limited extracted from {} to {}".format(local_file_path, len(extracted_urls)))
 
         extracted_urls = list(filter(self.filter_excluded_domains, extracted_urls))
         analysis = self.create_analysis(_file)
 
         # since cloudphish_request_limit, order urls by our interest in them
         extracted_ordered_urls, analysis.details['urls_grouped_by_domain'] = self.order_urls_by_interest(extracted_urls)
+        observable_count = 0
         for url in extracted_ordered_urls:
-            url_observable = analysis.add_observable(F_URL, url)
+            if observable_count < self.max_extracted_urls:
+                url_observable = analysis.add_observable(F_URL, url)
+                if url_observable:
+                    observable_count += 1
+
             analysis.iocs.add_url_iocs(url)
             if url_observable:
                 analysis.details['urls'].append(url_observable.value)
@@ -4091,7 +4129,8 @@ class OfficeFileArchiver(AnalysisModule):
             i += 1
             target_path = os.path.join(self.existing_subdir, '{:06}_{}'.format(i, os.path.basename(_file.value)))
 
-        shutil.copy(local_file_path, target_path)
+        target_path += '.e'
+        encrypt(local_file_path, target_path)
         logging.debug("archived office file {}".format(target_path))
 
         analysis = self.create_analysis(_file)
@@ -4196,5 +4235,143 @@ class MHTMLAnalysisModule(AnalysisModule):
 
             except Exception as e:
                 logging.error(f"unable to extract part #{part_id - 1} from {_file.value}: {e}")
+
+        return True
+
+class XLMMacroDeobfuscatorAnalysis(Analysis):
+
+    CELL_COUNT = 'cell_count'
+
+    def initialize_details(self):
+        self.details = {
+            XLMMacroDeobfuscatorAnalysis.CELL_COUNT: 0,
+        }
+
+    @property
+    def cell_count(self) -> int:
+        return self.details[XLMMacroDeobfuscatorAnalysis.CELL_COUNT]
+
+    @cell_count.setter
+    def cell_count(self, value: int):
+        self.details[XLMMacroDeobfuscatorAnalysis.CELL_COUNT] = value
+
+    def generate_summary(self) -> str:
+        return f"XLMMacroDeobfuscator Analysis - analyzed {self.cell_count} cells"
+
+RE_XLM_CELL_PATTERN = re.compile(b'\nCELL:')
+RE_XLM_ERROR_PATTERN = re.compile(b'\nError ')
+RE_XLM_PARAMS = re.compile(r'^CELL:.*\(([^\)]*)\)$')
+
+# https://blog.reversinglabs.com/blog/excel-4.0-macros
+
+class XLMMacroDeobfuscatorAnalyzer(AnalysisModule):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        with open(os.path.join(saq.SAQ_HOME, 'etc', 'xlmdeobfuscator.yar'), 'r') as fp:
+            self.xlm_yara_context = yara.compile(source=fp.read())
+
+    @property
+    def generated_analysis_type(self):
+        return XLMMacroDeobfuscatorAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_FILE
+
+    def verify_environment(self):
+        pass
+
+    @property
+    def timeout(self) -> int:
+        return self.config.getint('timeout')
+
+    def execute_analysis(self, _file):
+        local_file_path = get_local_file_path(self.root, _file)
+        if not os.path.exists(local_file_path):
+            logging.error("cannot find local file path for {}".format(_file.value))
+            return False
+
+        # ignore files we're not interested in
+        xlm4 = False
+        yara_matches = self.xlm_yara_context.match(local_file_path)
+        for match in self.xlm_yara_context.match(local_file_path):
+            if 'xlm4' in match.tags:
+                xlm4 = True
+                break
+
+        if not xlm4:
+            return False
+
+        stdout = None
+        stderr = None
+
+        analysis = self.create_analysis(_file)
+        p = Popen(['xlmdeobfuscator', '-f', local_file_path], stdout=PIPE, stderr=PIPE)
+        try:
+            stdout, stderr = p.communicate(timeout=self.timeout)
+        except TimeoutExpired:
+            try:
+                logging.warning(f"xlmdeobfuscator timed out analyzing {local_file_path}")
+                _file.add_tag('xlmdeobfuscator_failed')
+                p.kill()
+            except Exception as e:
+                logging.error(f"unable to kill xlmdeobfuscator process: {e}")
+
+        if stdout:
+            if b'Failed to decrypt the file\nUse --password switch to provide the correct password' in stdout:
+                logging.debug(f"{_file.value} is encrypted -- cannot xlmdeobfuscator the file")
+                return False
+
+            target_dir = f'{local_file_path}.xlmdeobfuscator'
+            os.makedirs(target_dir, exist_ok=True)
+            target_file = os.path.join(target_dir, 'xlmdeobfuscator.stdout')
+            with open(target_file, 'wb') as fp:
+                # cut the banner out
+                if b'\nFile:' in stdout:
+                    stdout = stdout[stdout.index(b'\nFile:'):]
+
+                fp.write(stdout)
+
+            file_observable = analysis.add_observable(F_FILE, os.path.relpath(target_file, start=self.root.storage_dir))
+            if file_observable:
+                file_observable.add_directive(DIRECTIVE_EXTRACT_URLS)
+                file_observable.add_directive(DIRECTIVE_CRAWL_EXTRACTED_URLS)
+
+            # this analysis only runs if this document says it has xlm4 
+            # so if it didn't pull anything out then it's probably noteworthy
+            analysis.cell_count = len(RE_XLM_CELL_PATTERN.findall(stdout))
+            if analysis.cell_count:
+                _file.add_tag('xlm4')
+            else:
+                _file.add_tag('xlm4:no_cells')
+
+            if RE_XLM_ERROR_PATTERN.search(stdout):
+                _file.add_tag('xlm4:error')
+
+            # special URL extraction
+            for line in stdout.decode().split('\n'):
+                if line.startswith('CELL:'):
+                    m = RE_XLM_PARAMS.match(line)
+                    if not m:
+                        continue
+
+                    params = m.group(1)
+                    if not params:
+                        continue
+
+                    if 'http' in params.lower():
+                        target_url = params[params.lower().index('http'):]
+                        _file.add_detection_point('A url was found in an Excel 4.0 macro.')
+                        url = analysis.add_observable(F_URL, target_url)
+                        if url:
+                            url.add_directive(DIRECTIVE_CRAWL)
+
+        # not sure when this happens
+        if stderr:
+            target_dir = f'{local_file_path}.xlmdeobfuscator'
+            os.makedirs(target_dir, exist_ok=True)
+            with open(os.path.join(target_dir, 'xlmdeobfuscator.stderr'), 'wb') as fp:
+                fp.write(stdout)
 
         return True

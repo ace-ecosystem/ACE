@@ -1,6 +1,7 @@
 # vim: sw=4:ts=4:et
 
 import datetime
+import hashlib
 import logging
 import os, os.path
 import shutil
@@ -13,6 +14,7 @@ from subprocess import Popen, PIPE
 
 import saq, saq.test
 from saq.constants import *
+from saq.crypto import decrypt
 from saq.test import *
 from saq.analysis import Analysis, RootAnalysis
 from saq.indicators import Indicator
@@ -446,6 +448,9 @@ class TestCase(ACEModuleTestCase):
 
     def test_file_analysis_002_archive_003_jar(self):
 
+        from saq.crypto import decrypt
+        decrypt('test_data/jar/test.jar.e', 'test_data/jar/test.jar', password='ace')
+
         if not os.path.exists('test_data/jar/test.jar'):
             self.skipTest("missing test data")
 
@@ -470,6 +475,8 @@ class TestCase(ACEModuleTestCase):
         analysis = _file.get_analysis(ArchiveAnalysis)
         self.assertIsNotNone(analysis)
         self.assertEquals(analysis.file_count, 42)
+
+        os.remove('test_data/jar/test.jar')
 
     def test_file_analysis_002_archive_004_jar(self):
 
@@ -801,6 +808,43 @@ class TestCase(ACEModuleTestCase):
         # the root analysis object should be whitelisted
         self.assertTrue(root.whitelisted)
 
+    def test_file_analysis_004_yara_007_qa_modifier(self):
+
+        self.initialize_yss()
+
+        root = create_root_analysis(uuid=str(uuid.uuid4()))
+        root.initialize_storage()
+        shutil.copy('test_data/scan_targets/qa_modifier_target', root.storage_dir)
+        _file = root.add_observable(F_FILE, 'qa_modifier_target')
+        root.save()
+        root.schedule()
+        
+        engine = TestEngine()
+        engine.enable_module('analysis_module_yara_scanner_v3_4', 'test_groups')
+        engine.controlled_stop()
+        engine.start()
+        engine.wait()
+
+        # scanned file /opt/saq/var/test/91b55d6f-fe82-4508-ac68-bbc519693d12/scan.target with yss (matches found: True)
+        self.assertEquals(log_count('with yss (matches found: True)'), 1)
+
+        root.load()
+        _file = root.get_observable(_file.id)
+        
+        from saq.modules.file_analysis import YaraScanResults_v3_4
+        analysis = _file.get_analysis(YaraScanResults_v3_4)
+        self.assertTrue(analysis)
+
+        # the file should *not* have any detection points
+
+        # the yara rule should NOT have detections
+        self.assertTrue(len(root.all_detection_points) == 0)
+        # there should be a file named after the md5 of the file
+        target_dir = os.path.join(saq.DATA_DIR, saq.CONFIG['analysis_module_yara_scanner_v3_4']['qa_dir'])
+        target_path = os.path.join(target_dir, 'test_qa_modifier', _file.md5_hash)
+        self.assertTrue(os.path.exists(target_path))
+        self.assertTrue(os.path.exists(f'{target_path}.json'))
+
     def test_file_analysis_005_pcode_000_extract_pcode(self):
 
         if not os.path.exists('test_data/ole_files/word2013_macro_stripped.doc'):
@@ -838,6 +882,9 @@ class TestCase(ACEModuleTestCase):
 
     def test_file_analysis_005_office_file_archiver_000_archive(self):
 
+        from saq.crypto import decrypt
+        decrypt('test_data/ole_files/Paid Invoice.doc.e', 'test_data/ole_files/Paid Invoice.doc', password='ace')
+
         if not os.path.exists('test_data/ole_files/Paid Invoice.doc'):
             self.skipTest("missing test data")
 
@@ -856,6 +903,7 @@ class TestCase(ACEModuleTestCase):
         root.initialize_storage()
         shutil.copy('test_data/ole_files/Paid Invoice.doc', root.storage_dir)
         _file = root.add_observable(F_FILE, 'Paid Invoice.doc')
+        sha256 = _file.sha256_hash
         root.save()
         root.schedule()
 
@@ -877,6 +925,16 @@ class TestCase(ACEModuleTestCase):
         # the details of the analysis should be the FULL path to the archived file
         self.assertTrue(analysis.details)
         self.assertTrue(os.path.exists(analysis.details))
+
+        # make sure we can decrypt it
+        target_dir = tempfile.mkdtemp(dir=saq.TEMP_DIR)
+        target_path = os.path.join(target_dir, _file.value)
+        decrypt(analysis.details, target_path)
+        h = hashlib.sha256()
+        with open(target_path, 'rb') as fp:
+            h.update(fp.read())
+
+        self.assertTrue(h.hexdigest().lower() == sha256.lower())
 
         root = create_root_analysis(uuid=str(uuid.uuid4()))
         root.initialize_storage()
@@ -905,9 +963,14 @@ class TestCase(ACEModuleTestCase):
         self.assertTrue(os.path.exists(analysis.details))
 
         # but it should also be a duplicate so the name should have the number prefix
-        self.assertTrue(os.path.basename(analysis.details).startswith('000001_'))
+        self.assertTrue(os.path.basename(analysis.details).startswith('000000_'))
+
+        os.remove('test_data/ole_files/Paid Invoice.doc')
     
     def test_file_analysis_006_extracted_ole_000_js(self):
+
+        from saq.crypto import decrypt
+        decrypt('test_data/docx/js_ole_obj.docx.e', 'test_data/docx/js_ole_obj.docx', password='ace')
 
         if not os.path.exists('test_data/docx/js_ole_obj.docx'):
             self.skipTest("missing test data")
@@ -933,7 +996,12 @@ class TestCase(ACEModuleTestCase):
         self.assertIsNotNone(_file)
         self.assertTrue(any([d for d in root.all_detection_points if 'compiles as JavaScript' in d.description]))
 
+        os.remove('test_data/docx/js_ole_obj.docx')
+
     def test_open_office_extraction(self):
+
+        from saq.crypto import decrypt
+        decrypt('test_data/openoffice/demo.odt.e', 'test_data/openoffice/demo.odt', password='ace')
 
         root = create_root_analysis()
         root.initialize_storage()
@@ -956,8 +1024,9 @@ class TestCase(ACEModuleTestCase):
 
         analysis = _file.get_analysis('ArchiveAnalysis')
         self.assertIsNotNone(analysis)
-        # removed this check because it keeps changing, not sure why
-        #self.assertEquals(len(analysis.find_observables(F_FILE)), 11)
+        self.assertEquals(len(analysis.find_observables(F_FILE)), 12)
+
+        os.remove('test_data/openoffice/demo.odt')
 
     def test_crawl_extracted_urls(self):
 

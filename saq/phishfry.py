@@ -81,6 +81,8 @@ class Phishfry():
         response_code, response_text = self.post(body, impersonate=mailbox.email_address)
         if response_code == 'ErrorNonExistentMailbox':
             raise ErrorNonExistentMailbox('mailbox does not exist')
+        if response_code == 'ErrorAccessDenied':
+            raise ErrorAccessDenied('failed to impersonate user: access denied')
         if response_code != 'NoError':
             raise Exception(f'failed to find folder: {response_code}')
         folder_id = re.search('FolderId[^>]*Id="([^"]*)"', response_text)
@@ -215,6 +217,11 @@ class ErrorNonExistentMessage(Exception):
         self.message = message
 
 class ErrorUnsupportedMailboxType(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+
+class ErrorAccessDenied(Exception):
     def __init__(self, message):
         super().__init__(message)
         self.message = message

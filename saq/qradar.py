@@ -12,8 +12,8 @@ import os, os.path
 import tempfile
 import threading
 import time
-
 import requests
+import saq
 
 # JSON keys defined in the documentation
 KEY_SEARCH_ID = 'search_id'
@@ -282,3 +282,12 @@ class QRadarAPIClientTestStub(QRadarAPIClient):
 
     def create_offense_closing_reason(self, *args, **kwargs):
         pass
+
+def find_users(query):
+    client = QRadarAPIClient(saq.CONFIG['qradar']['url'], saq.CONFIG['qradar']['token'])
+    results = client.execute_aql_query(query)
+    users = []
+    for event in results['events']:
+        if event['user']:
+            users.append(event['user'])
+    return users
