@@ -545,7 +545,7 @@ class ActiveDirectoryAnalysis(Analysis):
         if self.fqdn is not None:
             result += ' ({0})'.format(self.fqdn)
 
-        # example: 'description': ['A346348 - Timothy Anderson'],
+        # example: 'description': ['USERID - John Doe'],
         if self.owner is not None:
             user, _ = self.owner
             user = user.strip()
@@ -576,7 +576,7 @@ class ActiveDirectoryAnalyzer(AnalysisModule):
         if analysis.fqdn is not None:
             analysis.add_observable(F_FQDN, analysis.fqdn)
 
-        # example: 'description': ['A346348 - Timothy Anderson'],
+        # example: 'description': ['USERID - John Doe'],
         if analysis.owner is not None:
             user, _ = analysis.owner
             user = user.strip()
