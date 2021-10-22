@@ -267,7 +267,6 @@ class Bit9FileHashAnalyzer_v1(SplunkAnalysisModule):
 # Questions: What did this process do? (Activity/event summary)
 #            What does the process tree look like?
 #
-
 class ProcessGUIDAnalysis(Analysis):
     """What activity did this process perform?"""
 

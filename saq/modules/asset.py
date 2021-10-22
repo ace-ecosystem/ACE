@@ -128,8 +128,9 @@ class NetworkIdentifier(AnalysisModule):
         observable.add_analysis(analysis)
 
         # if this ipv4 has at least one identified network then we can assume it's an asset
-        if len(analysis.identified_networks) > 0:
-            analysis.add_observable(F_ASSET, observable.value)
+        #if len(analysis.identified_networks) > 0:
+        #    analysis.add_observable(F_ASSET, observable.value)
+        # NOTE: I don't think the above adds any value anymore
 
         return True
 
@@ -853,5 +854,63 @@ class AssetAnalyzer(AnalysisModule):
         analysis.fqdn = self.get_fqdn(asset)
         analysis.owner = self.get_owner(asset)
         analysis.os = self.get_os(asset)
+
+        return True
+
+
+class AzureDeviceAnalysis(Analysis):
+    """Does Azure know of a device by this asset/hostname?"""
+
+    def initialize_details(self):
+        self.details = {}
+
+    def generate_summary(self):
+        if not self.details or not isinstance(self.details, list):
+            return None
+
+        device_count = len(self.details)
+        if device_count == 0:
+            return None
+
+        if device_count > 1:
+            return f"Azure Device Analysis: {device_count} device results."
+
+        summary = 'Azure Device Analysis: '
+        device_data = self.details[0]
+        summary += f'{device_data.get("operatingSystem")} {device_data.get("operatingSystemVersion")}'
+        summary += f' - {device_data.get("manufacturer")} {device_data.get("model")}'
+        summary += f' - {device_data.get("enrollmentType")} - {device_data.get("trustType")}'
+        return summary
+
+class AzureDeviceAnalyzer(AnalysisModule):
+    @property
+    def generated_analysis_type(self):
+        return AzureDeviceAnalysis
+
+    @property
+    def valid_observable_types(self):
+        return F_ASSET
+
+    def execute_analysis(self, asset):
+
+        from saq.graph_api import get_api, execute_and_get_all, execute_request
+
+        api = get_api() # default by default
+        if not api:
+            logging.error(f"no graph api instance loaded.")
+            return False
+
+        api.initialize()
+        headers = {'ConsistencyLevel': 'eventual'}
+
+        url = api.build_url(f'v1.0/devices?$search="displayName:{asset.value}"')
+
+        results = execute_and_get_all(api, url, headers=headers)
+        if not results:
+            return False
+
+        logging.info(f"got azure analysis for {asset}")
+        analysis = self.create_analysis(asset)
+        analysis.details = results
 
         return True

@@ -12,6 +12,7 @@ import zipfile
 from subprocess import Popen, PIPE
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from werkzeug.utils import secure_filename
+from urlfinderlib import is_url
 
 import saq
 
@@ -1256,6 +1257,25 @@ class ProtectedURLAnalyzer(AnalysisModule):
                             _qs['authkey'][0], _qs['resid'][0])
 
             logging.info("translated one drive url {} to {}".format(url.value, extracted_url))
+
+        """
+        elif parsed_url.netloc.lower().endswith('urldefense.com'):
+            logging.info(f"urldefense.com wrapped url: {url.value}")
+            protection_type = "Proofpoint urldefense"
+            if parsed_url.path.startswith('/v3/__'):
+                #extracted_url = parsed_url.path[len('/v3/__'):parsed_url.path.rfind('__')]
+                #if not extracted_url:
+                    # wrapped URL has query format, try more forcefully
+                url_parts = url.value.split('__')
+                if len(url_parts) > 1:
+                    extracted_url = url_parts[1]
+                    extracted_url = extracted_url.replace("*","%")
+                else:
+                    logging.error(f"failed to parse urldefense.com url: {url.value}")
+                # make sure it's an actual url as tons of shit gets parsed out
+                if not is_url(extracted_url):
+                    extracted_url = None
+        """
 
         if not extracted_url or not protection_type:
             return False

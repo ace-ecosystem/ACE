@@ -1208,6 +1208,8 @@ class ReadOnlyAnalysis(Analysis):
 
 class DeprecatedAnalysis(ReadOnlyAnalysis):
     """Used when the data.json references an Analysis class that is no longer available."""
+    def jinja_template_path(self):
+        return "analysis/default_template.html"
 
 class ErrorAnalysis(ReadOnlyAnalysis):
     """Used when an Analysis object fails to load as a fallback."""
@@ -2066,7 +2068,7 @@ class Observable(TaggableObject, DetectableObject):
             # has this module been deprecated?
             for deprecated_module in saq.CONFIG['deprecated_modules'].values():
                 if module_path == deprecated_module:
-                    logging.debug("{} references deprecated module {}".format(self, module_path))
+                    logging.info("{} references deprecated module {}".format(self, module_path))
                     a = DeprecatedAnalysis()
                     break
 

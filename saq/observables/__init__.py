@@ -252,10 +252,10 @@ PROTECTED_URLS = ['egnyte.com', 'fireeye.com', 'safelinks.protection.outlook.com
 class URLObservable(Observable):
     def __init__(self, *args, **kwargs):
         super().__init__(F_URL, *args, **kwargs)
-
-    @Observable.value.setter
-    def value(self, new_value):
-        self._value = new_value.strip()
+        self.value = self.value.strip()
+        self.was_sanitized = False
+        self.original_value = self.value
+        self.crawl = False
 
         # Extract URL from known protected URLs, if necessary
         if any(url in self.value for url in PROTECTED_URLS):
@@ -264,6 +264,10 @@ class URLObservable(Observable):
         # Use urlfinderlib to make sure this is a valid URL before creating the observable
         if not is_url(self.value):
             raise ObservableValueError("invalid URL {}".format(self.value))
+
+    @Observable.value.setter
+    def value(self, new_value):
+        self._value = new_value.strip()
 
     @property
     def sha256(self):
@@ -390,6 +394,7 @@ class URLObservable(Observable):
             extracted_url = 'NOT_A_URL'
 
         if extracted_url:
+            self.was_sanitized = True
             self.value = extracted_url
 
 

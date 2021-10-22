@@ -7,6 +7,8 @@ import saq
 import shutil
 import sys
 import tempfile
+import pytz
+import time
 
 from subprocess import Popen, PIPE, DEVNULL
 
@@ -149,6 +151,41 @@ class PcapConversationExtraction(ExternalProcessAnalysisModule):
         assert conversation is not None
         assert output_dir is not None
 
+        # since this is thread, the introduction of AnalysisModuleTracking can cause
+        # threads to get lost and for work to be done over and over again
+        # when a new process picks up the analysis to continue
+        # do not execute a new pcap collection if it appears an attempt to collect the
+        # conversation has already been attempted. NOTE that the extract program creates the dir
+        if os.path.isdir(output_dir):
+            # it already exists.. return
+            logging.warning(f"pcap extraction appears to already have or be happening for {conversation}")
+            # XXX returning True could mean we pick up un-finished pcap files if another thread is running
+            # XXX else returning False means that if the thread is left to die on the wire.. the pcap files
+            # XXX could never get added as observables
+            # XXX So, HACK .. try and rename the file. Exceptions mean another process has a handle on it.
+            # XXX and we should wait a bit before trying again and/or returning
+            # wait up to two minutes
+            max_time = time.time() + 120
+            while time.time() < max_time:
+                for pcap_file in os.listdir(output_dir):
+                    if not pcap_file.endswith('.pcap'):
+                        continue
+
+                    # skip ones that have a size of 24 bytes (which is an empty pcap file)
+                    pcap_path = os.path.join(output_dir, pcap_file)
+                    if os.path.getsize(pcap_path) < 25:
+                        continue
+
+                    try:
+                        os.rename(pcap_path, pcap_path)
+                        return True
+                    except OSError as e:
+                        logging.warning(f"appears {pcap_path} for {conversation} is still being written. waiting...")
+                        time.sleep(1)
+            else:
+                # risk having the pcaps (even if corrupted) rather than nada
+                return True
+
         src, dst = parse_ipv4_conversation(conversation)
 
         if self.timezone:
@@ -170,6 +207,7 @@ class PcapConversationExtraction(ExternalProcessAnalysisModule):
             bpf], preexec_fn=os.setsid,
             stdout = DEVNULL,
             stderr = DEVNULL)
+        logging.info(f"launced process_id={self.external_process.pid} to extract pcap for {conversation}")
         self.external_process.wait()
     
         logging.debug("got return code {} for pcap_extract".format(self.external_process.returncode))

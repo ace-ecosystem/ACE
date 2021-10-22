@@ -1,5 +1,7 @@
 import requests
 import saq
+import logging
+
 from saq.email import is_local_email_domain
 import saq.graph_api
 import saq.proxy
@@ -36,10 +38,23 @@ class EmailRemediator(Remediator):
         params = { '$select': 'id', '$filter': f"internetMessageId eq '{message_id}'" }
         r = self.graph.get(f"{self.base_uri}/users/{recipient}/messages", params=params)
         if r.status_code == requests.codes.not_found:
-            return RemediationIgnore('mailbox does not exist')
+            try:
+                error_result = r.json()
+                error_code = error_result['error']['code']
+                error_message = error_result['error']['message']
+                logging.warning(f'Remediator={self.name}: lookup of {recipient}: {error_code}: {error_message}')
+                if 'MailboxNotEnabledForRESTAPI' == error_code:
+                    return RemediationFailure(f'{error_code}: {error_message}')
+                if 'ErrorInvalidUser' == error_code:
+                    return RemediationIgnore(f'Mailbox does not exist.')
+                return RemediationIgnore(f'{error_code}: {error_message}')
+            except Exception as e:
+                logging.warning(f"{r.status_code} unexpected: {r.content}")
+                return RemediationIgnore(f'Unexpected result from MS o365: {r.content}')
         r.raise_for_status()
         r = r.json()
         if len(r['value']) == 0:
+            logging.info(f"got empty result response: {r}")
             return RemediationSuccess('message does not exist')
         item_id = r['value'][0]['id']
 

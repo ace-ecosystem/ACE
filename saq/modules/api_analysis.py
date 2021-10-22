@@ -249,9 +249,9 @@ class BaseAPIAnalyzer(AnalysisModule):
 
         # XXX for some reason the self.target_query is getting cached when the same module runs for the same analysis
         # for different observables
-        if '<O_VALUE>' not in self.target_query: 
+        if '<O_VALUE>' not in self.target_query:
             self._reload_target_query()
-            logging.warning(f"had to reset self.target_query to clear previous use")
+            logging.debug(f"had to reset self.target_query to clear previous use")
 
         self.target_query = self.target_query.replace('<O_TYPE>', observable.type) \
             .replace('<O_VALUE>', observable.value)  # TODO property escape stuff

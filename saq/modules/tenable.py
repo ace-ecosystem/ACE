@@ -118,5 +118,9 @@ class TenableAssetSearchAnalyzer(AnalysisModule):
             hostname = analysis.details['freshest_result'].get('hostname')
             if hostname and len(hostname) == 1:
                 analysis.add_observable(F_HOSTNAME, hostname[0])
+            # the netbois_name can be helpful too
+            netbios_name = analysis.details['freshest_result'].get('netbios_name')
+            if netbios_name and len(netbios_name) == 1:
+                analysis.add_observable(F_HOSTNAME, netbios_name[0])
 
         return True

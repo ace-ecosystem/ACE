@@ -200,7 +200,8 @@ class QueryHunt(Hunt):
         else:
             self.time_range = create_timedelta(self.time_range)
 
-        self.max_time_range = rule_section.get('max_time_range', fallback=None)
+        self.max_time_range = rule_section.get('max_time_range',
+                                               fallback=saq.CONFIG['query_hunter']['max_time_range'])
         if self.max_time_range is not None:
             self.max_time_range = create_timedelta(self.max_time_range)
 

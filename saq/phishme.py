@@ -76,6 +76,7 @@ def submit_response(recipient, subject, disposition, comment, old_disposition=No
 
     message['From'] = saq.CONFIG['smtp']['mail_from']
     message['To'] = (recipient,)
+    message['BCC'] = saq.CONFIG['phishme'].get('bcc_list', '').split(',')
 
     message.set_content(text_content)
     if html_content:
