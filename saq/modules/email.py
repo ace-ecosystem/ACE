@@ -1915,7 +1915,7 @@ class EmailAnalyzer(AnalysisModule):
 
         # combine the header and the decoded parts of the email into a single buffer for scanning with yara
         # we only combine the un-named html and text parts, not additional attachements
-        if headers_path:
+        if self.config.getboolean('combine_header_and_decoded_body_parts', True) and headers_path:
             combined_path = os.path.join(self.root.storage_dir, '{}.combined'.format(_file.value))
             if os.path.exists(combined_path):
                 logging.debug(f"combined path {combined_path} already exists")

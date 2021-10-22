@@ -218,6 +218,10 @@ def kill_process_tree(pid, sig=signal.SIGTERM, include_parent=True,
 
     gone, alive = psutil.wait_procs(children, timeout=timeout,
                                     callback=on_terminate)
+
+    for p in alive:
+        logging.warning(f"process {p} is still alive after sending {sig}.")
+
     return (gone, alive)
 
 def json_parse(fileobj, decoder=json.JSONDecoder(), buffersize=2048):
