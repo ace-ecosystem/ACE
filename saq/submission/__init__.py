@@ -39,6 +39,7 @@ class Submission(object):
                  type,
                  event_time=None,
                  details=None,
+                 company_id=None,
                  observables=[],
                  tags=[],
                  files=[],
@@ -53,6 +54,7 @@ class Submission(object):
         self.type = type
         self.event_time = event_time
         self.details = details
+        self.company_id = company_id
         self.observables = observables
         self.tags = tags
         self.files = files
@@ -121,6 +123,7 @@ class Submission(object):
                 event_time=self.event_time,
                 details=self.details,
                 queue=self.queue,
+                company_id=self.company_id,
                 instructions=self.instructions)
 
 
@@ -241,6 +244,7 @@ class SubmissionFilter(object):
         self.next_update = None
 
     def load_tuning_rules(self):
+        from plyara.utils import rebuild_yara_rule
         logging.info("loading tuning rules for submissions")
         # when will the next time be that we check to see if the rules need to be updated?
         self.next_update = local_time() + self.tuning_update_frequency
@@ -314,7 +318,7 @@ class SubmissionFilter(object):
 
                             logging.debug(f"adding rule {parsed_rule['rule_name']} to {tuning_rules[target][1]}")
                             os.write(tuning_rules[target][0], 
-                                     plyara.utils.rebuild_yara_rule(parsed_rule).encode('utf8'))
+                                     rebuild_yara_rule(parsed_rule).encode('utf8'))
                             os.write(tuning_rules[target][0], b'\n')
 
         for target in VALID_TUNING_TARGETS:

@@ -549,8 +549,8 @@ ANALYSIS_TYPE_FALCON = 'falcon'
 ANALYSIS_TYPE_FIREEYE = 'fireeye'
 ANALYSIS_TYPE_QRADAR_OFFENSE = 'qradar_offense'
 ANALYSIS_TYPE_BRICATA = 'bricata'
-ANALYSIS_TYPE_GRAPH_RESOURCE = 'graph - resource'
 ANALYSIS_TYPE_O365 = 'o365'
+ANALYSIS_TYPE_GRAPH_RESOURCE = 'graph - resource'
 ANALYSIS_TYPE_CARBON_BLACK = 'carbon_black'
 
 # supported intelligence databases

@@ -69,7 +69,7 @@
         <div class="card-header" role="tab" id="headingTwo">
           <h5 class="mb-0">
             <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#collapseNetconns" aria-expanded="false" aria-controls="collapseFileMods">
-                Network Connections ({{(analysis.details['events'].get('netconn', []) + analysis.details['events'].get('netconn_proxy'))|length}} events captured)
+                Network Connections ({{(analysis.details['events'].get('netconn', []) + analysis.details['events'].get('netconn_proxy', []))|length}} events captured)
             </a>
           </h5>
         </div>

@@ -168,8 +168,8 @@ class CarbonBlackProcessAnalyzer_v2(AnalysisModule):
             queries['domain'] = f"domain:{observable.value}"
         elif observable.type == F_FILE_PATH:
             _value = observable.value.replace('"', '\\"')
-            queries['verbose_file_path'] = f'"{_value}"'
-            #queries['file_path'] = f'filemod:"{_value}"'
+            #queries['verbose_file_path'] = f'"{_value}"'
+            queries['file_path'] = f'filemod:"{_value}"'
         elif observable.type == F_FILE_NAME:
             queries['cmdline'] = f'cmdline:"{observable.value}"'
             queries['filemod'] = f'filemod:"{observable.value}"'
@@ -471,7 +471,7 @@ class CarbonBlackNetconnSourceAnalyzer(SplunkAnalysisModule):
                     if nc['domain'] and nc['domain'] not in analysis.details['correlated_domain_names']:
                         logging.info(f"correlated {observable} to fqdn: {nc['domain']}")
                         analysis.details['correlated_domain_names'][nc['domain']] = 1
-                    else:
+                    elif nc['domain']:
                         analysis.details['correlated_domain_names'][nc['domain']] += 1
 
         if len(analysis.details['correlated_domain_names']) == 1:
@@ -649,9 +649,27 @@ class CarbonBlackCloudProcessAnalyzer(AnalysisModule):
             analysis.details = process_to_dict(proc, max_events=self.max_events, start_time=start_time, end_time=end_time)
             analysis.details["event_start_time"] = start_time
             analysis.details["event_end_time"] = end_time
+
+            device_name = analysis.details['info'].get('device_name')
+            hostname = device_name[device_name.rfind('\\')+1:] if '\\' in device_name else device_name
+            analysis.add_observable(F_HOSTNAME, hostname)
+
+            username = analysis.details['info'].get('process_username')
+            if username:
+                username = username[0]
+                username = username[username.rfind('\\')+1:] if '\\' in username else username
+                analysis.add_observable(F_USER, username)
+
+            cmdline = analysis.details['info'].get('process_cmdline')
+            if cmdline and isinstance(cmdline, list):
+                cmdline = cmdline[0]
+                if len(cmdline) > 200:
+                    cmdline = cmdline[:200] + " [TRUNCATED]"
+                analysis.add_observable(F_COMMAND_LINE, cmdline)
+
             return True
         except Exception as e:
-            logging.error(f"problem exporting cabon black response process: {observable} : {e}")
+            logging.error(f"problem exporting cabon black cloud process: {observable} : {e}")
             report_exception()
             return False
 
@@ -872,14 +890,20 @@ class CBC_UniversalBinaryStore_Analyzer(AnalysisModule):
 
         results = consolidate_metadata_and_summaries(CBC_API, [observable.value])
         if not results:
-            return None
+            return False
 
         if not isinstance(results, list) and len(results) == 1:
             logging.warning(f"got unexpected results from cbinterface.psc.ubs.consolidate_metadata_and_summaries")
             return False
 
+        results = results[0]
+        if ( not results.get('metadata') and not results.get('device_summary') and
+             not results.get('signature_summary') and not results.get('file_path_summary') ):
+             # no results to work with
+             return False
+
         analysis = self.create_analysis(observable)
-        analysis.details = results[0]
+        analysis.details = results
 
         # Add rare file_paths if the data set is small
         if self.add_rare_file_path_observables:
@@ -978,6 +1002,11 @@ class CarbonBlackCloudAnalyzer(AnalysisModule):
         return self.config.getint('max_process_guids')
 
     @property
+    def enforce_time_window(self):
+        # NOTE: If False, CBC queries will search all available data.
+        return self.config.getboolean('enforce_time_window', False)
+
+    @property
     def relative_hours_before(self):
         return self.config.getint('relative_hours_before')
 
@@ -1043,7 +1072,11 @@ class CarbonBlackCloudAnalyzer(AnalysisModule):
         for _k, query in queries.items():
             logging.debug(f"{self} attempting correlation of {observable.value} with query: '{query}' between '{start_time}' and '{end_time}'")
             try:
-                processes[_k] = make_process_query(CBC_API, query, start_time, end_time)
+                # NOTE: Removing time enforcement and searching all data by default.
+                if self.enforce_time_window:
+                    processes[_k] = make_process_query(CBC_API, query, start_time, end_time)
+                else:
+                    processes[_k] = make_process_query(CBC_API, query)
                 if processes[_k]:
                     any_results = True
                     # convert AsyncProcessQuery to list of actual results.
@@ -1111,6 +1144,11 @@ class CBC_AssetIdentifier(AnalysisModule):
             raise ValueError("missing Carbon Black Cloud API connection.")
 
     @property
+    def enforce_time_window(self):
+        # NOTE: If False, CBC queries will search all available data.
+        return self.config.getboolean('enforce_time_window', False)
+
+    @property
     def relative_duration_before(self):
         return self.config.get('relative_duration_before')
 
@@ -1143,11 +1181,13 @@ class CBC_AssetIdentifier(AnalysisModule):
         end_time = target_time.astimezone(pytz.timezone('UTC')) + create_timedelta(self.relative_duration_after)
         # hackery: remove TZ for avoiding org.apache.solr.common.SolrException: Invalid Date in Date Math String:'2021-04-28T16:00:00+00:00'
 
-        def _device_search(query, start_time, end_time, max_results=self.max_device_results):
+        def _device_search(query, start_time=None, end_time=None, max_results=self.max_device_results):
             """Yield alerts."""
             url = f"/appservices/v6/orgs/{CBC_API.credentials.org_key}/devices/_search"
 
-            criteria = {'last_contact_time': {'start': start_time.isoformat(), 'end': end_time.isoformat()}}
+            criteria = {}
+            if start_time and end_time:
+                criteria = {'last_contact_time': {'start': start_time.isoformat(), 'end': end_time.isoformat()}}
             sort = [{"field": "last_contact_time", "order": "ASC"}]
             search_data = {"criteria": criteria,
                            "rows": max_results,
@@ -1160,7 +1200,10 @@ class CBC_AssetIdentifier(AnalysisModule):
         query = f"lastInternalIpAddress:{observable.value} OR lastExternalIpAddress:{observable.value}"
         results = None
         try:
-            results = _device_search(query, start_time, end_time)
+            if self.enforce_time_window:
+                results = _device_search(query, start_time, end_time)
+            else:
+                results = _device_search(query)
         except Exception as e:
             logging.error(f"couldn't perform cb query: {e}")
             return False
@@ -1173,7 +1216,13 @@ class CBC_AssetIdentifier(AnalysisModule):
 
         for device in analysis.details.get('results', [])[:self.hostname_limit]:
             if device.get('name'):
-                analysis.add_observable(F_HOSTNAME, device['name'])
+                device_name = device['name']
+                device_name = device_name[device_name.rfind('\\')+1:] if '\\' in device_name else device_name
+                analysis.add_observable(F_HOSTNAME, device_name)
+            if device.get('login_user_name'):
+                user =  device['login_user_name']
+                user = user[user.rfind('\\')+1:] if '\\' in user else user
+                analysis.add_observable(F_USER, user)
 
         return True
 

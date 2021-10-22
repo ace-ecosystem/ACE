@@ -13,6 +13,21 @@ function add_indicators_to_event_in_tip(event_id) {
     });
 }
 
+function create_indicators_in_sip(event_id) {
+    $.ajax({
+        dataType: "html",
+        url: 'create_indicators_in_sip',
+        data: { event_id: event_id },
+        method: "POST",
+        success: function(data, textStatus, jqXHR) {
+            alert("Created indicators in SIP");
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            alert("DOH: " + textStatus + " - " + errorThrown);
+        }
+    });
+}
+
 function create_event_in_tip(event_id) {
     $.ajax({
         dataType: "html",

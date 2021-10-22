@@ -1,6 +1,8 @@
 import re
 import requests
 
+from saq.proxy import proxies
+
 class Phishfry():
     def __init__(self, server, version):
         self.server = server
@@ -42,7 +44,7 @@ class Phishfry():
         '''
         data = f"<?xml version='1.0' encoding='utf-8'?>{envelope}"
         data = re.sub(r'\n\s*', '', data)
-        r = self.session.post(f"https://{self.server}/EWS/Exchange.asmx", data=data, headers=headers)
+        r = self.session.post(f"https://{self.server}/EWS/Exchange.asmx", data=data, headers=headers)#, proxies=proxies())
         r.raise_for_status()
         response_code = re.search('ResponseCode>([^<]*)<', r.text)
         if response_code is None:

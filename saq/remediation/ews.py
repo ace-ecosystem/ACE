@@ -1,3 +1,4 @@
+import logging
 from requests.auth import HTTPBasicAuth
 from requests_ntlm import HttpNtlmAuth
 import saq
@@ -16,7 +17,8 @@ class EmailRemediator(Remediator):
         elif auth == 'basic':
             self.phishfry.session.auth = HTTPBasicAuth(self.config['user'], self.config['pass'])
         if self.config.getboolean('use_proxy') or False:
-            self.phishfry.session.proxy = proxies()
+            logging.info(f"using proxy...")
+            self.phishfry.session.proxies.update(proxies())
 
     @property
     def type(self): 

@@ -2058,6 +2058,8 @@ class FileTypeAnalyzer(AnalysisModule):
 
         if is_office_document:
             _file.add_tag('microsoft_office')
+            if "eval" in analysis.details['type']:
+                analysis.add_detection_point(f"suspect malicious evaluation hidden in office document 'Title'")
 
         if analysis.is_ole_file:
             _file.add_tag('ole')
@@ -2073,6 +2075,10 @@ class FileTypeAnalyzer(AnalysisModule):
 
         if analysis.is_zip_file:
             _file.add_tag('zip')
+
+        # if it looks like an email but the MIME is HTML.. try to treat it like an email.
+        if _file.value == 'email.rfc822.email.rfc822' and analysis.details['mime'].startswith('text/'):
+            _file.add_directive(DIRECTIVE_ORIGINAL_EMAIL)
 
         return True
 
@@ -2599,7 +2605,7 @@ class YaraScanner_v3_4(AnalysisModule):
 
             # yara rules can get generated automatically from SIP data using the ace export-sip-yara-rules output_dir command
             # so if the name of the rule starts with SIP_ then we also want to add indicators as observables
-            if yara_result['rule'].startswith('SIP_'):
+            elif yara_result['rule'].startswith('SIP_'):
                 for string_match in yara_result['strings']:
                     position, string_id, value = string_match
                     # example: '0x45cf:$5537d11dbcb87f5c8053ae55: /webstat/image.php?id='
@@ -2607,7 +2613,14 @@ class YaraScanner_v3_4(AnalysisModule):
                     if m:
                         analysis.add_observable(F_INDICATOR, 'sip:{}'.format(m.group(1)))
 
-
+            # if the rule is detectable, add the unique yara strings it hit on as observables. This is helpful for tuning.
+            elif yara_result['rule'] not in no_alert_rules:
+                for string_match in yara_result['strings']:
+                    if not isinstance(string_match, list) and not len(string_match) == 3:
+                        continue
+                    position, string_id, value = string_match
+                    analysis.add_observable("detectable_yara_string_id", f"{yara_result['rule']}:{string_id}")
+                    #analysis.add_observable("yara_string_value", value)
 
             yara_result['context'] = []
             for position, string_id, value in yara_result['strings']:
@@ -3435,7 +3448,7 @@ class URLExtractionAnalyzer(AnalysisModule):
     @staticmethod
     def order_urls_by_interest(extracted_urls):
         """Sort the extracted urls into a list by their domain+TLD frequency and path extension.
-        Baically, we want the urls that are more likely to be malicious to come first.
+        Basically, we want the urls that are more likely to be malicious to come first.
         """
         image_extensions = ('.png', '.gif', '.jpeg', '.jpg', '.tiff', '.bmp')
         image_urls = []
@@ -3545,7 +3558,12 @@ class URLExtractionAnalyzer(AnalysisModule):
         # extract all the URLs out of this file
         extracted_urls = []
         with open(local_file_path, 'rb') as fp:
-            extracted_urls = find_urls(fp.read(), base_url=base_url)
+            # XXX TEMP hack - https://github.com/ace-ecosystem/urlfinderlib/issues/35
+            # manually specify mimetype for small html files
+            if local_file_path.endswith('.html') or local_file_path.endswith('.htm') and os.stat(local_file_path).st_size < 300:
+                extracted_urls = find_urls(fp.read(), base_url=base_url, mimetype='html')
+            else:
+                extracted_urls = find_urls(fp.read(), base_url=base_url)
             logging.debug("extracted {} urls from {}".format(len(extracted_urls), local_file_path))
 
         extracted_urls = list(filter(self.filter_excluded_domains, extracted_urls))

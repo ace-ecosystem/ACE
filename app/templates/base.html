@@ -120,11 +120,18 @@
 <div id="content_area">
 {% block content %}
     <div class="container-fluid">
-    {% for message in get_flashed_messages() %}
-    <div class="alert alert-warning">
-        <button type="button" class="close" data-dismiss="alert">&times;</button>
-        {{ message }}
-    </div>
+    {% for category, message in get_flashed_messages(with_categories=True) %}
+    {% if category == 'error' %}
+        <div class="alert alert-danger">
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+            {{ message }}
+        </div>
+    {% else %}
+        <div class="alert alert-warning">
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+            {{ message }}
+        </div>
+    {% endif %}
     {% endfor %}
     <div style="margin-top: 10px">
     {% block page_content %}{% endblock %}
@@ -264,8 +271,8 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-default" data-dismiss="modal">Nevermind</button>
-                    <button type="submit" class="btn btn-primary" id="btn-disposition">Save</button>
                     <button type="button" class="btn btn-primary" id="btn-save-to-event" style="display:none;" data-toggle="modal" data-dismiss="modal" data-target="#event_modal">Save To Event</button>
+                    <button type="submit" class="btn btn-primary" id="btn-disposition">Save</button>
                 </div>
             </div>
             </form>

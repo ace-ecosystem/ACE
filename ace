@@ -145,10 +145,19 @@ def execute_hunt(args):
         sys.exit(1)
 
     collector.hunt_managers[hunt_type].load_hunts_from_config()
-    hunt = collector.hunt_managers[hunt_type].get_hunt(lambda hunt: hunt_name in hunt.ini_path)
-    if hunt is None:
+    hunts = collector.hunt_managers[hunt_type].get_hunts(lambda hunt: hunt_name in hunt.ini_path)
+    if hunts is None:
         logging.error(f"unknown hunt {hunt_name} for type {hunt_type}")
         sys.exit(1)
+    hunt = hunts[0]
+    if len(hunts) > 1:
+        logging.warning(f"got {len(hunts)} hunts matching '{hunt_name}' for type {hunt_type}")
+        for _hunt in hunts:
+            _ini_name = os.path.basename(_hunt.ini_path).split('.', 1)[0]
+            logging.warning(f" -> {_hunt.name} @ {_hunt.ini_path} - {_ini_name}")
+            if hunt_name == _ini_name:
+                hunt = _hunt
+        logging.warning(f"going with {hunt.name} @ {hunt.ini_path}...")
 
     # set the Hunt to manual so we don't record the execution timestamps
     hunt.manual_hunt = True
@@ -420,6 +429,67 @@ msapi_sp = msapi_parser.add_subparsers(dest='msapi_cmd')
 graph_parser =  msapi_sp.add_parser('graph',
     help="MS Graph API utilites")
 graph_sp = graph_parser.add_subparsers(dest='graph_cmd')
+
+def export_azure_devices(args):
+    from saq.graph_api import get_api, execute_and_get_all, execute_request
+
+    api = get_api(args.account_name)
+    if not api:
+        logging.error(f"no graph api instance loaded for {args.account_name}")
+        return False
+    
+    api.initialize()
+    headers = {'ConsistencyLevel': 'eventual'}
+
+    if args.device_count:
+        headers['Accept'] = 'text/plain'
+        url = api.build_url(f'v1.0/devices/$count')
+        results = execute_request(api, url, headers=headers)
+        print(f"{results} total devices")
+        return
+
+    # get all devices by default
+    url = api.build_url('v1.0/devices?$top=500')
+    if args.device_name:
+        url = api.build_url(f'v1.0/devices?$search="displayName:{args.device_name}"')
+
+    results = execute_and_get_all(api, url, headers=headers)
+    if not results:
+        return None
+    if args.stdout or args.device_name:
+        print(json.dumps(results, indent=2))
+        return
+    with open(args.output_file, 'w') as fp:
+        fp.write(json.dumps(results))
+    if os.path.exists(args.output_file):
+        print(f" + wrote: {args.output_file}")
+
+    return
+
+export_azure_devices_parser = graph_sp.add_parser('get-devices',
+    help="Getting and exporting azure devices. WARNING: default is to export all devices to json file.")
+export_azure_devices_parser.add_argument(
+    '--account-name', default='default', 
+    help="The company name of a configured Azure tenant."
+)
+export_azure_devices_parser.add_argument(
+    '-d', '--device_name', default=None,
+    help="Query Azure AD for this device name."
+)
+export_azure_devices_parser.add_argument(
+    '-c', '--device_count', action='store_true',
+    help="Query Azure AD and return a count of devices."
+)
+export_azure_devices_parser.add_argument(
+    '-o', '--output_file', default='azure_device_export.json',
+    help="The name of the file to write results to. Default=azure_device_export.json"
+)
+export_azure_devices_parser.add_argument(
+    '--stdout', action='store_true', default=False,
+    help="Print JSON output to console."
+)
+
+export_azure_devices_parser.set_defaults(func=export_azure_devices)
 
 def list_graph_resources(args):
     from saq.collectors import graph_collections
@@ -839,10 +909,10 @@ def correlate(args):
                               ANALYSIS_MODE_CLI, ANALYSIS_MODE_CORRELATION
     from saq.engine import Engine
     from saq.error import report_exception
-    from saq.process_server import initialize_process_server
+    #from saq.process_server import initialize_process_server
     from saq.util import parse_event_time
 
-    initialize_process_server()
+    #initialize_process_server()
 
     engine = Engine(single_threaded_mode=args.single_threaded)
     engine.set_local()
@@ -2885,6 +2955,48 @@ update_organization_parsers = subparsers.add_parser('update-organization',
 update_organization_parsers.set_defaults(func=update_organization)
 
 # ============================================================================
+# Carbon Black Interface
+#
+
+def carbon_black_cloud_utils(args):
+    from cbinterface.psc.device import yield_devices
+    from saq.carbon_black import CBC_API
+
+    if args.export_active_devices:
+        output_file = args.output_file
+        devices = [d for d in yield_devices(CBC_API, query="sensorStates:ACTIVE")]
+        with open(output_file, 'w') as fp:
+            fp.write(json.dumps(devices))
+        if os.path.exists(output_file):
+            print(f" + wrote: {output_file}")
+
+cbc_parser = subparsers.add_parser('cbc-tools',
+    help="Interface with the configured CBC environment")
+cbc_parser.add_argument('--export-active-devices', action='store_true', help="export active CBC devices to 'active_carbon_black_cloud_devices.json'")
+cbc_parser.add_argument(
+    '-o', '--output_file', action='store', default='active_carbon_black_cloud_devices.json',
+    help="file name to write results to. default is active_carbon_black_cloud_devices.json."
+)
+
+cbc_parser.set_defaults(func=carbon_black_cloud_utils)
+
+# ============================================================================
+# asset-tracker utilities
+#
+
+from saq.asset_tracker import build_parser as at_parser_builder
+
+def asset_tracker(args):
+    from saq.asset_tracker import execute_arguments
+    return execute_arguments(args)
+
+asset_tracking_parser = subparsers.add_parser('asset-tracking',
+    help="Interface with the Asset tracking database")
+at_parser_builder(asset_tracking_parser)
+
+asset_tracking_parser.set_defaults(func=asset_tracker)
+
+# ============================================================================
 # ip-inspector utilities
 #
 
@@ -2964,7 +3076,7 @@ update_tip_cache_parser = subparsers.add_parser('update-tip-cache',
 update_tip_cache_parser.set_defaults(func=update_tip_cache)
 
 def export_sip_yara_rules(args):
-
+    import glob
     import yara
     yara.set_config(max_strings_per_rule=30720)
 
@@ -2997,7 +3109,9 @@ def export_sip_yara_rules(args):
     def format_yara_string(s):
         return s.replace('\\', '\\\\').replace('"','\\"').replace("\n","")
 
-    def get_yara_filename(indicator_type):
+    def get_yara_filename(indicator_type, rule_count=0):
+        if rule_count > 0:
+            return os.path.join(args.dir, "SIP_{}_{}.yar".format(indicator_type, rule_count))
         return os.path.join(args.dir, "SIP_{}.yar".format(indicator_type))
 
     indicator_types = [_.strip() for _ in saq.CONFIG['sip_yara_export']['export_list'].split(',')]
@@ -3014,119 +3128,164 @@ def export_sip_yara_rules(args):
 
         sources.append(source)
 
+    yara_files_written_or_known = []
+
     for indicator_type in indicator_types:
+
         # what is the crits equivalent of this indicator type?
         indicator_type = get_indicator_type_mapping(indicator_type)
         logging.info("exporting indicator type {}".format(indicator_type))
-      
+    
         # does a template file exists for this indicator type?
         template_path = os.path.join(saq.CONFIG['sip_yara_export']['export_template_dir'], '{}.template'.format(indicator_type))
         if not os.path.exists(template_path):
             template_path = os.path.join(saq.CONFIG['sip_yara_export']['export_template_dir'], 'default.template')
 
         logging.debug("using template {} for {}".format(template_path, indicator_type))
-
-        # load the template we're going to be using
-        with open(template_path, 'r') as fp:
-            template = fp.read()
-
-        template = template.replace('TEMPLATE_RULE_NAME', 'SIP_{}'.format(re.sub(r'[^a-zA-Z0-9_]', '', indicator_type)))
         
         special_paths = { "%temp%":[ "\\windows\\temp", "\\temp", "\\appdata\\local\\temp", "\\local settings\\temp", "\\locals~1\\temp" ],
-                          "%appdata%": [ "\\application data", "\\appdata\\roaming" ],
-                          "%programdata%": [ "\\programdata", "\\documents and settings\\all users" ],
-                          "%programfiles%": [ "\\program files", "\\program files (x86)" ],
-                          "%systemdrive%": [ "" ],
-                          "%system%": [ "\\windows\\system32", "\\windows\\system" ] }
+                        "%appdata%": [ "\\application data", "\\appdata\\roaming" ],
+                        "%programdata%": [ "\\programdata", "\\documents and settings\\all users" ],
+                        "%programfiles%": [ "\\program files", "\\program files (x86)" ],
+                        "%systemdrive%": [ "" ],
+                        "%system%": [ "\\windows\\system32", "\\windows\\system" ] }
 
-        string_data = io.StringIO()
-        count = 0
-        skip_count = 0
 
+        # handle writing multiple files with single rule limit is hit
         url = f'/api/indicators?status=Analyzed&bulk=True&type={indicator_type}'
         if sources:
             url += '&sources={}'.format(','.join(sources))
 
-        for indicator in sip_client.get(url):
-            string_buffer = io.StringIO()
-            item_id = indicator['id']
-            item_value = indicator['value']
+        def convert_sip_indicators_to_yara_strings(indicators, rule_count=0):
+            """return indicators that still need to be processed because the limit was reached"""
 
-            # is this string too small?
-            if len(item_value) < export_minimum_length:
-                skip_count += 1
-                continue
-                
-            # do we need to reformat this string?
-            if indicator['type'] == get_indicator_type_mapping(saq.intel.I_FILE_PATH):
-                subindicator = 0
-                for path in special_paths:
-                    if path.lower() in indicator['value'].lower():
-                        for p_item in special_paths[path]:
-                            item_value = indicator['value'].lower().replace(path, p_item)
-                            item_id = str(indicator['id']) + "_" + str(subindicator)
-                            string_buffer.write('          ${} = "{}" {}\n'.format(item_id, format_yara_string(item_value), string_modifiers[indicator['type'].lower()]))
-                            subindicator += 1
+            # load the template we're going to be using
+            with open(template_path, 'r') as fp:
+                template = fp.read()
 
-                if subindicator == 0:
+            if rule_count > 0:
+                template = template.replace('TEMPLATE_RULE_NAME', 'SIP_{}_{}'.format(re.sub(r'[^a-zA-Z0-9_]', '', indicator_type), rule_count))
+            else:
+                template = template.replace('TEMPLATE_RULE_NAME', 'SIP_{}'.format(re.sub(r'[^a-zA-Z0-9_]', '', indicator_type)))
+
+            string_data = io.StringIO()
+            count = 0
+            skip_count = 0
+
+            # https://github.com/VirusTotal/yara/ -> libyara/include/yara/libyara.h#L83
+            stack_size = 16384
+            # in reality, this stack size equates to 16382 strings per rule.
+            # We will use a nice nice round number.
+            single_rule_string_limit = stack_size - 384
+
+            remaining_indicators = []
+            
+            #def convert_indicators_to_yara_strings(indicators, count=0):
+            for indicator in indicators:
+                string_buffer = io.StringIO()
+                item_id = indicator['id']
+                item_value = indicator['value']
+
+                if count == single_rule_string_limit:
+                    logging.warning(f"reached default yara single rule stack size limit with indicator id: {item_id}")
+                    remaining_indicators = indicators[count:]
+                    logging.warning(f"breaking and will write remaining {len(remaining_indicators)} indicators to separate rule.")
+                    break
+
+                # is this string too small?
+                if len(item_value) < export_minimum_length:
+                    skip_count += 1
+                    continue
+                    
+                # do we need to reformat this string?
+                if indicator['type'] == get_indicator_type_mapping(saq.intel.I_FILE_PATH):
+                    subindicator = 0
+                    for path in special_paths:
+                        if path.lower() in indicator['value'].lower():
+                            for p_item in special_paths[path]:
+                                item_value = indicator['value'].lower().replace(path, p_item)
+                                item_id = str(indicator['id']) + "_" + str(subindicator)
+                                string_buffer.write('          ${} = "{}" {}\n'.format(item_id, format_yara_string(item_value), string_modifiers[indicator['type'].lower()]))
+                                subindicator += 1
+
+                    if subindicator == 0:
+                        string_buffer.write('          $sip_{} = "{}" {}\n'.format(item_id, format_yara_string(item_value), string_modifiers[indicator['type'].lower()]))
+
+                elif indicator['type'] == get_indicator_type_mapping(saq.intel.I_REGISTRY_KEY):
+                    for reg in ['hkcu\\', 'hklm\\', 'hkc\\', 'hku\\', 'hkcr\\']:
+                        item_value = item_value.lower().replace(reg, "") # remove the front end of the indicator if it matches our special case
+                    string_buffer.write('          $sip_{} = "{}" {}\n'.format(item_id, format_yara_string(item_value), string_modifiers[indicator['type'].lower()]))
+                elif indicator['type'] == get_indicator_type_mapping(saq.intel.I_HEX_STRING):
+                    # hex strings are passed as is and are expected to be in yara hex string format
+                    string_buffer.write('          $sip_{} = {{ {} }}\n'.format(item_id, item_value))
+                else:
                     string_buffer.write('          $sip_{} = "{}" {}\n'.format(item_id, format_yara_string(item_value), string_modifiers[indicator['type'].lower()]))
 
-            elif indicator['type'] == get_indicator_type_mapping(saq.intel.I_REGISTRY_KEY):
-                for reg in ['hkcu\\', 'hklm\\', 'hkc\\', 'hku\\', 'hkcr\\']:
-                    item_value = item_value.lower().replace(reg, "") # remove the front end of the indicator if it matches our special case
-                string_buffer.write('          $sip_{} = "{}" {}\n'.format(item_id, format_yara_string(item_value), string_modifiers[indicator['type'].lower()]))
-            elif indicator['type'] == get_indicator_type_mapping(saq.intel.I_HEX_STRING):
-                # hex strings are passed as is and are expected to be in yara hex string format
-                string_buffer.write('          $sip_{} = {{ {} }}\n'.format(item_id, item_value))
-            else:
-                string_buffer.write('          $sip_{} = "{}" {}\n'.format(item_id, format_yara_string(item_value), string_modifiers[indicator['type'].lower()]))
+                # make sure this individual string compiles into a yara rule
+                test_rule = template.replace('TEMPLATE_STRINGS', string_buffer.getvalue())
+                try:
+                    yara.compile(source=test_rule)
+                except Exception as e:
+                    logging.error("indicator type {} id {} value {} invalid for yara".format(indicator_type, item_id, item_value))
+                    print(test_rule)
+                    skip_count += 1
+                    continue
 
-            # make sure this individual string compiles into a yara rule
-            test_rule = template.replace('TEMPLATE_STRINGS', string_buffer.getvalue())
+                count += 1
+                string_data.write(string_buffer.getvalue())
+
+            if count == 0:
+                logging.info("no indicators of type {} available for export".format(indicator_type))
+                return 
+
+            # make sure the whole rule compiles
+            rule = template.replace('TEMPLATE_STRINGS', string_data.getvalue()) 
             try:
-                yara.compile(source=test_rule)
+                yara.compile(source=rule)
             except Exception as e:
-                logging.error("indicator type {} id {} value {} invalid for yara".format(indicator_type, item_id, item_value))
-                print(test_rule)
-                skip_count += 1
-                continue
+                logging.error("unable to compile rules for {}: {}".format(indicator_type, e))
+                print(rule)
+                return
 
-            count += 1
-            string_data.write(string_buffer.getvalue())
+            output_file = get_yara_filename(indicator_type, rule_count)
+            yara_files_written_or_known.append(output_file)
 
-        if count == 0:
-            logging.info("no indicators of type {} available for export".format(indicator_type))
-            continue
+            # make sure something changed
+            if os.path.exists(output_file):
+                with open(output_file, 'r') as fp:
+                    existing_rule = fp.read()
 
-        # make sure the whole rule compiles
-        rule = template.replace('TEMPLATE_STRINGS', string_data.getvalue()) 
-        try:
-            yara.compile(source=rule)
-        except Exception as e:
-            logging.error("unable to compile rules for {}: {}".format(indicator_type, e))
-            print(rule)
-            continue
+                if existing_rule == rule:
+                    logging.info("no changes detected for {}".format(indicator_type))
+                    return
 
-        # make sure something changed
-        output_file = get_yara_filename(indicator_type)
-        if os.path.exists(output_file):
-            with open(output_file, 'r') as fp:
-                existing_rule = fp.read()
+            with open(output_file, 'w') as fp:
+                fp.write(rule)
 
-            if existing_rule == rule:
-                logging.info("no changes detected for {}".format(indicator_type))
-                continue
+            logging.info("exported {} skipped {} indicators of type {} to {}".format(count, skip_count, indicator_type, output_file))
+            if count == 0:
+                logging.warning("no strings were exported for {}, removing {}".format(indicator_type, output_file))
+                try:
+                    os.remove(output_file)
+                    yara_files_written_or_known.remove(output_file)
+                except Exception as e:
+                    logging.error("unable to remove {}: {}".format(output_file, e))
 
-        with open(output_file, 'w') as fp:
-            fp.write(rule)
+            return remaining_indicators
 
-        logging.info("exported {} skipped {} indicators of type {} to {}".format(count, skip_count, indicator_type, output_file))
-        if count == 0:
-            logging.warning("no strings were exported for {}, removing {}".format(indicator_type, output_file))
-            try:
-                os.remove(output_file)
-            except Exception as e:
-                logging.error("unable to remove {}: {}".format(output_file, e))
+        indicators_for_processing = sip_client.get(url)
+        rule_count=0
+        while isinstance(indicators_for_processing, list) and len(indicators_for_processing) > 0:
+            indicators_for_processing = convert_sip_indicators_to_yara_strings(indicators_for_processing, rule_count=rule_count)
+            rule_count += 1
+
+    # use glob to search for old files that need to be deleted
+    # like if a mass indicator turn off happened and fell back on our rule count..
+    # if we don't do this, a file would be left out there with duplicate strings and waste compute resources.
+    for file_path in glob.glob(f"{args.dir}/*.yar"):
+        if file_path not in yara_files_written_or_known:
+            logging.warning(f"detected indicator reduction left legacy yar file. deleting '{file_path}")
+            os.remove(file_path)
 
     sys.exit(0)
 
@@ -3400,6 +3559,109 @@ cleanup_cloudphish_parser.add_argument('--cleanup-days', type=int, default=7,
     help="Select URLs that have not been requested in X days (defaults to 7 days.)")
 cleanup_cloudphish_parser.set_defaults(func=cleanup_cloudphish)
 
+
+def comprehensive_cloudphish_cache_clearing(args):
+    """Clear cloudphish cached on non-TP URLs.
+
+    If a URL hasn't been in a TP alert in X days, clear it even
+    if the URL as an Alert status.
+
+    This scenario happens a lot: A new indicator gets turned on that
+    causes a URL to get an Alert status with the cloudphish cache. The
+    indicator can get turned off but we will continue to alert on the URL
+    until the cache is cleared. The longer the FP URL continues without 
+    being cleared the more problems can be introduced if it shows up again.
+
+    IF there really are URLs that remain TP for extended periods of time,
+    they should be turned into indicators (of various forms) instead of holding
+    onto cached analysis results.
+    """
+    import ace_api
+    from saq.database import get_db_connection
+
+    ace_api.set_default_remote_host(saq.CONFIG['global']['node'])
+    ace_api.set_default_ssl_ca_path(saq.CONFIG['SSL']['ca_chain_path'])
+
+    clear_counter = 0
+
+    logging.info(f"getting ALERT status cloudphish cache results\
+ inserted before {args.cleanup_days} days ago and looked up with the last {args.lookup_days} days...")
+
+    with get_db_connection() as db:
+        c = db.cursor()
+
+        c.execute("""
+SELECT
+    LOWER(HEX(cloudphish_analysis_results.sha256_url)),
+    LOWER(HEX(cloudphish_analysis_results.sha256_content)),
+    cloudphish_analysis_results.insert_date,
+    cloudphish_url_lookup.url
+FROM 
+    cloudphish_url_lookup JOIN cloudphish_analysis_results ON cloudphish_url_lookup.sha256_url = cloudphish_analysis_results.sha256_url 
+WHERE
+    cloudphish_analysis_results.result = 'ALERT'
+    AND status = 'ANALYZED'
+    AND cloudphish_url_lookup.last_lookup > NOW() - INTERVAL %s DAY
+    AND cloudphish_analysis_results.insert_date < NOW() - INTERVAL %s DAY
+""", ( args.lookup_days, args.cleanup_days, ))
+
+        results = c.fetchall()
+
+        logging.info(f"processing {len(results)} cloudphish ALERT status cache results for URLs with only FP alerts.")
+
+        url_tp_enumeration_tracking = []
+        url_tp_enumeration_tracking_path = os.path.join(saq.SAQ_HOME, saq.CONFIG['global']['data_dir'], 'var/cloudphish_enumerated_truepositives.txt') 
+        if os.path.exists(url_tp_enumeration_tracking_path):
+            with open(url_tp_enumeration_tracking_path, 'r') as fp:
+                url_tp_enumeration_tracking = fp.read().splitlines()
+
+        for sha256_url, sha256_content, insert_date, url in results:
+            if url in url_tp_enumeration_tracking:
+                logging.info(f"skipping previously evaluated url with true positives: {url}")
+                continue
+            logging.info(f"enumerating dispositions for {url} ...")
+            c.execute("""SELECT DISTINCT a.disposition, COUNT(a.disposition) AS Count FROM
+                         observables o JOIN observable_mapping om ON o.id = om.observable_id
+                           JOIN alerts a ON a.id = om.alert_id
+                         WHERE
+                           o.type = 'url' AND o.value = %s AND a.alert_type != 'faqueue'
+                         AND a.disposition not in ('FALSE_POSITIVE') GROUP BY a.disposition""", (url, ))
+            url_alert_results = c.fetchall()
+
+            if not url_alert_results:
+                logging.info(f"URL has only FP alert associations, clearing: {url}")
+                if not args.dry_run:
+                    try:
+                        if ace_api.cloudphish_clear_alert(url=url):
+                            logging.info(f"cleared {url}.")
+                            clear_counter += 1
+                        else:
+                            logging.warning(f"unexpected result clearing {url}.")
+                    except Exception as e:
+                        logging.error(f"problem clearing {url} : {e}")
+            else:
+                url_tp_enumeration_tracking.append(url)
+                for dispo, count in url_alert_results:
+                    logging.info(f"\t -> has {count} w/ {dispo}")
+
+    logging.info(f"cleared a total of {clear_counter} url cache results.") 
+
+    with open(url_tp_enumeration_tracking_path, 'w') as fp:
+        for url in url_tp_enumeration_tracking:
+            fp.write(f"{url}\n")
+
+    if os.path.exists(url_tp_enumeration_tracking_path):
+        logging.info(f"wrote TP url enumerations to {url_tp_enumeration_tracking_path}")
+
+clear_cloudphish_cache_parser = subparsers.add_parser('cloudphish-clear-stale-alert-cache',
+    help="Clear alert status on alertable but stale/false positive URLs.")
+clear_cloudphish_cache_parser.add_argument('--dry-run', required=False, dest='dry_run',
+    default=False, action='store_true', help="Just return the results that would be purged")
+clear_cloudphish_cache_parser.add_argument('--cleanup-days', type=int, default=14,
+    help="Select URLs that are older than X days (defaults to 14 days.)")
+clear_cloudphish_cache_parser.add_argument('--lookup-days', type=int, default=30,
+    help="Select URLs that have been looked up in the last X days (defaults to 30 days")
+clear_cloudphish_cache_parser.set_defaults(func=comprehensive_cloudphish_cache_clearing)
 
 # ============================================================================
 # company management
