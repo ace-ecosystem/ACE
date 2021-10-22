@@ -53,5 +53,5 @@ class FQDNAnalyzer(AnalysisModule):
                 return True
             return False
         except Exception as e:
-            logging.error(f"Problem resolving FQDN: {e}")
+            logging.warning(f"Problem resolving {observable.value}: {e}")
             return False

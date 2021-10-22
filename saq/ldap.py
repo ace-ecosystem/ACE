@@ -67,7 +67,11 @@ def lookup_user(user):
     entries = search(f"(cn={user})")
     if len(entries) == 0:
         return None
-    attributes = entries[0]['attributes']
+    attributes = {}
+    for entry in entries:
+        if 'attributes' in entry:
+            attributes = entry['attributes']
+            break
     if 'manager' in attributes:
         m = re.match(r'CN=([^,]+)', attributes['manager'])
         attributes['manager_cn'] = m.group(1)

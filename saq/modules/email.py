@@ -1554,6 +1554,8 @@ class EmailAnalyzer(AnalysisModule):
         if 'cc' in target_email:
             email_details[KEY_CC] = get_address_list(target_email, 'cc')
             for address in email_details[KEY_CC]:
+                if not address:
+                    continue
                 if is_local_email_domain(address):
                     analysis.add_ioc(I_EMAIL_CC_ADDRESS, address, status='Informational', tags=['cc_address'])
                 else:
@@ -1913,7 +1915,7 @@ class EmailAnalyzer(AnalysisModule):
 
         # combine the header and the decoded parts of the email into a single buffer for scanning with yara
         # we only combine the un-named html and text parts, not additional attachements
-        if headers_path:
+        if self.config.getboolean('combine_header_and_decoded_body_parts', True) and headers_path:
             combined_path = os.path.join(self.root.storage_dir, '{}.combined'.format(_file.value))
             if os.path.exists(combined_path):
                 logging.debug(f"combined path {combined_path} already exists")
