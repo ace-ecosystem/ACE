@@ -430,6 +430,67 @@ graph_parser =  msapi_sp.add_parser('graph',
     help="MS Graph API utilites")
 graph_sp = graph_parser.add_subparsers(dest='graph_cmd')
 
+def export_azure_devices(args):
+    from saq.graph_api import get_api, execute_and_get_all, execute_request
+
+    api = get_api(args.account_name)
+    if not api:
+        logging.error(f"no graph api instance loaded for {args.account_name}")
+        return False
+    
+    api.initialize()
+    headers = {'ConsistencyLevel': 'eventual'}
+
+    if args.device_count:
+        headers['Accept'] = 'text/plain'
+        url = api.build_url(f'v1.0/devices/$count')
+        results = execute_request(api, url, headers=headers)
+        print(f"{results} total devices")
+        return
+
+    # get all devices by default
+    url = api.build_url('v1.0/devices?$top=500')
+    if args.device_name:
+        url = api.build_url(f'v1.0/devices?$search="displayName:{args.device_name}"')
+
+    results = execute_and_get_all(api, url, headers=headers)
+    if not results:
+        return None
+    if args.stdout or args.device_name:
+        print(json.dumps(results, indent=2))
+        return
+    with open(args.output_file, 'w') as fp:
+        fp.write(json.dumps(results))
+    if os.path.exists(args.output_file):
+        print(f" + wrote: {args.output_file}")
+
+    return
+
+export_azure_devices_parser = graph_sp.add_parser('get-devices',
+    help="Getting and exporting azure devices. WARNING: default is to export all devices to json file.")
+export_azure_devices_parser.add_argument(
+    '--account-name', default='default', 
+    help="The company name of a configured Azure tenant."
+)
+export_azure_devices_parser.add_argument(
+    '-d', '--device_name', default=None,
+    help="Query Azure AD for this device name."
+)
+export_azure_devices_parser.add_argument(
+    '-c', '--device_count', action='store_true',
+    help="Query Azure AD and return a count of devices."
+)
+export_azure_devices_parser.add_argument(
+    '-o', '--output_file', default='azure_device_export.json',
+    help="The name of the file to write results to. Default=azure_device_export.json"
+)
+export_azure_devices_parser.add_argument(
+    '--stdout', action='store_true', default=False,
+    help="Print JSON output to console."
+)
+
+export_azure_devices_parser.set_defaults(func=export_azure_devices)
+
 def list_graph_resources(args):
     from saq.collectors import graph_collections
 
@@ -2892,6 +2953,48 @@ def update_organization(args):
 update_organization_parsers = subparsers.add_parser('update-organization',
     help="Updates the files used by the UserTaggingAnalyzer module.")
 update_organization_parsers.set_defaults(func=update_organization)
+
+# ============================================================================
+# Carbon Black Interface
+#
+
+def carbon_black_cloud_utils(args):
+    from cbinterface.psc.device import yield_devices
+    from saq.carbon_black import CBC_API
+
+    if args.export_active_devices:
+        output_file = args.output_file
+        devices = [d for d in yield_devices(CBC_API, query="sensorStates:ACTIVE")]
+        with open(output_file, 'w') as fp:
+            fp.write(json.dumps(devices))
+        if os.path.exists(output_file):
+            print(f" + wrote: {output_file}")
+
+cbc_parser = subparsers.add_parser('cbc-tools',
+    help="Interface with the configured CBC environment")
+cbc_parser.add_argument('--export-active-devices', action='store_true', help="export active CBC devices to 'active_carbon_black_cloud_devices.json'")
+cbc_parser.add_argument(
+    '-o', '--output_file', action='store', default='active_carbon_black_cloud_devices.json',
+    help="file name to write results to. default is active_carbon_black_cloud_devices.json."
+)
+
+cbc_parser.set_defaults(func=carbon_black_cloud_utils)
+
+# ============================================================================
+# asset-tracker utilities
+#
+
+from saq.asset_tracker import build_parser as at_parser_builder
+
+def asset_tracker(args):
+    from saq.asset_tracker import execute_arguments
+    return execute_arguments(args)
+
+asset_tracking_parser = subparsers.add_parser('asset-tracking',
+    help="Interface with the Asset tracking database")
+at_parser_builder(asset_tracking_parser)
+
+asset_tracking_parser.set_defaults(func=asset_tracker)
 
 # ============================================================================
 # ip-inspector utilities
