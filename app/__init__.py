@@ -4,6 +4,7 @@ import base64
 import logging
 import time
 import urllib.parse
+import json
 
 import saq
 
@@ -102,6 +103,18 @@ def create_app():
     def btoa(b):
         return b.decode('ascii')
 
+    def json_str_to_dict(s):
+        return json.loads(s)
+
+    def custom_error_missing_question(value):
+        try:
+            return value.question
+        except:
+            return "ERROR: Edge case conundrums with caching and archiving cleanup."
+
+    def dict_to_indented_json(d):
+        return json.dumps(d, indent=2, default=str)
+
     app.jinja_env.filters['btoa'] = btoa
     app.jinja_env.filters['b64decode'] = b64decode_wrapper
     app.jinja_env.filters['b64encode'] = base64.b64encode
@@ -109,6 +122,9 @@ def create_app():
     app.jinja_env.filters['s64encode'] = s64encode
     app.jinja_env.filters['b64escape'] = b64escape
     app.jinja_env.filters['hexdump'] = hexdump
+    app.jinja_env.filters['json_str_to_dict'] = json_str_to_dict
+    app.jinja_env.filters['dict_to_indented_json'] = dict_to_indented_json
+    app.jinja_env.filters['custom_error_missing_question'] = custom_error_missing_question
 
     # add the "do" template command
     app.jinja_env.add_extension('jinja2.ext.do')

@@ -1238,9 +1238,20 @@ def set_disposition():
     disposition = request.form.get('disposition', None)
     user_comment = request.form.get('comment', None)
 
+    # Check here to see if this user has to comment before a disposition is allowed.
+    # If the user has to comment, make sure a comment is included with this disposition
+    # OR check every alert in the alert_uuids and make sure they all have a comment.
+    force_comment = False
+    if saq.CONFIG.has_section('gui_force_comment_dispositioning'):
+        if saq.CONFIG['gui_force_comment_dispositioning'].get(current_user.queue):
+            logging.info(f"{current_user.username} is being forced to comment.")
+            force_comment = saq.CONFIG['gui_force_comment_dispositioning'].getboolean(current_user.queue)
+
     # format user comment
-    if user_comment is not None:
+    if user_comment:
         user_comment = user_comment.strip()
+        # can set force_comment to False
+        force_comment = False
 
     # check if disposition is valid
     if disposition not in VALID_ALERT_DISPOSITIONS:
@@ -1258,6 +1269,17 @@ def set_disposition():
         logging.error("neither of the expected request fields were present")
         flash("internal error")
         return redirect(url_for('analysis.index'))
+
+    if force_comment:
+        for alert_uuid in alert_uuids:
+            # don't force comments on FAQ alerts
+            alert = db.session.query(GUIAlert).filter(GUIAlert.uuid == alert_uuid).one()
+            if alert.alert_type == 'faqueue':
+                continue
+            if not db.session.query(Comment).filter(Comment.uuid == alert_uuid).all():
+                flash("You must provide a comment before a disposition will be applied.", "error")
+                logging.info(f"{current_user.username} tried to disposition {alert_uuid} without commenting.")
+                return redirect(url_for('analysis.manage'))
 
     # update the database
     logging.debug("user {} updating {} alerts to {}".format(current_user.username, len(alert_uuids), disposition))
@@ -1559,8 +1581,17 @@ def _reset_filters():
     session['filters'] = {
         'Disposition': [ 'None' ],
         'Owner': [ 'None', current_user.display_name ],
-        'Queue': [ current_user.queue ],
     }
+    # gui_alert_queue_filter_map
+    queue = current_user.queue
+    if saq.CONFIG.has_section('gui_alert_queue_filter_map'):
+        if saq.CONFIG['gui_alert_queue_filter_map'].get(queue):
+            # if there is a queue by this name in the config
+            # it should point to a list of queues
+            queue_list = saq.CONFIG['gui_alert_queue_filter_map'].get(queue)
+            queue = queue_list.split(',')
+    if isinstance(queue, list):
+        session['filters']['Queue'] = queue
 
 def reset_checked_alerts():
     session['checked'] = []
@@ -1790,7 +1821,7 @@ def manage():
 
     # apply filters
     filters = getFilters()
-    for name in session['filters']: 
+    for name in session['filters']:
         if session['filters'][name] and len(session['filters'][name]) > 0:
             query = filters[name].apply(query, session['filters'][name])
 
@@ -2805,7 +2836,8 @@ def index():
         domain_list=domain_list,
         domain_summary_str=domain_summary_str,
         tip=tip_factory(),
-        tip_indicator_summaries=alert.all_ioc_tip_summaries
+        tip_indicator_summaries=alert.all_ioc_tip_summaries,
+        remediation_targets=get_remediation_targets([alert.uuid]),
     )
 
 @analysis.route('/file', methods=['GET'])
@@ -3312,8 +3344,8 @@ def remediation_targets():
     # queue targets for removal/restoration
     action = 'remove' if request.method == 'DELETE' else 'restore'
     logging.info(f"{action}ing {len(body['targets'])} targets")
-    for target_id in body['targets']:
-        target = RemediationTarget(id=target_id)
+    targets = [RemediationTarget(id=target_id) for target_id in body['targets']]
+    for target in targets:
         logging.info(f"target has {len(target.history)} historical remediations")
         target.queue(action, current_user.id)
 

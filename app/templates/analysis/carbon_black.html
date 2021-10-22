@@ -1,18 +1,21 @@
 
 {% if analysis.details and 'queries' in analysis.details %}
     {# multi-query analysis #}
-    {% for key,query_string in analysis.details['queries'].items() %}
     <b>Total Process Results: {{analysis.details['total_process_results']}}</b>
+    {% for key,query_string in analysis.details['queries'].items() %}
+    {% if analysis.details['total_query_results'][key] > 0 %}
     <div class="panel panel-default">
         <div class="panel-heading">Total Query Results ({{key}}): {{analysis.details['total_query_results'][key]}}</b></div>
         <div class="panel-body">
 
         <b>This Analysis is based on the following CarbonBlack Response query</b>:
         <pre>{{query_string}}</pre>
+        {% if 'query_weblinks' in analysis.details %}
         <i>Results were constrained between {{analysis.details['start_time']}} and {{analysis.details['end_time']}}</i>
         <p>You can load this query in the CarbonBlack GUI by clicking <a href="{{analysis.details['query_weblinks'][key]}}" target="_blank">here</a> <i>(you may need to click Search in their portal).</i></p>
         <br>
-        {% if analysis.details['histogram_data'] %}
+        {% endif %}
+        {% if 'histogram_data' in analysis.details and analysis.details['histogram_data'] %}
         <b>Process Histograms</b>:
         {% for title, facets in analysis.details['histogram_data'][key].items() %}
             <pre>{{analysis.print_facet_histogram(title, facets)}}</pre>
@@ -24,15 +27,24 @@
             <div class="panel-heading">The <i>most recent</i> <b>{{analysis.details['process_samples'][key]|length}}</b> processes:</div>
             <div class="panel-body">
               {% for sample in analysis.details['process_samples'][key] %}
+                {% if 'fields' in sample %}
+                    {% set full_info_string = sample['info'] %}
+                    {% set sample = sample['fields'] %}
+                {% endif %}
                 <b>Process GUID = {{sample['id']}}:</b>
                 <div class="well"><a href="{{sample['webui_link']}}" target="_blank">{{sample['start']}} UTC <b>{{sample['username']}}@{{sample['hostname']}}</b> <span style="color: #0000FF">{{sample['path']}}</span> <span style="color: #FF0000">{{sample['cmdline']}}</span> <span style="color: #008000">{{sample['process_md5']}}</span> - {{sample['id']}}</a></div>
-                <pre>{{sample['full_info_string']}}</pre>
+                {% if full_info_string %}
+                    <pre>{{full_info_string}}</pre>
+                {% else %}
+                    <pre>{{sample['full_info_string']}}</pre>
+                {% endif %}
                 <hr>
               {% endfor %}
             </div>
           </div>
         </div>
     </div>
+    {% endif %}
     {% endfor %}
 {% elif analysis.details and 'query' in analysis.details %}
     {# single-query analysis #}
