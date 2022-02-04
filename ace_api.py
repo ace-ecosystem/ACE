@@ -13,12 +13,6 @@ except ImportError:
     sys.exit(1)
 
 try:
-    import pytz
-except ImportError:
-    print("You need to install the pytz library (see https://pypi.org/project/pytz/)")
-    sys.exit(1)
-
-try:
     import tzlocal
 except ImportError:
     print("You need to install the tzlocal library (see https://pypi.org/project/tzlocal/)")
@@ -45,6 +39,8 @@ import uuid
 import warnings
 
 from configparser import ConfigParser
+
+from zoneinfo import ZoneInfo
 
 # set up the argument parsing as we define the functions
 # so we can keep them grouped together
@@ -112,7 +108,7 @@ default_remote_host = 'localhost'
 default_ssl_verification = None
 
 # the local timezone
-LOCAL_TIMEZONE = pytz.timezone(tzlocal.get_localzone().zone)
+LOCAL_TIMEZONE = ZoneInfo(tzlocal.get_localzone_name())
 
 # the datetime string format we use for this api
 DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%f%z'
@@ -198,7 +194,7 @@ get_valid_companies_command_parser.set_defaults(func=_cli_get_valid_companies)
 def get_valid_observables(*args, **kwargs):
     """Get all of the valid observable types for this ACE ecosystem.
 
-    :return: result dictionary containing observables names and discription.
+    :return: result dictionary containing observables names and description.
     :rtype: dict
     """
     return _execute_api_call('common/get_valid_observables', *args, **kwargs).json()
@@ -276,15 +272,15 @@ def submit(
 
     # default event time is now
     if event_time is None:
-        event_time = datetime.datetime.now()
+        event_time = datetime.datetime.utcnow()
 
     # no timezone yet?
     # convert to UTC and then to the correct datetime format string for ACE
     if isinstance(event_time, datetime.datetime):
         if event_time.tzinfo is None:
-            formatted_event_time = LOCAL_TIMEZONE.localize(event_time).astimezone(pytz.UTC).strftime(DATETIME_FORMAT)
+            formatted_event_time = formatted_event_time.replace(tzinfo=ZoneInfo('UTC')).strftime(DATETIME_FORMAT)
         else:
-            formatted_event_time = event_time.astimezone(pytz.UTC).strftime(DATETIME_FORMAT)
+            formatted_event_time = event_time.astimezone(ZoneInfo('UTC')).strftime(DATETIME_FORMAT)
     else:
         # otherwise we assume the event time is already formatted
         formatted_event_time = event_time
@@ -300,8 +296,8 @@ def submit(
         # make sure any times are formatted
         if 'time' in o and isinstance(o['time'], datetime.datetime):
             if o['time'].tzinfo is None:
-                o['time'] = LOCAL_TIMEZONE.localize(o['time'])
-            o['time'] = o['time'].astimezone(pytz.UTC).strftime(DATETIME_FORMAT)
+                o['time'] = o['time'].replace(tzinfo=LOCAL_TIMEZONE)
+            o['time'] = o['time'].astimezone(ZoneInfo('UTC')).strftime(DATETIME_FORMAT)
 
     # make sure the tags are strings
     for t in tags:
@@ -432,7 +428,7 @@ submit_command_parser.add_argument('-t', '--time', '--event-time', dest='event_t
     help="""The time of the event that triggered the analysis, or the source reference time for all analysis. 
             The expected format is {} (example: {}). Defaults to current time and current time zone.""".format(
     DATETIME_FORMAT.replace('%', '%%'),
-    LOCAL_TIMEZONE.localize(datetime.datetime.now()).strftime(DATETIME_FORMAT)))
+    datetime.datetime.now().replace(tzinfo=LOCAL_TIMEZONE).strftime(DATETIME_FORMAT)))
 submit_command_parser.add_argument('-d', '--details', dest='details',
     help="""The free form JSON dict that makes up the details of the analysis.
             You can specify @filename to load a given file as a JSON dict.""")
@@ -440,8 +436,8 @@ submit_command_parser.add_argument('-o', '--observables', nargs='+', dest='obser
     help="""Adds the given observable to the analysis in the following format:
             type/value/[/time][/tags_csv][/directives_csv][/limited_analysis_csv]
             Any times must be in {} format (example: {}).""".format(
-    DATETIME_FORMAT.replace('%', '%%'), 
-    LOCAL_TIMEZONE.localize(datetime.datetime.now()).strftime(DATETIME_FORMAT)))
+    DATETIME_FORMAT.replace('%', '%%'),
+    datetime.datetime.now().replace(tzinfo=LOCAL_TIMEZONE).strftime(DATETIME_FORMAT)))
 submit_command_parser.add_argument('-T', '--tags', nargs='+', dest='tags',
     help="""The list of tags to add to the analysis.""")
 submit_command_parser.add_argument('-f', '--files', nargs='+', dest='files',
@@ -787,7 +783,7 @@ class AlertSubmitException(Exception):
 class Analysis(object):
     """An ACE Analysis object.
 
-    :param str discription: (optional) A brief description of this analysis data (Why? What? How?).
+    :param str description: (optional) A brief description of this analysis data (Why? What? How?).
     :param str analysis_mode: (optional) The ACE mode this analysis should be put into. 'correlation' will force an
         alert creation. 'analysis' will only alert if a detection is made. Default: 'analysis'
     :param str tool: (optional) The "tool" that is submitting this analysis. Meant for distinguishing your custom
@@ -802,6 +798,10 @@ class Analysis(object):
     :param list observables: (optional) A list of observables to add to the request.
     :param list tags: (optional) If this request becomes an Alert, these tags will get added to it.
     :param list files: (optional) A list of (file_name, file_descriptor) tuples to be included in this ACE request.
+    :param str queue: (optional) The queue this analysis should go into if this submissions becomes an alert.
+    :param str instructions: (optional) A free form string value that gives the analyst instructions on what
+        this alert is about and/or how to analyze the data contained in the
+        alert.
     """
     def __init__(self, *args, **kwargs):
         # these just get passed to ace_api.submit function
@@ -820,9 +820,12 @@ class Analysis(object):
             'type': 'generic',
             'event_time': None,
             'details': {},
+            'company_id': None,
             'observables': [],
             'tags': [],
             'files': [],
+            'queue': 'default',
+            'instructions': None,
         }
 
         for key, value in kwargs.items():
@@ -929,7 +932,7 @@ class Analysis(object):
 
     def add_observable(self, o_type, o_value, o_time=None, directives=[], limited_analysis=[], tags=[]):
         """Add an observable to this analysis.
-        To all of the observable types and discriptions supported by the ACE instance you're working with, use ace_api.get_valid_observables().
+        To all of the observable types and descriptions supported by the ACE instance you're working with, use ace_api.get_valid_observables().
 
         :param str o_type: The type of observable.
         :param str o_value: The value of the observable.
@@ -1234,6 +1237,93 @@ class Analysis(object):
                 except Exception as e:
                     logging.error("unable to close file descriptor for {}".format(file_name))
 
+class Submission(object):
+    """A single analysis submission.
+
+    Essentially the same thing as the Analysis class in a different form for use case convieniece.
+    NOTE: The files parameter MUST be either a list of file names or a list of tuples of (source, dest) NOT file descriptors.
+
+    Attributes:
+        description: A description of the analysis.
+        analysis_mode: The analysis mode to use for the analysis.
+        tool: The "tool" that is submitting this analysis. Meant for distinguishing your custom hunters and detection tools.
+        tool_instance: The instance of the tool submitting this analysis.
+        type: The type of analysis this is, kinda like the focus of the alert. Mainly used internally by some ACE modules. Default: 'generic'
+        event_time: Assign a time to this analysis.
+        details: A dictionary of details about the analysis.
+        company_id: The company ID of the company submitting this analysis.
+        observables: A list of observables to be included in the analysis.
+        tags: A list of tags to be included in the analysis.
+        files: A list of files to be included in the analysis.
+        queue: The queue to submit this analysis to.
+        group_assignments: A list of RemoteNodeGroup.name values to assign this analysis to.
+        instructions: A dictionary of instructions to be included in the analysis.
+    """
+    def __init__(self,
+                 description, 
+                 analysis_mode,
+                 tool,
+                 tool_instance,
+                 type,
+                 event_time=None,
+                 details=None,
+                 company_id=None,
+                 observables=[],
+                 tags=[],
+                 files=[],
+                 queue='default',
+                 group_assignments=[],
+                 instructions=None):
+
+        self.description = description
+        self.analysis_mode = analysis_mode
+        self.tool = tool
+        self.tool_instance = tool_instance
+        self.type = type
+        self.event_time = event_time
+        self.details = details
+        self.company_id = company_id
+        self.observables = observables
+        self.tags = tags
+        self.files = files
+        self.uuid = str(uuid.uuid4())
+        self.queue = queue
+        self.instructions = instructions
+
+        # list of RemoteNodeGroup.name values
+        # empty list means send to all configured groups
+        self.group_assignments = group_assignments
+
+
+    def __str__(self):
+        return f"Submission({self.description} ({self.analysis_mode}))"
+
+    def add_observable(self, observable):
+        """Adds the given observable to the submission data.
+
+        NOTE: Observables must have a `type` key and a `value` key at a minimum.
+        
+        Args:
+            observable: A dictionary containing the observable data.
+        """
+        assert 'type' in observable, "missing type in observable {observable}"
+        assert 'value' in observable, "missing value in observable {observable}"
+        self.observables.append(o)
+
+    def add_file(self, path, dest_path=None):
+        """Adds the given file to be included in the submission.
+        Args:
+            path: The path to the file to be included (can be a full path.)
+            dest_path: Optional path relative to the storage directory of the
+            Analysis to place the file into. By default the file is placed into
+            the root directory of the analysis.
+        """
+        if dest_path:
+            self.files.append((path, dest_path))
+        else:
+            self.files.append(path)
+
+
 class Alert(Analysis):
     """This class primarily supports backwards compatibility with the old client lib.
     
@@ -1375,9 +1465,12 @@ update_event_status_parser.add_argument('--status', help="Event status", require
 update_event_status_parser.set_defaults(func=_cli_update_event_status)
 
 def load_config():
-    """Load ace_api configuration. Configuration files are looked for in the following locations::
+    """Load ace_api configuration.
+
+    Configuration files are looked for in the following locations::
         /opt/ace/etc/ace_api.local.ini
-        ~/<current-user>/.ace/api.ini
+        /etc/ace/ace_api.ini
+        ~/.config/ace/api.ini
 
     Configuration items found in later config files take presendence over earlier ones.
     """
@@ -1385,8 +1478,10 @@ def load_config():
     config_paths = []
     # default
     config_paths.append('/opt/ace/etc/ace_api.local.ini')
+    # system specific
+    config_paths.append('/etc/ace/ace_api.ini')
     # user specific
-    config_paths.append(os.path.join(os.path.expanduser("~"),'.ace','api.ini'))
+    config_paths.append(os.path.join(os.path.expanduser("~"),'.config', 'ace', 'api.ini'))
     finds = []
     for cp in config_paths:
         if os.path.exists(cp):

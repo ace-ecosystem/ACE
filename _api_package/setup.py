@@ -14,7 +14,7 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 description = "Analysis Correlation Engine (ACE) API Python Bindings."
 
 here = path.abspath(path.dirname(__file__))
@@ -36,7 +36,7 @@ setup(
     long_description_content_type='text/markdown',
 
     # The project's main homepage.
-    url='https://github.com/IntegralDefense/ACE/_api_package',
+    url='https://github.com/ace-ecosystem/ACE/_api_package',
 
     # Author details
     author='John Davison',
@@ -93,7 +93,7 @@ setup(
     # your project is installed. For an analysis of "install_requires" vs pip's
     # requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['tzlocal', 'requests', 'pytz'],
+    install_requires=['tzlocal', 'requests'],
 
     entry_points={
             'console_scripts': ['ace_api=ace_api:main'],
