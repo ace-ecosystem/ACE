@@ -1740,6 +1740,17 @@ def main():
 
     args = parser.parse_args()
 
+    if config and args.environment is not None:
+        if config.has_option(args.environment, "disable_proxy"):
+            args.disable_proxy = config[args.environment].getboolean("disable_proxy")
+        if config.has_option(args.environment, "ssl_verification"):
+            if os.path.exists(config[args.environment]["ssl_verification"]):
+                args.ssl_verification = config[args.environment]["ssl_verification"]
+            else:
+                args.ssl_verification = config[args.environment].getboolean("ssl_verification")
+        if config.has_option(args.environment, "remote_host"):
+            args.remote_host = config[args.environment]["remote_host"]
+
     if args.disable_proxy:
         for env_var in ["http_proxy", "https_proxy", "ftp_proxy"]:
             if env_var in os.environ:
